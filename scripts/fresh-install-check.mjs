@@ -100,7 +100,7 @@ try {
   check('the installed mn runs', run(mn, ['--version'], work).trim() === version, version);
 
   // One copy each: an object made by one copy of a WASM package is refused by another.
-  for (const name of ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/ledger-v8', '@midnight-ntwrk/compact-runtime']) {
+  for (const name of ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/ledger-v8', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4']) {
     const copies = copiesOf(work, name);
     check(`one copy of ${name}`, copies.length === 1, copies.join(', '));
   }

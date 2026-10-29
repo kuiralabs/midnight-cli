@@ -3,6 +3,8 @@ import { nightToMicro, parseAmount, validateRecipientAddress, isDustRelatedError
 import { getNetworkConfig } from '../lib/network.ts';
 import { deriveUnshieldedAddress } from '../lib/derive-address.ts';
 import { GENESIS_SEED, SYNC_ATTEMPT_TIMEOUT_MS, SYNC_ATTEMPT_REMOTE_TIMEOUT_MS } from '../lib/constants.ts';
+import { UsageError } from '../lib/errors.ts';
+import { ERROR_CODES, EXIT_INVALID_ARGS, classifyError } from '../lib/exit-codes.ts';
 
 describe('nightToMicro', () => {
   it('converts whole NIGHT to micro-NIGHT', () => {
@@ -90,6 +92,15 @@ describe('parseAmount', () => {
 
   it('throws for Infinity', () => {
     expect(() => parseAmount('Infinity')).toThrow('Invalid amount');
+  });
+
+  // `mn transfer bob 0` was reported with code UNKNOWN and exit 1.
+  it('refuses a bad amount as a usage mistake, which the caller fixes', () => {
+    for (const amount of ['0', '-5', 'abc', 'Infinity']) {
+      const refused = (() => { try { parseAmount(amount); } catch (err) { return err as Error; } throw new Error(`${amount} was accepted`); })();
+      expect(refused).toBeInstanceOf(UsageError);
+      expect(classifyError(refused)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.INVALID_ARGS });
+    }
   });
 });
 

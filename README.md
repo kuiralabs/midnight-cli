@@ -88,6 +88,11 @@ Both run ledger 8 today, so this build refuses them; use 0.5.x there. Once a net
 midnight wallet generate alice
 midnight config set network preprod   # or: preview
 
+# Preprod only: its indexer and node are served by Blockfrost, which needs
+# your own project id. Create a "Midnight Preprod" project at https://blockfrost.io
+# and set its id once (it starts with nightpreprod):
+midnight config set blockfrost-project-id <project id>
+
 # 2. Get test tokens from the faucet
 #    preprod: https://faucet.preprod.midnight.network/
 #    preview: https://faucet.preview.midnight.network/

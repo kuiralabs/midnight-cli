@@ -1803,17 +1803,20 @@ describe('dapp-connector', () => {
     // Found live: a dApp asked plain `mn serve` (no terminal) to balance a spend
     // of the wallet's own NIGHT and got back a sealed transaction carrying the
     // wallet's valid signature, which it could submit through any node.
-    it('prompts, so with no terminal a spend of the wallet\'s own NIGHT is rejected before anything is balanced or signed', async () => {
-      const walletSpend = Buffer.from(await unsealedBytes(buildTx({
+    it.each([
+      ['balanceUnsealedTransaction', unsealedBytes, 'balanceUnboundTransaction'],
+      ['balanceSealedTransaction', sealedBytes, 'balanceFinalizedTransaction'],
+    ] as const)('%s prompts, so with no terminal a spend of the wallet\'s own NIGHT is rejected before anything is balanced or signed', async (method, toBytes, balanceMethod) => {
+      const walletSpend = Buffer.from(await toBytes(buildTx({
         guaranteed: { inputs: [spend(WALLET_SK, 990n)], outputs: [pay(990n)], signers: [] },
       }))).toString('hex');
       const balance = vi.fn();
-      const bundle = createBundleStub({ balanceUnboundTransaction: balance });
+      const bundle = createBundleStub({ [balanceMethod]: balance });
       connector = createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { autoApproveReads: true } });
       const origIsTTY = process.stdin.isTTY;
       Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
       try {
-        const err: any = await connector.handlers.balanceUnsealedTransaction({ tx: walletSpend }, ctx()).catch((e: any) => e);
+        const err: any = await connector.handlers[method]({ tx: walletSpend }, ctx()).catch((e: any) => e);
 
         expect(err.code).toBe('Rejected');
         expect(balance).not.toHaveBeenCalled();

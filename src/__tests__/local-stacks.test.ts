@@ -165,6 +165,15 @@ describe('resolveNetwork', () => {
     });
   });
 
+  it('keeps one network\'s saved endpoints away from another', async () => {
+    const { resolveNetwork } = await import('../lib/resolve-network.ts');
+    const { parseArgs } = await import('../lib/argv.ts');
+    await withConfig({ network: 'preview', networks: { preview: { 'proof-server': 'http://preview-prover:6300' } } }, (configDir) => {
+      const { config } = resolveNetwork({ args: parseArgs(['balance', '--network', 'preprod']), configDir });
+      expect(config.proofServer).toBe('http://localhost:6300');
+    });
+  });
+
   it('with every endpoint given by flag, works whatever docker runs', async () => {
     const { resolveNetwork } = await import('../lib/resolve-network.ts');
     const { parseArgs } = await import('../lib/argv.ts');
