@@ -14,6 +14,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nel349/midnight-wallet-cli.git"
+    "url": "git+https://github.com/kuiralabs/midnight-cli.git",
+    "directory": "packages/dust-sync-darwin-arm64"
+  },
+  "bugs": {
+    "url": "https://github.com/kuiralabs/midnight-cli/issues"
   }
 }

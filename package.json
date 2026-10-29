@@ -5,13 +5,13 @@
   "description": "Git-style CLI wallet for the Midnight blockchain",
   "license": "Apache-2.0",
   "author": "Norman Lopez (https://github.com/nel349)",
-  "homepage": "https://github.com/nel349/midnight-wallet-cli#readme",
+  "homepage": "https://github.com/kuiralabs/midnight-cli#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nel349/midnight-wallet-cli.git"
+    "url": "git+https://github.com/kuiralabs/midnight-cli.git"
   },
   "bugs": {
-    "url": "https://github.com/nel349/midnight-wallet-cli/issues"
+    "url": "https://github.com/kuiralabs/midnight-cli/issues"
   },
   "keywords": [
     "midnight",

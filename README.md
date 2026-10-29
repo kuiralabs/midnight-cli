@@ -1,6 +1,6 @@
 # midnight-wallet-cli
 
-![midnight-wallet-cli demo](https://raw.githubusercontent.com/nel349/midnight-wallet-cli/main/docs/midnight-cli-gif.gif)
+![midnight-wallet-cli demo](https://raw.githubusercontent.com/kuiralabs/midnight-cli/main/docs/midnight-cli-gif.gif)
 
 [![npm version](https://badge.fury.io/js/midnight-wallet-cli.svg)](https://www.npmjs.com/package/midnight-wallet-cli)
 [![npm downloads](https://img.shields.io/npm/dm/midnight-wallet-cli)](https://npm-stat.com/charts.html?package=midnight-wallet-cli)
@@ -340,7 +340,7 @@ Every tool error returns `{ error: true, code: <CODE>, message: <human prose> }`
 
 ## Issues & Feedback
 
-Found a bug or have a feature request? [Open an issue](https://github.com/nel349/midnight-wallet-cli/issues).
+Found a bug or have a feature request? [Open an issue](https://github.com/kuiralabs/midnight-cli/issues).
 
 ## Requirements
 
@@ -353,8 +353,8 @@ Found a bug or have a feature request? [Open an issue](https://github.com/nel349
 Working on the CLI itself? Clone, install, build, test:
 
 ```bash
-git clone https://github.com/nel349/midnight-wallet-cli.git
-cd midnight-wallet-cli
+git clone https://github.com/kuiralabs/midnight-cli.git
+cd midnight-cli
 npm install
 npm run build       # bun build → dist/wallet.js + dist/mcp-server.js
 npm test            # vitest run

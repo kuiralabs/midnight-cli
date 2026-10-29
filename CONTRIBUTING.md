@@ -7,8 +7,8 @@ agent-facing surface (MCP, `--json`, `--agent` flag).
 ## Getting set up
 
 ```bash
-git clone https://github.com/nel349/midnight-wallet-cli.git
-cd midnight-wallet-cli
+git clone https://github.com/kuiralabs/midnight-cli.git
+cd midnight-cli
 npm install
 ```
 
@@ -110,7 +110,7 @@ Read `CLAUDE.md` at the repo root for the full engineering standards
 
 ## Reporting bugs
 
-[Open an issue](https://github.com/nel349/midnight-wallet-cli/issues) with:
+[Open an issue](https://github.com/kuiralabs/midnight-cli/issues) with:
 
 - What you ran
 - What you expected

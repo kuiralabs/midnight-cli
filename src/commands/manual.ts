@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import { type ParsedArgs, hasFlag, getFlag } from '../lib/argv.ts';
 import { bold, dim, teal, yellow, white } from '../ui/colors.ts';
 import { COMMAND_SPECS, type CommandSpec } from './help.ts';
-import { PKG_NAME, PKG_VERSION } from '../lib/pkg.ts';
+import { PKG_NAME, PKG_VERSION, PKG_REPOSITORY_URL } from '../lib/pkg.ts';
 
 const SECTION_BAR = '═'.repeat(63);
 const RULE = '─'.repeat(64);
@@ -248,7 +248,7 @@ export function buildManual(): string {
   out.push(`  ${teal('mn help <command>')}    Help for one command (flags and examples)`);
   out.push(`  ${teal('mn help --agent')}      Comprehensive AI / MCP reference`);
   out.push('');
-  out.push(`  Repository:        ${dim('github.com/nel349/midnight-wallet-cli')}`);
+  out.push(`  Repository:        ${dim(PKG_REPOSITORY_URL.replace(/^https:\/\//, ''))}`);
   out.push(`  JSON contract:     ${dim('docs/JSON_CONTRACT.md')}`);
   out.push('');
 
