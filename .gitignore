@@ -29,7 +29,8 @@ sidecar/**/target/
 bun.lock
 .codex/
 
-# Internal planning docs live in the private repo (midnight-cli-private), not here
+# Internal planning docs live in the private repo kuiralabs/midnight-cli-plan, not here.
+# private/ is the archived midnight-cli-private checkout, kept locally for reference.
 tasks/
 
 # Native sidecar binaries — built fresh by CI into the platform packages, never committed
