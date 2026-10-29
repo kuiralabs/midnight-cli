@@ -96,6 +96,7 @@ export function buildManual(): string {
   out.push(`  ${bold('Networks')}`);
   out.push(`    ${teal('undeployed')}   Local network. Free dev tokens, fast iteration.`);
   out.push(`    ${teal('preprod')}      Public testnet. Persistent, real ZK proofs. (Ledger 8 today: refused.)`);
+  out.push(`                 Served by Blockfrost: needs your own project id (see Configuration).`);
   out.push(`    ${teal('preview')}      Public testnet, smaller scale. (Ledger 8 today: refused.)`);
   out.push('');
   out.push(`  ${bold('Tokens')}`);

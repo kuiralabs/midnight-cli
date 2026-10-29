@@ -217,6 +217,10 @@ describe('approval', () => {
       },
     );
 
+    it.each(['balanceUnsealedTransaction', 'balanceSealedTransaction'])('approves %s with --approve-all', async (method) => {
+      expect(await promptApproval({ method, network: 'undeployed', details: [] }, { approveAll: true, autoApproveReads: true })).toBe('approve');
+    });
+
     it('does not auto-approve balancing when autoApproveReads is false', async () => {
       const origIsTTY = process.stdin.isTTY;
       Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });

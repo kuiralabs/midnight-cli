@@ -168,6 +168,14 @@ describe('signRecipe', () => {
     expect(signersOf(readUnproven(signed.balancingTransaction!.serialize()))).toEqual(['wallet']);
   });
 
+  it('returns a signed transaction that needed no balancing as it is', async () => {
+    const recipe = unboundRecipe(await unsealedBytes(agentPaysMerchant()));
+    const signer = countingSigner();
+
+    expect(await signRecipe(facade, recipe, signer)).toBe(recipe);
+    expect(signer.calls).toBe(0);
+  });
+
   it('signs both through the facade when the dApp transaction has no signed inputs', async () => {
     const before = await unsealedBytes(buildTx({ guaranteed: { inputs: [spend(WALLET_SK, 100n)], outputs: [pay(100n)], signers: [] } }));
     const signer = countingSigner();
