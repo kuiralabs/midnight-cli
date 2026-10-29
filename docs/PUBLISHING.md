@@ -44,7 +44,7 @@ Dry-run the build without publishing via the workflow's `workflow_dispatch` (`dr
 
 ## Auth: OIDC trusted publishing
 
-Publishing uses **OIDC trusted publishing** (no long-lived secret) once each of the six packages has a trusted publisher configured on npmjs.com (repo `nel349/midnight-wallet-cli`, workflow `release-sidecar.yml`).
+Publishing uses **OIDC trusted publishing** (no long-lived secret) once each of the six packages has a trusted publisher configured on npmjs.com (repo `kuiralabs/midnight-cli`, workflow `release-sidecar.yml`).
 
 **First release bootstrap** — a trusted publisher can only be attached to a package that already exists, so the very first publish needs a one-time classic **Automation** token stored as the `NPM_TOKEN` repo secret. After that release, configure the six trusted publishers and the secret can be deleted; every later tag publishes tokenless.
 

@@ -12,7 +12,7 @@
 # sidecar: it's built against ledger 8, and mn never selects it there.
 #
 # Auth: OIDC trusted publishing (no long-lived secret) once each package has a
-# trusted publisher configured on npmjs.com (repo nel349/midnight-wallet-cli,
+# trusted publisher configured on npmjs.com (repo kuiralabs/midnight-cli,
 # this workflow file). Until then — including the very first publish, since a
 # trusted publisher can only be attached to a package that already exists — npm
 # falls back to the `NPM_TOKEN` repo secret (a classic Automation token). After
