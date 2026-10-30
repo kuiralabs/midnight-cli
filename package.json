@@ -54,7 +54,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@kuiralabs/midnight-account-chain": "0.2.2",
+    "@kuiralabs/midnight-account": "file:../../midnight-account/account",
+    "@kuiralabs/midnight-account-chain": "file:../../midnight-account/chain",
     "@midnight-ntwrk/compact-runtime": "0.20.0",
     "@midnight-ntwrk/ledger-v8": "8.1.0",
     "@midnight-ntwrk/midnight-js-contracts": "5.0.0-rc.1",
