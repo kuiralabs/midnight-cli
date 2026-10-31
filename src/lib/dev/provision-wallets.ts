@@ -6,10 +6,15 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { captureCommand } from '../run-command.ts';
 import { MIDNIGHT_DIR, WALLETS_DIR_NAME } from '../constants.ts';
-import { getActiveWalletName, setActiveWallet } from '../wallet-config.ts';
-import type { ParsedArgs } from '../argv.ts';
+import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet } from '../wallet-config.ts';
+import { createWallet, walletSecretFrom } from '../wallet-create.ts';
+import { passphraseForNewSecret } from '../passphrase.ts';
+import { airdropNight } from '../airdrop.ts';
+import { checkBalance } from '../balance-subscription.ts';
+import { registerDust } from '../dust-register.ts';
+import { resolveNetwork } from '../resolve-network.ts';
+import type { NetworkConfig } from '../network.ts';
 
 /** Default dev wallet names — one per common test persona. */
 export const DEFAULT_DEV_WALLET_NAMES = ['dev-alice', 'dev-bob', 'dev-carol'] as const;
@@ -24,7 +29,7 @@ export interface ProvisionedWallet {
   state: WalletProvisionState;
 }
 
-/** The three steps of setting up a wallet; the defaults run mn's own commands. */
+/** The steps of setting up a wallet; the defaults are the wallet functions mn's own commands use. */
 export interface ProvisionSteps {
   generate: (name: string, signal?: AbortSignal) => Promise<void>;
   airdrop: (name: string, amountNight: number, signal?: AbortSignal) => Promise<void>;
@@ -41,11 +46,11 @@ export interface ProvisionOptions {
   steps?: ProvisionSteps;
 }
 
-const COMMAND_STEPS: ProvisionSteps = {
-  generate: invokeWalletGenerate,
-  airdrop: invokeAirdrop,
-  registerDust: invokeDustRegister,
-  needsDust: invokeNeedsDust,
+const WALLET_STEPS: ProvisionSteps = {
+  generate: generateWallet,
+  airdrop: airdropToWallet,
+  registerDust: registerWalletDust,
+  needsDust: walletNeedsDust,
 };
 
 /**
@@ -59,7 +64,7 @@ const COMMAND_STEPS: ProvisionSteps = {
  * while the earlier ones register instead of one after another.
  */
 export async function provisionDevWallets(opts: ProvisionOptions): Promise<ProvisionedWallet[]> {
-  const steps = opts.steps ?? COMMAND_STEPS;
+  const steps = opts.steps ?? WALLET_STEPS;
   const results: ProvisionedWallet[] = [];
   const created: string[] = [];
 
@@ -129,47 +134,30 @@ function walletExists(name: string): boolean {
   return existsSync(path);
 }
 
-async function invokeWalletGenerate(name: string, signal: AbortSignal | undefined): Promise<void> {
-  const args: ParsedArgs = {
-    command: 'wallet',
-    subcommand: 'generate',
-    positionals: [name],
-    flags: { network: 'undeployed' },
-  };
-  const { default: handler } = await import('../../commands/wallet.ts');
-  await captureCommand(handler, args, { signal });
+/** The local network, with any endpoints saved for it, as the wallet commands resolve it. */
+function undeployedNetwork(): NetworkConfig {
+  return resolveNetwork({
+    args: { command: 'dev', subcommand: undefined, positionals: [], flags: { network: 'undeployed' } },
+  }).config;
 }
 
-async function invokeAirdrop(name: string, amountNight: number, signal: AbortSignal | undefined): Promise<void> {
-  const args: ParsedArgs = {
-    command: 'airdrop',
-    subcommand: String(amountNight),
-    positionals: [],
-    flags: { wallet: name, network: 'undeployed' },
-  };
-  const { default: handler } = await import('../../commands/airdrop.ts');
-  await captureCommand(handler, args, { signal });
+async function generateWallet(name: string): Promise<void> {
+  createWallet(name, walletSecretFrom(), await passphraseForNewSecret(homedir()));
 }
 
-async function invokeNeedsDust(name: string, signal: AbortSignal | undefined): Promise<boolean> {
-  const args: ParsedArgs = {
-    command: 'dust',
-    subcommand: 'status',
-    positionals: [],
-    flags: { wallet: name, network: 'undeployed' },
-  };
-  const { default: handler } = await import('../../commands/dust.ts');
-  const status = await captureCommand(handler, args, { signal }) as { registered?: unknown; unregisteredUtxos?: unknown };
-  return status.registered === false && typeof status.unregisteredUtxos === 'number' && status.unregisteredUtxos > 0;
+async function airdropToWallet(name: string, amountNight: number, signal: AbortSignal | undefined): Promise<void> {
+  const recipientAddress = loadWalletConfig(resolveWalletPath(name)).addresses.undeployed;
+  await airdropNight({ networkConfig: undeployedNetwork(), recipientAddress, amountNight, signal });
 }
 
-async function invokeDustRegister(name: string, signal: AbortSignal | undefined): Promise<void> {
-  const args: ParsedArgs = {
-    command: 'dust',
-    subcommand: 'register',
-    positionals: [],
-    flags: { wallet: name, network: 'undeployed' },
-  };
-  const { default: handler } = await import('../../commands/dust.ts');
-  await captureCommand(handler, args, { signal });
+async function walletNeedsDust(name: string, signal: AbortSignal | undefined): Promise<boolean> {
+  const address = loadWalletConfig(resolveWalletPath(name)).addresses.undeployed;
+  const { registeredUtxos, unregisteredUtxos } = await checkBalance(address, undeployedNetwork().indexerWS);
+  signal?.throwIfAborted();
+  return registeredUtxos === 0 && unregisteredUtxos > 0;
+}
+
+async function registerWalletDust(name: string, signal: AbortSignal | undefined): Promise<void> {
+  const { seed } = await unlockWallet(resolveWalletPath(name));
+  await registerDust(Buffer.from(seed, 'hex'), undeployedNetwork(), { signal });
 }

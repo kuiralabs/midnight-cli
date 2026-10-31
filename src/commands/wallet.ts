@@ -2,29 +2,25 @@
 // Subcommands: generate, list, use, info, remove
 
 import * as fs from 'fs';
-import * as path from 'path';
 import { homedir } from 'os';
 import { type ParsedArgs, getFlag, hasFlag, isMinimalMode } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
-import { generateMnemonic, mnemonicToSeedSync, mnemonicToEntropy, validateMnemonic } from '@scure/bip39';
+import { mnemonicToEntropy } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { deriveAllAddresses, deriveAllShieldedAddresses } from '../lib/derive-address.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { parseSeedHex } from '../lib/seed-resolver.ts';
 import {
   loadWalletConfig,
   unlockWallet,
-  writeSealedWallet,
   protectAllWallets,
   setActiveWallet,
   listWallets,
   removeWallet,
   resolveWalletPath,
   getActiveWalletName,
-  type WalletPublic,
 } from '../lib/wallet-config.ts';
 import { passphraseForNewSecret } from '../lib/passphrase.ts';
-import { WALLETS_DIR_NAME, MIDNIGHT_DIR, isValidWalletName } from '../lib/constants.ts';
+import { createWallet, walletFilePath, walletSecretFrom } from '../lib/wallet-create.ts';
 import { header, keyValue, divider, formatAddress } from '../ui/format.ts';
 import { bold, yellow, dim, green, teal } from '../ui/colors.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
@@ -66,11 +62,7 @@ async function walletGenerate(args: ParsedArgs): Promise<void> {
     );
   }
 
-  if (!isValidWalletName(name)) {
-    throw new Error(
-      `Invalid wallet name: "${name}"\nWallet name must be a simple name (no path separators, .json suffix, or special characters).`
-    );
-  }
+  const targetPath = walletFilePath(name);
 
   const networkName = resolveNetworkName({ args });
   const seedHex = getFlag(args, 'seed');
@@ -80,10 +72,6 @@ async function walletGenerate(args: ParsedArgs): Promise<void> {
     throw new Error('Cannot specify both --seed and --mnemonic. Use one or the other.');
   }
 
-  // Resolve target path
-  const walletsDir = path.join(homedir(), MIDNIGHT_DIR, WALLETS_DIR_NAME);
-  const targetPath = path.join(walletsDir, `${name}.json`);
-
   if (fs.existsSync(targetPath) && !hasFlag(args, 'force')) {
     throw new Error(
       `Wallet "${name}" already exists: ${targetPath}\n` +
@@ -91,38 +79,13 @@ async function walletGenerate(args: ParsedArgs): Promise<void> {
     );
   }
 
-  let seedBuffer: Buffer;
-  let mnemonic: string | undefined;
-
-  if (seedHex !== undefined) {
-    seedBuffer = parseSeedHex(seedHex, '--seed');
-  } else if (mnemonicStr !== undefined) {
-    if (!validateMnemonic(mnemonicStr, wordlist)) {
-      throw new Error('Invalid BIP-39 mnemonic. Expected 12 or 24 words from the English wordlist.');
-    }
-    mnemonic = mnemonicStr;
-    seedBuffer = Buffer.from(mnemonicToSeedSync(mnemonic));
-  } else {
-    mnemonic = generateMnemonic(wordlist, 256);
-    seedBuffer = Buffer.from(mnemonicToSeedSync(mnemonic));
-  }
-
-  const addresses = deriveAllAddresses(seedBuffer);
-  const shieldedAddresses = deriveAllShieldedAddresses(seedBuffer);
-  const activeAddress = addresses[networkName];
-
-  const config: WalletPublic = {
-    addresses,
-    shieldedAddresses,
-    createdAt: new Date().toISOString(),
-  };
-  const secrets = mnemonic ? { seed: seedBuffer.toString('hex'), mnemonic } : { seed: seedBuffer.toString('hex') };
+  const secret = walletSecretFrom(seedHex !== undefined ? { seed: parseSeedHex(seedHex, '--seed') } : { mnemonic: mnemonicStr });
 
   // Checked above: an existing wallet is replaced only with --force.
-  const savedPath = writeSealedWallet(targetPath, config, secrets, await passphraseForNewSecret(homedir()), { overwrite: hasFlag(args, 'force') });
-
-  // Set as active wallet
-  setActiveWallet(name);
+  const created = createWallet(name, secret, await passphraseForNewSecret(homedir()), { overwrite: hasFlag(args, 'force') });
+  const { addresses, shieldedAddresses, mnemonic, file: savedPath } = created;
+  const seedBuffer = created.seed;
+  const activeAddress = addresses[networkName];
 
   // JSON mode
   if (hasFlag(args, 'json')) {
@@ -134,7 +97,7 @@ async function walletGenerate(args: ParsedArgs): Promise<void> {
       activeNetwork: networkName,
       seed: seedBuffer.toString('hex'),
       file: savedPath,
-      createdAt: config.createdAt,
+      createdAt: created.createdAt,
       active: true,
     };
     if (mnemonic) result.mnemonic = mnemonic;

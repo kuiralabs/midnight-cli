@@ -9,6 +9,7 @@ import { bold, dim, teal, yellow, green } from '../ui/colors.ts';
 import { silentSpinner, start as startSpinner } from '../ui/spinner.ts';
 import { type CommandContext, type Payer, payerFor, resolvePayingTarget } from '../lib/payer.ts';
 import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
+import { deployContract } from '../lib/contract/deploy.ts';
 import { validateContractAddress } from '../lib/contract/validate.ts';
 import type { RawStateValue } from '../lib/contract/raw-state.ts';
 import { resolveContractCallRequest, resolveContractDeployRequest, resolveScanDir } from '../lib/contract/request.ts';
@@ -108,16 +109,15 @@ async function handleInspect(args: ParsedArgs): Promise<void> {
 
 async function handleDeploy(args: ParsedArgs, payer: Payer, signal?: AbortSignal): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
-  const { dappDir, info, constructorArgs, privateStateSecretKey } = resolveContractDeployRequest(args);
-
-  const { runDeploy } = await import('../lib/contract/runner.ts');
+  const request = resolveContractDeployRequest(args);
+  const { info, constructorArgs } = request;
 
   if (!jsonMode) {
     process.stderr.write('\n' + header('Contract Deploy') + '\n\n');
   }
 
   const target = resolvePayingTarget(args, 'contract', 'deploy');
-  const { network, networkConfig } = target;
+  const { network } = target;
 
   if (!jsonMode) {
     process.stderr.write(keyValue('Contract', info.name) + '\n');
@@ -128,52 +128,32 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, signal?: AbortSignal
     process.stderr.write('\n');
   }
 
-  // Pre-check: verify wallet has balance and dust before attempting deploy
-  await assertWalletCanPay(target, getFlag(args, 'wallet'), jsonMode ? silentSpinner() : startSpinner('Checking wallet...'));
+  const deployed = await deployContract({
+    request,
+    target,
+    wallet: getFlag(args, 'wallet'),
+    payer,
+    progress: (message) => jsonMode ? silentSpinner() : startSpinner(message),
+    signal,
+  });
 
-  // Start mn serve (or reuse existing)
-  const serve = await payer.serve(target, getFlag(args, 'wallet'), jsonMode ? silentSpinner() : startSpinner('Starting mn serve...'));
-
-  const spinner = jsonMode ? silentSpinner() : startSpinner('Deploying contract...');
-
-  try {
-    const result = await runDeploy({
-      dappDir,
-      networkConfig,
-      managedDir: info.managedDir,
-      contractName: info.name,
-      servePort: serve.port,
-      args: constructorArgs,
-      privateStateSecretKey,
-      onMessage: (msg) => spinner.update(msg),
-      signal,
+  if (jsonMode) {
+    // JSON path emits a single line of structured output on stdout. The
+    // bare address line below is for the human "pipe through head" workflow
+    // and would pollute the JSON stream.
+    writeJsonResult({
+      subcommand: 'deploy',
+      contractName: deployed.contractName,
+      address: deployed.address,
+      network,
     });
-
-    spinner.stop('Contract deployed');
-
-    if (jsonMode) {
-      // JSON path emits a single line of structured output on stdout. The
-      // bare address line below is for the human "pipe through head" workflow
-      // and would pollute the JSON stream.
-      writeJsonResult({
-        subcommand: 'deploy',
-        contractName: info.name,
-        address: result.contractAddress,
-        network,
-      });
-    } else {
-      process.stderr.write('\n');
-      process.stderr.write(keyValue('Address', result.contractAddress) + '\n');
-      process.stderr.write('\n' + green('  ✓ Deploy successful') + '\n');
-      writeNextStepsHint(result.contractAddress, info.circuits, network);
-      // Pipeable address on stdout for shell composition (e.g. `addr=$(mn contract deploy)`).
-      process.stdout.write(result.contractAddress + '\n');
-    }
-  } catch (err) {
-    spinner.fail('Deploy failed');
-    throw err;
-  } finally {
-    await serve.stop();
+  } else {
+    process.stderr.write('\n');
+    process.stderr.write(keyValue('Address', deployed.address) + '\n');
+    process.stderr.write('\n' + green('  ✓ Deploy successful') + '\n');
+    writeNextStepsHint(deployed.address, info.circuits, network);
+    // Pipeable address on stdout for shell composition (e.g. `addr=$(mn contract deploy)`).
+    process.stdout.write(deployed.address + '\n');
   }
 }
 
