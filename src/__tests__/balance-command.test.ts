@@ -9,10 +9,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-// Live tests against a running ledger-9 indexer. Opt in with MN_LIVE_TESTS=1;
-// they use undeployed's saved endpoints (`midnight config set ...`) or the
-// defaults, never docker auto-detection (MN_NO_LOCAL_DETECT is set for tests).
-const HAS_INDEXER = process.env.MN_LIVE_TESTS === '1';
+// The balance command's checks that need no chain. Those that read a live
+// indexer are in balance-command.live.test.ts (npm run test:live).
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-balance-cmd-test-${process.pid}`);
 
@@ -74,69 +72,6 @@ describe('balance command — shielded flag errors', () => {
   });
 });
 
-describe.skipIf(!HAS_INDEXER)('balance command — reads address from wallet file', () => {
-  it('loads address from wallet file and syncs full wallet', async () => {
-    const walletFile = path.join(TEST_DIR, 'wallet.json');
-    const config: WalletConfig = {
-      seed: GENESIS_SEED,
-      addresses: deriveAllAddresses(genesisSeedBuffer),
-      createdAt: '2026-01-01T00:00:00.000Z',
-    };
-    saveWalletConfig(config, walletFile);
-
-    const args = parseArgs(['balance', '--wallet', walletFile, '--network', 'undeployed']);
-    await balanceCommand(args);
-
-    const err = io.stderr();
-    expect(err).toContain('Balance');
-    expect(err).toContain(GENESIS_UNDEPLOYED_ADDRESS);
-    expect(err).toContain('undeployed');
-    expect(err).toContain('Unshielded');
-    expect(err).toContain('Shielded');
-  });
-});
-
-describe.skipIf(!HAS_INDEXER)('balance command — positional address with local indexer', () => {
-  it('checks balance for the genesis address on undeployed', async () => {
-    const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed']);
-    await balanceCommand(args);
-
-    const err = io.stderr();
-    expect(err).toContain('Balance');
-    expect(err).toContain(GENESIS_UNDEPLOYED_ADDRESS);
-    expect(err).toContain('undeployed');
-    expect(err).toContain('UTXOs');
-    expect(err).toContain('Transactions');
-  });
-
-  it('uses explicit --network flag for address lookup', async () => {
-    const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed']);
-    await balanceCommand(args);
-
-    const err = io.stderr();
-    expect(err).toContain('undeployed');
-  });
-
-  it('outputs NIGHT balance to stdout for genesis address', async () => {
-    const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed']);
-    await balanceCommand(args);
-
-    const out = io.stdout();
-    // Genesis address on local undeployed should have funds — stdout has bare NIGHT=<amount>
-    expect(out).toContain('NIGHT=');
-  });
-
-  it('outputs "0" to stdout for an unfunded address', async () => {
-    const args = parseArgs(['balance', EMPTY_ADDRESS, '--network', 'undeployed']);
-    await balanceCommand(args);
-
-    const out = io.stdout().trim();
-    expect(out).toBe('0');
-    const err = io.stderr();
-    expect(err).toContain('No balance found');
-  });
-});
-
 describe('balance command — --indexer-ws override', () => {
   it('uses custom indexer WS URL and fails on invalid one', async () => {
     // --no-cache forces a fresh fetch so the test actually hits the
@@ -152,61 +87,6 @@ describe('balance command — --indexer-ws override', () => {
   });
 });
 
-describe.skipIf(!HAS_INDEXER)('balance command — JSON output', () => {
-  it('outputs valid JSON with all expected fields', async () => {
-    const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed', '--json']);
-    await balanceCommand(args);
-
-    const data = JSON.parse(io.stdout().trim());
-    expect(data.address).toBe(GENESIS_UNDEPLOYED_ADDRESS);
-    expect(data.network).toBe('undeployed');
-    expect(data.balances).toBeDefined();
-    expect(typeof data.utxoCount).toBe('number');
-    expect(typeof data.txCount).toBe('number');
-  });
-
-  it('exposes a top-level NIGHT alias for flat-shape consumers', async () => {
-    // Compatibility shim for integrators who jq for `.NIGHT` directly
-    // (e.g. midnight-expert's session health check). The nested
-    // `.balances.NIGHT` remains canonical; this is an additive mirror.
-    const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed', '--json']);
-    await balanceCommand(args);
-
-    const data = JSON.parse(io.stdout().trim());
-    if (data.balances?.NIGHT) {
-      expect(data.NIGHT).toBe(data.balances.NIGHT);
-    }
-  });
-
-  it('reports NIGHT balance in NIGHT units (not micro-NIGHT)', async () => {
-    const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed', '--json']);
-    await balanceCommand(args);
-
-    const data = JSON.parse(io.stdout().trim());
-    const nightBalance = data.balances.NIGHT;
-    if (nightBalance) {
-      // Should contain a decimal point (NIGHT format), not raw micro-NIGHT
-      expect(nightBalance).toContain('.');
-      // Should have exactly 6 decimal places
-      const decimals = nightBalance.split('.')[1];
-      expect(decimals.length).toBe(6);
-    }
-  });
-
-  it('does not write formatted headers/tables to stderr in JSON mode', async () => {
-    // Note: spinner output still goes to stderr at the command level.
-    // Full stderr suppression happens globally in wallet.ts entry point.
-    const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed', '--json']);
-    await balanceCommand(args);
-    const err = io.stderr();
-    // Should NOT contain formatted output (headers, key-value pairs, dividers)
-    expect(err).not.toContain('Balance');
-    expect(err).not.toContain('Address');
-    expect(err).not.toContain('UTXOs');
-    expect(err).not.toContain('─');
-  });
-});
-
 describe('balance command — network inference from address HRP', () => {
   it('throws a clear error when --network conflicts with the address HRP', async () => {
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'preprod']);
@@ -214,24 +94,3 @@ describe('balance command — network inference from address HRP', () => {
   });
 });
 
-describe.skipIf(!HAS_INDEXER)('balance command — spinner lifecycle', () => {
-  it('shows syncing progress on stderr for successful check', async () => {
-    const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed']);
-    await balanceCommand(args);
-
-    const err = io.stderr();
-    // Spinner should show progress and complete with ✓
-    expect(err).toContain('Checking balance');
-    expect(err).toContain('✓');
-  });
-
-  it('stops spinner with "Failed" on connection error', async () => {
-    const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--indexer-ws', 'ws://localhost:19999']);
-    try {
-      await balanceCommand(args);
-    } catch {
-      const err = io.stderr();
-      expect(err).toContain('Failed');
-    }
-  });
-});

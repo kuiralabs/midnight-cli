@@ -50,6 +50,7 @@
     "link": "bun link",
     "prepublishOnly": "npm run build && npm run test",
     "test": "vitest run",
+    "test:live": "vitest run --config vitest.live.config.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
