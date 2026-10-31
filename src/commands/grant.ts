@@ -19,7 +19,9 @@ import { type OwnerCommandOutput, grantRequestOf, grantsOf, issue, issuePreview,
 import { prepareGrant } from '../lib/grant/prepare.ts';
 import { type GrantRequest, paysAFee } from '../lib/grant/request.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
-import { type PayingWallet, assertWalletCanPay, openPayingWallet } from '../lib/paying-wallet.ts';
+import { type PayingWallet, openPayingWallet } from '../lib/grant/fee-wallet.ts';
+import { type CommandContext, payerFor } from '../lib/payer.ts';
+import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
 import { dim, yellow } from '../ui/colors.ts';
 import { header, keyValue, formatNight } from '../ui/format.ts';
 import { type Spinner, silentSpinner, start as startSpinner } from '../ui/spinner.ts';
@@ -51,7 +53,7 @@ function shortOfShieldedNight(held: bigint, value: bigint): UsageError {
   );
 }
 
-export default async function grantCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
+export default async function grantCommand(args: ParsedArgs, signal?: AbortSignal, context?: CommandContext): Promise<void> {
   const { request, target, walletName, recordsDir, account } = await prepareGrant(args);
   const jsonMode = hasFlag(args, 'json');
   const walletFlag = getFlag(args, 'wallet');
@@ -69,8 +71,9 @@ export default async function grantCommand(args: ParsedArgs, signal?: AbortSigna
     if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
   };
   // Reading the account or a request submits nothing: a wallet with no Dust can still do it, and none is opened.
-  const funds = paysAFee(request) ? await assertWalletCanPay(target, walletFlag, spinnerFor('Checking wallet...')) : undefined;
-  const paying = paysAFee(request) ? await openPayingWallet(target, walletFlag, spinnerFor('Opening the wallet...')) : undefined;
+  const payer = paysAFee(request) ? payerFor(`grant ${request.subcommand}`, context) : undefined;
+  const funds = payer ? await assertWalletCanPay(target, walletFlag, spinnerFor('Checking wallet...')) : undefined;
+  const paying = payer ? await openPayingWallet(payer, target, walletFlag, spinnerFor('Opening the wallet...')) : undefined;
   try {
     await runOwned(request, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor, throwIfCancelled });
   } finally {

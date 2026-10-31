@@ -1,21 +1,27 @@
-// Serve manager — start mn serve programmatically (in-process) for test runs.
-// Replicates the initialization from src/commands/serve.ts but returns a handle
-// instead of blocking on a signal. Always runs in approve-all mode.
+// Serve manager — start mn serve programmatically (in-process), for test runs
+// and for the commands mn serve pays for. Replicates the initialization from
+// src/commands/serve.ts but returns a handle instead of blocking on a signal.
+// Always runs in approve-all mode.
 
 import { Socket } from 'node:net';
-import { loadWalletConfig, resolveWalletPath, unlockWallet } from '../wallet-config.ts';
-import { resolveNetwork } from '../resolve-network.ts';
-import { assertLedgerSupported } from '../ledger-guard.ts';
-import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName } from '../network.ts';
-import { buildFacade, isFacadeSynced, startAndSyncFacade, stopFacade, suppressSdkTransientErrors, waitForDustAvailable } from '../facade.ts';
-import { bindCachesToIndexer, describeIndexerChange } from '../cache-indexer.ts';
-import { loadWalletCache, saveWalletCache } from '../wallet-cache.ts';
-import { suppressRpcNoise } from '../transfer.ts';
-import { createDAppConnector, type DAppConnectorCallbacks } from '../dapp-connector.ts';
-import { createRpcServer, type RpcServer } from '../ws-rpc.ts';
-import { DEFAULT_SERVE_PORT } from '../constants.ts';
-import type { FacadeBundle } from '../facade.ts';
-import type { ServeHandle } from './types.ts';
+import { loadWalletConfig, resolveWalletPath, unlockWallet } from './wallet-config.ts';
+import { resolveNetwork } from './resolve-network.ts';
+import { assertLedgerSupported } from './ledger-guard.ts';
+import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName } from './network.ts';
+import { buildFacade, isFacadeSynced, startAndSyncFacade, stopFacade, suppressSdkTransientErrors, waitForDustAvailable } from './facade.ts';
+import { bindCachesToIndexer, describeIndexerChange } from './cache-indexer.ts';
+import { loadWalletCache, saveWalletCache } from './wallet-cache.ts';
+import { suppressRpcNoise } from './transfer.ts';
+import { createDAppConnector, type DAppConnectorCallbacks } from './dapp-connector.ts';
+import { createRpcServer, type RpcServer } from './ws-rpc.ts';
+import { DEFAULT_SERVE_PORT } from './constants.ts';
+import type { FacadeBundle } from './facade.ts';
+
+/** A running mn serve, and how to stop it. */
+export interface ServeHandle {
+  port: number;
+  stop(): Promise<void>;
+}
 
 export interface ServeManagerOptions {
   port?: number;

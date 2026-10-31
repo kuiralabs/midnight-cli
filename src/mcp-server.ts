@@ -17,6 +17,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { type CommandRun, captureCommand } from './lib/run-command.ts';
+import { servePayer } from './lib/serve-payer.ts';
 import { classifyError, ERROR_CODES } from './lib/exit-codes.ts';
 import { trimAgentMessage } from './lib/error-trim.ts';
 import { FULL_FLAG, type ParsedArgs } from './lib/argv.ts';
@@ -1135,11 +1136,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
  * the one before is not sent again.
  */
 function toolCall(progressToken: ProgressToken | undefined, extra: RequestHandlerExtra<ServerRequest, ServerNotification>): CommandRun {
-  if (progressToken === undefined) return { signal: extra.signal };
+  if (progressToken === undefined) return { signal: extra.signal, payer: servePayer };
   let progress = 0;
   let last: string | undefined;
   return {
     signal: extra.signal,
+    payer: servePayer,
     onProgress: (message) => {
       if (message === last) return;
       last = message;

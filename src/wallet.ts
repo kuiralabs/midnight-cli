@@ -156,7 +156,8 @@ async function run(): Promise<void> {
     }
     case 'contract': {
       const { default: handler } = await import('./commands/contract.ts');
-      return handler(args, signal);
+      const { servePayer } = await import('./lib/serve-payer.ts');
+      return handler(args, signal, { payer: servePayer });
     }
     case 'dev': {
       const { default: handler } = await import('./commands/dev.ts');
@@ -164,7 +165,8 @@ async function run(): Promise<void> {
     }
     case 'grant': {
       const { default: handler } = await import('./commands/grant.ts');
-      return handler(args, signal);
+      const { servePayer } = await import('./lib/serve-payer.ts');
+      return handler(args, signal, { payer: servePayer });
     }
     default:
       throw new UsageError(
