@@ -8,6 +8,7 @@ import { assertEndpointUsable } from './blockfrost.ts';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import * as ledger from '@midnightntwrk/ledger-v9';
@@ -63,21 +64,25 @@ export function resolveSidecarBinary(): string | null {
   }
 
   // Phase 3 platform package: @nel349/dust-sync-<os>-<arch>.
+  return platformPackageBinary(import.meta.url);
+}
+
+/**
+ * The sidecar binary in the platform package (@nel349/dust-sync-<os>-<arch>)
+ * resolvable from `fromUrl`, or null when it isn't installed. Resolved with
+ * node:module's createRequire, which works from source and from the bundle.
+ */
+export function platformPackageBinary(fromUrl: string): string | null {
+  const exe = process.platform === 'win32' ? 'dust-sync.exe' : 'dust-sync';
   try {
     const pkg = `@nel349/dust-sync-${process.platform}-${process.arch}`;
-    const req = createRequire(import.meta.url);
-    const binPath = join(dirname(req.resolve(`${pkg}/package.json`)), exe);
-    if (existsSync(binPath)) return binPath;
-  } catch { /* package not installed */ }
-
-  return null;
+    const binPath = join(dirname(createRequire(fromUrl).resolve(`${pkg}/package.json`)), exe);
+    return existsSync(binPath) ? binPath : null;
+  } catch {
+    return null; // package not installed
+  }
 }
 
-// Lazy `require` for the optional-package lookup (ESM has no bare require).
-function createRequire(url: string) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  return (globalThis as any).require ?? (require('node:module') as typeof import('node:module')).createRequire(url);
-}
 
 /** True when the native sidecar should be used (binary resolves + not disabled). */
 /**
