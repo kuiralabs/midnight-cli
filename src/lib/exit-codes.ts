@@ -1,4 +1,4 @@
-import { isUsageError } from './errors.ts';
+import { CANCELLED_MESSAGE, isUsageError } from './errors.ts';
 // Structured exit codes and error classification for CLI
 // Used by both JSON mode and non-JSON error reporting
 
@@ -118,7 +118,7 @@ export function classifyError(err: Error): ClassifiedError {
   const msg = (err.message ?? '').toLowerCase();
 
   // Cancelled by user (SIGINT / AbortController)
-  if (msg.includes('operation cancelled') || msg.includes('operation aborted') || msg === 'cancelled' || msg === 'aborted') {
+  if (msg.includes(CANCELLED_MESSAGE.toLowerCase()) || msg.includes('operation aborted') || msg === 'cancelled' || msg === 'aborted') {
     return { exitCode: EXIT_CANCELLED, errorCode: ERROR_CODES.CANCELLED };
   }
 

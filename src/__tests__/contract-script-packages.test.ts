@@ -13,6 +13,9 @@ import { pathToFileURL } from 'node:url';
 import {
   NoNodeRuntimeError,
   SCRIPT_PACKAGES,
+  acquireOverlay,
+  executeScript,
+  releaseOverlay,
   generateCallScript,
   generateDeployScript,
   generateStateScript,
@@ -58,23 +61,38 @@ describe('the packages the scripts need', () => {
 });
 
 describe('a dApp laid out unlike ours', () => {
-  const importEach = (dapp: string) => {
+  const importEach = (dapp: string, extra: string[] = []) => {
     const script = path.join(dapp, 'probe.mjs');
-    fs.writeFileSync(script, `for (const p of ${JSON.stringify(SCRIPT_PACKAGES)}) await import(p);\nconsole.log('imported', ${SCRIPT_PACKAGES.length});`);
-    return spawnSync(scriptRuntime(), [script], { cwd: dapp, encoding: 'utf8', timeout: 120_000 });
+    const names = [...SCRIPT_PACKAGES, ...extra];
+    fs.writeFileSync(script, `for (const p of ${JSON.stringify(names)}) await import(p);\nconsole.log('imported', ${names.length});`);
+    const run = spawnSync(scriptRuntime(), [script], { cwd: dapp, encoding: 'utf8', timeout: 120_000 });
+    fs.rmSync(script);
+    return run;
   };
+  // A package of the same installed tree that no generated script imports, as a witness might.
+  const WITNESS_ONLY = '@midnight-ntwrk/midnight-js-protocol';
 
-  it('with no node_modules gets one holding only links to the packages, and is left as it was', () => {
+  it('with no node_modules gets a link to the installed tree, so a witness\'s other imports resolve too, and is left as it was', () => {
     const made = overlayScriptPackages(path.join(dir, 'node_modules'));
-    expect(fs.lstatSync(path.join(dir, 'node_modules')).isSymbolicLink()).toBe(false);
-    expect(fs.readdirSync(path.join(dir, 'node_modules')).sort()).toEqual(['@midnight-ntwrk', 'ws']);
-    const run = importEach(dir);
+    expect(made).toHaveLength(1);
+    expect(fs.lstatSync(path.join(dir, 'node_modules')).isSymbolicLink()).toBe(true);
+    const run = importEach(dir, [WITNESS_ONLY]);
     expect(run.status, run.stderr).toBe(0);
-    expect(run.stdout.trim()).toBe(`imported ${SCRIPT_PACKAGES.length}`);
+    expect(run.stdout.trim()).toBe(`imported ${SCRIPT_PACKAGES.length + 1}`);
 
     undoOverlay(made);
-    fs.rmSync(path.join(dir, 'probe.mjs'));
     expect(fs.readdirSync(dir)).toEqual([]);
+  });
+
+  it('with a node_modules of its own but no Midnight scope gets the whole scope linked', () => {
+    fs.mkdirSync(path.join(dir, 'node_modules', 'left-pad'), { recursive: true });
+    const made = overlayScriptPackages(path.join(dir, 'node_modules'));
+    expect(fs.lstatSync(path.join(dir, 'node_modules', '@midnight-ntwrk')).isSymbolicLink()).toBe(true);
+    const run = importEach(dir, [WITNESS_ONLY]);
+    expect(run.status, run.stderr).toBe(0);
+
+    undoOverlay(made);
+    expect(fs.readdirSync(path.join(dir, 'node_modules'))).toEqual(['left-pad']);
   });
 
   it('that pins a package keeps its own, gets the rest, and keeps its own afterwards', () => {
@@ -90,6 +108,31 @@ describe('a dApp laid out unlike ours', () => {
     undoOverlay(made);
     expect(fs.readdirSync(path.join(dir, 'node_modules', '@midnight-ntwrk'))).toEqual(['compact-runtime']);
     expect(fs.readFileSync(path.join(pinned, 'index.js'), 'utf8')).toBe('export const pinned = true;');
+  });
+
+  it('shares one overlay between runs at once: the first to finish leaves it for the other, the last undoes it', () => {
+    acquireOverlay(dir);
+    acquireOverlay(dir);
+    releaseOverlay(dir);
+    expect(fs.lstatSync(path.join(dir, 'node_modules')).isSymbolicLink()).toBe(true);
+    expect(importEach(dir).status).toBe(0);
+    releaseOverlay(dir);
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
+
+  it('a run whose holder died: the stale share is dropped and the overlay still undone', () => {
+    acquireOverlay(dir);
+    const record = path.join(dir, '.mn-overlay.json');
+    const held = JSON.parse(fs.readFileSync(record, 'utf8')) as { pids: number[]; made: unknown[] };
+    // A pid no live process has.
+    fs.writeFileSync(record, JSON.stringify({ ...held, pids: [...held.pids, 2 ** 22 + 12345] }));
+    releaseOverlay(dir);
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
+
+  it('with no Node to run under, refuses before writing anything to the dApp', async () => {
+    await expect(executeScript({ dir, script: 'console.log(1)', findRuntime: () => { throw new NoNodeRuntimeError(); } })).rejects.toThrow(NoNodeRuntimeError);
+    expect(fs.readdirSync(dir)).toEqual([]);
   });
 });
 

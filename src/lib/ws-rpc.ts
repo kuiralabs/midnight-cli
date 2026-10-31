@@ -146,6 +146,12 @@ export interface RpcConnection {
 export interface RpcServerOptions {
   port: number;
   handlers: Record<string, RpcHandler>;
+  /**
+   * Refuse every connection that carries an Origin header, which browsers
+   * always send: for a server only mn's own Node scripts may use, such as the
+   * approve-all wallet a deploy serves, so no web page can reach it.
+   */
+  refuseBrowsers?: boolean;
   /** Called when a new WebSocket connection is established */
   onConnect?: (connection: RpcConnection) => void;
   /** Called when a connection is closed */
@@ -206,12 +212,16 @@ function parseRequest(data: string): JsonRpcRequest {
 let connectionCounter = 0;
 
 export function createRpcServer(options: RpcServerOptions): RpcServer {
-  const { port, handlers, onConnect, onDisconnect, onRequest, onResponse } = options;
+  const { port, handlers, onConnect, onDisconnect, onRequest, onResponse, refuseBrowsers = false } = options;
   const connections = new Map<string, RpcConnection>();
 
   // Bind to loopback only — prevents remote machines on the network from connecting.
   // Browser DApps on localhost can still connect via ws://localhost:<port>.
-  const wss = new WebSocketServer({ port, host: '127.0.0.1' });
+  const wss = new WebSocketServer({
+    port,
+    host: '127.0.0.1',
+    ...(refuseBrowsers ? { verifyClient: (info: { origin?: string }) => !info.origin } : {}),
+  });
   const ready = new Promise<void>((resolve, reject) => {
     wss.once('listening', () => resolve());
     wss.once('error', reject);

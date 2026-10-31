@@ -55,4 +55,24 @@ describe('deployContract', () => {
     }
     expect(said).toEqual(['Checking wallet...']);
   });
+
+  it("asks the payer it is given whether it can pay, not mn's own wallets", async () => {
+    // A program's own payer, paying from a wallet mn has no file for (the injection the Payer interface exists for).
+    const asked: string[] = [];
+    const ownPayer = {
+      assertCanPay: async (_target: unknown, wallet: string | undefined) => { asked.push(`assertCanPay ${wallet}`); return { nightBalance: 1n, dustBalance: 1n }; },
+      serve: async () => { asked.push('serve'); throw new Error('served by the program'); },
+      connect: async () => { throw new Error('not used'); },
+    };
+    const args = parseArgs(['contract', 'deploy', '--path', path.join(home, 'dapp'), '--wallet', 'external', ...ENDPOINTS]);
+    await expect(deployContract({
+      request: resolveContractDeployRequest(args),
+      target: resolvePayingTarget(args, 'contract', 'deploy'),
+      wallet: 'external',
+      payer: ownPayer,
+      progress: () => silentSpinner(),
+    })).rejects.toThrow('served by the program');
+    expect(asked).toEqual(['assertCanPay external', 'serve']);
+    expect(fs.existsSync(path.join(home, '.midnight', 'wallets'))).toBe(false);
+  });
 });

@@ -318,6 +318,8 @@ export async function startServe(options: ServeManagerOptions): Promise<ServeHan
   const server = createRpcServer({
     port,
     handlers: connector.handlers,
+    // It approves every request, for mn's own scripts only: no web page may connect.
+    refuseBrowsers: true,
     onConnect: (conn) => {
       onMessage(`connected ${conn.id}`);
     },

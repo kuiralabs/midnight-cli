@@ -14,15 +14,9 @@ import { migrateOldWallet } from './lib/wallet-paths.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
-import { installSdkNoiseFilters } from './lib/sdk-noise.ts';
-import { setNoticeSink } from './lib/notices.ts';
 import { setPrompter } from './lib/prompter.ts';
-import { setSettingsSource, settingsFromEnvironment } from './lib/settings.ts';
-import { setHostPathsSource } from './lib/state-root.ts';
-import { MIDNIGHT_DIR } from './lib/constants.ts';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { createTerminalPrompter } from './ui/terminal-prompter.ts';
+import { installCliHost } from './lib/cli-host.ts';
 
 // Commands that start a WalletFacade. They (a) leave WebSocket connections in
 // the event loop that facade.stop() doesn't fully drain — so we must exit
@@ -67,17 +61,9 @@ if (FACADE_COMMANDS.has(command)) await ensureHeapForSync();
 // Endpoint URLs can carry a Blockfrost project id: nothing mn or its libraries print shows it.
 hideProjectIdsInOutput();
 
-// The SDK's transient errors and RPC noise are filtered for the whole run; libraries only listen for them.
-installSdkNoiseFilters();
-
-// What libraries have for the person at the terminal goes to stderr.
-setNoticeSink((line) => process.stderr.write(line + '\n'));
-
-// Libraries read the environment variables of spec §5.4 as settings, at the moment they need one.
-setSettingsSource(() => settingsFromEnvironment(process.env));
-
-// mn's state lives under ~/.midnight, the home read as each path is built.
-setHostPathsSource(() => ({ stateRoot: join(homedir(), MIDNIGHT_DIR), home: homedir() }));
+// What the libraries get from their host: the SDK noise filters, notices on
+// stderr, settings from the environment, and the state root ~/.midnight.
+installCliHost();
 
 // Libraries ask their questions (passphrase, approvals) at the terminal.
 setPrompter(createTerminalPrompter());

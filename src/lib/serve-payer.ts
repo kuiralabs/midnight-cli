@@ -9,6 +9,7 @@ import { DEFAULT_SERVE_PORT } from './constants.ts';
 import { OWN_COMMAND_DUST_WAIT_MS } from './dust-wait.ts';
 import type { Payer, PayingMethod, PayingTarget, ServedWallet, WalletConnection } from './payer.ts';
 import type { Spinner } from '../ui/spinner.ts';
+import { assertWalletCanPay } from './wallet-can-pay.ts';
 
 /** The connection name the command's own calls are made under, for the connector's pending transactions. */
 const OWN_CONNECTION = 'mn-own-command';
@@ -56,7 +57,12 @@ async function connectWallet({ network, endpoints }: PayingTarget, wallet: strin
 
 /** The payer whose served wallet is the mn serve on `port`. */
 export function servePayerAt(port: number): Payer {
-  return { serve: (target, wallet, progress) => serveWallet(port, target, wallet, progress), connect: connectWallet };
+  return {
+    // The wallet mn serve pays from is mn's own: its balance is checked as mn keeps it.
+    assertCanPay: assertWalletCanPay,
+    serve: (target, wallet, progress) => serveWallet(port, target, wallet, progress),
+    connect: connectWallet,
+  };
 }
 
 export const servePayer: Payer = servePayerAt(DEFAULT_SERVE_PORT);

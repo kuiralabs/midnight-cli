@@ -29,19 +29,26 @@ interface CacheFile {
   wallets: WalletCacheData;
 }
 
-/**
- * Derive the cache file path for a given address and network.
- * Path: ~/.midnight/cache/<network>/<address-prefix>.json
- */
 /** The cache folder: `cacheDir` when given, else the state root's. Every wallet cache, the Dust and shielded ones and the indexer marker included, lives under it. */
 export function cacheRootDir(cacheDir?: string): string {
   return cacheDir ?? join(stateRoot(), CACHE_DIR_NAME);
 }
 
+/** How much of an address or key names its cache file: enough to keep them apart, short enough for any filesystem. */
+export const CACHE_KEY_PREFIX_LENGTH = 20;
+
+/** The part of an address or key a cache file is named by. */
+export function cacheKeyOf(addressOrKey: string): string {
+  return addressOrKey.slice(0, CACHE_KEY_PREFIX_LENGTH);
+}
+
+/**
+ * Derive the cache file path for a given address and network.
+ * Path: <cache folder>/<network>/<address-prefix>.json
+ */
 export function getCachePath(address: string, network: string, cacheDir?: string): string {
   const base = cacheRootDir(cacheDir);
-  // Use first 20 chars of address as prefix (enough to avoid collisions, short enough for filesystem)
-  const prefix = address.slice(0, 20);
+  const prefix = cacheKeyOf(address);
   return join(base, network, `${prefix}.json`);
 }
 

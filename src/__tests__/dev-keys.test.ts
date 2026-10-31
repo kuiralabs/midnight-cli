@@ -28,12 +28,12 @@ describe('startKeyDispatcher', () => {
     process.stdin.setRawMode = vi.fn(() => process.stdin) as any;
     process.stdin.resume = vi.fn(() => process.stdin) as any;
     process.stdin.setEncoding = vi.fn(() => process.stdin) as any;
-    return await import('../lib/dev/keys.ts');
+    return await import('../ui/dev-keys.ts');
   }
 
   it('returns a no-op dispatcher when stdin is not a TTY', async () => {
     (process.stdin as any).isTTY = false;
-    const { startKeyDispatcher } = await import('../lib/dev/keys.ts');
+    const { startKeyDispatcher } = await import('../ui/dev-keys.ts');
     const d = startKeyDispatcher({ actions: { d: () => {} }, onInterrupt: () => {} });
     expect(typeof d.stop).toBe('function');
     d.stop(); // must not throw

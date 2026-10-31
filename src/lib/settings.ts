@@ -4,6 +4,17 @@
 // consumer gives its own. A library never reads the environment itself; with
 // no source, every setting is unset.
 
+/** The environment variables of spec §5.4 that become settings: their names, in one place. */
+export const PASSPHRASE_ENV = 'MN_PASSPHRASE';
+export const SEED_ENV = 'MN_SEED';
+export const NO_LOCAL_DETECT_ENV = 'MN_NO_LOCAL_DETECT';
+export const DUST_SYNC_BIN_ENV = 'MN_DUST_SYNC_BIN';
+export const DISABLE_NATIVE_DUST_ENV = 'MN_DISABLE_NATIVE_DUST';
+export const DUST_COLLAPSE_DISABLE_ENV = 'MN_DISABLE_DUST_COLLAPSE';
+export const BLOCKFROST_PROJECT_ID_ENV = 'MN_BLOCKFROST_PROJECT_ID';
+/** The name Midnight's own docs give the Blockfrost variable; other tools use it too. */
+export const SHARED_BLOCKFROST_PROJECT_ID_ENV = 'BLOCKFROST_PROJECT_ID';
+
 export interface Settings {
   /** MN_PASSPHRASE: mn's passphrase, for a run with no terminal to ask at. */
   passphrase: string | undefined;
@@ -25,14 +36,14 @@ export interface Settings {
 /** The settings the variables of §5.4 in `env` give. */
 export function settingsFromEnvironment(env: Record<string, string | undefined>): Settings {
   return {
-    passphrase: env.MN_PASSPHRASE,
-    seed: env.MN_SEED,
-    isLocalDetectOff: env.MN_NO_LOCAL_DETECT === '1',
-    dustSyncBin: env.MN_DUST_SYNC_BIN,
-    isNativeDustOff: env.MN_DISABLE_NATIVE_DUST === '1',
-    isDustCollapseOff: env.MN_DISABLE_DUST_COLLAPSE === '1',
-    blockfrostProjectId: env.MN_BLOCKFROST_PROJECT_ID,
-    sharedBlockfrostProjectId: env.BLOCKFROST_PROJECT_ID,
+    passphrase: env[PASSPHRASE_ENV],
+    seed: env[SEED_ENV],
+    isLocalDetectOff: env[NO_LOCAL_DETECT_ENV] === '1',
+    dustSyncBin: env[DUST_SYNC_BIN_ENV],
+    isNativeDustOff: env[DISABLE_NATIVE_DUST_ENV] === '1',
+    isDustCollapseOff: env[DUST_COLLAPSE_DISABLE_ENV] === '1',
+    blockfrostProjectId: env[BLOCKFROST_PROJECT_ID_ENV],
+    sharedBlockfrostProjectId: env[SHARED_BLOCKFROST_PROJECT_ID_ENV],
   };
 }
 

@@ -27,9 +27,13 @@ const RULES = [
   ['changes directory', /\bprocess\.chdir\s*\(/],
   ['opens a prompt', /\bfrom\s+['"](node:)?readline['"]|\brequire\(\s*['"](node:)?readline['"]\s*\)/],
   ['reads the environment', /\bprocess\.env\b/],
+  ['reads the terminal', /\bprocess\.stdin\b|\bsetRawMode\s*\(/],
+  ['hands a child the terminal', /\bstdio\s*:\s*['"]inherit['"]|['"]inherit['"]/],
   // Spec §7: the host gives the state root; a library never builds a path from the home directory.
   ['computes a path from the home directory', /\bhomedir\s*\(|\bos\.homedir\b/],
 ];
+
+const RAW_RULES = new Set(['opens a prompt', 'hands a child the terminal']);
 
 // Shell concerns by design (1F): what they do to the process is their job.
 const SHELL_CONCERNS = new Set([
@@ -45,11 +49,30 @@ export const ALLOWED = {
   'lib/contract/runner.ts': ['reads the environment'],
 };
 
-/** Replaces string, template-literal and comment contents with spaces, keeping line breaks. */
+/**
+ * Replaces string, template-literal text, regex-literal and comment contents
+ * with spaces, keeping line breaks. The code inside a template's `${…}` is
+ * kept and scanned like any other code.
+ */
 function codeOnly(source) {
   let out = '';
   let i = 0;
   const blank = (s) => s.replace(/[^\n]/g, ' ');
+  // Where a '/' starts a regex literal rather than a division: after nothing,
+  // or after an operator or an opening bracket.
+  const regexMayStart = () => /(^|[=(,;:!&|?{}[+\-*%<>~^]|\breturn|\btypeof)\s*$/.test(out);
+  // Inside templates, the `${…}` depth at which each one was opened.
+  const templates = [];
+  let depth = 0;
+  const skipTemplateText = () => {
+    // At a template's text: blank it until its end or the next `${`.
+    let j = i;
+    while (j < source.length && source[j] !== '`' && !(source[j] === '$' && source[j + 1] === '{')) j += source[j] === '\\' ? 2 : 1;
+    out += blank(source.slice(i, j));
+    i = j;
+    if (source[i] === '`') { out += '`'; i += 1; templates.pop(); }
+    else if (i < source.length) { out += '${'; i += 2; depth += 1; }
+  };
   while (i < source.length) {
     const c = source[i];
     const next = source[i + 1];
@@ -63,12 +86,36 @@ function codeOnly(source) {
       const stop = end === -1 ? source.length : end + 2;
       out += blank(source.slice(i, stop));
       i = stop;
-    } else if (c === '"' || c === "'" || c === '`') {
+    } else if (c === '`') {
+      out += '`';
+      i += 1;
+      templates.push(depth);
+      skipTemplateText();
+    } else if (c === '}' && templates.length > 0 && depth === templates[templates.length - 1] + 1) {
+      // The end of a template's `${…}`: back to its text.
+      out += '}';
+      i += 1;
+      depth -= 1;
+      skipTemplateText();
+    } else if (c === '"' || c === "'") {
       let j = i + 1;
-      while (j < source.length && source[j] !== c) j += source[j] === '\\' ? 2 : 1;
-      out += c + blank(source.slice(i + 1, j)) + (j < source.length ? c : '');
-      i = j + 1;
+      while (j < source.length && source[j] !== c && source[j] !== '\n') j += source[j] === '\\' ? 2 : 1;
+      out += c + blank(source.slice(i + 1, j)) + (source[j] === c ? c : '');
+      i = source[j] === c ? j + 1 : j;
+    } else if (c === '/' && regexMayStart()) {
+      let j = i + 1;
+      let inClass = false;
+      while (j < source.length && source[j] !== '\n' && (inClass || source[j] !== '/')) {
+        if (source[j] === '\\') j += 1;
+        else if (source[j] === '[') inClass = true;
+        else if (source[j] === ']') inClass = false;
+        j += 1;
+      }
+      out += '/' + blank(source.slice(i + 1, j)) + (source[j] === '/' ? '/' : '');
+      i = source[j] === '/' ? j + 1 : j;
     } else {
+      if (c === '{') depth += 1;
+      else if (c === '}') depth -= 1;
       out += c;
       i += 1;
     }
@@ -94,9 +141,10 @@ export function findViolations(files = sourceFiles(), allowed = ALLOWED) {
     const raw = source.split('\n');
     for (const [rule, pattern] of RULES) {
       if ((allowed[rel] ?? []).includes(rule)) continue;
-      const scan = rule === 'opens a prompt' ? raw : lines;
+      // A rule matched on a string (an import's specifier, stdio's 'inherit') reads the raw source.
+      const scan = RAW_RULES.has(rule) ? raw : lines;
       scan.forEach((text, at) => {
-        if (pattern.test(text) && !(rule === 'opens a prompt' && /^\s*(\/\/|\*)/.test(text))) found.push({ file: rel, line: at + 1, rule });
+        if (pattern.test(text) && !(RAW_RULES.has(rule) && /^\s*(\/\/|\*)/.test(text))) found.push({ file: rel, line: at + 1, rule });
       });
     }
   }

@@ -582,30 +582,54 @@ process.exit(0);
 /** What the overlay made, to undo afterwards newest first: a link, or a folder it created. */
 type Made = { path: string; kind: 'link' | 'folder' };
 
+/** The installed copy of each scope SCRIPT_PACKAGES uses (`@midnight-ntwrk`, …), and the node_modules holding them. */
+function installedTrees(): { root: string | null; scopes: Map<string, string> } {
+  const scopes = new Map<string, string>();
+  let root: string | null = null;
+  for (const name of SCRIPT_PACKAGES) {
+    if (!name.startsWith('@')) continue;
+    const folder = packageFolder(name);
+    if (folder === null) continue;
+    const scope = name.slice(0, name.indexOf('/'));
+    if (!scopes.has(scope)) scopes.set(scope, dirname(folder));
+    root ??= dirname(dirname(folder));
+  }
+  return { root, scopes };
+}
+
 /**
- * Link each of SCRIPT_PACKAGES that `userNodeModules` lacks to mn's copy, by
- * name, making `node_modules` and a scope folder where they are missing.
+ * Make SCRIPT_PACKAGES, and whatever else a dApp's witnesses import from the
+ * same installed tree, resolvable from `userNodeModules`, finding mn's copy
+ * by name (never by walking up from this file):
+ *   - a dApp with no node_modules gets a link to the node_modules holding them;
+ *   - a dApp without one of their scopes gets a link to that whole scope;
+ *   - a package still missing (in a scope the dApp has, or unscoped) is linked
+ *     on its own.
  * Never replaces what the dApp has: the user may pin a version we shouldn't
- * shadow. A package that can't be found or linked is left out, and the script
- * then fails with Node's clear ERR_MODULE_NOT_FOUND.
+ * shadow. What can't be found or linked is left out, and the script then fails
+ * with Node's clear ERR_MODULE_NOT_FOUND.
  */
 export function overlayScriptPackages(userNodeModules: string): Made[] {
   const made: Made[] = [];
-  const ensureFolder = (dir: string): void => {
-    if (existsSync(dir)) return;
-    mkdirSync(dir);
-    made.push({ path: dir, kind: 'folder' });
-  };
-  for (const name of SCRIPT_PACKAGES) {
-    const target = packageFolder(name);
-    const link = join(userNodeModules, name);
-    if (target === null || existsSync(link)) continue;
+  const link = (target: string, at: string): void => {
     try {
-      ensureFolder(userNodeModules);
-      if (name.startsWith('@')) ensureFolder(dirname(link));
-      symlinkSync(target, link, 'dir');
-      made.push({ path: link, kind: 'link' });
+      symlinkSync(target, at, 'dir');
+      made.push({ path: at, kind: 'link' });
     } catch { /* left out: the script reports the missing package */ }
+  };
+  const { root, scopes } = installedTrees();
+  if (!existsSync(userNodeModules)) {
+    if (root !== null) link(root, userNodeModules);
+    return made;
+  }
+  for (const [scope, folder] of scopes) {
+    const at = join(userNodeModules, scope);
+    if (!existsSync(at)) link(folder, at);
+  }
+  for (const name of SCRIPT_PACKAGES) {
+    const at = join(userNodeModules, name);
+    const target = existsSync(at) ? null : packageFolder(name);
+    if (target !== null) link(target, at);
   }
   return made;
 }
@@ -618,6 +642,44 @@ export function undoOverlay(made: readonly Made[]): void {
       else rmdirSync(item.path);
     } catch { /* best-effort: never touch what the dApp has */ }
   }
+}
+
+/** The record, in a dApp folder, of the overlay its running scripts share. */
+const OVERLAY_RECORD = '.mn-overlay.json';
+interface OverlayRecord { pids: number[]; made: Made[] }
+
+const isAlive = (pid: number): boolean => {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+};
+
+/**
+ * Takes a share of the dApp's overlay for this run, making it if no live run
+ * holds one. Runs in one folder at once share it, so one finishing never
+ * removes links another still uses; a run that died leaves its pid, which the
+ * next run drops.
+ */
+export function acquireOverlay(dappDir: string): void {
+  const record = join(dappDir, OVERLAY_RECORD);
+  let held: OverlayRecord | null = null;
+  try { held = JSON.parse(readFileSync(record, 'utf8')) as OverlayRecord; } catch { /* none yet */ }
+  const live = (held?.pids ?? []).filter(isAlive);
+  const made = held !== null ? held.made : overlayScriptPackages(join(dappDir, 'node_modules'));
+  writeFileSync(record, JSON.stringify({ pids: [...live, process.pid], made } satisfies OverlayRecord));
+}
+
+/** Gives back this run's share; the last run out undoes the overlay and removes the record. */
+export function releaseOverlay(dappDir: string): void {
+  const record = join(dappDir, OVERLAY_RECORD);
+  let held: OverlayRecord;
+  try { held = JSON.parse(readFileSync(record, 'utf8')) as OverlayRecord; } catch { return; }
+  const mine = held.pids.indexOf(process.pid);
+  const pids = held.pids.filter((pid, at) => at !== mine && isAlive(pid));
+  if (pids.length > 0) {
+    writeFileSync(record, JSON.stringify({ pids, made: held.made } satisfies OverlayRecord));
+    return;
+  }
+  undoOverlay(held.made);
+  try { unlinkSync(record); } catch { /* already gone */ }
 }
 
 /** A generated script to run with node, and where. */
@@ -637,6 +699,8 @@ export interface ScriptRun {
   label?: string;
   /** Stops the run when it aborts: the script's process is killed, and the run fails as cancelled. */
   signal?: AbortSignal;
+  /** Finds the Node.js to run the script with; scriptRuntime unless given. */
+  findRuntime?: () => string;
 }
 
 // How long a cancelled script has to exit on SIGTERM before it is killed outright.
@@ -672,7 +736,7 @@ export function scriptRuntime(
 }
 
 /** Runs a generated script and returns what it wrote to stdout. Throws its marked error when it fails. */
-export async function executeScript({ dir: dappDir, script, onMessage, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal }: ScriptRun): Promise<string> {
+export async function executeScript({ dir: dappDir, script, onMessage, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal, findRuntime = scriptRuntime }: ScriptRun): Promise<string> {
   if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
   // ESM resolution walks up from the importing file's location to find
   // node_modules; NODE_PATH does NOT work for ESM. Three different files
@@ -681,25 +745,28 @@ export async function executeScript({ dir: dappDir, script, onMessage, env: extr
   //   2. the user's compiled contract/index.js (under managed/<name>/)
   //   3. the user's witnesses.js (under dist/ or src/)
   // All three live somewhere under dappDir, so symlinking ours into the
-  // dApp's node_modules satisfies all of them. overlayScriptPackages handles
-  // both the empty-tree and missing-package cases; cleanup removes only
-  // what we created so the dApp dir ends up exactly as we found it.
-  const userNodeModules = join(dappDir, 'node_modules');
-  const overlay = overlaySdk ? overlayScriptPackages(userNodeModules) : [];
-
+  // dApp's node_modules satisfies all of them (overlayScriptPackages); the
+  // last run out removes only what was made, so the dApp ends as we found it.
+  // Resolved before anything is written, so a missing Node leaves the dApp as it was.
+  const runtime = findRuntime();
   // Unique to this run, so two at once in one directory never share a script.
   const scriptPath = join(dappDir, `.mn-${label}-${Date.now()}-${randomBytes(SCRIPT_NAME_RANDOM_BYTES).toString('hex')}.mjs`);
-  writeFileSync(scriptPath, script);
-
+  if (overlaySdk) acquireOverlay(dappDir);
   const cleanup = () => {
     try { unlinkSync(scriptPath); } catch {}
-    // Undo the overlay newest first: links go (never their targets), and a
-    // folder we made goes only once it is empty again.
-    undoOverlay(overlay);
+    // Our share of the overlay goes back; the last run out undoes it (links
+    // go, never their targets; a folder we made goes only once empty).
+    if (overlaySdk) releaseOverlay(dappDir);
   };
+  try {
+    writeFileSync(scriptPath, script);
+  } catch (err) {
+    cleanup();
+    throw err;
+  }
 
   return new Promise<string>((resolve, reject) => {
-    const child = spawn(scriptRuntime(), [scriptPath], {
+    const child = spawn(runtime, [scriptPath], {
       cwd: cwd ?? dappDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {

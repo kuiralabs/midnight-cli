@@ -491,7 +491,9 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, signal?: AbortSign
           prompt,
           dappDir,
           logFile: testLogFile,
-          onOutput: (chunk) => process.stdout.write(chunk),
+          // stdout carries the --json result alone; the test's own output then goes to stderr.
+          onOutput: (chunk) => (jsonMode ? process.stderr : process.stdout).write(chunk),
+          terminal: 'inherit',
           onMessage: (msg) => {
             if (!jsonMode) process.stderr.write(dim(`  ${msg}`) + '\n');
           },

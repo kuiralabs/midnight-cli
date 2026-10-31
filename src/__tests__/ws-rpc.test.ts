@@ -57,6 +57,35 @@ describe('ws-rpc', () => {
       expect(ws.readyState).toBe(WebSocket.OPEN);
     });
 
+    it('with refuseBrowsers, refuses a connection carrying an Origin (any web page) and accepts mn\'s own scripts', async () => {
+      const port = nextPort();
+      server = createRpcServer({ port, handlers: {}, refuseBrowsers: true });
+      await server.ready;
+
+      const fromPage = new WebSocket(`ws://127.0.0.1:${port}`, { origin: 'https://evil.example' });
+      const refused = await new Promise<number | string>((resolve) => {
+        fromPage.once('unexpected-response', (_req, res) => resolve(res.statusCode ?? 0));
+        fromPage.once('open', () => resolve('open'));
+        fromPage.once('error', () => resolve('error'));
+      });
+      fromPage.terminate();
+      expect(refused).toBe(401);
+
+      const fromScript = await connectClient(port);
+      clients.push(fromScript);
+      expect(fromScript.readyState).toBe(WebSocket.OPEN);
+    });
+
+    it('without refuseBrowsers, a browser dApp with an Origin still connects (plain mn serve)', async () => {
+      const port = nextPort();
+      server = createRpcServer({ port, handlers: {} });
+      await server.ready;
+      const fromPage = new WebSocket(`ws://127.0.0.1:${port}`, { origin: 'http://localhost:5173' });
+      await new Promise((resolve, reject) => { fromPage.once('open', resolve); fromPage.once('error', reject); });
+      clients.push(fromPage);
+      expect(fromPage.readyState).toBe(WebSocket.OPEN);
+    });
+
     it('dispatches method calls to handlers', async () => {
       const port = nextPort();
       server = createRpcServer({

@@ -20,7 +20,6 @@ import { type GrantRequest, paysAFee } from '../lib/grant/request.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
 import { type PayingWallet, openPayingWallet } from '../lib/grant/fee-wallet.ts';
 import { type CommandContext, payerFor } from '../lib/payer.ts';
-import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
 import { dim } from '../ui/colors.ts';
 import { header, keyValue, formatNight } from '../ui/format.ts';
 import { type Spinner, silentSpinner, start as startSpinner } from '../ui/spinner.ts';
@@ -71,7 +70,7 @@ export default async function grantCommand(args: ParsedArgs, signal?: AbortSigna
   };
   // Reading the account or a request submits nothing: a wallet with no Dust can still do it, and none is opened.
   const payer = paysAFee(request) ? payerFor(`grant ${request.subcommand}`, context) : undefined;
-  const funds = payer ? await assertWalletCanPay(target, walletFlag, spinnerFor('Checking wallet...')) : undefined;
+  const funds = payer ? await payer.assertCanPay(target, walletFlag, spinnerFor('Checking wallet...')) : undefined;
   const paying = payer ? await openPayingWallet(payer, target, walletFlag, spinnerFor('Opening the wallet...')) : undefined;
   try {
     await runOwned(request, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor, throwIfCancelled });

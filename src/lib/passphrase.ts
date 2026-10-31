@@ -12,11 +12,11 @@ import { DIR_MODE, FILE_MODE } from './constants.ts';
 import { UsageError } from './errors.ts';
 import { openSecret, sealSecret } from './keystore.ts';
 import { currentPrompter, type Prompter } from './prompter.ts';
-import { settings } from './settings.ts';
+import { PASSPHRASE_ENV, settings } from './settings.ts';
 import { stateRoot } from './state-root.ts';
 
-/** The variable a non-interactive run sets the passphrase in. */
-export const PASSPHRASE_ENV = 'MN_PASSPHRASE';
+/** The variable a non-interactive run sets the passphrase in (named in settings.ts). */
+export { PASSPHRASE_ENV };
 
 /** Where the keystore's check of the passphrase is kept, under the state root. */
 const KEYSTORE_FILENAME = 'keystore.json';

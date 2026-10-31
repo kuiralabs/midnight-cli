@@ -2,7 +2,7 @@
 // Inherits the child's stdout and stderr so test output (Vitest/Jest/whatever)
 // streams to the user in real time without buffering.
 
-import { spawn } from 'node:child_process';
+import { spawn, type IOType } from 'node:child_process';
 import type { ProjectInfo } from './detect-project.ts';
 
 export interface TestResult {
@@ -16,6 +16,11 @@ export interface TestResult {
 export interface TestRunnerOptions {
   project: ProjectInfo;
   signal?: AbortSignal;
+  /**
+   * Where the tests' output goes, as spawn takes it. The caller decides: mn dev
+   * hands the tests its terminal so they show live; by default it is dropped.
+   */
+  output?: IOType;
   /** Override the resolved command (useful for tests). */
   commandOverride?: { bin: string; args: string[] };
 }
@@ -32,9 +37,9 @@ export async function runTests(opts: TestRunnerOptions): Promise<TestResult> {
   return new Promise<TestResult>((resolvePromise, rejectPromise) => {
     const child = spawn(bin, args, {
       cwd: opts.project.projectRoot,
-      // Inherit stderr/stdout so test output streams directly. Ignore stdin
-      // so the child can't steal the parent's raw-mode keystroke buffer.
-      stdio: ['ignore', 'inherit', 'inherit'],
+      // Output where the caller says. Ignore stdin so the child can't steal
+      // the parent's raw-mode keystroke buffer.
+      stdio: ['ignore', opts.output ?? 'ignore', opts.output ?? 'ignore'],
     });
 
     const onAbort = () => { child.kill('SIGTERM'); };

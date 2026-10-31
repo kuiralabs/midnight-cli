@@ -5,6 +5,7 @@
 import { resolve, relative } from 'node:path';
 import { type ParsedArgs } from '../lib/argv.ts';
 import { type CommandContext, payerFor } from '../lib/payer.ts';
+import { isPassphraseSet, unlockPassphrase } from '../lib/passphrase.ts';
 import { detectProject, type ProjectInfo } from '../lib/dev/detect-project.ts';
 import { runCompile, type CompileResult } from '../lib/dev/compile.ts';
 import { runTests } from '../lib/dev/test.ts';
@@ -15,7 +16,7 @@ import {
   DEFAULT_DEV_WALLET_NAMES,
   DEFAULT_DEV_AIRDROP_AMOUNT,
 } from '../lib/dev/provision-wallets.ts';
-import { startKeyDispatcher } from '../lib/dev/keys.ts';
+import { startKeyDispatcher } from '../ui/dev-keys.ts';
 import { findWitnessFile, buildMissingWitnessError } from '../lib/contract/witness-discovery.ts';
 import { header, divider, keyValue } from '../ui/format.ts';
 import { bold, dim, red, teal, yellow } from '../ui/colors.ts';
@@ -147,6 +148,11 @@ export default async function devCommand(args: ParsedArgs, signal?: AbortSignal,
   process.stderr.write(dim('  ') + bold('[d]') + dim(' deploy   ') + testHint + bold('[q]') + dim(' quit\n\n'));
 
   // ── Phase 6: keystroke dispatcher + wait until aborted ────
+  // Unlock mn's passphrase now, while stdin is still a plain terminal: once the
+  // dispatcher reads keys in raw mode, a passphrase typed for [d]'s deploy would
+  // be read as dev keystrokes too. Asked once per run; MN_PASSPHRASE asks nothing.
+  if (isPassphraseSet()) await unlockPassphrase();
+
   const abortController = new AbortController();
   const stopRequest = () => {
     if (!abortController.signal.aborted) abortController.abort();
@@ -249,7 +255,8 @@ async function runProjectTests(project: ProjectInfo, signal?: AbortSignal): Prom
   process.stderr.write(dim(`\n  Running npm run ${project.testScript}...\n`));
   try {
     // runTests passes cwd: project.projectRoot to spawn — no parent chdir needed.
-    const result = await runTests({ project, signal });
+    // The tests stream their output to this terminal as they run.
+    const result = await runTests({ project, signal, output: 'inherit' });
     if (result.success) {
       process.stderr.write(`  ${dim('─')} Tests passed ${dim(`(${formatDuration(result.durationMs)})`)}\n`);
     } else {

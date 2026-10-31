@@ -1,9 +1,8 @@
-// Calling a circuit of a deployed contract: check the wallet can pay, serve it
-// through the payer, run the call script against the served wallet, and stop
-// serving. `mn contract call` calls through here, as deploy.ts deploys.
+// Calling a circuit of a deployed contract: the call script, run against the
+// wallet the payer serves (served-wallet.ts). `mn contract call` calls through here.
 
-import { assertWalletCanPay } from '../wallet-can-pay.ts';
 import type { Payer, PayingTarget } from '../payer.ts';
+import { withServedWallet } from './served-wallet.ts';
 import type { Spinner } from '../../ui/spinner.ts';
 import type { ContractCallRequest } from './request.ts';
 
@@ -30,12 +29,7 @@ export async function callContract({ request, target, wallet, payer, progress, s
   const { dappDir, info, address, circuit, callArgs } = request;
   const { runCall } = await import('./runner.ts');
 
-  // Before anything is served: the wallet has NIGHT and Dust to pay with.
-  await assertWalletCanPay(target, wallet, progress('Checking wallet...'));
-
-  const serve = await payer.serve(target, wallet, progress('Starting mn serve...'));
-  const spinner = progress(`Calling ${circuit}...`);
-  try {
+  return withServedWallet({ target, wallet, payer, progress }, { running: `Calling ${circuit}...`, done: `${circuit} called`, failed: 'Call failed' }, async (servePort, spinner) => {
     const result = await runCall({
       dappDir,
       networkConfig: target.networkConfig,
@@ -44,16 +38,10 @@ export async function callContract({ request, target, wallet, payer, progress, s
       contractAddress: address,
       circuit,
       args: callArgs,
-      servePort: serve.port,
+      servePort,
       onMessage: (msg) => spinner.update(msg),
       signal,
     });
-    spinner.stop(`${circuit} called`);
     return { contractName: info.name, circuit, address, network: target.network, status: result.status };
-  } catch (err) {
-    spinner.fail('Call failed');
-    throw err;
-  } finally {
-    await serve.stop();
-  }
+  });
 }

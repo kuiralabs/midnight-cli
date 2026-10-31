@@ -200,11 +200,10 @@ export async function promptApproval(
     return 'reject';
   }
 
-  // Show the approval box, then ask
-  notice('\n' + renderApprovalBox(request) + '\n');
+  // The request is part of the question, so whoever answers sees what they approve.
   promptActive = true;
   try {
-    const answer = await prompter.ask(yellow('  Approve? [A/r] '));
+    const answer = await prompter.ask('\n' + renderApprovalBox(request) + '\n\n' + yellow('  Approve? [A/r] '));
     // Input ended before an answer (e.g. piped input ends): reject.
     if (answer === null) return 'reject';
     const normalized = answer.trim().toLowerCase();
