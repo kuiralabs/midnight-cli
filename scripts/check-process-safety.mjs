@@ -40,7 +40,8 @@ const SHELL_CONCERNS = new Set([
 // break; each needs a reason a library can't do otherwise.
 export const ALLOWED = {
   // Hands the environment on to the script it generates, which runs as its own
-  // process and reads MN_INDEXER_URL and the private-state secret from it; reads nothing itself.
+  // process and reads MN_INDEXER_URL and the private-state secret from it; and,
+  // only when mn runs under a runtime other than Node, reads PATH to find Node.
   'lib/contract/runner.ts': ['reads the environment'],
 };
 

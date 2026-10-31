@@ -4,9 +4,10 @@
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { writeFileSync, unlinkSync, existsSync, symlinkSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdirSync, rmdirSync } from 'node:fs';
+import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { assertEndpointUsable } from '../blockfrost.ts';
 import type { NetworkConfig } from '../network.ts';
 import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
@@ -14,32 +15,59 @@ import { coerceArg } from './arg-coerce.ts';
 import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
 import { CANCELLED_MESSAGE } from '../errors.ts';
 
-/**
- * Walk up from this module to find the closest `node_modules` directory.
- * The generated deploy/call script imports SDK packages by bare specifier
- * (`@midnight-ntwrk/midnight-js-contracts`, `ws`, etc.); without help, Node
- * resolves those against the user's project — which usually doesn't have them.
- *
- * NODE_PATH is documented as honored only by CommonJS resolution, not ESM.
- * Since the deploy script is ESM (.mjs), we instead write the script into a
- * temp dir that contains a `node_modules` symlink to ours. Node's normal
- * walk-up from the script's location then finds our SDK packages.
- */
-function findOurNodeModules(): string | null {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  // Bounded walk — node_modules should be a few levels up at most. Stop at
-  // filesystem root.
-  for (let i = 0; i < 8; i++) {
-    const candidate = join(dir, 'node_modules');
-    if (existsSync(candidate)) return candidate;
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
-}
+// The generated deploy/call script imports SDK packages by bare specifier
+// (`@midnight-ntwrk/midnight-js-contracts`, `ws`, etc.); without help, Node
+// resolves those against the user's project, which usually doesn't have them.
+// NODE_PATH is honored only by CommonJS resolution, not ESM, so each package
+// the script needs is linked by name into the dApp's node_modules instead, and
+// Node's normal walk-up from the script finds it there.
 
-const OUR_NODE_MODULES = findOurNodeModules();
+/**
+ * Every package a generated script imports, and the compact runtime the
+ * user's compiled contract imports. Each is found by name from mn's own
+ * location and linked into the dApp by name, so this works wherever the
+ * packages sit (our checkout, our install, or someone else's hoisted tree).
+ * A test keeps this list in step with the scripts' imports.
+ */
+export const SCRIPT_PACKAGES = [
+  '@midnight-ntwrk/compact-js',
+  '@midnight-ntwrk/compact-runtime',
+  '@midnight-ntwrk/midnight-js-contracts',
+  '@midnight-ntwrk/midnight-js-http-client-proof-provider',
+  '@midnight-ntwrk/midnight-js-indexer-public-data-provider',
+  '@midnight-ntwrk/midnight-js-level-private-state-provider',
+  '@midnight-ntwrk/midnight-js-network-id',
+  '@midnight-ntwrk/midnight-js-node-zk-config-provider',
+  '@midnight-ntwrk/midnight-js-types',
+  '@midnight-ntwrk/midnight-js-utils',
+  'ws',
+] as const;
+
+/** The folder of the installed package `name`, as mn resolves it; null when it isn't installed. */
+export function packageFolder(name: string): string | null {
+  // node:module's createRequire works in every host (Node, the test runner,
+  // the bundle); a package exported to `import` only is found through
+  // import.meta.resolve where the host has it.
+  let entry: string;
+  try {
+    entry = createRequire(import.meta.url).resolve(name);
+  } catch {
+    try {
+      entry = fileURLToPath(import.meta.resolve(name));
+    } catch {
+      return null;
+    }
+  }
+  for (let dir = dirname(entry); ; dir = dirname(dir)) {
+    const manifest = join(dir, 'package.json');
+    if (existsSync(manifest)) {
+      try {
+        if ((JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string }).name === name) return dir;
+      } catch { /* not this one: keep looking up */ }
+    }
+    if (dirname(dir) === dir) return null;
+  }
+}
 
 export interface RunnerOptions {
   dappDir: string;
@@ -551,52 +579,45 @@ process.exit(0);
 
 // ── Script execution ──
 
-/**
- * Names of npm packages the generated bridge script (and the user's compiled
- * contract module) bare-import. When any of these are missing from the user's
- * node_modules, overlayMidnightSdk symlinks ours into theirs so resolution
- * succeeds. `@midnight-ntwrk` is a scope — symlinking the whole scope dir
- * brings every SDK package along in one shot.
- */
-const SDK_OVERLAY_NAMES = ['@midnight-ntwrk', 'ws'] as const;
+/** What the overlay made, to undo afterwards newest first: a link, or a folder it created. */
+type Made = { path: string; kind: 'link' | 'folder' };
 
 /**
- * Make our SDK packages resolvable from `userNodeModules`. Two cases:
- *   1. User has no node_modules at all → symlink the whole tree (cheap, the
- *      pre-existing fast path).
- *   2. User has a node_modules dir but is missing one of SDK_OVERLAY_NAMES
- *      (common for "compile-only" projects that ship Compact source +
- *      managed artifacts but never `npm install`-ed the SDK) → symlink the
- *      missing top-level entries individually so we don't clobber what they
- *      DO have.
- *
- * Returns the list of paths to remove on cleanup, in reverse-creation order.
+ * Link each of SCRIPT_PACKAGES that `userNodeModules` lacks to mn's copy, by
+ * name, making `node_modules` and a scope folder where they are missing.
+ * Never replaces what the dApp has: the user may pin a version we shouldn't
+ * shadow. A package that can't be found or linked is left out, and the script
+ * then fails with Node's clear ERR_MODULE_NOT_FOUND.
  */
-function overlayMidnightSdk(userNodeModules: string): string[] {
-  if (!OUR_NODE_MODULES) return [];
-  const created: string[] = [];
-
-  // Fast path: no user node_modules → whole-tree symlink.
-  if (!existsSync(userNodeModules)) {
-    try {
-      symlinkSync(OUR_NODE_MODULES, userNodeModules);
-      created.push(userNodeModules);
-    } catch { /* leave alone — caller will get a clean module-not-found from node */ }
-    return created;
-  }
-
-  // Per-package overlay: only fill in what's missing. Never replace existing
-  // entries — the user might be pinning a specific version we shouldn't shadow.
-  for (const name of SDK_OVERLAY_NAMES) {
-    const target = join(OUR_NODE_MODULES, name);
+export function overlayScriptPackages(userNodeModules: string): Made[] {
+  const made: Made[] = [];
+  const ensureFolder = (dir: string): void => {
+    if (existsSync(dir)) return;
+    mkdirSync(dir);
+    made.push({ path: dir, kind: 'folder' });
+  };
+  for (const name of SCRIPT_PACKAGES) {
+    const target = packageFolder(name);
     const link = join(userNodeModules, name);
-    if (!existsSync(target) || existsSync(link)) continue;
+    if (target === null || existsSync(link)) continue;
     try {
-      symlinkSync(target, link);
-      created.push(link);
-    } catch { /* ignore — at worst the bridge fails with a clear ERR_MODULE_NOT_FOUND */ }
+      ensureFolder(userNodeModules);
+      if (name.startsWith('@')) ensureFolder(dirname(link));
+      symlinkSync(target, link, 'dir');
+      made.push({ path: link, kind: 'link' });
+    } catch { /* left out: the script reports the missing package */ }
   }
-  return created;
+  return made;
+}
+
+/** Removes what overlayScriptPackages made, newest first; a folder only if it is empty again. */
+export function undoOverlay(made: readonly Made[]): void {
+  for (const item of made.slice().reverse()) {
+    try {
+      if (item.kind === 'link') unlinkSync(item.path);
+      else rmdirSync(item.path);
+    } catch { /* best-effort: never touch what the dApp has */ }
+  }
 }
 
 /** A generated script to run with node, and where. */
@@ -623,6 +644,33 @@ const CANCEL_GRACE_MS = 5_000;
 /** Random bytes in a generated script's name, beside the time. */
 const SCRIPT_NAME_RANDOM_BYTES = 4;
 
+/** No Node.js to run a generated script with: mn runs under another runtime and none is on PATH. */
+export class NoNodeRuntimeError extends Error {
+  readonly code = 'NO_NODE_RUNTIME';
+  constructor() {
+    super('Contract scripts run under Node.js, and none was found on PATH. Install Node.js 22 or later, or run mn under Node.');
+    this.name = 'NoNodeRuntimeError';
+    Object.setPrototypeOf(this, NoNodeRuntimeError.prototype);
+  }
+}
+
+/**
+ * The Node.js a generated script runs with: the one running mn, which passed
+ * its version checks; or, when mn runs under another runtime (bun), the first
+ * `node` on `searchPath`.
+ */
+export function scriptRuntime(
+  runtime: { execPath: string; isNode: boolean } = { execPath: process.execPath, isNode: process.versions.bun === undefined },
+  searchPath: string = process.env.PATH ?? '',
+): string {
+  if (runtime.isNode) return runtime.execPath;
+  const exe = process.platform === 'win32' ? 'node.exe' : 'node';
+  for (const dir of searchPath.split(delimiter)) {
+    if (dir && existsSync(join(dir, exe))) return join(dir, exe);
+  }
+  throw new NoNodeRuntimeError();
+}
+
 /** Runs a generated script and returns what it wrote to stdout. Throws its marked error when it fails. */
 export async function executeScript({ dir: dappDir, script, onMessage, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal }: ScriptRun): Promise<string> {
   if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
@@ -633,11 +681,11 @@ export async function executeScript({ dir: dappDir, script, onMessage, env: extr
   //   2. the user's compiled contract/index.js (under managed/<name>/)
   //   3. the user's witnesses.js (under dist/ or src/)
   // All three live somewhere under dappDir, so symlinking ours into the
-  // dApp's node_modules satisfies all of them. overlayMidnightSdk handles
+  // dApp's node_modules satisfies all of them. overlayScriptPackages handles
   // both the empty-tree and missing-package cases; cleanup removes only
   // what we created so the dApp dir ends up exactly as we found it.
   const userNodeModules = join(dappDir, 'node_modules');
-  const overlayPaths = overlaySdk ? overlayMidnightSdk(userNodeModules) : [];
+  const overlay = overlaySdk ? overlayScriptPackages(userNodeModules) : [];
 
   // Unique to this run, so two at once in one directory never share a script.
   const scriptPath = join(dappDir, `.mn-${label}-${Date.now()}-${randomBytes(SCRIPT_NAME_RANDOM_BYTES).toString('hex')}.mjs`);
@@ -645,18 +693,13 @@ export async function executeScript({ dir: dappDir, script, onMessage, env: extr
 
   const cleanup = () => {
     try { unlinkSync(scriptPath); } catch {}
-    // Remove overlay symlinks in reverse order of creation. unlinkSync on a
-    // symlink only removes the link, never the target — safe even if the
-    // user's node_modules dir was created by us (it's a symlink itself in
-    // that case, so it goes too).
-    for (const p of overlayPaths.slice().reverse()) {
-      try { unlinkSync(p); } catch {}
-    }
+    // Undo the overlay newest first: links go (never their targets), and a
+    // folder we made goes only once it is empty again.
+    undoOverlay(overlay);
   };
 
   return new Promise<string>((resolve, reject) => {
-    // The Node.js running mn, which passed its version checks, not whichever is first on PATH.
-    const child = spawn(process.execPath, [scriptPath], {
+    const child = spawn(scriptRuntime(), [scriptPath], {
       cwd: cwd ?? dappDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
