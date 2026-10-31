@@ -9,7 +9,7 @@
 //     RPC-CORE lines on console.warn and console.error (one per failed
 //     submit), are kept off the terminal.
 
-import { isSdkTransient, reportSdkWarning } from './sdk-warnings.ts';
+import { reportSdkWarning, sdkTransientWarning } from './sdk-warnings.ts';
 
 let installed = false;
 
@@ -22,8 +22,9 @@ export function installSdkNoiseFilters(): void {
   const isRpcNoise = (args: unknown[]) => args.some((a) => String(a).includes('RPC-CORE'));
 
   process.on('unhandledRejection', (reason) => {
-    if (isSdkTransient(reason)) {
-      reportSdkWarning((reason as { _tag: string })._tag, (reason as { message?: string }).message ?? 'transient error');
+    const warning = sdkTransientWarning(reason);
+    if (warning !== null && typeof reason !== 'string') {
+      reportSdkWarning(warning.tag, warning.message);
       return;
     }
     originalError('Unhandled rejection:', reason);
@@ -31,13 +32,9 @@ export function installSdkNoiseFilters(): void {
   });
 
   console.error = (...args: unknown[]) => {
-    const first = args[0];
-    if (typeof first === 'object' && isSdkTransient(first)) {
-      reportSdkWarning((first as { _tag: string })._tag, (first as { message?: string }).message ?? 'transient error');
-      return;
-    }
-    if (typeof first === 'string' && isSdkTransient(first)) {
-      reportSdkWarning('Wallet.Sync', 'transient error');
+    const warning = sdkTransientWarning(args[0]);
+    if (warning !== null) {
+      reportSdkWarning(warning.tag, warning.message);
       return;
     }
     if (isRpcNoise(args)) return;

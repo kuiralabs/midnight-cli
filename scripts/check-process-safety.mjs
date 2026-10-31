@@ -85,9 +85,10 @@ export function findViolations(files = sourceFiles(), allowed = ALLOWED) {
   const found = [];
   for (const file of files.filter(isLibrary)) {
     const rel = relative(SRC, file);
-    const lines = codeOnly(readFileSync(file, 'utf8')).split('\n');
+    const source = readFileSync(file, 'utf8');
+    const lines = codeOnly(source).split('\n');
     // An import line keeps its specifier: check prompts on the raw source.
-    const raw = readFileSync(file, 'utf8').split('\n');
+    const raw = source.split('\n');
     for (const [rule, pattern] of RULES) {
       if ((allowed[rel] ?? []).includes(rule)) continue;
       const scan = rule === 'opens a prompt' ? raw : lines;

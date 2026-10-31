@@ -79,6 +79,24 @@ describe('the shell filters the SDK noise', () => {
     expect(result.stderr).not.toContain('RPC-CORE');
   });
 
+  it("hands the SDK's Wallet.* console.error traces, object or string, to the listener, and prints anything else", () => {
+    const result = run([
+      "onSdkWarning((tag, message) => console.log('warned', tag, message));",
+      "console.error({ _tag: 'Wallet.Sync', message: 'Internal Server Error' });",
+      "console.error('Wallet.Sync: Internal Server Error\\n    at somewhere');",
+      "console.error('a real problem');",
+    ].join('\n'));
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('warned Wallet.Sync Internal Server Error\nwarned Wallet.Sync transient error\n');
+    expect(result.stderr).toBe('a real problem\n');
+  });
+
+  it('still exits 1 on a rejection that is only a string, even one starting Wallet.', () => {
+    const result = run("onSdkWarning(() => console.log('warned'));\nPromise.reject('Wallet.Sync: not an SDK error object');\nsetTimeout(() => console.log('still running'), 500);");
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+  });
+
   it('still exits 1 on any other unhandled rejection', () => {
     const result = run("Promise.reject(new Error('a real failure'));\nsetTimeout(() => console.log('still running'), 500);");
     expect(result.status).toBe(1);

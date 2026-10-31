@@ -63,7 +63,7 @@ describe('createWallet', () => {
 
   it('replaces an existing wallet only when asked', async () => {
     const first = createWallet('alice', walletSecretFrom({ seed: Buffer.alloc(32, 1) }), PASSPHRASE);
-    expect(() => createWallet('alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE)).toThrow();
+    expect(() => createWallet('alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE)).toThrow(`Wallet file already exists: ${first.file}`);
     expect((await unlockWallet(first.file)).seed).toBe(Buffer.alloc(32, 1).toString('hex'));
 
     createWallet('alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE, { overwrite: true });

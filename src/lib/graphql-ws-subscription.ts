@@ -18,6 +18,7 @@
 // `partial=true` means "state is valid but not caught up — persist and resume".
 
 import WebSocket from 'ws';
+import { CANCELLED_MESSAGE } from './errors.ts';
 import { assertEndpointUsable, endpointRefusalFromWsError } from './blockfrost.ts';
 
 /** Why the subscription settled. `timeout`/`closed-early` are the partial cases. */
@@ -113,7 +114,7 @@ export function subscribeGraphqlWs<TResult>(
       reject(err);
     };
 
-    const onAbort = () => finishErr(new Error('Operation cancelled'));
+    const onAbort = () => finishErr(new Error(CANCELLED_MESSAGE));
     signal?.addEventListener('abort', onAbort, { once: true });
 
     const resetIdleTimer = () => {

@@ -2,6 +2,7 @@
 // Handles: facade lifecycle, sync, balance check, dust, tx build/sign/prove/submit, retries
 
 import * as ledger from '@midnightntwrk/ledger-v9';
+import { CANCELLED_MESSAGE } from './errors.ts';
 import { MidnightBech32m, UnshieldedAddress, type DustAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { type FacadeState, type UtxoWithMeta } from '@midnightntwrk/wallet-sdk/facade';
 import * as rx from 'rxjs';
@@ -469,7 +470,7 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
       seedBuffer,
       networkConfig,
       async ({ bundle, state }) => {
-        if (signal?.aborted) throw new Error('Operation cancelled');
+        if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
 
         verbose('transfer', 'Sync complete, checking balance...');
         const unshieldedBalance = state.unshielded.balances[ledger.unshieldedToken().raw] ?? 0n;
@@ -487,7 +488,7 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
         // away (just after registering), else fail fast with how long it takes.
         await awaitDustForFee(state.dust, MIN_DUST_FOR_TRANSFER, onDust, signal);
 
-        if (signal?.aborted) throw new Error('Operation cancelled');
+        if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
 
         verbose('transfer', 'Ensuring dust availability...');
         const dustResult = await ensureDust(bundle, onDust, state);
@@ -504,7 +505,7 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
         }
         verbose('transfer', 'Dust available');
 
-        if (signal?.aborted) throw new Error('Operation cancelled');
+        if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
 
         verbose('transfer', 'Building and submitting transaction...');
         const txHash = await buildAndSubmitTransfer(

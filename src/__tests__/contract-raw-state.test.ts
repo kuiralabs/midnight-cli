@@ -35,7 +35,13 @@ describe('describeRawState', () => {
   it('describes a bounded Merkle tree by height and root', () => {
     const empty = describeRawState(StateValue.newBoundedMerkleTree(new StateBoundedMerkleTree(4)));
     expect(empty).toMatchObject({ type: 'boundedMerkleTree', height: 4 });
-    const rehashed = describeRawState(StateValue.newBoundedMerkleTree(new StateBoundedMerkleTree(4).rehash()));
-    expect(rehashed.type === 'boundedMerkleTree' && rehashed.root?.every((part) => /^[0-9a-f]*$/.test(part))).toBe(true);
+    // An empty tree's root is zero: one atom of no bytes.
+    expect(describeRawState(StateValue.newBoundedMerkleTree(new StateBoundedMerkleTree(4).rehash()))).toEqual({ type: 'boundedMerkleTree', height: 4, root: [''] });
+    const rehashed = describeRawState(StateValue.newBoundedMerkleTree(new StateBoundedMerkleTree(4).update(0n, atom([0x2a])).rehash()));
+    // A rehashed tree has a root: field-aligned bytes in hex, none of them empty.
+    expect(rehashed.type).toBe('boundedMerkleTree');
+    const root = rehashed.type === 'boundedMerkleTree' ? rehashed.root : null;
+    expect(root?.length).toBeGreaterThan(0);
+    for (const part of root ?? []) expect(part).toMatch(/^[0-9a-f]+$/);
   });
 });
