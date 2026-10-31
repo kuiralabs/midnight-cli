@@ -56,5 +56,6 @@ describe('notices', () => {
     });
     expect(run.status, run.stderr).toBe(0);
     expect(run.stderr).toMatch(/Warning: wallet .*alice\.json is not protected/);
-  });
+    // Starting the CLI through tsx takes seconds under a full parallel run: the test waits as long as its spawn does.
+  }, 60_000);
 });
