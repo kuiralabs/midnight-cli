@@ -217,41 +217,30 @@ export default async function devCommand(args: ParsedArgs, signal?: AbortSignal)
 }
 
 async function deployContract(project: ProjectInfo): Promise<void> {
-  const previousCwd = process.cwd();
-  if (previousCwd !== project.projectRoot) {
-    try { process.chdir(project.projectRoot); } catch { /* best-effort */ }
+  // Pre-flight: contracts that declare witnesses need a witnesses.js the
+  // runner can load. If declared witnesses exist and no implementation file
+  // is present, refuse early with an actionable message rather than letting
+  // the SDK throw "first (witnesses) argument does not contain a function-
+  // valued field named X" mid-deploy.
+  const witnessNames = await readDeclaredWitnesses(project.projectRoot);
+  if (witnessNames.length > 0 && !findWitnessFile(project.projectRoot)) {
+    const message = buildMissingWitnessError({ projectRoot: project.projectRoot, witnessNames });
+    process.stderr.write(yellow(`  ✗ Cannot auto-deploy:\n`));
+    for (const line of message.split('\n')) process.stderr.write(dim(`    ${line}\n`));
+    return;
   }
 
+  const spinner = startSpinner(`Deploying with ${DEPLOY_WALLET} on ${DEPLOY_NETWORK}...`);
   try {
-    // Pre-flight: contracts that declare witnesses need a witnesses.js the
-    // runner can load. If declared witnesses exist and no implementation file
-    // is present, refuse early with an actionable message rather than letting
-    // the SDK throw "first (witnesses) argument does not contain a function-
-    // valued field named X" mid-deploy.
-    const witnessNames = await readDeclaredWitnesses(project.projectRoot);
-    if (witnessNames.length > 0 && !findWitnessFile(project.projectRoot)) {
-      const message = buildMissingWitnessError({ projectRoot: project.projectRoot, witnessNames });
-      process.stderr.write(yellow(`  ✗ Cannot auto-deploy:\n`));
-      for (const line of message.split('\n')) process.stderr.write(dim(`    ${line}\n`));
-      return;
-    }
-
-    const spinner = startSpinner(`Deploying with ${DEPLOY_WALLET} on ${DEPLOY_NETWORK}...`);
-    try {
-      const { deployDevContract } = await import('../lib/dev/deploy.ts');
-      const { servePayer } = await import('../lib/serve-payer.ts');
-      const deployed = await deployDevContract(DEPLOY_WALLET, DEPLOY_NETWORK, servePayer);
-      spinner.stop(`Deployed`);
-      process.stderr.write(`  ${dim('address')}  ${teal(deployed.address)}\n`);
-    } catch (err) {
-      spinner.fail('Deploy failed');
-      const message = err instanceof Error ? err.message : String(err);
-      process.stderr.write(red('  ' + message) + '\n');
-    }
-  } finally {
-    if (process.cwd() !== previousCwd) {
-      try { process.chdir(previousCwd); } catch { /* best-effort */ }
-    }
+    const { deployDevContract } = await import('../lib/dev/deploy.ts');
+    const { servePayer } = await import('../lib/serve-payer.ts');
+    const deployed = await deployDevContract(project.projectRoot, DEPLOY_WALLET, DEPLOY_NETWORK, servePayer);
+    spinner.stop(`Deployed`);
+    process.stderr.write(`  ${dim('address')}  ${teal(deployed.address)}\n`);
+  } catch (err) {
+    spinner.fail('Deploy failed');
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(red('  ' + message) + '\n');
   }
 }
 
