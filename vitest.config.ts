@@ -12,6 +12,7 @@ export default defineConfig({
     setupFiles: ['src/__tests__/helpers/shell-settings.ts'],
     // Nested checkouts under .claude/ run their own tests; count only this
     // checkout's.
-    exclude: [...configDefaults.exclude, '**/.claude/**'],
+    // Live tests read a running chain: `npm run test:live` runs them (vitest.live.config.ts), never `npm test`.
+    exclude: [...configDefaults.exclude, '**/.claude/**', '**/*.live.test.ts'],
   },
 });
