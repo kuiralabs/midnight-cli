@@ -43,7 +43,7 @@ export interface PassphraseSource {
 
 const keystorePath = (home: string): string => path.join(home, MIDNIGHT_DIR, KEYSTORE_FILENAME);
 
-const ask = async (source: PassphraseSource, prompter: Prompter, question: string): Promise<string> => {
+const ask = async (prompter: Prompter, question: string): Promise<string> => {
   const line = await prompter.askSecret(question);
   if (line === null) throw new NoPassphraseError();
   return line;
@@ -55,9 +55,9 @@ export async function readPassphrase(source: PassphraseSource = {}): Promise<str
   if (fromEnv !== undefined && fromEnv.length > 0) return fromEnv;
   const prompter = source.prompter === undefined ? currentPrompter() : source.prompter;
   if (prompter === null || !prompter.isInteractive()) throw new NoPassphraseError();
-  const passphrase = await ask(source, prompter, source.confirm ? 'New passphrase for mn: ' : 'Passphrase for mn: ');
+  const passphrase = await ask(prompter, source.confirm ? 'New passphrase for mn: ' : 'Passphrase for mn: ');
   if (source.confirm) {
-    const again = await ask(source, prompter, 'Passphrase again: ');
+    const again = await ask(prompter, 'Passphrase again: ');
     if (again !== passphrase) throw new UsageError('The two passphrases do not match.');
   }
   return passphrase;

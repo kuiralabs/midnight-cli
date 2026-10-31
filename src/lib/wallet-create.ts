@@ -4,12 +4,12 @@
 // wallets through here.
 
 import * as path from 'path';
-import { homedir } from 'os';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { deriveAllAddresses, deriveAllShieldedAddresses } from './derive-address.ts';
 import { writeSealedWallet, setActiveWallet, type WalletPublic } from './wallet-config.ts';
-import { WALLETS_DIR_NAME, MIDNIGHT_DIR, isValidWalletName } from './constants.ts';
+import { isValidWalletName } from './constants.ts';
+import { getWalletsDir } from './wallet-paths.ts';
 
 /** A wallet's secret: the seed, and the mnemonic it came from when there is one. */
 export interface WalletSecret {
@@ -34,7 +34,7 @@ export function walletFilePath(name: string): string {
       `Invalid wallet name: "${name}"\nWallet name must be a simple name (no path separators, .json suffix, or special characters).`
     );
   }
-  return path.join(homedir(), MIDNIGHT_DIR, WALLETS_DIR_NAME, `${name}.json`);
+  return path.join(getWalletsDir(), `${name}.json`);
 }
 
 /** The secret from a given seed, a given mnemonic (checked against the English wordlist), or else a new 24-word mnemonic. */

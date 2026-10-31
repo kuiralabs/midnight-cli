@@ -274,12 +274,21 @@ describe('approval', () => {
     });
 
     it('rejects when stdin is not a TTY', async () => {
+      setPrompter(createTerminalPrompter({ input: new PassThrough(), output: new PassThrough(), isTTY: false }));
 
       const result = await promptApproval(baseRequest);
       expect(result).toBe('reject');
 
       const written = stripAnsi(stderrOutput.join(''));
-      expect(written).toContain('stdin is not a TTY');
+      expect(written).toContain('Cannot prompt for approval: stdin is not a TTY');
+    });
+
+    it('rejects when the host set no prompter, saying so', async () => {
+      const result = await promptApproval(baseRequest);
+      expect(result).toBe('reject');
+
+      const written = stripAnsi(stderrOutput.join(''));
+      expect(written).toContain('Cannot prompt for approval: the host set no prompter (setPrompter)');
     });
 
     describe('without a terminal, the hint names what the server could have been started with', () => {

@@ -187,7 +187,9 @@ export async function promptApproval(
   // Non-interactive environment — reject by default
   const prompter = currentPrompter();
   if (prompter === null || !prompter.isInteractive()) {
-    notice(red('  Cannot prompt for approval: stdin is not a TTY'));
+    notice(red(prompter === null
+      ? '  Cannot prompt for approval: the host set no prompter (setPrompter)'
+      : '  Cannot prompt for approval: stdin is not a TTY'));
     notice(dim(`  ${nonInteractiveHint(request, options)}`));
     return 'reject';
   }

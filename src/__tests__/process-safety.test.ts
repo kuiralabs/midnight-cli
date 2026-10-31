@@ -91,6 +91,26 @@ describe('the shell filters the SDK noise', () => {
     expect(result.stderr).toBe('a real problem\n');
   });
 
+  it('touches nothing while no call listens: SDK traces and RPC noise print as they would without the filters', () => {
+    const result = run([
+      "console.error({ _tag: 'Wallet.Sync', message: 'Internal Server Error' });",
+      "console.warn('RPC-CORE: submitAndWatchExtrinsic: Custom error: 138');",
+      "const stop = onSdkWarning(undefined);",
+      "console.warn('RPC-CORE: kept off while listening');",
+      "stop();",
+    ].join('\n'));
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain('Wallet.Sync');
+    expect(result.stderr).toContain('RPC-CORE: submitAndWatchExtrinsic');
+    expect(result.stderr).not.toContain('kept off while listening');
+  });
+
+  it('exits 1 on a Wallet.* rejection while no call listens, as before the filters', () => {
+    const result = run("Promise.reject(Object.assign(new Error('Internal Server Error'), { _tag: 'Wallet.Sync' }));\nsetTimeout(() => console.log('still running'), 500);");
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+  });
+
   it('still exits 1 on a rejection that is only a string, even one starting Wallet.', () => {
     const result = run("onSdkWarning(() => console.log('warned'));\nPromise.reject('Wallet.Sync: not an SDK error object');\nsetTimeout(() => console.log('still running'), 500);");
     expect(result.status).toBe(1);

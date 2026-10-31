@@ -1,22 +1,31 @@
 // The SDK's transient errors (Wallet.Sync: Internal Server Error, …) surface
-// as unhandled rejections and console.error calls, which the shell filters for
-// the whole run (sdk-noise.ts). A library that wants to show them as progress
-// ("…, retrying") listens here for the length of its call; it never touches
-// the process itself. The latest listener gets each warning, as the innermost
-// suppression did before.
+// as unhandled rejections and console.error calls, which the shell filters
+// (sdk-noise.ts) while some call listens here. A call that runs the SDK listens
+// for its length, to show them as progress ("…, retrying") or only to keep
+// them off the terminal; it never touches the process itself. The latest
+// listener gets each warning, as the innermost suppression did before.
 
 type SdkWarningListener = (tag: string, message: string) => void;
 
 const listeners: SdkWarningListener[] = [];
 
-/** Sends the SDK's transient warnings to `listener` until the returned function is called. */
+/**
+ * Sends the SDK's transient warnings to `listener` until the returned function
+ * is called. With no listener they are only kept off the terminal. The shell's
+ * filters act only while someone listens, as the suppression they replace did.
+ */
 export function onSdkWarning(listener: SdkWarningListener | undefined): () => void {
-  if (listener === undefined) return () => {};
+  listener ??= () => {};
   listeners.push(listener);
   return () => {
     const at = listeners.lastIndexOf(listener);
     if (at >= 0) listeners.splice(at, 1);
   };
+}
+
+/** True while some call is listening: the shell's filters act only then. */
+export function isListeningForSdkWarnings(): boolean {
+  return listeners.length > 0;
 }
 
 /** Hands one transient SDK warning to the latest listener, if any. */
