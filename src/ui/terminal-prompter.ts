@@ -44,20 +44,22 @@ const hiddenLine = (input: NonNullable<TerminalIo['input']>): Promise<string | n
   });
 
 export function createTerminalPrompter(io: TerminalIo = {}): Prompter {
-  const input = io.input ?? process.stdin;
-  const output = io.output ?? process.stderr;
+  // Looked up when asked, never at creation: the CLI makes its prompter at
+  // start, and only a command that prompts may touch stdin.
+  const input = () => io.input ?? process.stdin;
+  const output = () => io.output ?? process.stderr;
   return {
-    isInteractive: () => io.isTTY ?? input.isTTY === true,
+    isInteractive: () => io.isTTY ?? input().isTTY === true,
     ask: (question) => new Promise((resolve) => {
-      const rl = createInterface({ input, output });
+      const rl = createInterface({ input: input(), output: output() });
       let answered = false;
       rl.on('close', () => { if (!answered) resolve(null); });
       rl.question(question, (answer) => { answered = true; rl.close(); resolve(answer); });
     }),
     askSecret: async (question) => {
-      output.write(question);
-      const line = await hiddenLine(input);
-      output.write('\n');
+      output().write(question);
+      const line = await hiddenLine(input());
+      output().write('\n');
       return line;
     },
   };

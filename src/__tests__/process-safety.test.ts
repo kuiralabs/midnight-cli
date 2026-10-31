@@ -42,6 +42,25 @@ describe('the process-safety check', () => {
     ]);
   });
 
+  it("still sees code inside a template's ${…} and after a regex holding a quote, and a child handed the terminal", () => {
+    const hidden = join(dir, 'hidden.ts');
+    writeFileSync(hidden, [
+      'const a = `home: ${process.env.HOME}`;',
+      "const r = /'/;",
+      'process.exit(1);',
+      'console.log(a, r);',
+      "spawn('x', [], { stdio: 'inherit' });",
+      'process.stdin.setRawMode(true);',
+    ].join('\n'));
+    expect(findViolations([hidden], {}).map((v) => `${v.line} ${v.rule}`)).toEqual([
+      '4 writes to the terminal',
+      '3 exits',
+      '1 reads the environment',
+      '6 reads the terminal',
+      '5 hands a child the terminal',
+    ]);
+  });
+
   it('skips strings, template literals and comments', () => {
     const quiet = join(dir, 'quiet.ts');
     writeFileSync(quiet, [

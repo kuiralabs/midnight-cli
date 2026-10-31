@@ -11,9 +11,8 @@ import type { NetworkConfig, NetworkName } from '../network.ts';
 import { assertLedger9StackReachable, assertLedgerSupported } from '../ledger-guard.ts';
 import { buildFacade, hasDustAvailable, startAndSyncFacade, stopFacade, waitForDustAvailable } from '../facade.ts';
 import { loadWalletCache, saveWalletCache } from '../wallet-cache.ts';
-import { executeTransfer, ensureDust } from '../transfer.ts';
-import { GENESIS_SEED } from '../constants.ts';
-import { deriveUnshieldedAddress } from '../derive-address.ts';
+import { ensureDust } from '../transfer.ts';
+import { airdropNight } from '../airdrop.ts';
 
 import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallbacks } from './types.ts';
 import { startServeOrReuse } from '../serve-manager.ts';
@@ -120,11 +119,11 @@ async function stepBalance(amount: number, config: DappTestConfig, callbacks: Pr
 
   // Check current balance — use fresh cache since localnet may have restarted
   callbacks.onMessage('Checking balance...');
+  bindCachesToIndexer(network, networkConfig.indexerWS);
+  const cache = loadWalletCache(address, network);
   const stopListening = onSdkWarning((_tag, msg) => {
     callbacks.onMessage(`SDK: ${msg}`);
   });
-  bindCachesToIndexer(network, networkConfig.indexerWS);
-  const cache = loadWalletCache(address, network);
   const bundle = await buildFacade(seedBuffer, networkConfig, cache).catch((err: unknown) => { stopListening(); throw err; });
 
   try {
@@ -164,11 +163,8 @@ async function stepBalance(amount: number, config: DappTestConfig, callbacks: Pr
 
   // Undeployed (localnet) — auto-airdrop from genesis
   callbacks.onMessage(`Balance is 0. Airdropping ${amount} NIGHT from genesis...`);
-  const genesisSeedBuffer = Buffer.from(GENESIS_SEED, 'hex');
-  const genesisAddress = deriveUnshieldedAddress(genesisSeedBuffer, network as NetworkName);
-
-  await executeTransfer({
-    seedBuffer: genesisSeedBuffer,
+  // The same genesis airdrop `mn airdrop` and `mn dev` fund through.
+  await airdropNight({
     networkConfig,
     recipientAddress: address,
     amountNight: amount,
@@ -196,9 +192,9 @@ async function stepDust(config: DappTestConfig, callbacks: PrepCallbacks): Promi
   const address = walletConfig.addresses[network as NetworkName];
 
   // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
-  const stopListening = onSdkWarning(undefined);
   bindCachesToIndexer(network, networkConfig.indexerWS);
   const cache = loadWalletCache(address, network);
+  const stopListening = onSdkWarning(undefined);
   const bundle = await buildFacade(seedBuffer, networkConfig, cache).catch((err: unknown) => { stopListening(); throw err; });
 
   try {

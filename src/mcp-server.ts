@@ -26,13 +26,7 @@ import { createConfirmationStore } from './lib/mcp/confirmation.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
-import { installSdkNoiseFilters } from './lib/sdk-noise.ts';
-import { setNoticeSink } from './lib/notices.ts';
-import { setSettingsSource, settingsFromEnvironment } from './lib/settings.ts';
-import { setHostPathsSource } from './lib/state-root.ts';
-import { MIDNIGHT_DIR } from './lib/constants.ts';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { installCliHost } from './lib/cli-host.ts';
 
 // Skill resources — teach MCP clients how to use this CLI conversationally.
 // Split into:
@@ -1200,14 +1194,8 @@ async function main() {
   assertNodeSupported();
   // Endpoint URLs can carry a Blockfrost project id: no response or log shows it.
   hideProjectIdsInOutput();
-  // The SDK's transient errors and RPC noise are filtered for the server's life; tools only listen for them.
-  installSdkNoiseFilters();
-  // Libraries' notices go to stderr, the server's log, as before; stdout is the protocol.
-  setNoticeSink((line) => process.stderr.write(line + '\n'));
-  // Tools read the environment variables of spec §5.4 as settings, as each is needed.
-  setSettingsSource(() => settingsFromEnvironment(process.env));
-  // The server's state lives under ~/.midnight, as the CLI's does.
-  setHostPathsSource(() => ({ stateRoot: join(homedir(), MIDNIGHT_DIR), home: homedir() }));
+  // What the tools' libraries get from their host, as the CLI gives them (no prompter: no terminal here).
+  installCliHost();
   // The server runs facades on demand (balance/transfer/etc.). A cold shielded
   // sync would overflow Node's default heap, so re-exec once at startup with
   // more headroom. No-op when launched via `mn --mcp` (already bumped) or when

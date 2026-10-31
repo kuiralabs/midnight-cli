@@ -17,7 +17,7 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { DIR_MODE, FILE_MODE } from './constants.ts';
 import { deriveDustSeed } from './derivation.ts';
 import { type DustRetention } from './dust-direct.ts';
-import { cacheRootDir } from './wallet-cache.ts';
+import { cacheKeyOf, cacheRootDir } from './wallet-cache.ts';
 
 // v2 added the retention fields (owned generation indices + frontier) that the
 // generation-tree collapse needs. v1 caches lack them and are invalidated, so
@@ -75,7 +75,7 @@ export function getDustCachePath(
   pubkeyHex: string,
   cacheDir?: string,
 ): string {
-  const prefix = pubkeyHex.slice(0, 20);
+  const prefix = cacheKeyOf(pubkeyHex);
   return join(dustCacheDir(network, cacheDir), `dust-${prefix}.json`);
 }
 

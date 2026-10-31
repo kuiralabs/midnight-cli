@@ -1,7 +1,7 @@
 // Browser test — launch Claude to run a browser-based test.
 // Supports three modes: vision (--chrome, screenshots), dom (accessibility tree), script (JS evaluation).
 
-import { execSync, spawn } from 'node:child_process';
+import { execSync, spawn, type IOType } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -63,6 +63,12 @@ export interface BrowserTestOptions {
   onMessage?: (msg: string) => void;
   /** The test's own output as it comes, to show beside the log file it also goes to. */
   onOutput?: (chunk: Buffer) => void;
+  /**
+   * The terminal's part in the run, as spawn takes it, for the session's stdin
+   * and stderr (its stdout is always read, for the log and onOutput). mn test
+   * hands it the terminal; by default it gets none.
+   */
+  terminal?: IOType;
 }
 
 export interface BrowserTestResult {
@@ -196,9 +202,9 @@ export async function runBrowserTest(options: BrowserTestOptions): Promise<Brows
   return new Promise<BrowserTestResult>((resolve) => {
     const child = spawn('claude', args, {
       cwd: dappDir,
-      // stdin + stderr inherit for display access and status output
-      // stdout piped so we can tee to log file while also showing in terminal
-      stdio: ['inherit', 'pipe', 'inherit'],
+      // stdin and stderr where the caller says (mn test: the terminal); stdout
+      // piped so we can tee it to the log file and the caller.
+      stdio: [options.terminal ?? 'ignore', 'pipe', options.terminal ?? 'ignore'],
     });
 
     let timedOut = false;

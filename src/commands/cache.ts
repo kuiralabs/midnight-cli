@@ -11,6 +11,7 @@ import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { green } from '../ui/colors.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
+import { clearChainCaches } from '../lib/chain-caches.ts';
 
 export default async function cacheCommand(args: ParsedArgs): Promise<void> {
   const action = args.subcommand;
@@ -46,10 +47,7 @@ export default async function cacheCommand(args: ParsedArgs): Promise<void> {
     process.stderr.write(green('✓') + ` Cache cleared for wallet "${walletFlag}" on ${networkName}\n`);
   } else if (networkFlag) {
     // Clear cache for a specific network
-    clearWalletCache(undefined, networkFlag);
-    clearDustDirectCache(networkFlag);
-    clearNativeDustCheckpoint(networkFlag);
-    clearShieldedDirectCache(networkFlag);
+    clearChainCaches(networkFlag);
     if (jsonMode) {
       writeJsonResult({ action: 'clear', scope: 'network', network: networkFlag });
       return;
@@ -57,10 +55,7 @@ export default async function cacheCommand(args: ParsedArgs): Promise<void> {
     process.stderr.write(green('✓') + ` Cache cleared for network "${networkFlag}"\n`);
   } else {
     // Clear all cache
-    clearWalletCache();
-    clearDustDirectCache();
-    clearNativeDustCheckpoint();
-    clearShieldedDirectCache();
+    clearChainCaches(undefined);
     if (jsonMode) {
       writeJsonResult({ action: 'clear', scope: 'all' });
       return;

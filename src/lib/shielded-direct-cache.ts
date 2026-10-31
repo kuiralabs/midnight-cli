@@ -20,7 +20,7 @@ import { DIR_MODE, FILE_MODE } from './constants.ts';
 import { deriveShieldedSeed } from './derivation.ts';
 import { readShieldedBalanceDirect, type ShieldedDirectOptions } from './shielded-direct.ts';
 import { fetchEventTip, isCursorBeyondTip } from './event-tip.ts';
-import { cacheRootDir } from './wallet-cache.ts';
+import { cacheKeyOf, cacheRootDir } from './wallet-cache.ts';
 
 // v2: ledger-9 states replace ledger-8 ones. Dev-preset localnets share a genesis
 // hash, so the chain-id guard can't keep a ledger-8 cache off a ledger-9 chain.
@@ -61,7 +61,7 @@ export function getShieldedCachePath(
   pubkeyHex: string,
   cacheDir?: string,
 ): string {
-  const prefix = pubkeyHex.slice(0, 20);
+  const prefix = cacheKeyOf(pubkeyHex);
   return join(shieldedCacheDir(network, cacheDir), `shielded-${prefix}.json`);
 }
 

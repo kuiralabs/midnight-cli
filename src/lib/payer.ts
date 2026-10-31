@@ -56,7 +56,19 @@ export interface WalletConnection {
  * Opens the wallet that pays, for the target network. `wallet` is the --wallet
  * flag; without it the active wallet pays. Progress goes to `progress`.
  */
+/** What the paying wallet holds, once it is known to be able to pay. */
+export interface PayingFunds {
+  nightBalance: bigint;
+  dustBalance: bigint;
+}
+
 export interface Payer {
+  /**
+   * Refuses, before anything is served, unless the wallet this payer pays from
+   * has NIGHT and Dust to pay with; what it holds otherwise. Each payer checks
+   * its own wallet.
+   */
+  assertCanPay: (target: PayingTarget, wallet: string | undefined, progress: Spinner) => Promise<PayingFunds>;
   serve: (target: PayingTarget, wallet: string | undefined, progress: Spinner) => Promise<ServedWallet>;
   connect: (target: PayingTarget, wallet: string | undefined, progress: Spinner) => Promise<WalletConnection>;
 }

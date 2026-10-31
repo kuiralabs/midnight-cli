@@ -27,7 +27,7 @@ const HOMES = [
   ['shell', /^wallet\.ts$/],
   // help plays the shell's intro, and manual builds the full manual from help's specs (Y24).
   ['shell', /^commands\/(help|manual)\.ts$/],
-  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise)\.ts$/],
+  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host)\.ts$/],
   ['shell', /^ui\/(animate|art)\.ts$/],
   ['mcp', /^mcp-server\.ts$/],
   ['mcp', /^lib\/mcp\//],
@@ -35,7 +35,7 @@ const HOMES = [
   ['core', /^commands\/config\.ts$/],
   ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
-  ['dev', /^ui\/test-create-prompt\.ts$/],
+  ['dev', /^ui\/(test-create-prompt|dev-keys)\.ts$/],
 
   ['chain', /^commands\/status\.ts$/],
   ['chain', /^lib\/(node-rpc|chain-id|indexer-graphql|graphql-ws-subscription|event-tip|ledger-guard|node-ready|indexer-ready|proof-server-ready|chain-clock|endpoint-check|balance-subscription)\.ts$/],

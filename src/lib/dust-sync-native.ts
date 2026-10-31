@@ -20,7 +20,7 @@ import { type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { collapseForeignGenerations } from './dust-collapse.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
 import { settings } from './settings.ts';
-import { cacheRootDir } from './wallet-cache.ts';
+import { cacheKeyOf, cacheRootDir } from './wallet-cache.ts';
 
 /** Sidecar checkpoint JSON shape (snake_case — matches the Rust `Checkpoint`). */
 export interface SidecarCheckpoint {
@@ -123,10 +123,13 @@ function readCheckpointCursor(path: string): number {
   } catch { return -2; }
 }
 
+/** The sidecar's checkpoint file for a Dust key, beside the other Dust caches. */
+const nativeCheckpointName = (pubkeyHex: string): string => `dust-native-${cacheKeyOf(pubkeyHex)}.json`;
+
 function nativeCheckpointPath(networkName: string, pubkeyHex: string, cacheDir?: string): string {
   const dir = join(cacheRootDir(cacheDir), networkName);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: DIR_MODE });
-  return join(dir, `dust-native-${pubkeyHex.slice(0, 20)}.json`);
+  return join(dir, nativeCheckpointName(pubkeyHex));
 }
 
 /**
@@ -138,7 +141,7 @@ function nativeCheckpointPath(networkName: string, pubkeyHex: string, cacheDir?:
 export function clearNativeDustCheckpoint(network?: string, pubkeyHex?: string, cacheDir?: string): void {
   const base = cacheRootDir(cacheDir);
   if (network && pubkeyHex) {
-    try { unlinkSync(join(base, network, `dust-native-${pubkeyHex.slice(0, 20)}.json`)); } catch { /* not found is ok */ }
+    try { unlinkSync(join(base, network, nativeCheckpointName(pubkeyHex))); } catch { /* not found is ok */ }
     return;
   }
   const wipeDir = (dir: string) => {

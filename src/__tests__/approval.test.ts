@@ -168,10 +168,13 @@ describe('approval', () => {
     });
 
     /** A terminal that answers through a stream, and the stream to type into. */
+    let shown = '';
     const terminal = () => {
       const input = new PassThrough();
-      const prompter = createTerminalPrompter({ input, output: new PassThrough(), isTTY: true });
-      setPrompter(prompter);
+      const output = new PassThrough();
+      shown = '';
+      output.on('data', (chunk: Buffer) => { shown += chunk.toString('utf8'); });
+      setPrompter(createTerminalPrompter({ input, output, isTTY: true }));
       return input;
     };
 
@@ -325,7 +328,10 @@ describe('approval', () => {
       const approving = promptApproval(baseRequest);
       input.write('\n');
       expect(await approving).toBe('approve');
-      expect(stripAnsi(stderrOutput.join(''))).toContain('makeTransfer');
+      // The request is shown as part of the question, whatever the host does with notices.
+      expect(stripAnsi(shown)).toContain('makeTransfer');
+      expect(stripAnsi(shown)).toContain('Approve? [A/r]');
+      expect(stderrOutput.join('')).not.toContain('makeTransfer');
 
       input = terminal();
       const rejecting = promptApproval(baseRequest);

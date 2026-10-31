@@ -14,7 +14,7 @@ import {
 } from './network.ts';
 import { checkProjectId, networkOfProjectId, usesBlockfrost } from './blockfrost.ts';
 import { getBlockfrostProjectId, loadCliConfig, getEndpointOverridesForNetwork } from './cli-config.ts';
-import { settings } from './settings.ts';
+import { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV, settings } from './settings.ts';
 
 export interface NetworkResolutionContext {
   args: ParsedArgs;
@@ -48,15 +48,8 @@ export function resolveNetworkName(ctx: NetworkResolutionContext): NetworkName {
   return 'undeployed';
 }
 
-/** Where a project id can be given for one run, or to a process that has no config (CI, an MCP server). */
-export const BLOCKFROST_PROJECT_ID_ENV = 'MN_BLOCKFROST_PROJECT_ID';
-
-/**
- * The name Midnight's own docs give the variable. Other Blockfrost tools use
- * it too (for another network's id, or another chain's), so a value that is
- * not this network's is passed over, not refused.
- */
-export const SHARED_BLOCKFROST_PROJECT_ID_ENV = 'BLOCKFROST_PROJECT_ID';
+// The Blockfrost variables' names are settings.ts's (spec §5.4), re-exported for the callers that name them.
+export { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV };
 
 /**
  * The Blockfrost project id for `name`: the environment's (mn's own variable,
