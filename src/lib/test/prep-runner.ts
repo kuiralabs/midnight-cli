@@ -125,7 +125,7 @@ async function stepBalance(amount: number, config: DappTestConfig, callbacks: Pr
   });
   bindCachesToIndexer(network, networkConfig.indexerWS);
   const cache = loadWalletCache(address, network);
-  const bundle = await buildFacade(seedBuffer, networkConfig, cache);
+  const bundle = await buildFacade(seedBuffer, networkConfig, cache).catch((err: unknown) => { stopListening(); throw err; });
 
   try {
     const state = await startAndSyncFacade(bundle, {
@@ -195,9 +195,11 @@ async function stepDust(config: DappTestConfig, callbacks: PrepCallbacks): Promi
   const seedBuffer = Buffer.from(walletConfig.seed, 'hex');
   const address = walletConfig.addresses[network as NetworkName];
 
+  // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
+  const stopListening = onSdkWarning(undefined);
   bindCachesToIndexer(network, networkConfig.indexerWS);
   const cache = loadWalletCache(address, network);
-  const bundle = await buildFacade(seedBuffer, networkConfig, cache);
+  const bundle = await buildFacade(seedBuffer, networkConfig, cache).catch((err: unknown) => { stopListening(); throw err; });
 
   try {
     callbacks.onMessage('Syncing wallet...');
@@ -235,6 +237,7 @@ async function stepDust(config: DappTestConfig, callbacks: PrepCallbacks): Promi
     callbacks.onMessage('Dust is available');
     try { await saveWalletCache(address, network, bundle.facade); } catch {}
   } finally {
+    stopListening();
     try { await stopFacade(bundle); } catch {}
   }
 }

@@ -28,6 +28,7 @@ import { header, keyValue, divider, formatAddress, successMessage } from '../ui/
 import { bold, dim } from '../ui/colors.ts';
 import { start as startSpinner, trackElapsed } from '../ui/spinner.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
+import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
 export default async function airdropCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
   rejectNoCacheForWrites(args);
@@ -278,6 +279,8 @@ async function shieldedAirdrop(
   process.stderr.write(keyValue('Amount', bold(amountNight + ' NIGHT (shielded)')) + '\n');
   process.stderr.write('\n');
 
+  // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
+  const stopListening = onSdkWarning(undefined);
   const spinner = startSpinner('Syncing genesis wallet...');
 
   try {
@@ -356,5 +359,6 @@ async function shieldedAirdrop(
     spinner.fail('Failed');
     throw err;
   } finally {
+    stopListening();
   }
 }

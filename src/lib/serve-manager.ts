@@ -233,63 +233,74 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
   await assertLedgerSupported(networkName, networkConfig);
   const address = config.addresses[networkName];
 
-  // Suppress SDK noise
+  // The SDK's transient warnings, as progress, until the connector is stopped
   const stopListening = onSdkWarning((_tag, msg) => {
     onMessage(`SDK: ${msg}`);
   });
+  // A failure before the connector is handed back stops what was started, so
+  // the listener doesn't outlive this call and the facade doesn't keep syncing.
+  let bundle: Awaited<ReturnType<typeof buildFacade>> | undefined;
+  let connector: ReturnType<typeof createDAppConnector>;
+  try {
+    // Build & sync facade
+    onMessage('Building wallet facade...');
+    const indexerChange = bindCachesToIndexer(networkName, networkConfig.indexerWS);
+    if (indexerChange) onMessage(describeIndexerChange(networkName, indexerChange));
+    const cache = loadWalletCache(address, networkName);
+    const built = await buildFacade(seedBuffer, networkConfig, cache);
+    bundle = built;
 
-  // Build & sync facade
-  onMessage('Building wallet facade...');
-  const indexerChange = bindCachesToIndexer(networkName, networkConfig.indexerWS);
-  if (indexerChange) onMessage(describeIndexerChange(networkName, indexerChange));
-  const cache = loadWalletCache(address, networkName);
-  const bundle = await buildFacade(seedBuffer, networkConfig, cache);
-
-  onMessage('Syncing wallet...');
-  await startAndSyncFacade(bundle, {
-    onProgress: (applied, highest) => {
-      if (highest > 0) {
-        const pct = Math.min(Math.round((applied / highest) * 100), 100);
-        onMessage(`Syncing wallet... ${pct}%`);
-      }
-    },
-  });
-  onMessage('Wallet synced');
-
-  // Wait for dust
-  onMessage('Waiting for dust...');
-  const syncedState = await waitForDustAvailable(bundle);
-  onMessage('Dust ready');
-
-  // Save cache after sync
-  try { await saveWalletCache(address, networkName, bundle.facade); } catch { /* best-effort */ }
-
-  // Create DApp Connector — approve-all mode for tests
-  const connector = createDAppConnector({
-    bundle,
-    networkConfig,
-    approvalOptions: { approveAll: true, autoApproveReads: true },
-    // Reads answer from the state this sync ended on, and from every later
-    // one that is synced by the rule the sync used.
-    initialState: syncedState,
-    isCurrent: (state) => isFacadeSynced(state, 'full', bundle.emptyStreams),
-    dustWaitMs: options.dustWaitMs,
-    callbacks: {
-      onPhaseStart: (_connId, _method, phase) => {
-        onMessage(`${phase}...`);
+    onMessage('Syncing wallet...');
+    await startAndSyncFacade(built, {
+      onProgress: (applied, highest) => {
+        if (highest > 0) {
+          const pct = Math.min(Math.round((applied / highest) * 100), 100);
+          onMessage(`Syncing wallet... ${pct}%`);
+        }
       },
-      onPhaseComplete: (_connId, _method, phase, durationMs) => {
-        onMessage(`${phase} ${Math.round(durationMs)}ms`);
+    });
+    onMessage('Wallet synced');
+
+    // Wait for dust
+    onMessage('Waiting for dust...');
+    const syncedState = await waitForDustAvailable(built);
+    onMessage('Dust ready');
+
+    // Save cache after sync
+    try { await saveWalletCache(address, networkName, built.facade); } catch { /* best-effort */ }
+
+    // Create DApp Connector — approve-all mode for tests
+    connector = createDAppConnector({
+      bundle: built,
+      networkConfig,
+      approvalOptions: { approveAll: true, autoApproveReads: true },
+      // Reads answer from the state this sync ended on, and from every later
+      // one that is synced by the rule the sync used.
+      initialState: syncedState,
+      isCurrent: (state) => isFacadeSynced(state, 'full', built.emptyStreams),
+      dustWaitMs: options.dustWaitMs,
+      callbacks: {
+        onPhaseStart: (_connId, _method, phase) => {
+          onMessage(`${phase}...`);
+        },
+        onPhaseComplete: (_connId, _method, phase, durationMs) => {
+          onMessage(`${phase} ${Math.round(durationMs)}ms`);
+        },
       },
-    },
-  });
+    });
+  } catch (err) {
+    stopListening();
+    if (bundle !== undefined) { try { await stopFacade(bundle); } catch { /* best-effort */ } }
+    throw err;
+  }
+  const started = bundle;
 
   return {
     connector,
     async stop() {
       connector.dispose();
       stopListening();
-      try { await stopFacade(bundle); } catch { /* best-effort */ }
+      try { await stopFacade(started); } catch { /* best-effort */ }
     },
   };
 }

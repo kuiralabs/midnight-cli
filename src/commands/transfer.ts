@@ -19,6 +19,7 @@ import { bold, dim } from '../ui/colors.ts';
 import { start as startSpinner, trackElapsed } from '../ui/spinner.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
 import { DUST_SHORT_WAIT_MS, payWhenDustCovers } from '../lib/dust-wait.ts';
+import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
 export default async function transferCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
   rejectNoCacheForWrites(args);
@@ -146,6 +147,8 @@ async function shieldedTransfer(
 
   if (isVerbose(args)) enableVerbose();
 
+  // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
+  const stopListening = onSdkWarning(undefined);
   const spinner = startSpinner('Syncing wallet...');
 
   try {
@@ -231,5 +234,6 @@ async function shieldedTransfer(
     spinner.fail('Failed');
     throw err;
   } finally {
+    stopListening();
   }
 }

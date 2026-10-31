@@ -23,6 +23,7 @@ import { header, keyValue, divider, formatNight, formatAddress, toNight } from '
 import { bold, dim } from '../ui/colors.ts';
 import { start as startSpinner, type Spinner } from '../ui/spinner.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
+import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
 export default async function balanceCommand(args: ParsedArgs): Promise<void> {
   // Positional address → unshielded only (lightweight, no facade)
@@ -193,6 +194,8 @@ async function walletBalance(args: ParsedArgs): Promise<void> {
     indexerWS: getFlag(args, 'indexer-ws'),
   }, networkName);
 
+  // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
+  const stopListening = onSdkWarning(undefined);
   const noCache = hasFlag(args, 'no-cache');
   const isJson = hasFlag(args, 'json');
   const nightToken = ledger.unshieldedToken().raw;
@@ -333,5 +336,6 @@ async function walletBalance(args: ParsedArgs): Promise<void> {
     activeSpinner?.fail('Failed');
     throw err;
   } finally {
+    stopListening();
   }
 }

@@ -180,7 +180,8 @@ async function run(): Promise<void> {
     }
     case 'dev': {
       const { default: handler } = await import('./commands/dev.ts');
-      return handler(args, signal);
+      const { servePayer } = await import('./lib/serve-payer.ts');
+      return handler(args, signal, { payer: servePayer });
     }
     case 'grant': {
       const { default: handler } = await import('./commands/grant.ts');

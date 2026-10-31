@@ -4,11 +4,9 @@
 // left untouched (the user can `mn wallet remove <name>` to force re-setup).
 
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { MIDNIGHT_DIR, WALLETS_DIR_NAME } from '../constants.ts';
 import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet } from '../wallet-config.ts';
-import { createWallet, walletSecretFrom } from '../wallet-create.ts';
+import { createWallet, walletFilePath, walletSecretFrom } from '../wallet-create.ts';
 import { passphraseForNewSecret } from '../passphrase.ts';
 import { airdropNight } from '../airdrop.ts';
 import { checkBalance } from '../balance-subscription.ts';
@@ -46,12 +44,15 @@ export interface ProvisionOptions {
   steps?: ProvisionSteps;
 }
 
-const WALLET_STEPS: ProvisionSteps = {
-  generate: generateWallet,
-  airdrop: airdropToWallet,
-  registerDust: registerWalletDust,
-  needsDust: walletNeedsDust,
-};
+/** The steps through the wallet functions, on `network` (resolved once, for every wallet). */
+function walletSteps(network: NetworkConfig): ProvisionSteps {
+  return {
+    generate: generateWallet,
+    airdrop: (name, amountNight, signal) => airdropToWallet(network, name, amountNight, signal),
+    registerDust: (name, signal) => registerWalletDust(network, name, signal),
+    needsDust: (name, signal) => walletNeedsDust(network, name, signal),
+  };
+}
 
 /**
  * Ensure each wallet exists, is funded from genesis, and is dust-registered.
@@ -64,7 +65,7 @@ const WALLET_STEPS: ProvisionSteps = {
  * while the earlier ones register instead of one after another.
  */
 export async function provisionDevWallets(opts: ProvisionOptions): Promise<ProvisionedWallet[]> {
-  const steps = opts.steps ?? WALLET_STEPS;
+  const steps = opts.steps ?? walletSteps(undeployedNetwork());
   const results: ProvisionedWallet[] = [];
   const created: string[] = [];
 
@@ -130,8 +131,7 @@ function restoreActiveWallet(name: string | null): void {
 // ── Internals ────────────────────────────────────────────────
 
 function walletExists(name: string): boolean {
-  const path = join(homedir(), MIDNIGHT_DIR, WALLETS_DIR_NAME, `${name}.json`);
-  return existsSync(path);
+  return existsSync(walletFilePath(name));
 }
 
 /** The local network, with any endpoints saved for it, as the wallet commands resolve it. */
@@ -145,19 +145,19 @@ async function generateWallet(name: string): Promise<void> {
   createWallet(name, walletSecretFrom(), await passphraseForNewSecret(homedir()));
 }
 
-async function airdropToWallet(name: string, amountNight: number, signal: AbortSignal | undefined): Promise<void> {
+async function airdropToWallet(network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined): Promise<void> {
   const recipientAddress = loadWalletConfig(resolveWalletPath(name)).addresses.undeployed;
-  await airdropNight({ networkConfig: undeployedNetwork(), recipientAddress, amountNight, signal });
+  await airdropNight({ networkConfig: network, recipientAddress, amountNight, signal });
 }
 
-async function walletNeedsDust(name: string, signal: AbortSignal | undefined): Promise<boolean> {
+async function walletNeedsDust(network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<boolean> {
   const address = loadWalletConfig(resolveWalletPath(name)).addresses.undeployed;
-  const { registeredUtxos, unregisteredUtxos } = await checkBalance(address, undeployedNetwork().indexerWS);
+  const { registeredUtxos, unregisteredUtxos } = await checkBalance(address, network.indexerWS);
   signal?.throwIfAborted();
   return registeredUtxos === 0 && unregisteredUtxos > 0;
 }
 
-async function registerWalletDust(name: string, signal: AbortSignal | undefined): Promise<void> {
+async function registerWalletDust(network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<void> {
   const { seed } = await unlockWallet(resolveWalletPath(name));
-  await registerDust(Buffer.from(seed, 'hex'), undeployedNetwork(), { signal });
+  await registerDust(Buffer.from(seed, 'hex'), network, { signal });
 }

@@ -8,8 +8,8 @@ import { header, keyValue } from '../ui/format.ts';
 import { bold, dim, teal, yellow, green } from '../ui/colors.ts';
 import { silentSpinner, start as startSpinner } from '../ui/spinner.ts';
 import { type CommandContext, type Payer, payerFor, resolvePayingTarget } from '../lib/payer.ts';
-import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
 import { deployContract } from '../lib/contract/deploy.ts';
+import { callContract } from '../lib/contract/call.ts';
 import { validateContractAddress } from '../lib/contract/validate.ts';
 import type { RawStateValue } from '../lib/contract/raw-state.ts';
 import { resolveContractCallRequest, resolveContractDeployRequest, resolveScanDir } from '../lib/contract/request.ts';
@@ -181,16 +181,15 @@ function writeNextStepsHint(address: string, circuits: { name: string; arguments
 
 async function handleCall(args: ParsedArgs, payer: Payer, signal?: AbortSignal): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
-  const { dappDir, info, address, circuit, callArgs } = resolveContractCallRequest(args);
-
-  const { runCall } = await import('../lib/contract/runner.ts');
+  const request = resolveContractCallRequest(args);
+  const { info, address, circuit } = request;
 
   if (!jsonMode) {
     process.stderr.write('\n' + header('Contract Call') + '\n\n');
   }
 
   const target = resolvePayingTarget(args, 'contract', 'call');
-  const { network, networkConfig } = target;
+  const { network } = target;
 
   if (!jsonMode) {
     process.stderr.write(keyValue('Contract', info.name) + '\n');
@@ -198,44 +197,26 @@ async function handleCall(args: ParsedArgs, payer: Payer, signal?: AbortSignal):
     process.stderr.write(keyValue('Address', address.slice(0, 20) + '...') + '\n\n');
   }
 
-  await assertWalletCanPay(target, getFlag(args, 'wallet'), jsonMode ? silentSpinner() : startSpinner('Checking wallet...'));
+  const called = await callContract({
+    request,
+    target,
+    wallet: getFlag(args, 'wallet'),
+    payer,
+    progress: (message) => jsonMode ? silentSpinner() : startSpinner(message),
+    signal,
+  });
 
-  const serve = await payer.serve(target, getFlag(args, 'wallet'), jsonMode ? silentSpinner() : startSpinner('Starting mn serve...'));
-  const spinner = jsonMode ? silentSpinner() : startSpinner(`Calling ${circuit}...`);
-
-  try {
-    const result = await runCall({
-      dappDir,
-      networkConfig,
-      managedDir: info.managedDir,
-      contractName: info.name,
-      contractAddress: address,
+  if (jsonMode) {
+    writeJsonResult({
+      subcommand: 'call',
+      contractName: called.contractName,
       circuit,
-      args: callArgs,
-      servePort: serve.port,
-      onMessage: (msg) => spinner.update(msg),
-      signal,
+      address,
+      network,
+      status: called.status,
     });
-
-    spinner.stop(`${circuit} called`);
-
-    if (jsonMode) {
-      writeJsonResult({
-        subcommand: 'call',
-        contractName: info.name,
-        circuit,
-        address,
-        network,
-        status: result.status,
-      });
-    } else {
-      process.stderr.write('\n' + green('  ✓ Circuit call successful') + '\n\n');
-    }
-  } catch (err) {
-    spinner.fail('Call failed');
-    throw err;
-  } finally {
-    await serve.stop();
+  } else {
+    process.stderr.write('\n' + green('  ✓ Circuit call successful') + '\n\n');
   }
 }
 

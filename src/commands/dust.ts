@@ -20,6 +20,7 @@ import { header, keyValue, divider, formatDust, successMessage, toDust } from '.
 import { bold, dim, yellow } from '../ui/colors.ts';
 import { start as startSpinner } from '../ui/spinner.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
+import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
 export default async function dustCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
   const subcommand = args.subcommand;
@@ -51,8 +52,13 @@ export default async function dustCommand(args: ParsedArgs, signal?: AbortSignal
   // export: standalone path. Accepts a raw --seed (so a dApp operator can export a
   // snapshot for its own seed with no named wallet) or falls back to a named wallet.
   if (subcommand === 'export') {
-    // The chain-id check connects to the node; the shell keeps polkadot-js's RPC-CORE noise off stderr.
-    await dustExport(await resolveSeed(args), networkName, networkConfig, isJson, minimal, signal);
+    // The chain-id check connects to the node; keep polkadot-js's RPC-CORE noise off stderr.
+    const stopListening = onSdkWarning(undefined);
+    try {
+      await dustExport(await resolveSeed(args), networkName, networkConfig, isJson, minimal, signal);
+    } finally {
+      stopListening();
+    }
     return;
   }
 

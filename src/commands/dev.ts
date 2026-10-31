@@ -4,6 +4,7 @@
 
 import { resolve, relative } from 'node:path';
 import { type ParsedArgs } from '../lib/argv.ts';
+import { type CommandContext, payerFor } from '../lib/payer.ts';
 import { detectProject, type ProjectInfo } from '../lib/dev/detect-project.ts';
 import { runCompile, type CompileResult } from '../lib/dev/compile.ts';
 import { runTests } from '../lib/dev/test.ts';
@@ -24,7 +25,7 @@ import { start as startSpinner } from '../ui/spinner.ts';
 const DEPLOY_WALLET = 'dev-alice';
 const DEPLOY_NETWORK = 'undeployed';
 
-export default async function devCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
+export default async function devCommand(args: ParsedArgs, signal?: AbortSignal, context?: CommandContext): Promise<void> {
   const startDir = resolve(args.positionals[0] ?? process.cwd());
 
   process.stderr.write('\n' + header('mn dev') + '\n\n');
@@ -168,7 +169,7 @@ export default async function devCommand(args: ParsedArgs, signal?: AbortSignal)
         }
         deployInFlight = true;
         try {
-          await deployContract(project);
+          await deployContract(project, context);
         } finally {
           deployInFlight = false;
         }
@@ -216,7 +217,7 @@ export default async function devCommand(args: ParsedArgs, signal?: AbortSignal)
   });
 }
 
-async function deployContract(project: ProjectInfo): Promise<void> {
+async function deployContract(project: ProjectInfo, context: CommandContext | undefined): Promise<void> {
   // Pre-flight: contracts that declare witnesses need a witnesses.js the
   // runner can load. If declared witnesses exist and no implementation file
   // is present, refuse early with an actionable message rather than letting
@@ -233,8 +234,8 @@ async function deployContract(project: ProjectInfo): Promise<void> {
   const spinner = startSpinner(`Deploying with ${DEPLOY_WALLET} on ${DEPLOY_NETWORK}...`);
   try {
     const { deployDevContract } = await import('../lib/dev/deploy.ts');
-    const { servePayer } = await import('../lib/serve-payer.ts');
-    const deployed = await deployDevContract(project.projectRoot, DEPLOY_WALLET, DEPLOY_NETWORK, servePayer);
+    // The payer is the caller's (the CLI passes the serve payer), as for contract and grant.
+    const deployed = await deployDevContract(project.projectRoot, DEPLOY_WALLET, DEPLOY_NETWORK, payerFor('dev deploy', context));
     spinner.stop(`Deployed`);
     process.stderr.write(`  ${dim('address')}  ${teal(deployed.address)}\n`);
   } catch (err) {

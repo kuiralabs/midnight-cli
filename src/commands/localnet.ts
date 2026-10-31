@@ -2,8 +2,6 @@
 // Subcommands: up, down, status, logs
 
 import { spawn } from 'child_process';
-import { existsSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { type ParsedArgs, hasFlag, getFlag } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
 import {
