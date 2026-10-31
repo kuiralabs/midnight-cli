@@ -8,6 +8,7 @@
 // its cap; that is enough to say up front how long the wait is.
 
 import { toDust } from '../ui/format.ts';
+import { formatWait } from './duration.ts';
 
 /** The per-UTXO generation figures from the SDK's estimateRegistration (specks; rate per second). */
 export interface DustGenerationEstimate {
@@ -36,18 +37,6 @@ export function planRegistration(fee: bigint, estimates: readonly DustGeneration
   else if (cap < fee || ratePerSecond <= 0n) waitMs = null;
   else waitMs = Number(((fee - generated) * 1000n + ratePerSecond - 1n) / ratePerSecond);
   return { fee, generated, ratePerSecond, cap, waitMs };
-}
-
-/** A wait in words: "about 29 seconds", "about 19 minutes", "about 3 hours". */
-export function formatWait(ms: number): string {
-  if (ms < 60_000) {
-    const seconds = Math.max(1, Math.ceil(ms / 1000));
-    return `about ${seconds} second${seconds === 1 ? '' : 's'}`;
-  }
-  const minutes = Math.ceil(ms / 60_000);
-  if (minutes < 2) return 'about a minute';
-  if (minutes < 120) return `about ${minutes} minutes`;
-  return `about ${Math.round(minutes / 60)} hours`;
 }
 
 /** The NIGHT can't pay the registration fee within the time mn waits (or ever). */

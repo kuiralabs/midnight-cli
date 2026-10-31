@@ -1,7 +1,9 @@
 // `midnight wallet protect`: sets mn's passphrase on a machine with none and
 // seals every plain-text wallet under it, saying which it sealed; run again,
 // it seals nothing new; with another passphrase than the one set, it changes
-// nothing.
+// nothing. The accounts grant keeps are sealed by the protector grant
+// provides, which the CLI passes in (decision 24); without it, wallet seals
+// only wallets.
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -14,6 +16,8 @@ import { loadWalletConfig } from '../lib/wallet-config.ts';
 import { deriveAllAddresses } from '../lib/derive-address.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
+import { accountProtector } from '../lib/grant/account-protector.ts';
+import type { WalletProtector } from '../lib/wallet-protector.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
@@ -24,10 +28,11 @@ let io: CapturedOutput;
 const plainWallet = (name: string): string =>
   saveWalletConfig({ seed: SEED, addresses: deriveAllAddresses(Buffer.from(SEED, 'hex')), createdAt: '2026-10-19T00:00:00.000Z' }, path.join(home, '.midnight', 'wallets', `${name}.json`));
 
-const protect = async (): Promise<Record<string, unknown>> => {
+/** `wallet protect --json`, given the protectors the CLI gives it unless told otherwise. */
+const protect = async (protectors: WalletProtector[] = [accountProtector]): Promise<Record<string, unknown>> => {
   io.restore();
   io = captureOutput();
-  await walletCommand(parseArgs(['wallet', 'protect', '--json']));
+  await walletCommand(parseArgs(['wallet', 'protect', '--json']), undefined, { protectors });
   return JSON.parse(io.stdout()) as Record<string, unknown>;
 };
 
@@ -84,6 +89,27 @@ describe('wallet protect', () => {
     ]);
     expect(fs.readFileSync(path.join(accounts, 'gone', 'owner.json'), 'utf8')).toContain('4f'.repeat(32));
     expect(fs.existsSync(path.join(accounts, 'alice', 'owner.json'))).toBe(false);
+  });
+
+  it('given no protector, seals the wallets and leaves an account as it is', async () => {
+    plainWallet('alice');
+    const owner = path.join(home, '.midnight', 'accounts', 'undeployed', 'alice', 'owner.json');
+    fs.mkdirSync(path.dirname(owner), { recursive: true });
+    fs.writeFileSync(owner, JSON.stringify({ contractAddress: '5e'.repeat(32), bootSalt: '3a'.repeat(32), encryptionSecret: '2b'.repeat(32), deviceArm: 'k1', deviceSk: '4f'.repeat(32) }));
+    const result = await protect([]);
+    expect(result).toEqual({ sealed: ['alice'], alreadySealed: [] });
+    expect(fs.readFileSync(owner, 'utf8')).toContain('4f'.repeat(32));
+  });
+
+  it('prints each account the protector sealed, as before', async () => {
+    plainWallet('alice');
+    const owner = path.join(home, '.midnight', 'accounts', 'undeployed', 'alice', 'owner.json');
+    fs.mkdirSync(path.dirname(owner), { recursive: true });
+    fs.writeFileSync(owner, JSON.stringify({ contractAddress: '5e'.repeat(32), bootSalt: '3a'.repeat(32), encryptionSecret: '2b'.repeat(32), deviceArm: 'k1', deviceSk: '4f'.repeat(32) }));
+    io.restore();
+    io = captureOutput();
+    await walletCommand(parseArgs(['wallet', 'protect']), undefined, { protectors: [accountProtector] });
+    expect(io.stderr()).toContain('✓ account of alice on undeployed: owner key, records and private state encrypted');
   });
 
   it('passes over an empty account folder, which an earlier mn left for a command that failed', async () => {

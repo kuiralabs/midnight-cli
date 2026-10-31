@@ -30,14 +30,14 @@ const HOMES = [
   ['mcp', /^lib\/mcp\//],
 
   ['core', /^commands\/(config|help|manual)\.ts$/],
-  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors)\.ts$/],
+  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration)\.ts$/],
   ['core', /^ui\/(colors|format|spinner)\.ts$/],
 
   ['chain', /^commands\/status\.ts$/],
   ['chain', /^lib\/(node-rpc|chain-id|indexer-graphql|graphql-ws-subscription|event-tip|ledger-guard|node-ready|indexer-ready|proof-server-ready|chain-clock|endpoint-check|balance-subscription)\.ts$/],
 
   ['wallet', /^commands\/(wallet|generate|address|genesis-address|info|balance|transfer|airdrop|dust|cache)\.ts$/],
-  ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|wallet-cache|cache-indexer|transfer|transfer-request|sync-eta|wallet-can-pay|wallet-create|airdrop)\.ts$/],
+  ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|wallet-cache|cache-indexer|transfer|transfer-request|sync-eta|wallet-can-pay|wallet-create|airdrop|wallet-protector|chain-caches)\.ts$/],
   ['wallet', /^lib\/(dust-[a-z-]+|shielded-[a-z-]+)\.ts$/],
 
   ['contract', /^commands\/(contract|inspect-cost)\.ts$/],

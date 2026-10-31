@@ -160,18 +160,17 @@ async function handleDown(jsonMode: boolean): Promise<void> {
     // removed, so any wallet cache still referencing it is guaranteed stale
     // and would trigger "applied > highest" on the next command. Clearing
     // here means the next `mn <anything>` starts with a truthful cache.
-    const { clearWalletCache } = await import('../lib/wallet-cache.ts');
-    const { clearDustDirectCache } = await import('../lib/dust-direct-cache.ts');
-    clearWalletCache(undefined, 'undeployed');
-    clearDustDirectCache('undeployed');
+    const { clearChainCaches } = await import('../lib/chain-caches.ts');
+    clearChainCaches('undeployed');
 
     // Also wipe the dapp-local LevelDB private-state store if the user is
     // running this from a dapp directory. The store survives `docker compose
     // down --volumes` and refers to contract addresses that no longer exist
     // after the chain reset, causing "NotOpenError: Database failed to open"
     // (corruption) on the next `mn contract deploy/call`. Best-effort: only
-    // touches `./midnight-level-db` in the cwd, never scans the filesystem.
-    const leveldbWiped = wipeDappLevelDb();
+    // touches the store in the cwd, never scans the filesystem.
+    const { PRIVATE_STATE_DATABASE, clearDappPrivateState } = await import('../lib/contract/private-state.ts');
+    const leveldbWiped = clearDappPrivateState(process.cwd());
 
     spinner.stop('Local network removed (containers, networks, volumes, caches)');
     if (jsonMode) {
@@ -179,30 +178,11 @@ async function handleDown(jsonMode: boolean): Promise<void> {
       return;
     }
     if (leveldbWiped) {
-      process.stderr.write(dim('  Also cleared dapp leveldb at ./midnight-level-db (private state from old chain)') + '\n');
+      process.stderr.write(dim(`  Also cleared dapp leveldb at ./${PRIVATE_STATE_DATABASE} (private state from old chain)`) + '\n');
     }
   } catch (err) {
     spinner.fail('Failed to tear down local network');
     throw err;
-  }
-}
-
-/**
- * Wipe the LevelDB private-state store created by `levelPrivateStateProvider`
- * during a previous `mn contract deploy/call`. The store lives at
- * `<dappDir>/midnight-level-db` and holds contract private state keyed to the
- * old chain's contract addresses. After `mn localnet down --volumes`, the
- * chain is gone and re-using the store throws on open. Returns true iff
- * something was removed.
- */
-function wipeDappLevelDb(): boolean {
-  const dir = resolve(process.cwd(), 'midnight-level-db');
-  if (!existsSync(dir)) return false;
-  try {
-    rmSync(dir, { recursive: true, force: true });
-    return true;
-  } catch {
-    return false;
   }
 }
 

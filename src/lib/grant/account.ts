@@ -21,6 +21,7 @@ import {
   directoryOwnerStore,
 } from '@kuiralabs/midnight-account-chain/owner';
 import { MIDNIGHT_DIR } from '../constants.ts';
+import { PRIVATE_STATE_DATABASE } from '../contract/private-state.ts';
 import { type PassphraseSource, passphraseForNewSecret, unlockPassphrase } from '../passphrase.ts';
 import {
   AccountMigrationInterruptedError,
@@ -49,7 +50,6 @@ export function accountArtifactsDir(home: string = homedir()): string {
 const ACCOUNT_NETWORK_ID = 'undeployed';
 
 /** The private state's database, store and password, as every account so far was made with them. */
-const PRIVATE_STATE_DATABASE = 'midnight-level-db';
 const PRIVATE_STATE_STORE = 'midnight-bench-account';
 // The password the account package encrypted every account's private state
 // with until it took one from its caller: testkit-js's own, public in its

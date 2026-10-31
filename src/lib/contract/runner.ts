@@ -12,6 +12,7 @@ import type { NetworkConfig } from '../network.ts';
 import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
 import { coerceArg } from './arg-coerce.ts';
 import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
+import { CANCELLED_MESSAGE } from '../errors.ts';
 
 /**
  * Walk up from this module to find the closest `node_modules` directory.
@@ -619,9 +620,6 @@ export interface ScriptRun {
 
 // How long a cancelled script has to exit on SIGTERM before it is killed outright.
 const CANCEL_GRACE_MS = 5_000;
-// What a cancelled run fails with; classifyError reads it as CANCELLED.
-export const CANCELLED_MESSAGE = 'Operation cancelled';
-
 /** Random bytes in a generated script's name, beside the time. */
 const SCRIPT_NAME_RANDOM_BYTES = 4;
 

@@ -3,7 +3,8 @@
 // wallet airdropped 20 NIGHT 34 minutes earlier.
 
 import { describe, it, expect } from 'vitest';
-import { DustFeeNotGeneratedError, formatWait, planRegistration } from '../lib/dust-registration-plan.ts';
+import { DustFeeNotGeneratedError, planRegistration } from '../lib/dust-registration-plan.ts';
+import { formatWait } from '../lib/duration.ts';
 import { classifyError, EXIT_INSUFFICIENT_BALANCE } from '../lib/exit-codes.ts';
 
 const FEE = 526_587_115_818_352n;
