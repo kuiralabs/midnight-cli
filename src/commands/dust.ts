@@ -10,9 +10,9 @@ import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveSeed } from '../lib/seed-resolver.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides, type NetworkConfig } from '../lib/network.ts';
-import { suppressSdkTransientErrors, waitForLiteSyncedState } from '../lib/facade.ts';
 import { deriveDustSeed } from '../lib/derivation.ts';
-import { ensureDust, suppressRpcNoise } from '../lib/transfer.ts';
+import { suppressRpcNoise } from '../lib/transfer.ts';
+import { registerDust } from '../lib/dust-register.ts';
 import { checkBalance } from '../lib/balance-subscription.ts';
 import { dustPublicKeyHex } from '../lib/dust-direct-cache.ts';
 import { exportDustSnapshot } from '../lib/dust-export.ts';
@@ -91,17 +91,7 @@ export default async function dustCommand(args: ParsedArgs, signal?: AbortSignal
   // The repo's withFacade owns: validate caches, pre-prime dust, build facade,
   // sync (with retry), save, invalidate, stop. We just provide the work.
   rejectNoCacheForWrites(args);
-
-  const warningRef: { current?: (tag: string, msg: string) => void } = {};
-  const unsuppress = suppressSdkTransientErrors((tag, msg) => warningRef.current?.(tag, msg));
-  const restoreRpc = suppressRpcNoise();
-
-  try {
-    await dustRegister(seedBuffer, networkConfig, isJson, signal, warningRef);
-  } finally {
-    restoreRpc();
-    unsuppress();
-  }
+  await dustRegister(seedBuffer, networkConfig, isJson, signal);
 }
 
 // export: fast dust-direct sync → emit a facade-restorable snapshot. The snapshot
@@ -166,8 +156,6 @@ async function dustExport(
     throw err;
   }
 }
-
-type WarningRef = { current?: (tag: string, msg: string) => void };
 
 interface PreCheckResult {
   isRegistered: boolean;
@@ -265,49 +253,27 @@ async function dustRegister(
   networkConfig: NetworkConfig,
   jsonMode: boolean,
   signal?: AbortSignal,
-  warningRef?: WarningRef,
 ): Promise<void> {
   const networkName = networkConfig.networkId.toLowerCase();
   process.stderr.write('\n' + header('Dust Register') + '\n\n');
   process.stderr.write(keyValue('Network', networkName) + '\n\n');
 
   const spinner = startSpinner('Syncing wallet...');
-  if (warningRef) {
-    warningRef.current = (_tag, msg) => spinner.update(`Syncing wallet... (${msg}, retrying)`);
-  }
 
   try {
-    const { result, dustBal } = await defaultRepository().withFacade(
-      seedBuffer,
-      networkConfig,
-      async ({ bundle, state }) => {
-        if (signal?.aborted) throw new Error('Operation cancelled');
-        spinner.update('Checking dust status...');
-
-        // ensureDust handles: early return if dust exists, registration
-        // of unregistered UTXOs, waiting for dust coins.
-        const result = await ensureDust(bundle, (status: string) => spinner.update(status), state);
-
-        if (signal?.aborted) throw new Error('Operation cancelled');
-
-        // Wait for dust data to be fully populated before reading balance.
-        const finalState = await waitForLiteSyncedState(bundle);
-        return { result, dustBal: finalState.dust.balance(new Date()) };
+    const result = await registerDust(seedBuffer, networkConfig, {
+      signal,
+      onStatus: (s) => spinner.update(s),
+      onSyncProgress: (applied, highest) => {
+        if (highest > 0) {
+          const pct = Math.min(Math.round((applied / highest) * 100), 100);
+          spinner.update(pct >= 100 ? 'Syncing wallet...' : `Syncing wallet... ${pct}%`);
+        }
       },
-      {
-        syncMode: 'lite',
-        requireStrictSync: true,
-        signal,
-        onStatus: (s) => spinner.update(s),
-        onSyncProgress: (applied, highest) => {
-          if (highest > 0) {
-            const pct = Math.min(Math.round((applied / highest) * 100), 100);
-            spinner.update(pct >= 100 ? 'Syncing wallet...' : `Syncing wallet... ${pct}%`);
-          }
-        },
-        onSyncDetail: (detail) => spinner.update(`Syncing wallet... (waiting on: ${detail})`),
-      },
-    );
+      onSyncDetail: (detail) => spinner.update(`Syncing wallet... (waiting on: ${detail})`),
+      onSyncWarning: (_tag, msg) => spinner.update(`Syncing wallet... (${msg}, retrying)`),
+    });
+    const dustBal = result.dustBalance;
 
     spinner.stop(result.alreadyAvailable ? 'Dust already available' : 'Dust registration complete');
 

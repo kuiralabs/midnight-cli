@@ -19,7 +19,8 @@ import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '..
 import { getNetworkId } from '../lib/network-id.ts';
 import { GENESIS_SEED } from '../lib/constants.ts';
 import { deriveShieldedAddress } from '../lib/derive-address.ts';
-import { parseAmount, nightToMicro, executeTransfer, ensureDust, suppressRpcNoise } from '../lib/transfer.ts';
+import { parseAmount, nightToMicro, ensureDust, suppressRpcNoise } from '../lib/transfer.ts';
+import { airdropNight } from '../lib/airdrop.ts';
 import { suppressSdkTransientErrors } from '../lib/facade.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { header, keyValue, divider, formatAddress, successMessage } from '../ui/format.ts';
@@ -173,7 +174,6 @@ async function unshieldedAirdrop(
 ): Promise<void> {
   if (isVerbose(args)) enableVerbose();
   const recipientAddress = destination.address;
-  const genesisSeedBuffer = Buffer.from(GENESIS_SEED, 'hex');
 
   process.stderr.write('\n' + header('Airdrop') + '\n\n');
   process.stderr.write(keyValue('Network', networkName) + '\n');
@@ -185,8 +185,7 @@ async function unshieldedAirdrop(
   const spinner = startSpinner('Starting genesis wallet...');
 
   try {
-    const result = await executeTransfer({
-      seedBuffer: genesisSeedBuffer,
+    const result = await airdropNight({
       networkConfig,
       recipientAddress,
       amountNight,
@@ -242,13 +241,6 @@ async function unshieldedAirdrop(
       + '\n' + dim('        there is (about a minute for 1000 NIGHT). dust register says how long.') + '\n\n');
   } catch (err) {
     spinner.fail('Failed');
-    if (err instanceof Error && err.message.toLowerCase().includes('dust')) {
-      throw new Error(
-        `${err.message}\n\n` +
-        `On a fresh localnet, the minimum airdrop is ~1 NIGHT.\n` +
-        `Try: midnight airdrop 1`
-      );
-    }
     throw err;
   }
 }

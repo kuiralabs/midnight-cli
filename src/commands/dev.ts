@@ -16,7 +16,6 @@ import {
 } from '../lib/dev/provision-wallets.ts';
 import { startKeyDispatcher } from '../lib/dev/keys.ts';
 import { findWitnessFile, buildMissingWitnessError } from '../lib/contract/witness-discovery.ts';
-import { captureCommand } from '../lib/run-command.ts';
 import { header, divider, keyValue } from '../ui/format.ts';
 import { bold, dim, red, teal, yellow } from '../ui/colors.ts';
 import { start as startSpinner } from '../ui/spinner.ts';
@@ -239,17 +238,11 @@ async function deployContract(project: ProjectInfo): Promise<void> {
 
     const spinner = startSpinner(`Deploying with ${DEPLOY_WALLET} on ${DEPLOY_NETWORK}...`);
     try {
-      const { default: handler } = await import('./contract.ts');
+      const { deployDevContract } = await import('../lib/dev/deploy.ts');
       const { servePayer } = await import('../lib/serve-payer.ts');
-      const result = await captureCommand(handler, {
-        command: 'contract',
-        subcommand: 'deploy',
-        positionals: [],
-        flags: { wallet: DEPLOY_WALLET, network: DEPLOY_NETWORK },
-      }, { payer: servePayer });
+      const deployed = await deployDevContract(DEPLOY_WALLET, DEPLOY_NETWORK, servePayer);
       spinner.stop(`Deployed`);
-      const address = typeof result.address === 'string' ? result.address : '(unknown)';
-      process.stderr.write(`  ${dim('address')}  ${teal(address)}\n`);
+      process.stderr.write(`  ${dim('address')}  ${teal(deployed.address)}\n`);
     } catch (err) {
       spinner.fail('Deploy failed');
       const message = err instanceof Error ? err.message : String(err);

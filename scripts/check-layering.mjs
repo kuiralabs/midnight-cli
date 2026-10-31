@@ -37,7 +37,7 @@ const HOMES = [
   ['chain', /^lib\/(node-rpc|chain-id|indexer-graphql|graphql-ws-subscription|event-tip|ledger-guard|node-ready|indexer-ready|proof-server-ready|chain-clock|endpoint-check|balance-subscription)\.ts$/],
 
   ['wallet', /^commands\/(wallet|generate|address|genesis-address|info|balance|transfer|airdrop|dust|cache)\.ts$/],
-  ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|wallet-cache|cache-indexer|transfer|transfer-request|sync-eta|wallet-can-pay)\.ts$/],
+  ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|wallet-cache|cache-indexer|transfer|transfer-request|sync-eta|wallet-can-pay|wallet-create|airdrop)\.ts$/],
   ['wallet', /^lib\/(dust-[a-z-]+|shielded-[a-z-]+)\.ts$/],
 
   ['contract', /^commands\/(contract|inspect-cost)\.ts$/],
