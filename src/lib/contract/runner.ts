@@ -233,7 +233,7 @@ function rpcClose() {
  * those fragments so a test can evaluate a fragment with the same bindings.
  */
 export const PROVIDER_IMPORTS = `
-import { createWalletProvider, createMidnightProvider, Transaction } from '@midnight-ntwrk/midnight-js-types';
+import { Transaction } from '@midnight-ntwrk/midnight-js-types';
 import { toHex, fromHex } from '@midnight-ntwrk/midnight-js-utils';
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -242,16 +242,16 @@ import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-pri
 `;
 
 /**
- * walletProvider + midnightProvider backed by mn serve RPC. midnight-js 5
- * passes version-tagged txs ({ version: 'v9', tx }) and refuses providers that
- * do not declare `supportedEras`; createWalletProvider/createMidnightProvider
- * declare v9 and unwrap/re-tag, so the bodies below see live ledger-v9 txs.
+ * walletProvider + midnightProvider backed by mn serve RPC. midnight-js
+ * 5.0.0-beta.6 takes plain provider objects and hands them live ledger-v9
+ * txs: it has no version tags, no `supportedEras` and no
+ * createWalletProvider/createMidnightProvider.
  */
 export function walletProviderCode(): string {
   return `
 const walletState = await rpcCall('getShieldedAddresses', {});
 
-const walletProvider = createWalletProvider({
+const walletProvider = {
   getCoinPublicKey: () => walletState.shieldedCoinPublicKey,
   getEncryptionPublicKey: () => walletState.shieldedEncryptionPublicKey,
   // ttl is ignored: mn serve applies its own TTL when balancing.
@@ -259,12 +259,14 @@ const walletProvider = createWalletProvider({
     const result = await rpcCall('balanceUnsealedTransaction', { tx: toHex(tx.serialize()) });
     return Transaction.deserialize('signature', 'proof', 'binding', fromHex(result.tx));
   },
-});
+};
 
-const midnightProvider = createMidnightProvider(async (tx) => {
-  await rpcCall('submitTransaction', { tx: toHex(tx.serialize()) });
-  return tx.identifiers()[0];
-});
+const midnightProvider = {
+  async submitTx(tx) {
+    await rpcCall('submitTransaction', { tx: toHex(tx.serialize()) });
+    return tx.identifiers()[0];
+  },
+};
 `;
 }
 

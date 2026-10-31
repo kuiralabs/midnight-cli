@@ -14,12 +14,13 @@ import {
   type Bindingish,
   type PreBinding,
   type PreProof,
+  type Proof,
   type Proofish,
   type Signature,
   type SignatureEnabled,
   type SignatureVerifyingKey,
 } from '@midnightntwrk/ledger-v9';
-import type { BalancingRecipe, WalletFacade } from '@midnightntwrk/wallet-sdk/facade';
+import type { BalancingRecipe, WalletFacade } from '@midnightntwrk/wallet-sdk-facade';
 import { feeOnlyRefusals, readDAppTransaction } from '../lib/fee-only-check.ts';
 import {
   PartlySignedTransactionError, SignedTransactionNeedsUnshieldedError, assertSignable, signRecipe, unshieldedImbalanceSegments, unshieldedSignatures,
@@ -81,15 +82,14 @@ function wellFormedError(bytes: Uint8Array): string | undefined {
 
 /** The wallet's balancing transaction as the facade would book it: an unproven spend of the wallet's own input, unsigned. */
 function walletBalancing() {
-  return facade.adoptTransaction(
+  return readUnproven(
     buildTx({ guaranteed: { inputs: [spend(WALLET_SK, 5n, 7)], outputs: [pay(5n)], signers: [] } }).serialize(),
-    'Unproven',
   );
 }
 
 function unboundRecipe(dappBytes: Uint8Array, balancingTransaction?: ReturnType<typeof walletBalancing>): BalancingRecipe {
-  const baseTransaction = facade.adoptTransaction(dappBytes, 'Unbound');
-  return { type: 'UNBOUND_TRANSACTION', protocolVersion: baseTransaction.protocolVersion, baseTransaction, balancingTransaction };
+  const baseTransaction = Transaction.deserialize<SignatureEnabled, Proof, PreBinding>('signature', 'proof', 'pre-binding', dappBytes);
+  return { type: 'UNBOUND_TRANSACTION', baseTransaction, balancingTransaction };
 }
 
 const PARTLY_SIGNED = buildTx({
@@ -207,7 +207,7 @@ describe('signRecipe', () => {
     const transaction = walletBalancing();
     const signer = countingSigner();
 
-    const signed = await signRecipe(facade, { type: 'UNPROVEN_TRANSACTION', protocolVersion: transaction.protocolVersion, transaction }, signer);
+    const signed = await signRecipe(facade, { type: 'UNPROVEN_TRANSACTION', transaction }, signer);
 
     if (signed.type !== 'UNPROVEN_TRANSACTION') throw new Error(`expected an unproven recipe, got ${signed.type}`);
     expect(signersOf(readUnproven(signed.transaction.serialize()))).toEqual(['wallet']);

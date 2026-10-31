@@ -7,8 +7,8 @@ import * as rx from 'rxjs';
 import { isDustRelatedError, ensureDust, registerNightUtxos } from '../lib/transfer.ts';
 import { DustFeeNotGeneratedError } from '../lib/dust-registration-plan.ts';
 import type { FacadeBundle } from '../lib/facade.ts';
-import type { DustAddress } from '@midnightntwrk/wallet-sdk/address-format';
-import type { UtxoWithMeta } from '@midnightntwrk/wallet-sdk/facade';
+import type { DustAddress } from '@midnightntwrk/wallet-sdk-address-format';
+import type { UtxoWithMeta } from '@midnightntwrk/wallet-sdk-facade';
 
 // Opaque sentinels: the code under test only passes these through to the SDK,
 // so identity is what the assertions check.

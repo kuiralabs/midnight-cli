@@ -4,13 +4,13 @@ import { loadCliConfig, getEndpointOverridesForNetwork } from './cli-config.ts';
 import { INDEXER_GRAPHQL_PATH, INDEXER_GRAPHQL_WS_PATH } from './constants.ts';
 import { settings } from './settings.ts';
 
-export type NetworkName = 'preprod' | 'preview' | 'undeployed';
+export type NetworkName = 'preprod' | 'preview' | 'stagenet' | 'undeployed';
 
 /**
  * The protocol version ledger 9 starts at on the chains this build targets:
  * chains born on ledger 9 (the localnet reports 2001000). A plain number, so
- * the base and the ledger guard need no SDK; the wallet passes the SDK's own
- * schedule to the facade (`fork-schedule.ts`), and a test keeps the two equal.
+ * the base and the ledger guard need no SDK. (The beta SDK set has no fork
+ * schedule to keep it equal to; see `fork-schedule.ts`.)
  */
 export const LEDGER_9_FORK_VERSION = 2_000_000n;
 
@@ -37,6 +37,14 @@ const NETWORK_CONFIGS: Record<NetworkName, NetworkConfig> = {
     proofServer: 'http://localhost:6300',
     networkId: 'Preview',
   },
+  // Sig Network's stagenet, which runs the beta SDK set this branch is built on.
+  stagenet: {
+    indexer: `https://indexer.stagenet.shielded.tools${INDEXER_GRAPHQL_PATH}`,
+    indexerWS: `wss://indexer.stagenet.shielded.tools${INDEXER_GRAPHQL_WS_PATH}`,
+    node: 'wss://rpc.stagenet.shielded.tools',
+    proofServer: 'http://localhost:6300',
+    networkId: 'StageNet',
+  },
   undeployed: {
     indexer: `http://localhost:8088${INDEXER_GRAPHQL_PATH}`,
     indexerWS: `ws://localhost:8088${INDEXER_GRAPHQL_WS_PATH}`,
@@ -46,7 +54,7 @@ const NETWORK_CONFIGS: Record<NetworkName, NetworkConfig> = {
   },
 };
 
-const VALID_NETWORK_NAMES: readonly NetworkName[] = ['preprod', 'preview', 'undeployed'] as const;
+const VALID_NETWORK_NAMES: readonly NetworkName[] = ['preprod', 'preview', 'stagenet', 'undeployed'] as const;
 
 export function isValidNetworkName(name: string): name is NetworkName {
   return VALID_NETWORK_NAMES.includes(name as NetworkName);
@@ -67,6 +75,7 @@ export function getValidNetworkNames(): readonly string[] {
 export function detectNetworkFromAddress(address: string): NetworkName | null {
   if (address.startsWith('mn_addr_preprod1')) return 'preprod';
   if (address.startsWith('mn_addr_preview1')) return 'preview';
+  if (address.startsWith('mn_addr_stagenet1')) return 'stagenet';
   if (address.startsWith('mn_addr_undeployed1')) return 'undeployed';
   return null;
 }

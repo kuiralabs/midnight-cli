@@ -19,7 +19,7 @@
 // balanced for Dust; one that also needs unshielded value is refused.
 
 import type { Signature } from '@midnightntwrk/ledger-v9';
-import type { BalancingRecipe, WalletFacade } from '@midnightntwrk/wallet-sdk/facade';
+import type { BalancingRecipe, WalletFacade } from '@midnightntwrk/wallet-sdk-facade';
 import { readDAppTransaction, segmentsOf, unshieldedInputs, type FeeCheckTransaction } from './fee-only-check.ts';
 
 export type SignSegment = (data: Uint8Array) => Promise<Signature>;
@@ -98,7 +98,7 @@ export async function signRecipe(
   if (!recipe.balancingTransaction) return recipe;
   // The facade's own path for an unproven transaction: unshielded signatures, then a Dust registration's, if any.
   const signed = await facade.signRecipe(
-    { type: 'UNPROVEN_TRANSACTION', protocolVersion: recipe.protocolVersion, transaction: recipe.balancingTransaction },
+    { type: 'UNPROVEN_TRANSACTION', transaction: recipe.balancingTransaction },
     signSegment,
   );
   if (signed.type !== 'UNPROVEN_TRANSACTION') {

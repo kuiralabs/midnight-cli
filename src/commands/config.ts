@@ -30,7 +30,7 @@ export default async function configCommand(args: ParsedArgs): Promise<void> {
   // An endpoint key can be read or written for a network other than the selected one.
   const networkFlag = getFlag(args, 'network');
   if (networkFlag !== undefined && !isValidNetworkName(networkFlag)) {
-    throw new UsageError(`Invalid network: "${networkFlag}"\nValid networks: preprod, preview, undeployed`);
+    throw new UsageError(`Invalid network: "${networkFlag}"\nValid networks: preprod, preview, stagenet, undeployed`);
   }
   const scope = networkFlag as NetworkName | undefined;
 

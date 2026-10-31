@@ -3,13 +3,13 @@
 
 import * as rx from 'rxjs';
 import { notice } from './notices.ts';
-import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
-import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
-import type { FacadeState, WalletEntry } from '@midnightntwrk/wallet-sdk/facade';
-import type { FinalizedTx } from '@midnightntwrk/wallet-sdk';
+import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
+import * as ledger from '@midnightntwrk/ledger-v9';
+import type { UnboundTransaction } from '@midnightntwrk/wallet-sdk-capabilities/proving';
+import type { FacadeState, WalletEntry } from '@midnightntwrk/wallet-sdk-facade';
 
 import { type FacadeBundle, hasDustAvailable } from './facade.ts';
-import { LEDGER_9_FORK_VERSION, type NetworkConfig } from './network.ts';
+import { type NetworkConfig } from './network.ts';
 import type { ApprovalOptions } from './approval.ts';
 import { promptApproval } from './approval.ts';
 import { createApiError, type RpcHandler, type RpcHandlerContext } from './ws-rpc.ts';
@@ -25,7 +25,6 @@ import { decodeSignPayload, signedMessageBytes } from './sign-data.ts';
 import { DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan } from './dust-wait.ts';
 import { formatWait } from './duration.ts';
 import { fetchPartialSuccessSegments, type SegmentResult } from './tx-segments.ts';
-import { walletsBelowLedger9 } from './ledger-guard.ts';
 import { TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS } from './constants.ts';
 import { dim } from '../ui/colors.ts';
 import { roughDust, toDust } from '../ui/format.ts';
@@ -65,6 +64,9 @@ export interface DAppConnectorOptions {
    */
   dustWaitMs?: number;
 }
+
+/** A dApp's transaction as the facade takes it, by stage. */
+type DAppTransaction = { Unbound: UnboundTransaction; Finalized: ledger.FinalizedTransaction };
 
 /** Which token kinds the facade balances a dApp's transaction in. */
 export type TokenKindsToBalance = 'all' | Array<'dust' | 'shielded' | 'unshielded'>;
@@ -213,7 +215,7 @@ export function signatureScheme(tag: string): 'schnorr_bip340' {
 export function createDAppConnector(options: DAppConnectorOptions): DAppConnector {
   const { bundle, networkConfig, approvalOptions, callbacks } = options;
   const feeLimits = options.feeLimits ?? DEFAULT_FEE_LIMITS;
-  const { facade, keystore } = bundle;
+  const { facade, keystore, secretKeys } = bundle;
   const networkId = getNetworkId(networkConfig.networkId);
 
   // ── State subscription — cache latest synced state ──
@@ -221,11 +223,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
   const isCurrent = options.isCurrent ?? ((state: FacadeState) => state.isSynced);
   const dustWaitMs = options.dustWaitMs ?? DUST_SHORT_WAIT_MS;
   let latestState: FacadeState | undefined = options.initialState;
-  // From every state, synced or not: the wallets' protocol versions decide
-  // which ledger the facade reads a dApp's transaction as.
-  let protocolVersions: FacadeState['protocolVersion'] | undefined = options.initialState?.protocolVersion;
   const subscription = facade.state().subscribe((state) => {
-    protocolVersions = state.protocolVersion;
     if (isCurrent(state)) latestState = state;
   });
 
@@ -234,20 +232,6 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       throw createApiError('Disconnected', 'Wallet not synced yet');
     }
     return latestState;
-  }
-
-  /** Refuse transaction work until all three wallets are past the ledger-9 fork. */
-  function assertWalletsOnLedger9(): void {
-    if (!protocolVersions) {
-      throw createApiError('Disconnected', 'Wallet not synced yet');
-    }
-    const behind = walletsBelowLedger9(protocolVersions);
-    if (behind.length > 0) {
-      const detail = behind.map((w) => `${w} at ${protocolVersions![w]}`).join(', ');
-      throw createApiError('Disconnected',
-        `This wallet can't take transactions until all three of its wallets are on ledger 9 (fork at ${LEDGER_9_FORK_VERSION}); `
-        + `still behind: ${detail}. Wait for them to sync past the fork and retry.`);
-    }
   }
 
   // ── Shared helpers ──
@@ -260,9 +244,9 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
   // that entry pending until its TTL. `feeOnly` marks a transaction this
   // connection had balanced Dust-only under --approve-fees: only its submit
   // counts as fee-only.
-  const pendingTxsByConnection = new Map<string, Map<string, { finalized: FinalizedTx; timer: ReturnType<typeof setTimeout>; feeOnly: boolean }>>();
+  const pendingTxsByConnection = new Map<string, Map<string, { finalized: ledger.FinalizedTransaction; timer: ReturnType<typeof setTimeout>; feeOnly: boolean }>>();
 
-  function trackPendingTx(connectionId: string, txHex: string, finalized: FinalizedTx, feeOnly = false): void {
+  function trackPendingTx(connectionId: string, txHex: string, finalized: ledger.FinalizedTransaction, feeOnly = false): void {
     let txMap = pendingTxsByConnection.get(connectionId);
     if (!txMap) {
       txMap = new Map();
@@ -307,7 +291,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
   /** Sign, prove (with timeout), and serialize a transaction recipe.
    *  Returns both the serialized hex and the finalized tx object (for tracking/revert). */
-  async function processRecipe(recipe: any, tracker?: PhaseTracker): Promise<{ hex: string; finalized: FinalizedTx }> {
+  async function processRecipe(recipe: any, tracker?: PhaseTracker): Promise<{ hex: string; finalized: ledger.FinalizedTransaction }> {
     tracker?.start('signing');
     let signed: any;
     try {
@@ -321,7 +305,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     }
     tracker?.start('proving');
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let finalized: FinalizedTx;
+    let finalized: ledger.FinalizedTransaction;
     const finalizing = facade.finalizeRecipe(signed);
     try {
       finalized = await Promise.race([
@@ -346,13 +330,17 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
   }
 
   /**
-   * Read a dApp's hex transaction at the given stage, as this wallet's current
-   * ledger version. Bytes from another ledger version, or another stage, are
-   * the caller's mistake, so they come back as InvalidRequest.
+   * Read a dApp's hex transaction at the given stage, as ledger 9 (the beta
+   * SDK's only ledger; it has no `adoptTransaction`). Bytes from another
+   * ledger version, or another stage, are the caller's mistake, so they come
+   * back as InvalidRequest.
    */
-  function adopt<TStage extends TransactionStage>(txHex: string, stage: TStage): WalletTransaction<TStage> {
+  function adopt<TStage extends keyof DAppTransaction>(txHex: string, stage: TStage): DAppTransaction[TStage] {
     try {
-      return facade.adoptTransaction(fromHex(txHex), stage);
+      const bytes = fromHex(txHex);
+      return (stage === 'Unbound'
+        ? ledger.Transaction.deserialize('signature', 'proof', 'pre-binding', bytes)
+        : ledger.Transaction.deserialize('signature', 'proof', 'binding', bytes)) as DAppTransaction[TStage];
     } catch (err) {
       throw createApiError(
         'InvalidRequest',
@@ -462,8 +450,8 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     };
   }
 
-  async function assertFeeWithinLimit(dappTx: WalletTransaction<'Unbound'> | WalletTransaction<'Finalized'>, ttl: Date): Promise<void> {
-    const fee = await withDustRetry(() => facade.estimateTransactionFee(dappTx, { ttl }));
+  async function assertFeeWithinLimit(dappTx: DAppTransaction['Unbound'] | DAppTransaction['Finalized'], ttl: Date): Promise<void> {
+    const fee = await withDustRetry(() => facade.estimateTransactionFee(dappTx, secretKeys.dustSecretKey, { ttl }));
     notice(dim(`  fee-only: estimated fee ${toDust(fee)} DUST (limit ${toDust(feeLimits.maxFeeSpecks)})`));
     const reason = feeLimitRefusal(fee, feeLimits);
     if (reason) throw feeLimitError(reason);
@@ -484,7 +472,6 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     if (!txHex) {
       throw createApiError('InvalidRequest', 'tx is required');
     }
-    assertWalletsOnLedger9();
     const payFees = (params.options as { payFees?: unknown } | undefined)?.payFees;
     const feeOnly = approvalOptions.approveFees === true;
     if (feeOnly) assertFeeOnly(txHex, stage, payFees);
@@ -512,11 +499,11 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       const balanceOptions = { ttl, tokenKindsToBalance };
       let recipe: any;
       if (stage === 'unsealed') {
-        const unsealedTx = dappTx as WalletTransaction<'Unbound'>;
-        recipe = await withDustRetry(() => facade.balanceUnboundTransaction(unsealedTx, balanceOptions));
+        const unsealedTx = dappTx as DAppTransaction['Unbound'];
+        recipe = await withDustRetry(() => facade.balanceUnboundTransaction(unsealedTx, secretKeys, balanceOptions));
       } else {
-        const sealedTx = dappTx as WalletTransaction<'Finalized'>;
-        recipe = await withDustRetry(() => facade.balanceFinalizedTransaction(sealedTx, balanceOptions));
+        const sealedTx = dappTx as DAppTransaction['Finalized'];
+        recipe = await withDustRetry(() => facade.balanceFinalizedTransaction(sealedTx, secretKeys, balanceOptions));
       }
       const { hex, finalized } = await processRecipe(recipe, tracker);
       trackPendingTx(context.connectionId, hex, finalized, feeOnly);
@@ -832,7 +819,6 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       if (!Array.isArray(outputs) || outputs.length === 0) {
         throw createApiError('InvalidRequest', 'desiredOutputs must be a non-empty array');
       }
-      assertWalletsOnLedger9();
       const combinedTransfers = parseDesiredOutputs(outputs);
 
       const tracker = makeTracker('makeTransfer', context);
@@ -846,7 +832,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
       tracker.start('building');
       const payFees = (params.options as any)?.payFees ?? true;
-      const recipe = await withDustRetry(() => facade.transferTransaction(combinedTransfers, {
+      const recipe = await withDustRetry(() => facade.transferTransaction(combinedTransfers, secretKeys, {
         ttl: createTtl(),
         payFees,
       }));
@@ -861,8 +847,6 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       if (!txHex) {
         throw createApiError('InvalidRequest', 'tx is required');
       }
-      assertWalletsOnLedger9();
-
       const tracker = makeTracker('submitTransaction', context);
 
       // Submit is the irreversible action: prompt, unless under --approve-fees
@@ -925,7 +909,6 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       if (!intentOptions) {
         throw createApiError('InvalidRequest', 'options is required for makeIntent');
       }
-      assertWalletsOnLedger9();
       const swapInputs = parseDesiredInputs(desiredInputs ?? []);
       const combinedOutputs = parseDesiredOutputs(desiredOutputs ?? []);
 
@@ -936,7 +919,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
       tracker.start('building');
 
-      const recipe = await withDustRetry(() => facade.initSwap(swapInputs, combinedOutputs, {
+      const recipe = await withDustRetry(() => facade.initSwap(swapInputs, combinedOutputs, secretKeys, {
         ttl: createTtl(),
         payFees: intentOptions.payFees ?? true,
       }));

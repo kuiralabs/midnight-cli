@@ -1,5 +1,5 @@
 // The contract runner emits a Node script; these tests evaluate its provider
-// fragments against the installed midnight-js 5 / ledger-v9 packages. Only the
+// fragments against the installed midnight-js 5 beta / ledger-v9 packages. Only the
 // mn serve RPC (`rpcCall`) is stubbed.
 
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
@@ -9,16 +9,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import {
-  createWalletProvider,
-  createMidnightProvider,
-  assertSeamsSupportEra,
   Transaction,
   type WalletProvider,
   type MidnightProvider,
   type UnboundTransaction,
 } from '@midnight-ntwrk/midnight-js-types';
 import { toHex, fromHex } from '@midnight-ntwrk/midnight-js-utils';
-import { CURRENT_LEDGER_VERSION } from '@midnight-ntwrk/midnight-js-protocol/version';
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
@@ -69,10 +65,10 @@ function makeRpcStub(replies: Record<string, unknown>) {
 /** Run the generated wallet/midnight provider fragment with the bindings PROVIDER_IMPORTS gives it. */
 async function evalWalletProviders(rpcCall: unknown) {
   const fn = new AsyncFunction(
-    'rpcCall', 'createWalletProvider', 'createMidnightProvider', 'Transaction', 'toHex', 'fromHex',
+    'rpcCall', 'Transaction', 'toHex', 'fromHex',
     `${walletProviderCode()}\nreturn { walletProvider, midnightProvider };`,
   );
-  return await fn(rpcCall, createWalletProvider, createMidnightProvider, Transaction, toHex, fromHex) as {
+  return await fn(rpcCall, Transaction, toHex, fromHex) as {
     walletProvider: WalletProvider;
     midnightProvider: MidnightProvider;
   };
@@ -98,14 +94,14 @@ beforeAll(async () => {
 });
 
 describe('generated walletProvider', () => {
-  it('declares the current ledger era so midnight-js 5 does not refuse it', async () => {
+  it('has exactly the members midnight-js 5 beta asks of a wallet and a midnight provider', async () => {
     const { rpcCall } = makeRpcStub({
       getShieldedAddresses: { shieldedCoinPublicKey: COIN_PK, shieldedEncryptionPublicKey: ENC_PK },
     });
     const { walletProvider, midnightProvider } = await evalWalletProviders(rpcCall);
 
-    expect(walletProvider.supportedEras).toContain(CURRENT_LEDGER_VERSION);
-    expect(midnightProvider.supportedEras).toContain(CURRENT_LEDGER_VERSION);
+    expect(Object.keys(walletProvider).sort()).toEqual(['balanceTx', 'getCoinPublicKey', 'getEncryptionPublicKey']);
+    expect(Object.keys(midnightProvider)).toEqual(['submitTx']);
   });
 
   it('returns the keys mn serve reports', async () => {
@@ -118,7 +114,7 @@ describe('generated walletProvider', () => {
     expect(walletProvider.getEncryptionPublicKey()).toBe(ENC_PK);
   });
 
-  it('balances a v9-tagged tx via balanceUnsealedTransaction and returns the sealed tx v9-tagged', async () => {
+  it('balances a ledger-9 tx via balanceUnsealedTransaction and returns the sealed tx', async () => {
     const sealedHex = toHex(finalizedTx.serialize());
     const { calls, rpcCall } = makeRpcStub({
       getShieldedAddresses: { shieldedCoinPublicKey: COIN_PK, shieldedEncryptionPublicKey: ENC_PK },
@@ -126,14 +122,12 @@ describe('generated walletProvider', () => {
     });
     const { walletProvider } = await evalWalletProviders(rpcCall);
 
-    const balanced = await walletProvider.balanceTx({ version: 'v9', tx: unboundTx });
+    const balanced = await walletProvider.balanceTx(unboundTx);
 
     const balanceCall = calls.find((c) => c.method === 'balanceUnsealedTransaction');
     expect(balanceCall?.params).toEqual({ tx: toHex(unboundTx.serialize()) });
-    expect(balanced.version).toBe('v9');
-    if (balanced.version !== 'v9') throw new Error('unreachable');
-    expect(balanced.tx).toBeInstanceOf(Transaction);
-    expect(toHex(balanced.tx.serialize())).toBe(sealedHex);
+    expect(balanced).toBeInstanceOf(Transaction);
+    expect(toHex(balanced.serialize())).toBe(sealedHex);
   });
 
   it('surfaces an RPC rejection from mn serve', async () => {
@@ -142,20 +136,20 @@ describe('generated walletProvider', () => {
     });
     const { walletProvider } = await evalWalletProviders(rpcCall);
 
-    await expect(walletProvider.balanceTx({ version: 'v9', tx: unboundTx }))
+    await expect(walletProvider.balanceTx(unboundTx))
       .rejects.toThrow('unexpected RPC balanceUnsealedTransaction');
   });
 });
 
 describe('generated midnightProvider', () => {
-  it('submits the unwrapped tx hex via submitTransaction and returns its first identifier', async () => {
+  it('submits the tx hex via submitTransaction and returns its first identifier', async () => {
     const { calls, rpcCall } = makeRpcStub({
       getShieldedAddresses: { shieldedCoinPublicKey: COIN_PK, shieldedEncryptionPublicKey: ENC_PK },
       submitTransaction: { txHash: 'ignored-by-provider' },
     });
     const { midnightProvider } = await evalWalletProviders(rpcCall);
 
-    const txId = await midnightProvider.submitTx({ version: 'v9', tx: finalizedTx });
+    const txId = await midnightProvider.submitTx(finalizedTx);
 
     const submitCall = calls.find((c) => c.method === 'submitTransaction');
     expect(submitCall?.params).toEqual({ tx: toHex(finalizedTx.serialize()) });
@@ -167,7 +161,7 @@ describe('generated providers object', () => {
   let dir: string | undefined;
   afterEach(() => { if (dir) rmSync(dir, { recursive: true, force: true }); dir = undefined; });
 
-  it('passes the era check deployContract/findDeployedContract run first', async () => {
+  it('carries the wallet and midnight providers it is given, beside the SDK-built ones', async () => {
     dir = mkdtempSync(join(tmpdir(), 'mn-runner-'));
     const { rpcCall } = makeRpcStub({
       getShieldedAddresses: { shieldedCoinPublicKey: COIN_PK, shieldedEncryptionPublicKey: ENC_PK },
@@ -187,7 +181,7 @@ describe('generated providers object', () => {
         NodeZkConfigProvider, httpClientProofProvider, indexerPublicDataProvider, levelPrivateStateProvider,
       );
       try {
-        expect(() => assertSeamsSupportEra(CURRENT_LEDGER_VERSION, providers)).not.toThrow();
+        expect(providers.walletProvider).toBe(walletProvider);
         expect(providers.midnightProvider).toBe(midnightProvider);
       } finally {
         await providers.publicDataProvider.dispose();

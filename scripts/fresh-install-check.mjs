@@ -113,7 +113,7 @@ try {
   }));
   const address = wallet.shieldedAddresses.undeployed;
   const parsed = run(process.execPath, ['--input-type=module', '-e', `
-    import { MidnightBech32m, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
+    import { MidnightBech32m, ShieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
     try {
       MidnightBech32m.parse(${JSON.stringify(address)}).decode(ShieldedAddress, 'undeployed');
       console.log('parsed');

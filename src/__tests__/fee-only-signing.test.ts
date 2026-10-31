@@ -19,10 +19,13 @@ import {
   Transaction,
   WellFormedStrictness,
   verifySignature,
+  type PreBinding,
+  type Proof,
   type Signature,
+  type SignatureEnabled,
   type SignatureVerifyingKey,
 } from '@midnightntwrk/ledger-v9';
-import type { BalancingRecipe, WalletFacade } from '@midnightntwrk/wallet-sdk/facade';
+import type { BalancingRecipe, WalletFacade } from '@midnightntwrk/wallet-sdk-facade';
 import { feeOnlyRefusals, readDAppTransaction } from '../lib/fee-only-check.ts';
 import { signRecipe } from '../lib/sign-recipe.ts';
 import {
@@ -43,13 +46,13 @@ afterAll(async () => {
 
 /**
  * What `mn serve` does to an unsealed dApp transaction, minus the Dust
- * balancing: adopt the bytes, then sign the unbound recipe with the wallet's
+ * balancing: read the bytes, then sign the unbound recipe with the wallet's
  * keystore. Returns the base transaction's bytes after signing, and how many
  * segments the wallet's signer was asked to sign.
  */
 async function signAsServe(dappBytes: Uint8Array): Promise<{ after: Uint8Array; signerCalls: number }> {
-  const baseTransaction = facade.adoptTransaction(dappBytes, 'Unbound');
-  const recipe: BalancingRecipe = { type: 'UNBOUND_TRANSACTION', protocolVersion: baseTransaction.protocolVersion, baseTransaction };
+  const baseTransaction = Transaction.deserialize<SignatureEnabled, Proof, PreBinding>('signature', 'proof', 'pre-binding', dappBytes);
+  const recipe: BalancingRecipe = { type: 'UNBOUND_TRANSACTION', baseTransaction };
   let signerCalls = 0;
   const signer = (data: Uint8Array): Promise<Signature> => {
     signerCalls++;

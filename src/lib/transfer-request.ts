@@ -2,7 +2,7 @@
 // before syncing, the MCP server before it issues a confirmation token, so a
 // typo in the amount or the recipient is refused up front.
 
-import { MidnightBech32m, ShieldedAddress, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
+import { MidnightBech32m, ShieldedAddress, UnshieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
 import { type ParsedArgs, getFlag, hasFlag } from './argv.ts';
 import { UsageError } from './errors.ts';
 import { loadWalletConfig, resolveWalletPath, type WalletConfig } from './wallet-config.ts';

@@ -21,6 +21,10 @@ describe('detectNetworkFromAddress', () => {
     expect(detectNetworkFromAddress('mn_addr_preview1qqqqqq...')).toBe('preview');
   });
 
+  it('detects stagenet from address prefix', () => {
+    expect(detectNetworkFromAddress('mn_addr_stagenet1qqqqqq...')).toBe('stagenet');
+  });
+
   it('detects undeployed from address prefix', () => {
     expect(detectNetworkFromAddress('mn_addr_undeployed1qqqqqq...')).toBe('undeployed');
   });
@@ -85,6 +89,15 @@ describe('getNetworkConfig', () => {
     expect(config.networkId).toBe('Preview');
   });
 
+  it('returns exact URLs for stagenet', () => {
+    const config = getNetworkConfig('stagenet');
+    expect(config.indexer).toBe('https://indexer.stagenet.shielded.tools/api/v4/graphql');
+    expect(config.indexerWS).toBe('wss://indexer.stagenet.shielded.tools/api/v4/graphql/ws');
+    expect(config.node).toBe('wss://rpc.stagenet.shielded.tools');
+    expect(config.proofServer).toBe('http://localhost:6300');
+    expect(config.networkId).toBe('StageNet');
+  });
+
   it('returns localhost URLs for undeployed', () => {
     const config = getNetworkConfig('undeployed');
     expect(config.indexer).toBe('http://localhost:8088/api/v4/graphql');
@@ -105,12 +118,13 @@ describe('getNetworkConfig', () => {
 });
 
 describe('getValidNetworkNames', () => {
-  it('returns all three networks', () => {
+  it('returns all four networks', () => {
     const names = getValidNetworkNames();
     expect(names).toContain('preprod');
     expect(names).toContain('preview');
+    expect(names).toContain('stagenet');
     expect(names).toContain('undeployed');
-    expect(names).toHaveLength(3);
+    expect(names).toHaveLength(4);
   });
 
   it('agrees with isValidNetworkName', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getNetworkId } from '../lib/network-id.ts';
-import { NetworkId } from '@midnightntwrk/wallet-sdk';
+import { NetworkId } from '@midnightntwrk/wallet-sdk-abstractions';
 
 describe('getNetworkId', () => {
   it('returns Undeployed for "Undeployed"', () => {
@@ -13,6 +13,10 @@ describe('getNetworkId', () => {
 
   it('returns Preview for "Preview"', () => {
     expect(getNetworkId('Preview')).toBe(NetworkId.NetworkId.Preview);
+  });
+
+  it('returns StageNet for "StageNet"', () => {
+    expect(getNetworkId('StageNet')).toBe(NetworkId.NetworkId.StageNet);
   });
 
   it('throws for unknown networkId', () => {
@@ -30,14 +34,7 @@ describe('the plain values the base keeps match the SDK', () => {
     const { networkIdForName } = await import('../lib/network-id.ts');
     expect(networkIdForName('preprod')).toBe(NetworkId.NetworkId.PreProd);
     expect(networkIdForName('preview')).toBe(NetworkId.NetworkId.Preview);
+    expect(networkIdForName('stagenet')).toBe(NetworkId.NetworkId.StageNet);
     expect(networkIdForName('undeployed')).toBe(NetworkId.NetworkId.Undeployed);
-  });
-
-  it("keeps the ledger-9 fork at the SDK's version, and the facade's schedule starts there", async () => {
-    const { ProtocolVersion } = await import('@midnightntwrk/wallet-sdk');
-    const { LEDGER_9_FORK_VERSION } = await import('../lib/network.ts');
-    const { FORK_SCHEDULE } = await import('../lib/fork-schedule.ts');
-    expect(LEDGER_9_FORK_VERSION).toBe(ProtocolVersion.V9NativeForkVersion);
-    expect(FORK_SCHEDULE.v9).toBe(LEDGER_9_FORK_VERSION);
   });
 });
