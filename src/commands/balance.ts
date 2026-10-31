@@ -2,7 +2,7 @@
 // For positional address: unshielded only (GraphQL, no facade needed)
 
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { MidnightBech32m } from '@midnightntwrk/wallet-sdk/address-format';
+import { MidnightBech32m } from '@midnightntwrk/wallet-sdk-address-format';
 import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, isVerbose } from '../lib/argv.ts';
 import { enableVerbose, verbose } from '../lib/verbose.ts';
 import { type NetworkName, isValidNetworkName } from '../lib/network.ts';

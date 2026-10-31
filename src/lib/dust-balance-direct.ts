@@ -17,8 +17,8 @@
 // sync to pick up — acceptable for a fast balance read.
 
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { DustAddress } from '@midnightntwrk/wallet-sdk/address-format';
-import { NetworkId } from '@midnightntwrk/wallet-sdk';
+import { DustAddress } from '@midnightntwrk/wallet-sdk-address-format';
+import { NetworkId } from '@midnightntwrk/wallet-sdk-abstractions';
 
 import {
   INITIAL_NIGHT_DUST_RATIO,

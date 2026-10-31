@@ -40,12 +40,16 @@ describe('overlayDustDirectSnapshot', () => {
     expect(out.networkId).toBe('undeployed');
   });
 
+  // The beta SDK's Dust wallet has one variant, ledger 9, and restores every
+  // snapshot onto it whatever its protocolVersion, so no stamp is refused.
   it.each([
-    ['0', 'a ledger-8 (V1) snapshot'],
+    ['0', 'a snapshot stamped 0'],
     ['1000300', 'a snapshot stamped below the ledger-9 fork'],
-  ])('refuses to put a ledger-9 state into %s (%s): the ledger-8 variant would read it', (version) => {
-    expect(() => overlayDustDirectSnapshot(baseSnapshot('5', version), entry(ownedState, 100)))
-      .toThrow(/ledger-9 dust state.*protocol version/);
+  ])('overlays a ledger-9 state into %s (%s), keeping its stamp', (version) => {
+    const out = JSON.parse(overlayDustDirectSnapshot(baseSnapshot('5', version), entry(ownedState, 100)));
+    expect(out.state).toBe(ownedHex);
+    expect(out.offset).toBe('100');
+    expect(out.protocolVersion).toBe(version);
   });
 
   it('overlays unconditionally — even when the base offset is already higher (the freshness guard lives in the caller)', () => {

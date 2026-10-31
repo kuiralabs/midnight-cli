@@ -8,11 +8,10 @@
 // facade.ts imports DustWallet from the SDK again.
 
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { Imbalances, InsufficientFundsError as NoCoinsCoverIt, getBalanceRecipe, makeIndexerChainVersionProbe } from '@midnightntwrk/wallet-sdk/capabilities';
-import { CustomForkingDustWallet, DustWallet as SdkDustWallet, asV8DustParameters } from '@midnightntwrk/wallet-sdk/dust';
-import { V1Builder } from '@midnightntwrk/wallet-sdk/dust/v1';
-import { Migration, Transacting, V2Builder, WalletError } from '@midnightntwrk/wallet-sdk/dust/v2';
-import { LedgerOps } from '@midnightntwrk/wallet-sdk/utilities';
+import { Imbalances, InsufficientFundsError as NoCoinsCoverIt, getBalanceRecipe } from '@midnightntwrk/wallet-sdk-capabilities';
+import { CustomDustWallet, DustWallet as SdkDustWallet } from '@midnightntwrk/wallet-sdk-dust-wallet';
+import { Transacting, V1Builder, WalletError } from '@midnightntwrk/wallet-sdk-dust-wallet/v1';
+import { LedgerOps } from '@midnightntwrk/wallet-sdk-utilities';
 import { type DustInput, chooseDustCoins, planDustInputs, spreadFeeAcrossInputs } from './dust-balancing-plan.ts';
 import { type DustShortfall, withDustShortfall } from './sdk-errors.ts';
 
@@ -115,30 +114,10 @@ const makeConvergingTransacting: typeof Transacting.makeDefaultTransactingCapabi
   );
 
 /**
- * The SDK's `DustWallet(configuration)`, composed as it composes it (a
- * ledger-8 variant below the fork and a ledger-9 one from it), with the
- * ledger-9 variant's transacting replaced.
+ * The SDK's `DustWallet(configuration)`, composed as it composes it (one
+ * ledger-9 variant on the beta SDK, which has no fork schedule), with that
+ * variant's transacting replaced.
  */
 export function DustWallet(configuration: Parameters<typeof SdkDustWallet>[0]): ReturnType<typeof SdkDustWallet> {
-  const dustParameters = configuration.dustParameters ?? ledger.LedgerParameters.initialParameters().dust;
-  const withProbe = {
-    ...configuration,
-    chainVersionProbe: configuration.chainVersionProbe ?? makeIndexerChainVersionProbe(configuration),
-  };
-  return CustomForkingDustWallet(
-    withProbe,
-    {
-      builder: new V1Builder().withDefaults(),
-      // A WASM object belongs to the ledger module that made it, so the
-      // ledger-8 variant gets the same rates rebuilt as ledger-8's.
-      configuration: { ...configuration, dustParameters: asV8DustParameters(dustParameters) },
-    },
-    {
-      builder: new V2Builder()
-        .withDefaults()
-        .withTransacting(makeConvergingTransacting)
-        .withMigration(() => Migration.makeCrossLedgerMigration({ dustParameters })),
-      configuration,
-    },
-  );
+  return CustomDustWallet(configuration, new V1Builder().withDefaults().withTransacting(makeConvergingTransacting));
 }

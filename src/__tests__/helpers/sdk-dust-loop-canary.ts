@@ -3,7 +3,7 @@
 // with its spend added. Prints "returned" if it ever does. Run as its own
 // process by dust-wallet.test.ts, which stops it: the loop is synchronous.
 
-import { Transacting } from '@midnightntwrk/wallet-sdk/dust/v2';
+import { Transacting } from '@midnightntwrk/wallet-sdk-dust-wallet/v1';
 import { CAPTURED_AT, computeArguments, feeRange, paymentToBalance, timeWhenSmallestReaches, transacting } from './dust-balancing-case.ts';
 
 const payment = await paymentToBalance();

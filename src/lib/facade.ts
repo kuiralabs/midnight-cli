@@ -1,25 +1,23 @@
-import { ShieldedWallet } from '@midnightntwrk/wallet-sdk/shielded';
+import { ShieldedWallet } from '@midnightntwrk/wallet-sdk-shielded';
 import { notice } from './notices.ts';
 import {
   UnshieldedWallet,
   createKeystore,
   PublicKey,
   type UnshieldedKeystore,
-} from '@midnightntwrk/wallet-sdk/unshielded';
+} from '@midnightntwrk/wallet-sdk-unshielded-wallet';
 import { DustWallet } from './dust-wallet.ts';
 import {
   WalletFacade,
   WalletEntrySchema,
   mergeWalletEntries,
   type FacadeState,
-} from '@midnightntwrk/wallet-sdk/facade';
-import { type WalletSeeds } from '@midnightntwrk/wallet-sdk/hd';
+} from '@midnightntwrk/wallet-sdk-facade';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk';
+import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk-abstractions';
 import * as rx from 'rxjs';
 
 import { type NetworkConfig } from './network.ts';
-import { FORK_SCHEDULE } from './fork-schedule.ts';
 import { getNetworkId } from './network-id.ts';
 import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from './derivation.ts';
 import { type WalletCacheData } from './wallet-cache.ts';
@@ -40,18 +38,21 @@ export type SyncMode = 'full' | 'lite' | 'no-dust';
 // no-dust = shielded + unshielded (skip dust — used by balance; dust isn't needed
 //           to read NIGHT balances and avoids the dust `isConnected` SDK hang)
 
-/** A shielded or dust wallet that can be started from its seed (both SDK forking wallets can). */
-interface SeedStartable {
-  startWithSeed(seed: Uint8Array): Promise<void>;
+/**
+ * The secret keys the wallets start with and the facade balances with. The
+ * beta SDK starts wallets from keys, not seeds, and asks for them again on
+ * every call that spends shielded coins or Dust.
+ */
+export interface WalletSecretKeys {
+  shieldedSecretKeys: ledger.ZswapSecretKeys;
+  dustSecretKey: ledger.DustSecretKey;
 }
 
 export interface FacadeBundle {
   facade: WalletFacade;
   keystore: UnshieldedKeystore;
-  /** Per-role seeds: the material the wallets are started with. */
-  seeds: WalletSeeds;
-  /** The shielded and dust wallets the facade wraps, kept so a restored facade can be started from seeds. */
-  seedStartable: { shielded: SeedStartable; dust: SeedStartable };
+  /** The shielded and dust secret keys, derived once from the seed. */
+  secretKeys: WalletSecretKeys;
   /** Active subscription that keeps shareReplay buffers alive. Cleaned up by stopFacade. */
   keepAlive?: rx.Subscription;
   /** Whether the facade was restored from cached state (vs built from scratch). */
@@ -86,18 +87,16 @@ export async function buildFacade(
   verbose('facade', `Indexer: ${networkConfig.indexerWS}`);
   verbose('facade', `Proof server: ${networkConfig.proofServer}`);
 
-  const seeds: WalletSeeds = {
-    shielded: deriveShieldedSeed(seedBuffer),
-    unshielded: deriveUnshieldedSeed(seedBuffer),
-    dust: deriveDustSeed(seedBuffer),
+  const secretKeys: WalletSecretKeys = {
+    shieldedSecretKeys: ledger.ZswapSecretKeys.fromSeed(deriveShieldedSeed(seedBuffer)),
+    dustSecretKey: ledger.DustSecretKey.fromSeed(deriveDustSeed(seedBuffer)),
   };
-  const keystore = createKeystore({ kind: 'schnorr', secret: seeds.unshielded }, networkId);
+  const keystore = createKeystore({ kind: 'schnorr', secret: deriveUnshieldedSeed(seedBuffer) }, networkId);
 
   // Merged configuration for WalletFacade.init() — all wallet types
   // and services draw from this single config object.
   const configuration = {
     networkId,
-    forks: FORK_SCHEDULE,
     indexerClientConnection: {
       indexerHttpUrl: networkConfig.indexer,
       indexerWsUrl: networkConfig.indexerWS,
@@ -111,19 +110,13 @@ export async function buildFacade(
     relayURL: new URL(networkConfig.node),
   };
 
-  // The init factories hand back the wallets they build, so the bundle can
-  // start a restored facade from seeds (see startFacade).
-  let shielded: SeedStartable | undefined;
-  let dust: SeedStartable | undefined;
-
-  // Fresh build. The class-level startWithSeed derives and keeps both ledger
-  // versions' keys, so the wallet can read whichever side of the fork the
-  // chain is on. It doesn't start syncing; startFacade does that.
+  // Fresh build from the secret keys. It doesn't start syncing; startFacade
+  // does that.
   const initFresh = () => WalletFacade.init({
     configuration,
-    shielded: async (cfg) => (shielded = await ShieldedWallet(cfg).startWithSeed(seeds.shielded)),
+    shielded: (cfg) => ShieldedWallet(cfg).startWithSecretKeys(secretKeys.shieldedSecretKeys),
     unshielded: (cfg) => UnshieldedWallet(cfg).startWithPublicKey(PublicKey.fromKeyStore(keystore)),
-    dust: async (cfg) => (dust = await DustWallet(cfg).startWithSeed(seeds.dust)),
+    dust: (cfg) => DustWallet(cfg).startWithSecretKey(secretKeys.dustSecretKey, ledger.LedgerParameters.initialParameters().dust),
   });
 
   // Bridge: if the dust-direct cache has a more recent DustLocalState than the
@@ -131,7 +124,7 @@ export async function buildFacade(
   // restore. This lets commands that use the facade (transfer, airdrop, dust
   // register) benefit from the indexer-direct reader's checkpoint without
   // re-implementing the whole transaction flow.
-  const dustPublicKey = ledger.DustSecretKey.fromSeed(seeds.dust).publicKey;
+  const dustPublicKey = secretKeys.dustSecretKey.publicKey;
   const effectiveCache = cache ? maybeBridgeDustCache(cache, networkConfig, dustPublicKey) : null;
 
   // Attempt cache restore — fall back to fresh build on any deserialization error.
@@ -143,9 +136,9 @@ export async function buildFacade(
     try {
       facade = await WalletFacade.init({
         configuration,
-        shielded: (cfg) => (shielded = ShieldedWallet(cfg).restore(effectiveCache.shielded)),
+        shielded: (cfg) => ShieldedWallet(cfg).restore(effectiveCache.shielded),
         unshielded: (cfg) => UnshieldedWallet(cfg).restore(effectiveCache.unshielded),
-        dust: (cfg) => (dust = DustWallet(cfg).restore(effectiveCache.dust)),
+        dust: (cfg) => DustWallet(cfg).restore(effectiveCache.dust),
       });
       restoredFromCache = true;
       verbose('facade', 'Cache restore successful');
@@ -159,38 +152,20 @@ export async function buildFacade(
     facade = await initFresh();
   }
 
-  if (!shielded || !dust) {
-    throw new Error('Wallet facade was built without its shielded or dust wallet');
-  }
-  return { facade, keystore, seeds, seedStartable: { shielded, dust }, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS };
+  return { facade, keystore, secretKeys, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS };
 }
 
 /**
  * Start the facade's wallets and background sync, exactly once.
  *
- * A fresh facade takes the SDK's own path. Its wallets already hold both
- * ledger versions' keys, and `facade.start` adds the ledger-v9 ones.
- *
- * A restored facade can't take that path. A snapshot carries no keys, and
- * `facade.start` only supplies ledger-v9 keys, which can't drive a wallet
- * restored onto the ledger-v8 variant. So the shielded and dust wallets are
- * started from their seeds instead, which covers both ledger versions.
- * Starting a wallet twice runs two sync streams against the same state, so
- * this replaces `facade.start` rather than following it, and starts the same
- * four things it does.
+ * Fresh or restored, the beta SDK takes the same path: a snapshot carries no
+ * keys, and `facade.start` hands the shielded and dust wallets theirs. There
+ * is one ledger variant, so no wallet can be restored onto one the keys
+ * don't drive.
  */
 async function startFacade(bundle: FacadeBundle): Promise<void> {
-  const { facade, seeds, seedStartable } = bundle;
-  if (!bundle.restoredFromCache) {
-    await facade.start(seeds);
-    return;
-  }
-  await Promise.all([
-    seedStartable.shielded.startWithSeed(seeds.shielded),
-    facade.unshielded.start(),
-    seedStartable.dust.startWithSeed(seeds.dust),
-    facade.pendingTransactionsService.start(),
-  ]);
+  const { facade, secretKeys } = bundle;
+  await facade.start(secretKeys.shieldedSecretKeys, secretKeys.dustSecretKey);
 }
 
 /**
@@ -204,7 +179,7 @@ async function startFacade(bundle: FacadeBundle): Promise<void> {
  *   - parsing fails
  */
 // Shape of the facade's serialized dust-wallet snapshot. See
-// dust-wallet/src/v2/Serialization.ts `SnapshotSchema` — JSON on disk with
+// dust-wallet/src/v1/Serialization.ts `SnapshotSchema` — JSON on disk with
 // BigInts rendered as decimal strings. The `state` field is a hex-encoded
 // `DustLocalState.serialize()` (ledger-v9) — the same blob the dust-direct
 // cache stores, which is why the two are interchangeable via the overlay below.
@@ -235,15 +210,9 @@ export function overlayDustDirectSnapshot(
   direct: Pick<DustCacheEntry, 'state' | 'lastAppliedEventId'>,
 ): string {
   const snapshot: FacadeDustSnapshot = JSON.parse(dustSnapshotJson);
-  // The wallet restores a snapshot onto the variant its protocolVersion names.
-  // A ledger-9 state in a snapshot stamped below the fork would be read by the
-  // ledger-8 variant (e.g. a facade that started on V1 when the probe failed).
-  if (BigInt(snapshot.protocolVersion) < FORK_SCHEDULE.v9) {
-    throw new Error(
-      `Can't put a ledger-9 dust state into a snapshot at protocol version ${snapshot.protocolVersion}: ` +
-      `the wallet would read it as ledger 8 (fork at ${FORK_SCHEDULE.v9}).`,
-    );
-  }
+  // The beta SDK's Dust wallet has one variant, ledger 9, and restores every
+  // snapshot onto it whatever protocolVersion the snapshot carries, so there
+  // is no ledger-8 variant a ledger-9 state could be misread by.
   snapshot.state = Buffer.from(direct.state.serialize()).toString('hex');
   snapshot.offset = direct.lastAppliedEventId.toString();
   return JSON.stringify(snapshot);

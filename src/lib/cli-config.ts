@@ -256,7 +256,7 @@ export function setConfigValue(key: string, value: string, configDir?: string, s
   if (canonical === 'network') {
     if (!isValidNetworkName(value)) {
       throw new Error(
-        `Invalid network: "${value}"\nValid networks: preprod, preview, undeployed`
+        `Invalid network: "${value}"\nValid networks: preprod, preview, stagenet, undeployed`
       );
     }
     migrateFlatEndpointsToScope(config, config.network);

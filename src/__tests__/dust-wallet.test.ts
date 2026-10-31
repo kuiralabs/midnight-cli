@@ -6,12 +6,11 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type * as ledger from '@midnightntwrk/ledger-v9';
-import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk';
-import { Transacting } from '@midnightntwrk/wallet-sdk/dust/v2';
-import { WalletEntrySchema, mergeWalletEntries } from '@midnightntwrk/wallet-sdk/facade';
-import { EitherOps } from '@midnightntwrk/wallet-sdk/utilities';
+import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk-abstractions';
+import { Transacting } from '@midnightntwrk/wallet-sdk-dust-wallet/v1';
+import { WalletEntrySchema, mergeWalletEntries } from '@midnightntwrk/wallet-sdk-facade';
+import { EitherOps } from '@midnightntwrk/wallet-sdk-utilities';
 import { ConvergingDustTransacting, DustWallet } from '../lib/dust-wallet.ts';
-import { FORK_SCHEDULE } from '../lib/fork-schedule.ts';
 import { dustShortfallOf, isDustShortage } from '../lib/sdk-errors.ts';
 import {
   CAPTURED_AT, type FeeRange, coinsAt, computeArguments, feeRange, paymentToBalance, timeWhenSmallestReaches, transacting,
@@ -172,13 +171,11 @@ describe('DustWallet', () => {
   it('is the SDK\'s wallet class, built with mn\'s choice of fee coins', () => {
     const Wallet = DustWallet({
       networkId: 'undeployed',
-      forks: FORK_SCHEDULE,
       indexerClientConnection: { indexerHttpUrl: 'http://127.0.0.1:9' },
       costParameters: { additionalFeeOverhead: 0n, feeBlocksMargin: 5 },
-      chainVersionProbe: () => Promise.resolve(FORK_SCHEDULE.v9),
       txHistoryStorage: new InMemoryTransactionHistoryStorage(WalletEntrySchema, mergeWalletEntries),
     });
-    expect(typeof Wallet.startWithSeed).toBe('function');
+    expect(typeof Wallet.startWithSecretKey).toBe('function');
     expect(typeof Wallet.restore).toBe('function');
   });
 });

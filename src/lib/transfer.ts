@@ -3,8 +3,8 @@
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { CANCELLED_MESSAGE } from './errors.ts';
-import { MidnightBech32m, UnshieldedAddress, type DustAddress } from '@midnightntwrk/wallet-sdk/address-format';
-import { type FacadeState, type UtxoWithMeta } from '@midnightntwrk/wallet-sdk/facade';
+import { MidnightBech32m, UnshieldedAddress, type DustAddress } from '@midnightntwrk/wallet-sdk-address-format';
+import { type FacadeState, type UtxoWithMeta } from '@midnightntwrk/wallet-sdk-facade';
 import * as rx from 'rxjs';
 
 import { type NetworkConfig } from './network.ts';
@@ -349,6 +349,7 @@ async function buildAndSubmitTransfer(
             ],
           },
         ],
+        bundle.secretKeys,
         { ttl, payFees: true },
       );
 

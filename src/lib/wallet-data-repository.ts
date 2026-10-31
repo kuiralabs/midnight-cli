@@ -23,7 +23,7 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 
 import type { NetworkConfig, NetworkName } from './network.ts';
 import { isValidNetworkName } from './network.ts';
-import { type FacadeState } from '@midnightntwrk/wallet-sdk/facade';
+import { type FacadeState } from '@midnightntwrk/wallet-sdk-facade';
 import {
   buildFacade,
   startAndSyncFacade,

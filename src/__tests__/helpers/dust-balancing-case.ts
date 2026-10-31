@@ -4,7 +4,7 @@
 // state with the larger coin left out of what the wallet offers.
 
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { CoinsAndBalances, CoreWallet, Keys, Transacting } from '@midnightntwrk/wallet-sdk/dust/v2';
+import { CoinsAndBalances, CoreWallet, Keys, Transacting } from '@midnightntwrk/wallet-sdk-dust-wallet/v1';
 import { DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN } from '../../lib/constants.ts';
 import { TWO_COIN_DUST_CAPTURED_AT, TWO_COIN_DUST_SEED_HEX, TWO_COIN_DUST_STATE_HEX } from '../fixtures/dust-state-two-coins.ts';
 import { LEDGER9_PARAMETERS_HEX } from '../fixtures/ledger9-parameters.ts';

@@ -3,7 +3,7 @@
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { CANCELLED_MESSAGE } from '../lib/errors.ts';
-import { MidnightBech32m } from '@midnightntwrk/wallet-sdk/address-format';
+import { MidnightBech32m } from '@midnightntwrk/wallet-sdk-address-format';
 import { type ParsedArgs, getFlag, hasFlag, isVerbose, rejectNoCacheForWrites } from '../lib/argv.ts';
 import { enableVerbose } from '../lib/verbose.ts';
 import { saveShieldedAddress, unlockWallet } from '../lib/wallet-config.ts';
@@ -183,6 +183,7 @@ async function shieldedTransfer(
               type: 'shielded' as const,
               outputs: [{ type: nightToken, amount, receiverAddress: decodedRecipient }],
             }],
+            bundle.secretKeys,
             { ttl: new Date(Date.now() + 60 * 60 * 1000) },
           ),
           state.dust,

@@ -1,14 +1,14 @@
 // Address derivation helper — wraps HD derivation + keystore + PublicKey
 // into a single call returning the bech32m address string.
 
-import { HDWallet, Roles } from '@midnightntwrk/wallet-sdk/hd';
-import { createKeystore, PublicKey } from '@midnightntwrk/wallet-sdk/unshielded';
+import { HDWallet, Roles } from '@midnightntwrk/wallet-sdk-hd';
+import { createKeystore, PublicKey } from '@midnightntwrk/wallet-sdk-unshielded-wallet';
 import {
   MidnightBech32m,
   ShieldedAddress,
   ShieldedCoinPublicKey,
   ShieldedEncryptionPublicKey,
-} from '@midnightntwrk/wallet-sdk/address-format';
+} from '@midnightntwrk/wallet-sdk-address-format';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { type NetworkName, getValidNetworkNames } from './network.ts';
 import { deriveShieldedSeed } from './derivation.ts';

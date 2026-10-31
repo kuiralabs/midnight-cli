@@ -23,6 +23,7 @@
   "walletAddresses": {
     "preprod": "mn_addr_preprod1ugtvumxjrspvh598y6agtw3sdk06qf8sl0x0pfu6lf2080wrnprshfachh",
     "preview": "mn_addr_preview1ugtvumxjrspvh598y6agtw3sdk06qf8sl0x0pfu6lf2080wrnprshgrgy2",
+    "stagenet": "mn_addr_stagenet1ugtvumxjrspvh598y6agtw3sdk06qf8sl0x0pfu6lf2080wrnprsqxvrpj",
     "undeployed": "mn_addr_undeployed1ugtvumxjrspvh598y6agtw3sdk06qf8sl0x0pfu6lf2080wrnprsdj8xxx"
   },
   "keystoreKeys": [

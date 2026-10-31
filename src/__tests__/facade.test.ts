@@ -4,9 +4,9 @@
 
 import { afterEach, describe, it, expect } from 'vitest';
 import { WebSocketServer } from 'ws';
-import { SyncProgress } from '@midnightntwrk/wallet-sdk';
-import { SyncProgress as UnshieldedSyncProgress } from '@midnightntwrk/wallet-sdk/unshielded/v2';
-import type { FacadeState } from '@midnightntwrk/wallet-sdk/facade';
+import { SyncProgress } from '@midnightntwrk/wallet-sdk-abstractions';
+import { SyncProgress as UnshieldedSyncProgress } from '@midnightntwrk/wallet-sdk-unshielded-wallet/v1';
+import type { FacadeState } from '@midnightntwrk/wallet-sdk-facade';
 import { isFacadeSynced, detectStaleCache } from '../lib/facade.ts';
 
 type IndexProgress = ReturnType<typeof SyncProgress.createSyncProgress>;
@@ -149,22 +149,20 @@ describe('detectStaleCache', () => {
 });
 
 describe('startAndSyncFacade: starting the wallets exactly once', () => {
-  // A wallet started twice runs two sync streams against the same state, and a
-  // restored wallet started with ledger-9 keys only can't read a ledger-8
-  // snapshot. So: fresh → facade.start(seeds); restored → each wallet from its
-  // seed, never facade.start. The SDK objects are stand-ins that record calls;
-  // the sync state uses the SDK's real progress objects.
+  // A wallet started twice runs two sync streams against the same state. On
+  // the beta SDK there is one ledger variant and a snapshot carries no keys,
+  // so fresh and restored alike start once through facade.start(keys). The
+  // SDK objects are stand-ins that record calls; the sync state uses the
+  // SDK's real progress objects.
   async function startWith(restoredFromCache: boolean) {
     const { vi } = await import('vitest');
     const rx = await import('rxjs');
     const { startAndSyncFacade } = await import('../lib/facade.ts');
-    const seeds = { shielded: new Uint8Array([1]), unshielded: new Uint8Array([2]), dust: new Uint8Array([3]) };
+    const secretKeys = { shieldedSecretKeys: { role: 'shielded' }, dustSecretKey: { role: 'dust' } };
     const calls = {
       facadeStart: vi.fn(async () => {}),
       unshieldedStart: vi.fn(async () => {}),
       pendingStart: vi.fn(async () => {}),
-      shieldedFromSeed: vi.fn(async () => {}),
-      dustFromSeed: vi.fn(async () => {}),
     };
     const bundle: any = {
       facade: {
@@ -173,33 +171,29 @@ describe('startAndSyncFacade: starting the wallets exactly once', () => {
         pendingTransactionsService: { start: calls.pendingStart },
         state: () => rx.of(state()),
       },
-      seeds,
-      seedStartable: { shielded: { startWithSeed: calls.shieldedFromSeed }, dust: { startWithSeed: calls.dustFromSeed } },
+      secretKeys,
       keystore: {},
       restoredFromCache,
     };
     await startAndSyncFacade(bundle, { timeoutMs: 2_000 });
     bundle.keepAlive?.unsubscribe();
-    return { calls, seeds };
+    return { calls, secretKeys };
   }
 
-  it('starts a fresh facade through facade.start(seeds), once', async () => {
-    const { calls, seeds } = await startWith(false);
+  it('starts a fresh facade through facade.start(keys), once', async () => {
+    const { calls, secretKeys } = await startWith(false);
     expect(calls.facadeStart).toHaveBeenCalledTimes(1);
-    expect(calls.facadeStart).toHaveBeenCalledWith(seeds);
-    expect(calls.shieldedFromSeed).not.toHaveBeenCalled();
-    expect(calls.dustFromSeed).not.toHaveBeenCalled();
+    expect(calls.facadeStart).toHaveBeenCalledWith(secretKeys.shieldedSecretKeys, secretKeys.dustSecretKey);
+    expect(calls.unshieldedStart).not.toHaveBeenCalled();
+    expect(calls.pendingStart).not.toHaveBeenCalled();
   });
 
-  it('starts a restored facade from seeds, once each, and never through facade.start', async () => {
-    const { calls, seeds } = await startWith(true);
-    expect(calls.facadeStart).not.toHaveBeenCalled();
-    expect(calls.shieldedFromSeed).toHaveBeenCalledTimes(1);
-    expect(calls.shieldedFromSeed).toHaveBeenCalledWith(seeds.shielded);
-    expect(calls.dustFromSeed).toHaveBeenCalledTimes(1);
-    expect(calls.dustFromSeed).toHaveBeenCalledWith(seeds.dust);
-    expect(calls.unshieldedStart).toHaveBeenCalledTimes(1);
-    expect(calls.pendingStart).toHaveBeenCalledTimes(1);
+  it('starts a restored facade through facade.start(keys), once', async () => {
+    const { calls, secretKeys } = await startWith(true);
+    expect(calls.facadeStart).toHaveBeenCalledTimes(1);
+    expect(calls.facadeStart).toHaveBeenCalledWith(secretKeys.shieldedSecretKeys, secretKeys.dustSecretKey);
+    expect(calls.unshieldedStart).not.toHaveBeenCalled();
+    expect(calls.pendingStart).not.toHaveBeenCalled();
   });
 });
 
@@ -234,8 +228,7 @@ describe('startAndSyncFacade: a wallet that has heard nothing yet', () => {
     const { startAndSyncFacade } = await import('../lib/facade.ts');
     const bundle: any = {
       facade: { start: async () => {}, state: () => rx.concat(rx.of(state({ shielded: indexed(0n, 0n, false) })), rx.NEVER) },
-      seeds: {},
-      seedStartable: {},
+      secretKeys: {},
       keystore: {},
       restoredFromCache: false,
       indexerWsUrl,

@@ -187,7 +187,7 @@ const TOOLS: ToolDef[] = [
       type: 'object',
       properties: {
         name: { type: 'string' },
-        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        network: { type: 'string', enum: ['preprod', 'preview', 'stagenet', 'undeployed'] },
         seed: { type: 'string', description: '64 or 128 hex chars (32-byte raw or 64-byte BIP-39)' },
         mnemonic: { type: 'string', description: 'BIP-39 24 words' },
         force: { type: 'string' },
@@ -330,7 +330,7 @@ const TOOLS: ToolDef[] = [
       properties: {
         address: { type: 'string' },
         wallet: { type: 'string' },
-        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        network: { type: 'string', enum: ['preprod', 'preview', 'stagenet', 'undeployed'] },
         'indexer-ws': { type: 'string' },
         full: {
           type: 'boolean',
@@ -355,7 +355,7 @@ const TOOLS: ToolDef[] = [
       type: 'object',
       properties: {
         seed: { type: 'string', description: '64 or 128 hex chars (32-byte raw or 64-byte BIP-39)' },
-        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        network: { type: 'string', enum: ['preprod', 'preview', 'stagenet', 'undeployed'] },
         index: { type: 'string' },
       },
       required: ['seed'],
@@ -373,7 +373,7 @@ const TOOLS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        network: { type: 'string', enum: ['preprod', 'preview', 'stagenet', 'undeployed'] },
       },
     },
     async handler(params, call) {
@@ -538,7 +538,7 @@ const TOOLS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        network: { type: 'string', enum: ['preprod', 'preview', 'stagenet', 'undeployed'] },
         wallet: { type: 'string' },
       },
     },
@@ -673,7 +673,7 @@ const TOOLS: ToolDef[] = [
   //   inputSchema: {
   //     type: 'object',
   //     properties: {
-  //       network: { type: 'string', description: 'Network to check: preprod, preview, undeployed', enum: ['preprod', 'preview', 'undeployed'] },
+  //       network: { type: 'string', description: 'Network to check: preprod, preview, undeployed', enum: ['preprod', 'preview', 'stagenet', 'undeployed'] },
   //       all: { type: 'string', description: 'Set to "true" to show all networks' },
   //     },
   //   },
@@ -714,7 +714,7 @@ const TOOLS: ToolDef[] = [
       properties: {
         address: { type: 'string', description: 'Contract address (hex)' },
         wallet: { type: 'string' },
-        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        network: { type: 'string', enum: ['preprod', 'preview', 'stagenet', 'undeployed'] },
         path: { type: 'string', description: 'dApp directory (defaults to cwd; needed to find the compiled artifact for state decoding)' },
         managed: { type: 'string', description: 'Direct path to a managed/<name>/ directory (overrides path-based contract scan)' },
         name: { type: 'string', description: 'Specific contract name when the project has multiple' },
@@ -735,7 +735,7 @@ const TOOLS: ToolDef[] = [
       type: 'object',
       properties: {
         wallet: { type: 'string' },
-        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        network: { type: 'string', enum: ['preprod', 'preview', 'stagenet', 'undeployed'] },
         args: { type: 'string', description: 'JSON-encoded array or object of constructor arguments' },
         path: { type: 'string', description: 'dApp directory (defaults to cwd)' },
         managed: { type: 'string', description: 'Direct path to a managed/<name>/ directory (overrides path-based contract scan)' },
@@ -763,7 +763,7 @@ const TOOLS: ToolDef[] = [
         address: { type: 'string', description: 'Contract address (hex)' },
         circuit: { type: 'string', description: 'Circuit name to invoke' },
         wallet: { type: 'string' },
-        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        network: { type: 'string', enum: ['preprod', 'preview', 'stagenet', 'undeployed'] },
         args: { type: 'string', description: 'JSON-encoded array or object of circuit arguments' },
         path: { type: 'string', description: 'dApp directory (defaults to cwd)' },
         managed: { type: 'string', description: 'Direct path to a managed/<name>/ directory (overrides path-based contract scan)' },
@@ -937,7 +937,7 @@ const TOOLS: ToolDef[] = [
         name: { type: 'string', description: 'Specific contract name when the project has multiple' },
         suite: { type: 'string', description: 'Suite directory name under tests/suites/ (auto-derived from circuit/screen when AI scaffolds)' },
         strategy: { type: 'string', enum: ['cli', 'browser'], description: 'cli (default): drive contracts via actions.json. browser: drive a real UI via Claude + Chrome via prompt.md.' },
-        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        network: { type: 'string', enum: ['preprod', 'preview', 'stagenet', 'undeployed'] },
         goal: { type: 'string', description: 'AI mode: one-line success criterion this suite should verify (e.g. "round goes from 0 to 1 after increment"). Triggers AI scaffolding.' },
         screen: { type: 'string', description: 'AI mode + browser strategy: name of the screen component to focus on (e.g. "loan-request-form" or "LoanRequestForm"). Auto-discovered from src/components, src/pages, src/screens.' },
         'no-ai': { type: 'boolean', description: 'Force deterministic scaffolder even when claude CLI is available.' },
