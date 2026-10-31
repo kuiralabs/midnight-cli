@@ -7,6 +7,7 @@ import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
 import { DIR_MODE, FILE_MODE } from '../lib/constants.ts';
 import { deriveAllAddresses, deriveAllShieldedAddresses } from '../lib/derive-address.ts';
+import { stateRootIn } from './helpers/state-root-in.ts';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-wallet-test-${process.pid}`);
 
@@ -21,11 +22,11 @@ const VALID_CONFIG: WalletConfig = {
 
 const PASSPHRASE = 'correct horse battery staple';
 // Unlocking in the test's own home, a plain-text wallet's warning kept out of the output.
-const UNLOCK = { home: TEST_DIR, source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null }, warn: () => {} };
+const UNLOCK = { root: stateRootIn(TEST_DIR), source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null }, warn: () => {} };
 
 beforeEach(() => {
   fs.mkdirSync(TEST_DIR, { recursive: true });
-  establishPassphrase(TEST_DIR, PASSPHRASE);
+  establishPassphrase(stateRootIn(TEST_DIR), PASSPHRASE);
 });
 
 afterEach(() => {

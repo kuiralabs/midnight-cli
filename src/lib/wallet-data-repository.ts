@@ -179,6 +179,8 @@ export interface RepoDeps {
       onProgress?: (applied: number, max: number) => void;
       /** Repo passes a callback to persist incremental progress during long syncs. */
       onCheckpoint?: (state: ledger.DustLocalState, lastAppliedEventId: number, retention: DustRetention) => void;
+      /** The cache folder the repository keeps; the native sidecar keeps its checkpoint there. */
+      cacheDir?: string;
     },
   ) => Promise<DustDirectResult>;
   /** Chain genesis-hash fetcher (cache chain-reset guard). Default: `getChainGenesisHash`. */
@@ -334,6 +336,7 @@ export class WalletDataRepository {
       );
 
       result = await this.fetchDust(seed, network, {
+        cacheDir: this.cacheDir,
         startFromId,
         initialState: cached?.state,
         initialRetention: cached?.retention,
@@ -703,6 +706,7 @@ function defaultDustFetcher(
     signal?: AbortSignal;
     onProgress?: (applied: number, max: number) => void;
     onCheckpoint?: (state: ledger.DustLocalState, lastAppliedEventId: number, retention: DustRetention) => void;
+    cacheDir?: string;
   },
 ): Promise<DustDirectResult> {
   const dustSeed = deriveDustSeed(seed);

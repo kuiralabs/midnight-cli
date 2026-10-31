@@ -31,7 +31,7 @@ const HOMES = [
   ['mcp', /^lib\/mcp\//],
 
   ['core', /^commands\/(config|help|manual)\.ts$/],
-  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings)\.ts$/],
+  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
   ['dev', /^ui\/test-create-prompt\.ts$/],
 

@@ -9,7 +9,6 @@ import { existsSync } from 'node:fs';
 // confirmed. The others are paid by this wallet, through its DApp connector in
 // this process: no server, no port.
 
-import { homedir } from 'node:os';
 import { type ParsedArgs, hasFlag, getFlag } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
 import { ERROR_CODES, classifyError } from '../lib/exit-codes.ts';
@@ -22,7 +21,7 @@ import { writeJsonResult } from '../lib/json-output.ts';
 import { type PayingWallet, openPayingWallet } from '../lib/grant/fee-wallet.ts';
 import { type CommandContext, payerFor } from '../lib/payer.ts';
 import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
-import { dim, yellow } from '../ui/colors.ts';
+import { dim } from '../ui/colors.ts';
 import { header, keyValue, formatNight } from '../ui/format.ts';
 import { type Spinner, silentSpinner, start as startSpinner } from '../ui/spinner.ts';
 import { CANCELLED_MESSAGE } from '../lib/errors.ts';
@@ -100,8 +99,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   if (request.subcommand === 'device' && request.action === 'new') {
     const { createPendingDevice, openAccountKey, ownJoinCode } = await import('../lib/grant/sealed-account.ts');
     const { unlockPassphrase, passphraseForNewSecret, isPassphraseSet } = await import('../lib/passphrase.ts');
-    const home = homedir();
-    const passphrase = isPassphraseSet(home) ? await unlockPassphrase(home) : await passphraseForNewSecret(home);
+    const passphrase = isPassphraseSet() ? await unlockPassphrase() : await passphraseForNewSecret();
     const device = createPendingDevice(recordsDir, passphrase);
     const code = ownJoinCode(recordsDir, openAccountKey(recordsDir, passphrase), device);
     spinner.stop('Device ready');
@@ -120,9 +118,8 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   if (request.subcommand === 'import') {
     const { importAccount } = await import('../lib/grant/account-backup.ts');
     const { unlockPassphrase, passphraseForNewSecret, isPassphraseSet } = await import('../lib/passphrase.ts');
-    const home = homedir();
     try {
-      const passphrase = isPassphraseSet(home) ? await unlockPassphrase(home) : await passphraseForNewSecret(home);
+      const passphrase = isPassphraseSet() ? await unlockPassphrase() : await passphraseForNewSecret();
       const { contractAddress } = await importAccount(recordsDir, target.network, passphrase, request.file);
       spinner.stop('Imported');
       if (jsonMode) writeJsonResult({ subcommand: request.subcommand, network: target.network, wallet: walletName, ownerKey: 'sealed', address: contractAddress });
@@ -240,7 +237,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         if (owned.protection !== 'sealed') throw new UsageError('The account is not protected: its devices are managed once it is. Encrypt it first: midnight wallet protect');
         const { openAccountKey, sealedDeviceList } = await import('../lib/grant/sealed-account.ts');
         const { unlockPassphrase } = await import('../lib/passphrase.ts');
-        const passphrase = await unlockPassphrase(homedir());
+        const passphrase = await unlockPassphrase();
         const devices = sealedDeviceList(recordsDir, openAccountKey(recordsDir, passphrase));
         if (owned.ownCode === undefined) throw new Error('A sealed account names its own device code');
         const own = owned.ownCode();
@@ -289,7 +286,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
       case 'export': {
         const { exportAccount } = await import('../lib/grant/account-backup.ts');
         const { unlockPassphrase } = await import('../lib/passphrase.ts');
-        const outcome = await exportAccount(recordsDir, target.network, await unlockPassphrase(homedir()), request.file);
+        const outcome = await exportAccount(recordsDir, target.network, await unlockPassphrase(), request.file);
         spinner.stop('Written');
         if (jsonMode) {
           writeJsonResult({ ...common, address: outcome.contractAddress, file: outcome.file });

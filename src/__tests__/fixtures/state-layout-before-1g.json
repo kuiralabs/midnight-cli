@@ -1,0 +1,38 @@
+{
+  "files": [
+    ".midnight/",
+    ".midnight/accounts/",
+    ".midnight/accounts/undeployed/",
+    ".midnight/accounts/undeployed/alice/",
+    ".midnight/cache/",
+    ".midnight/cache/undeployed/",
+    ".midnight/cache/undeployed/indexer.host",
+    ".midnight/config.json",
+    ".midnight/keystore.json",
+    ".midnight/wallets/",
+    ".midnight/wallets/alice.json"
+  ],
+  "config": "{\n  \"network\": \"preview\",\n  \"networks\": {\n    \"undeployed\": {\n      \"node\": \"ws://localhost:29944\"\n    }\n  },\n  \"wallet\": \"alice\"\n}\n",
+  "marker": "localhost:28088\n",
+  "walletKeys": [
+    "addresses",
+    "shieldedAddresses",
+    "createdAt",
+    "sealed"
+  ],
+  "walletAddresses": {
+    "preprod": "mn_addr_preprod1ugtvumxjrspvh598y6agtw3sdk06qf8sl0x0pfu6lf2080wrnprshfachh",
+    "preview": "mn_addr_preview1ugtvumxjrspvh598y6agtw3sdk06qf8sl0x0pfu6lf2080wrnprshgrgy2",
+    "undeployed": "mn_addr_undeployed1ugtvumxjrspvh598y6agtw3sdk06qf8sl0x0pfu6lf2080wrnprsdj8xxx"
+  },
+  "keystoreKeys": [
+    "check"
+  ],
+  "paths": {
+    "walletCache": ".midnight/cache/undeployed/mn_addr_undeployed1a.json",
+    "dustCache": ".midnight/cache/undeployed/dust-abababababababababab.json",
+    "shieldedCache": ".midnight/cache/undeployed/shielded-cdcdcdcdcdcdcdcdcdcd.json",
+    "compose": ".midnight/localnet/compose.yml",
+    "accountArtifacts": ".midnight/account-artifacts"
+  }
+}

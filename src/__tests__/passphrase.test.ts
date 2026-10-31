@@ -21,6 +21,7 @@ import {
 } from '../lib/passphrase.ts';
 import { FILE_MODE } from '../lib/constants.ts';
 import { createTerminalPrompter } from '../ui/terminal-prompter.ts';
+import { stateRootIn } from './helpers/state-root-in.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 let home: string;
@@ -72,51 +73,51 @@ describe('reading the passphrase', () => {
 
 describe('the one passphrase', () => {
   it('is set once, in an owner-only file, and then known to be set', () => {
-    expect(isPassphraseSet(home)).toBe(false);
-    establishPassphrase(home, PASSPHRASE);
-    expect(isPassphraseSet(home)).toBe(true);
+    expect(isPassphraseSet(stateRootIn(home))).toBe(false);
+    establishPassphrase(stateRootIn(home), PASSPHRASE);
+    expect(isPassphraseSet(stateRootIn(home))).toBe(true);
     const marker = fs.readdirSync(path.join(home, '.midnight')).find((name) => name.startsWith('keystore'));
     expect(marker).toBeDefined();
     expect(fs.statSync(path.join(home, '.midnight', marker as string)).mode & 0o777).toBe(FILE_MODE);
   });
 
   it('unlocks with the passphrase it was set with', async () => {
-    establishPassphrase(home, PASSPHRASE);
-    expect(await unlockPassphrase(home, { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null })).toBe(PASSPHRASE);
+    establishPassphrase(stateRootIn(home), PASSPHRASE);
+    expect(await unlockPassphrase(stateRootIn(home), { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null })).toBe(PASSPHRASE);
   });
 
   it('refuses any other passphrase once set', async () => {
-    establishPassphrase(home, PASSPHRASE);
-    await expect(unlockPassphrase(home, { env: { [PASSPHRASE_ENV]: 'another one' }, prompter: null })).rejects.toThrow(WrongPassphraseError);
+    establishPassphrase(stateRootIn(home), PASSPHRASE);
+    await expect(unlockPassphrase(stateRootIn(home), { env: { [PASSPHRASE_ENV]: 'another one' }, prompter: null })).rejects.toThrow(WrongPassphraseError);
   });
 
   it('checks a changed MN_PASSPHRASE afresh, never taking the one checked before', async () => {
-    establishPassphrase(home, PASSPHRASE);
-    await unlockPassphrase(home, { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null });
-    await expect(unlockPassphrase(home, { env: { [PASSPHRASE_ENV]: 'another one' }, prompter: null })).rejects.toThrow(WrongPassphraseError);
+    establishPassphrase(stateRootIn(home), PASSPHRASE);
+    await unlockPassphrase(stateRootIn(home), { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null });
+    await expect(unlockPassphrase(stateRootIn(home), { env: { [PASSPHRASE_ENV]: 'another one' }, prompter: null })).rejects.toThrow(WrongPassphraseError);
   });
 
   it('is not set a second time over the first', () => {
-    establishPassphrase(home, PASSPHRASE);
-    expect(() => establishPassphrase(home, 'another one')).toThrow(/already set/);
+    establishPassphrase(stateRootIn(home), PASSPHRASE);
+    expect(() => establishPassphrase(stateRootIn(home), 'another one')).toThrow(/already set/);
   });
 });
 
 describe('a new secret', () => {
   it('sets the passphrase on a machine with none, and is sealed under it', async () => {
-    const passphrase = await passphraseForNewSecret(home, { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null });
+    const passphrase = await passphraseForNewSecret(stateRootIn(home), { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null });
     expect(passphrase).toBe(PASSPHRASE);
-    expect(isPassphraseSet(home)).toBe(true);
+    expect(isPassphraseSet(stateRootIn(home))).toBe(true);
   });
 
   it(`refuses a new passphrase shorter than ${MIN_PASSPHRASE_LENGTH} characters, setting nothing`, async () => {
-    await expect(passphraseForNewSecret(home, { env: { [PASSPHRASE_ENV]: 'too short' }, prompter: null })).rejects.toThrow(/at least/);
-    expect(isPassphraseSet(home)).toBe(false);
+    await expect(passphraseForNewSecret(stateRootIn(home), { env: { [PASSPHRASE_ENV]: 'too short' }, prompter: null })).rejects.toThrow(/at least/);
+    expect(isPassphraseSet(stateRootIn(home))).toBe(false);
   });
 
   it('takes the passphrase already set, and no other', async () => {
-    establishPassphrase(home, PASSPHRASE);
-    await expect(passphraseForNewSecret(home, { env: { [PASSPHRASE_ENV]: 'another passphrase' }, prompter: null })).rejects.toThrow(WrongPassphraseError);
+    establishPassphrase(stateRootIn(home), PASSPHRASE);
+    await expect(passphraseForNewSecret(stateRootIn(home), { env: { [PASSPHRASE_ENV]: 'another passphrase' }, prompter: null })).rejects.toThrow(WrongPassphraseError);
   });
 });
 

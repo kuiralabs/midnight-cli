@@ -4,10 +4,10 @@
 // stores); mn only names the place.
 
 import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import { DIR_MODE, MIDNIGHT_DIR } from '../constants.ts';
+import { DIR_MODE } from '../constants.ts';
 import { getActiveWalletName } from '../wallet-config.ts';
+import { stateRoot } from '../state-root.ts';
 
 /** The directory under ~/.midnight that holds each network's accounts. */
 export const ACCOUNTS_DIR_NAME = 'accounts';
@@ -22,8 +22,8 @@ export function accountWalletName(walletFlag: string | undefined, activeWallet: 
   return basename(walletFlag).replace(/\.json$/, '');
 }
 
-export function accountRecordsDir(network: string, walletName: string, home: string = homedir()): string {
-  return join(home, MIDNIGHT_DIR, ACCOUNTS_DIR_NAME, network, walletName);
+export function accountRecordsDir(network: string, walletName: string, root: string = stateRoot()): string {
+  return join(root, ACCOUNTS_DIR_NAME, network, walletName);
 }
 
 /** Creates the records directory, readable by its owner only: it will hold keys. */

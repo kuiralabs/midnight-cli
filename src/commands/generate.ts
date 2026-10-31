@@ -5,7 +5,6 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { homedir } from 'os';
 import { type ParsedArgs, getFlag, hasFlag } from '../lib/argv.ts';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
@@ -14,10 +13,10 @@ import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { type WalletPublic, writeSealedWallet } from '../lib/wallet-config.ts';
 import { passphraseForNewSecret } from '../lib/passphrase.ts';
 import { parseSeedHex } from '../lib/seed-resolver.ts';
-import { MIDNIGHT_DIR, DEFAULT_WALLET_FILENAME } from '../lib/constants.ts';
 import { header, keyValue, divider, formatAddress } from '../ui/format.ts';
 import { bold, yellow, dim, green } from '../ui/colors.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
+import { getDefaultWalletPath } from '../lib/wallet-paths.ts';
 
 export default async function generateCommand(args: ParsedArgs): Promise<void> {
   const networkName = resolveNetworkName({ args });
@@ -38,7 +37,7 @@ export default async function generateCommand(args: ParsedArgs): Promise<void> {
   // Overwrite protection: check if target file already exists
   const targetPath = outputPath
     ? path.resolve(outputPath)
-    : path.join(homedir(), MIDNIGHT_DIR, DEFAULT_WALLET_FILENAME);
+    : getDefaultWalletPath();
 
   if (fs.existsSync(targetPath) && !hasFlag(args, 'force')) {
     throw new Error(
@@ -75,7 +74,7 @@ export default async function generateCommand(args: ParsedArgs): Promise<void> {
   };
   const secrets = mnemonic ? { seed: seedBuffer.toString('hex'), mnemonic } : { seed: seedBuffer.toString('hex') };
 
-  const savedPath = writeSealedWallet(targetPath, config, secrets, await passphraseForNewSecret(homedir()), { overwrite: hasFlag(args, 'force') });
+  const savedPath = writeSealedWallet(targetPath, config, secrets, await passphraseForNewSecret(), { overwrite: hasFlag(args, 'force') });
 
   // JSON mode
   if (hasFlag(args, 'json')) {

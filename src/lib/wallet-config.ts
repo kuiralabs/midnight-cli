@@ -1,15 +1,15 @@
 import * as fs from 'fs';
 import { notice } from './notices.ts';
 import * as path from 'path';
-import { homedir } from 'os';
-import { MIDNIGHT_DIR, DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE, isValidWalletName } from './constants.ts';
-import { isValidNetworkName, type NetworkName } from './network.ts';
+import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, isValidWalletName } from './constants.ts';
+import { type NetworkName } from './network.ts';
 import { loadCliConfig, saveCliConfig } from './cli-config.ts';
-import { getDefaultWalletPath, getWalletsDir, ensureWalletsDir } from './wallet-paths.ts';
+import { getDefaultWalletPath, getWalletsDir } from './wallet-paths.ts';
 import { deriveAllAddresses, deriveAllShieldedAddresses } from './derive-address.ts';
 import { isSealedSecret, openSecret, sealSecret } from './keystore.ts';
 import { FileExistsError, writeJsonDurably } from './durable-file.ts';
 import { type PassphraseSource, unlockPassphrase } from './passphrase.ts';
+import { stateRoot } from './state-root.ts';
 
 /** What anyone may read of a wallet: its addresses, and whether its secrets are sealed. No secret. */
 export interface WalletConfig {
@@ -476,20 +476,20 @@ export interface ProtectedWallet {
   sealedNow: boolean;
 }
 
-/** Seals every wallet under `home` that is still in plain text, under `passphrase`, in name order. */
-export function protectAllWallets(home: string, passphrase: string): ProtectedWallet[] {
-  const walletsDir = path.join(home, MIDNIGHT_DIR, WALLETS_DIR_NAME);
+/** Seals every wallet under the state root `root` that is still in plain text, under `passphrase`, in name order. */
+export function protectAllWallets(root: string, passphrase: string): ProtectedWallet[] {
+  const walletsDir = path.join(root, WALLETS_DIR_NAME);
   const files = fs.existsSync(walletsDir) ? fs.readdirSync(walletsDir).filter((f) => f.endsWith('.json')).sort() : [];
   // A wallet from before named wallets, if it was never moved into wallets/.
-  const legacy = path.join(home, MIDNIGHT_DIR, DEFAULT_WALLET_FILENAME);
+  const legacy = path.join(root, DEFAULT_WALLET_FILENAME);
   const entries = files.map((f) => ({ name: f.replace(/\.json$/, ''), file: path.join(walletsDir, f) }));
   if (fs.existsSync(legacy)) entries.push({ name: DEFAULT_WALLET_FILENAME.replace(/\.json$/, ''), file: legacy });
   return entries.map(({ name, file }) => ({ name, file, sealedNow: sealWalletInPlace(file, passphrase) }));
 }
 
-/** How a wallet is unlocked: whose home holds mn's passphrase check, where the passphrase comes from, and where a warning goes. */
+/** How a wallet is unlocked: the state root holding mn's passphrase check (the host's, unless given), where the passphrase comes from, and where a warning goes. */
 export interface UnlockOptions {
-  home?: string;
+  root?: string;
   source?: PassphraseSource;
   warn?: (line: string) => void;
 }
@@ -511,7 +511,7 @@ export async function unlockWallet(walletPath: string, options: UnlockOptions = 
     }
     return typeof raw.mnemonic === 'string' ? { ...config, seed: raw.seed, mnemonic: raw.mnemonic } : { ...config, seed: raw.seed };
   }
-  const passphrase = await unlockPassphrase(options.home ?? homedir(), options.source);
+  const passphrase = await unlockPassphrase(options.root ?? stateRoot(), options.source);
   const secrets = JSON.parse(openSecret(raw.sealed, passphrase, 'wallet').toString('utf8')) as WalletSecrets;
   return { ...config, ...secrets };
 }

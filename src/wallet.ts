@@ -18,6 +18,10 @@ import { installSdkNoiseFilters } from './lib/sdk-noise.ts';
 import { setNoticeSink } from './lib/notices.ts';
 import { setPrompter } from './lib/prompter.ts';
 import { setSettingsSource, settingsFromEnvironment } from './lib/settings.ts';
+import { setHostPathsSource } from './lib/state-root.ts';
+import { MIDNIGHT_DIR } from './lib/constants.ts';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { createTerminalPrompter } from './ui/terminal-prompter.ts';
 
 // Commands that start a WalletFacade. They (a) leave WebSocket connections in
@@ -71,6 +75,9 @@ setNoticeSink((line) => process.stderr.write(line + '\n'));
 
 // Libraries read the environment variables of spec §5.4 as settings, at the moment they need one.
 setSettingsSource(() => settingsFromEnvironment(process.env));
+
+// mn's state lives under ~/.midnight, the home read as each path is built.
+setHostPathsSource(() => ({ stateRoot: join(homedir(), MIDNIGHT_DIR), home: homedir() }));
 
 // Libraries ask their questions (passphrase, approvals) at the terminal.
 setPrompter(createTerminalPrompter());

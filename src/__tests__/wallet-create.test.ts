@@ -12,6 +12,7 @@ import { createWallet, walletFilePath, walletSecretFrom } from '../lib/wallet-cr
 import { getActiveWalletName, unlockWallet } from '../lib/wallet-config.ts';
 import { deriveAllAddresses } from '../lib/derive-address.ts';
 import { PASSPHRASE_ENV, passphraseForNewSecret } from '../lib/passphrase.ts';
+import { stateRootIn } from './helpers/state-root-in.ts';
 
 const CHOSEN = 'correct horse battery staple';
 // The passphrase as a caller gets it: the first secret in a new home sets it.
@@ -26,7 +27,7 @@ beforeEach(async () => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-wallet-create-'));
   process.env.HOME = home;
   process.env[PASSPHRASE_ENV] = CHOSEN;
-  PASSPHRASE = await passphraseForNewSecret(home);
+  PASSPHRASE = await passphraseForNewSecret(stateRootIn(home));
 });
 
 afterEach(() => {

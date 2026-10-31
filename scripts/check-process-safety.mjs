@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Checks that library code leaves the host process alone (spec §3.1, decision
 // 20): no writing to the terminal, exiting, installing process handlers,
-// patching console, changing directory, opening a prompt, or reading the
-// environment. Commands, ui/, the shell and the MCP server may; so may the
+// patching console, changing directory, opening a prompt, reading the
+// environment, or computing a path from the home directory (spec §7). Commands, ui/, the shell and the MCP server may; so may the
 // modules marked below as shell concerns. String and template-literal
 // contents and comments are skipped, so the contract runner's generated
 // scripts (which run as their own process) don't count.
@@ -27,6 +27,8 @@ const RULES = [
   ['changes directory', /\bprocess\.chdir\s*\(/],
   ['opens a prompt', /\bfrom\s+['"](node:)?readline['"]|\brequire\(\s*['"](node:)?readline['"]\s*\)/],
   ['reads the environment', /\bprocess\.env\b/],
+  // Spec §7: the host gives the state root; a library never builds a path from the home directory.
+  ['computes a path from the home directory', /\bhomedir\s*\(|\bos\.homedir\b/],
 ];
 
 // Shell concerns by design (1F): what they do to the process is their job.

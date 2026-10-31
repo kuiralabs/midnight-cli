@@ -8,16 +8,17 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DIR_MODE, FILE_MODE, MIDNIGHT_DIR } from './constants.ts';
+import { DIR_MODE, FILE_MODE } from './constants.ts';
 import { UsageError } from './errors.ts';
 import { openSecret, sealSecret } from './keystore.ts';
 import { currentPrompter, type Prompter } from './prompter.ts';
 import { settings } from './settings.ts';
+import { stateRoot } from './state-root.ts';
 
 /** The variable a non-interactive run sets the passphrase in. */
 export const PASSPHRASE_ENV = 'MN_PASSPHRASE';
 
-/** Where the keystore's check of the passphrase is kept, under ~/.midnight. */
+/** Where the keystore's check of the passphrase is kept, under the state root. */
 const KEYSTORE_FILENAME = 'keystore.json';
 /** The value the check seals: opening it proves the passphrase. */
 const CHECK_VALUE = Buffer.from('mn keystore: the one passphrase', 'utf8');
@@ -41,7 +42,7 @@ export interface PassphraseSource {
   confirm?: boolean;
 }
 
-const keystorePath = (home: string): string => path.join(home, MIDNIGHT_DIR, KEYSTORE_FILENAME);
+const keystorePath = (root: string): string => path.join(root, KEYSTORE_FILENAME);
 
 const ask = async (prompter: Prompter, question: string): Promise<string> => {
   const line = await prompter.askSecret(question);
@@ -64,13 +65,13 @@ export async function readPassphrase(source: PassphraseSource = {}): Promise<str
 }
 
 /** True once mn's passphrase is set on this machine. */
-export function isPassphraseSet(home: string): boolean {
-  return fs.existsSync(keystorePath(home));
+export function isPassphraseSet(root: string = stateRoot()): boolean {
+  return fs.existsSync(keystorePath(root));
 }
 
 /** Sets mn's one passphrase. Refused when one is set already. */
-export function establishPassphrase(home: string, passphrase: string): void {
-  const file = keystorePath(home);
+export function establishPassphrase(root: string, passphrase: string): void {
+  const file = keystorePath(root);
   if (fs.existsSync(file)) throw new UsageError(`mn's passphrase is already set (${file}).`);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: DIR_MODE });
   // `wx`: never over a check another process wrote meanwhile.
@@ -78,15 +79,15 @@ export function establishPassphrase(home: string, passphrase: string): void {
 }
 
 /** Refuses `passphrase` unless it is the one set. */
-export function checkPassphrase(home: string, passphrase: string): void {
-  const { check } = JSON.parse(fs.readFileSync(keystorePath(home), 'utf8')) as { check: unknown };
+export function checkPassphrase(root: string, passphrase: string): void {
+  const { check } = JSON.parse(fs.readFileSync(keystorePath(root), 'utf8')) as { check: unknown };
   openSecret(check, passphrase, 'keystore-check');
 }
 
 /** The shortest passphrase mn accepts when one is set. */
 export const MIN_PASSPHRASE_LENGTH = 12;
 
-// The passphrase this process has unlocked, by home: one prompt per run.
+// The passphrase this process has unlocked, by state root: one prompt per run.
 const unlocked = new Map<string, string>();
 
 /**
@@ -94,14 +95,14 @@ const unlocked = new Map<string, string>();
  * run. One already checked is taken again only when the environment names no
  * other: a changed MN_PASSPHRASE is checked afresh.
  */
-export async function unlockPassphrase(home: string, source: PassphraseSource = {}): Promise<string> {
-  const known = unlocked.get(home);
+export async function unlockPassphrase(root: string = stateRoot(), source: PassphraseSource = {}): Promise<string> {
+  const known = unlocked.get(root);
   const fromEnv = source.env !== undefined ? source.env[PASSPHRASE_ENV] : settings().passphrase;
   if (known !== undefined && (fromEnv === undefined || fromEnv === '' || fromEnv === known)) return known;
-  if (!isPassphraseSet(home)) throw new UsageError('mn has no passphrase yet. Set one with: midnight wallet protect');
+  if (!isPassphraseSet(root)) throw new UsageError('mn has no passphrase yet. Set one with: midnight wallet protect');
   const passphrase = await readPassphrase(source);
-  checkPassphrase(home, passphrase);
-  unlocked.set(home, passphrase);
+  checkPassphrase(root, passphrase);
+  unlocked.set(root, passphrase);
   return passphrase;
 }
 
@@ -109,13 +110,13 @@ export async function unlockPassphrase(home: string, source: PassphraseSource = 
  * The passphrase to seal a new secret under: the one set, or, on a machine
  * with none yet, a new one (asked twice at a terminal), which is then set.
  */
-export async function passphraseForNewSecret(home: string, source: PassphraseSource = {}): Promise<string> {
-  if (isPassphraseSet(home)) return unlockPassphrase(home, source);
+export async function passphraseForNewSecret(root: string = stateRoot(), source: PassphraseSource = {}): Promise<string> {
+  if (isPassphraseSet(root)) return unlockPassphrase(root, source);
   const passphrase = await readPassphrase({ ...source, confirm: true });
   if ([...passphrase].length < MIN_PASSPHRASE_LENGTH) {
     throw new UsageError(`mn's passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters.`);
   }
-  establishPassphrase(home, passphrase);
-  unlocked.set(home, passphrase);
+  establishPassphrase(root, passphrase);
+  unlocked.set(root, passphrase);
   return passphrase;
 }

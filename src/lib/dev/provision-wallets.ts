@@ -4,7 +4,6 @@
 // left untouched (the user can `mn wallet remove <name>` to force re-setup).
 
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet } from '../wallet-config.ts';
 import { createWallet, walletFilePath, walletSecretFrom } from '../wallet-create.ts';
 import { passphraseForNewSecret } from '../passphrase.ts';
@@ -142,7 +141,7 @@ function undeployedNetwork(): NetworkConfig {
 }
 
 async function generateWallet(name: string): Promise<void> {
-  createWallet(name, walletSecretFrom(), await passphraseForNewSecret(homedir()));
+  createWallet(name, walletSecretFrom(), await passphraseForNewSecret());
 }
 
 async function airdropToWallet(network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined): Promise<void> {

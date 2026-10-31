@@ -10,14 +10,14 @@
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, readdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import { MIDNIGHT_DIR, CACHE_DIR_NAME, DIR_MODE, FILE_MODE } from './constants.ts';
+import { DIR_MODE, FILE_MODE } from './constants.ts';
 import { deriveDustSeed } from './derivation.ts';
 import { type DustRetention } from './dust-direct.ts';
+import { cacheRootDir } from './wallet-cache.ts';
 
 // v2 added the retention fields (owned generation indices + frontier) that the
 // generation-tree collapse needs. v1 caches lack them and are invalidated, so
@@ -66,7 +66,7 @@ export function dustPublicKeyHexFromSeed(seedBuffer: Buffer): string {
 }
 
 function dustCacheDir(network: string, cacheDir?: string): string {
-  const base = cacheDir ?? join(homedir(), MIDNIGHT_DIR, CACHE_DIR_NAME);
+  const base = cacheRootDir(cacheDir);
   return join(base, network);
 }
 
@@ -205,7 +205,7 @@ export function clearDustDirectCache(
   pubkeyHex?: string,
   cacheDir?: string,
 ): void {
-  const base = cacheDir ?? join(homedir(), MIDNIGHT_DIR, CACHE_DIR_NAME);
+  const base = cacheRootDir(cacheDir);
 
   if (network && pubkeyHex) {
     const path = getDustCachePath(network, pubkeyHex, cacheDir);

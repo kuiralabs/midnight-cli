@@ -8,7 +8,6 @@
 // owner key) and roster.json, with the private state in the directory's
 // midnight-level-db under the store name and password it was first made with.
 
-import { homedir } from 'node:os';
 import { notice } from '../notices.ts';
 import { join } from 'node:path';
 import { artefactCache } from '@kuiralabs/midnight-account-chain/artefacts';
@@ -21,7 +20,6 @@ import {
   directoryDeviceKeys,
   directoryOwnerStore,
 } from '@kuiralabs/midnight-account-chain/owner';
-import { MIDNIGHT_DIR } from '../constants.ts';
 import { PRIVATE_STATE_DATABASE } from '../contract/private-state.ts';
 import { type PassphraseSource, passphraseForNewSecret, unlockPassphrase } from '../passphrase.ts';
 import {
@@ -39,12 +37,13 @@ import {
 } from './sealed-account.ts';
 import { UsageError } from '../errors.ts';
 import type { NetworkConfig } from '../network.ts';
+import { stateRoot } from '../state-root.ts';
 
 /** Where the account package caches its proving artefacts, under ~/.midnight: each file is fetched the first time a command proves with it. */
 const ACCOUNT_ARTIFACTS_DIR_NAME = 'account-artifacts';
 
-export function accountArtifactsDir(home: string = homedir()): string {
-  return join(home, MIDNIGHT_DIR, ACCOUNT_ARTIFACTS_DIR_NAME);
+export function accountArtifactsDir(root: string = stateRoot()): string {
+  return join(root, ACCOUNT_ARTIFACTS_DIR_NAME);
 }
 
 /** The network the account package acts on: ledger 9, which only a local network runs so far. */
@@ -122,7 +121,7 @@ export interface GrantAccount {
 
 /** Where an account's passphrase comes from, and where a warning about a plain-text account goes. */
 export interface OpenAccountOptions {
-  home?: string;
+  root?: string;
   source?: PassphraseSource;
   warn?: (line: string) => void;
 }
@@ -135,10 +134,10 @@ export interface OpenAccountOptions {
  */
 export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir: string, say: (line: string) => void, options: OpenAccountOptions = {}): Promise<GrantAccount> {
   assertAccountNetwork(networkConfig);
-  const home = options.home ?? homedir();
+  const root = options.root ?? stateRoot();
   const progress = (event: ProgressEvent): void => say(describeProgress(event).trim());
   const network = networkOf({ networkId: ACCOUNT_NETWORK_ID, node: httpOf(networkConfig.node), indexer: networkConfig.indexer, proofServer: networkConfig.proofServer });
-  const context = accountContext({ network, artefacts: artefactCache(accountArtifactsDir(home), { progress }), progress });
+  const context = accountContext({ network, artefacts: artefactCache(accountArtifactsDir(root), { progress }), progress });
   const database = join(recordsDir, PRIVATE_STATE_DATABASE);
 
   const sealed = (key: Buffer): GrantAccount => ({
@@ -154,7 +153,7 @@ export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir:
       return ownDeviceCode(recordsDir, key, device);
     },
   });
-  if (isSealedAccount(recordsDir)) return sealed(openAccountKey(recordsDir, await unlockPassphrase(home, options.source)));
+  if (isSealedAccount(recordsDir)) return sealed(openAccountKey(recordsDir, await unlockPassphrase(root, options.source)));
 
   // Caught half way through being sealed: its private state may be under its new password already.
   if (isAccountMigrating(recordsDir)) throw new AccountMigrationInterruptedError(recordsDir);
@@ -166,7 +165,7 @@ export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir:
     );
     return { context, store: plainStore, keys: plainKeys, location: { database, store: PRIVATE_STATE_STORE, password: () => LEGACY_STORE_PASSWORD }, protection: 'plain-text' };
   }
-  return sealed(createAccountKey(recordsDir, await passphraseForNewSecret(home, options.source)));
+  return sealed(createAccountKey(recordsDir, await passphraseForNewSecret(root, options.source)));
 }
 
 /** The account's owner device, which its records hold. */
