@@ -21,10 +21,10 @@ export interface WalletProtector {
   /** Its key in `wallet protect --json`. */
   name: string;
   /**
-   * Seals what it keeps under `home` with `passphrase`. `coinKeyOf` gives the
+   * Seals what it keeps under the state root `root` with `passphrase`. `coinKeyOf` gives the
    * shielded coin public key of a wallet, by name.
    */
-  protect(home: string, passphrase: string, coinKeyOf: (wallet: string) => Promise<string>): Promise<ProtectorResult>;
+  protect(root: string, passphrase: string, coinKeyOf: (wallet: string) => Promise<string>): Promise<ProtectorResult>;
 }
 
 /** The wallet command's call context: a command's, and the protectors `wallet protect` runs. */

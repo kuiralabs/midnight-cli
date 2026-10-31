@@ -13,6 +13,7 @@ import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { loadWalletConfig, protectAllWallets, sealWalletInPlace, unlockWallet, writeSealedWallet } from '../lib/wallet-config.ts';
 import { deriveAllAddresses, deriveAllShieldedAddresses } from '../lib/derive-address.ts';
 import { FILE_MODE } from '../lib/constants.ts';
+import { stateRootIn } from './helpers/state-root-in.ts';
 
 const SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
 const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -25,12 +26,12 @@ const PUBLIC = {
 
 let home: string;
 let file: string;
-const withPassphrase = (passphrase: string) => ({ home, source: { env: { [PASSPHRASE_ENV]: passphrase }, prompter: null } });
+const withPassphrase = (passphrase: string) => ({ root: stateRootIn(home), source: { env: { [PASSPHRASE_ENV]: passphrase }, prompter: null } });
 
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-sealed-wallet-'));
   file = path.join(home, '.midnight', 'wallets', 'alice.json');
-  establishPassphrase(home, PASSPHRASE);
+  establishPassphrase(stateRootIn(home), PASSPHRASE);
 });
 afterEach(() => {
   fs.rmSync(home, { recursive: true, force: true });
@@ -81,7 +82,7 @@ describe('a wallet an earlier mn wrote in plain text', () => {
   it('still opens, saying it is not protected', async () => {
     writePlain();
     const warnings: string[] = [];
-    const wallet = await unlockWallet(file, { home, warn: (line) => warnings.push(line) });
+    const wallet = await unlockWallet(file, { root: stateRootIn(home), warn: (line) => warnings.push(line) });
     expect(wallet.seed).toBe(SEED);
     expect(loadWalletConfig(file).isSealed).toBe(false);
     expect(warnings.join('\n')).toMatch(/not protected[\s\S]*midnight wallet protect/);
@@ -120,7 +121,7 @@ describe('protecting every wallet', () => {
     const bob = writePlainAt('bob', OTHER_SEED);
     const carol = writePlainAt('carol', SEED);
     writeSealedWallet(file, PUBLIC, { seed: SEED }, PASSPHRASE);
-    const report = protectAllWallets(home, PASSPHRASE);
+    const report = protectAllWallets(stateRootIn(home), PASSPHRASE);
     expect(report).toEqual([
       { name: 'alice', file, sealedNow: false },
       { name: 'bob', file: bob, sealedNow: true },
@@ -131,7 +132,7 @@ describe('protecting every wallet', () => {
   });
 
   it('protects nothing, and says so, where there is no wallet', () => {
-    expect(protectAllWallets(home, PASSPHRASE)).toEqual([]);
+    expect(protectAllWallets(stateRootIn(home), PASSPHRASE)).toEqual([]);
   });
 });
 

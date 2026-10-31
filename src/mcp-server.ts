@@ -18,7 +18,7 @@ import {
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { type CommandRun, captureCommand } from './lib/run-command.ts';
 import { servePayer } from './lib/serve-payer.ts';
-import { classifyError, ERROR_CODES } from './lib/exit-codes.ts';
+import { classifyError } from './lib/exit-codes.ts';
 import { trimAgentMessage } from './lib/error-trim.ts';
 import { FULL_FLAG, type ParsedArgs } from './lib/argv.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
@@ -29,6 +29,10 @@ import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { installSdkNoiseFilters } from './lib/sdk-noise.ts';
 import { setNoticeSink } from './lib/notices.ts';
 import { setSettingsSource, settingsFromEnvironment } from './lib/settings.ts';
+import { setHostPathsSource } from './lib/state-root.ts';
+import { MIDNIGHT_DIR } from './lib/constants.ts';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 // Skill resources — teach MCP clients how to use this CLI conversationally.
 // Split into:
@@ -1202,6 +1206,8 @@ async function main() {
   setNoticeSink((line) => process.stderr.write(line + '\n'));
   // Tools read the environment variables of spec §5.4 as settings, as each is needed.
   setSettingsSource(() => settingsFromEnvironment(process.env));
+  // The server's state lives under ~/.midnight, as the CLI's does.
+  setHostPathsSource(() => ({ stateRoot: join(homedir(), MIDNIGHT_DIR), home: homedir() }));
   // The server runs facades on demand (balance/transfer/etc.). A cold shielded
   // sync would overflow Node's default heap, so re-exec once at startup with
   // more headroom. No-op when launched via `mn --mcp` (already bumped) or when

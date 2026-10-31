@@ -17,6 +17,7 @@ import { getNetworkConfig } from '../lib/network.ts';
 import { LEGACY_STORE_PASSWORD, openGrantAccount, privateStateLocationOf } from '../lib/grant/account.ts';
 import { AccountMigrationInterruptedError, protectAccount } from '../lib/grant/protect-account.ts';
 import { isSealedAccount } from '../lib/grant/sealed-account.ts';
+import { stateRootIn } from './helpers/state-root-in.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const ACCOUNT = '5e'.repeat(32);
@@ -33,7 +34,7 @@ const wallet = { getCoinPublicKey: () => COIN_KEY } as unknown as FeeWallet;
 
 // The account package's providers over the account's private state, under `password`.
 const privateStateUnder = async (password: string) => {
-  const account = await openGrantAccount(NETWORK, dir, () => {}, { home, source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null }, warn: () => {} });
+  const account = await openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null }, warn: () => {} });
   const providers = accountProviders(account.context, wallet, privateStateLocationOf(dir, () => password));
   providers.privateStateProvider.setContractAddress(ACCOUNT);
   return providers.privateStateProvider;
@@ -56,7 +57,7 @@ const plainTextLeft = (): string[] =>
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-protect-account-'));
   dir = path.join(home, '.midnight', 'accounts', 'undeployed', 'alice');
-  establishPassphrase(home, PASSPHRASE);
+  establishPassphrase(stateRootIn(home), PASSPHRASE);
 });
 afterEach(() => {
   fs.rmSync(home, { recursive: true, force: true });
@@ -68,7 +69,7 @@ describe('protecting an account an earlier mn made in plain text', () => {
     expect(await protectAccount(dir, PASSPHRASE, COIN_KEY)).toBe('sealed-now');
     expect(isSealedAccount(dir)).toBe(true);
     expect(plainTextLeft()).toEqual([]);
-    const account = await openGrantAccount(NETWORK, dir, () => {}, { home, source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null } });
+    const account = await openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null } });
     expect(account.protection).toBe('sealed');
     expect(account.store.readOwner()).toEqual(RECORD);
     expect(account.store.readRoster()).toEqual(ROSTER);
@@ -78,7 +79,7 @@ describe('protecting an account an earlier mn made in plain text', () => {
   it('moves its private state onto a password of its own, off the public one', async () => {
     await writePlainAccount();
     await protectAccount(dir, PASSPHRASE, COIN_KEY);
-    const account = await openGrantAccount(NETWORK, dir, () => {}, { home, source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null } });
+    const account = await openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null } });
     const own = await account.location.password();
     expect(own).not.toBe(LEGACY_STORE_PASSWORD);
     expect(await (await privateStateUnder(own)).get(PRIVATE_STATE_ID)).toEqual(PRIVATE_STATE);
@@ -101,9 +102,9 @@ describe('protecting an account an earlier mn made in plain text', () => {
     // A run that stopped after moving the private state, before the account was sealed.
     await protectAccount(dir, PASSPHRASE, COIN_KEY, { stopBeforeSealing: true });
     expect(isSealedAccount(dir)).toBe(false);
-    await expect(openGrantAccount(NETWORK, dir, () => {}, { home, warn: () => {} })).rejects.toThrow(AccountMigrationInterruptedError);
+    await expect(openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), warn: () => {} })).rejects.toThrow(AccountMigrationInterruptedError);
     expect(await protectAccount(dir, PASSPHRASE, COIN_KEY)).toBe('sealed-now');
-    const account = await openGrantAccount(NETWORK, dir, () => {}, { home, source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null } });
+    const account = await openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null } });
     expect(await (await privateStateUnder(await account.location.password())).get(PRIVATE_STATE_ID)).toEqual(PRIVATE_STATE);
     expect(plainTextLeft()).toEqual([]);
   });

@@ -18,6 +18,7 @@ import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts'
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 import { accountProtector } from '../lib/grant/account-protector.ts';
 import type { WalletProtector } from '../lib/wallet-protector.ts';
+import { stateRootIn } from './helpers/state-root-in.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
@@ -54,7 +55,7 @@ describe('wallet protect', () => {
     const alice = plainWallet('alice');
     plainWallet('bob');
     const result = await protect();
-    expect(isPassphraseSet(home)).toBe(true);
+    expect(isPassphraseSet(stateRootIn(home))).toBe(true);
     expect(result).toMatchObject({ sealed: ['alice', 'bob'], alreadySealed: [] });
     expect(loadWalletConfig(alice).isSealed).toBe(true);
     expect(fs.readFileSync(alice, 'utf8')).not.toContain(SEED);

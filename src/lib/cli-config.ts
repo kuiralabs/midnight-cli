@@ -1,10 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { homedir } from 'os';
-import { MIDNIGHT_DIR, DEFAULT_CONFIG_FILENAME, DIR_MODE, FILE_MODE, isValidWalletName } from './constants.ts';
+import { DEFAULT_CONFIG_FILENAME, DIR_MODE, FILE_MODE, isValidWalletName } from './constants.ts';
 import { blockfrostNetworks, checkProjectId, maskProjectId, networkOfProjectId } from './blockfrost.ts';
 import { type NetworkName, isValidNetworkName } from './network.ts';
 import { UsageError } from './errors.ts';
+import { stateRoot } from './state-root.ts';
 
 /** Endpoint overrides for one network. Keys mirror the flag/config names. */
 export interface NetworkEndpointOverrides {
@@ -69,7 +69,7 @@ function isValidUrl(value: string): boolean {
 }
 
 function getConfigDir(configDir?: string): string {
-  return configDir ?? path.join(homedir(), MIDNIGHT_DIR);
+  return configDir ?? stateRoot();
 }
 
 function getConfigPath(configDir?: string): string {

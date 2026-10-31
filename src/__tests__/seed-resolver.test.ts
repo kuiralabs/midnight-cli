@@ -10,6 +10,7 @@ import { parseArgs } from '../lib/argv.ts';
 import { parseSeedHex, resolveSeedSource, resolveSeed } from '../lib/seed-resolver.ts';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { type WalletPublic, writeSealedWallet } from '../lib/wallet-config.ts';
+import { stateRootIn } from './helpers/state-root-in.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const ORIGINAL_HOME = process.env.HOME;
@@ -120,7 +121,7 @@ describe('resolveSeedSource', () => {
     process.env.HOME = TMP;
     process.env[PASSPHRASE_ENV] = PASSPHRASE;
     try {
-      establishPassphrase(TMP, PASSPHRASE);
+      establishPassphrase(stateRootIn(TMP), PASSPHRASE);
       const p = writeSealedWallet(join(TMP, 'sealed.json'), { addresses: {} as WalletPublic['addresses'], createdAt: new Date().toISOString() }, { seed: SEED_B }, PASSPHRASE);
       const r = await resolveSeedSource(argsFor(['--wallet', p]));
       expect(r.seed.toString('hex')).toBe(SEED_B);

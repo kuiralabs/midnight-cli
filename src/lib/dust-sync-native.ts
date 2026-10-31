@@ -7,19 +7,19 @@
 import { assertEndpointUsable } from './blockfrost.ts';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import { MIDNIGHT_DIR, CACHE_DIR_NAME, DIR_MODE, FILE_MODE } from './constants.ts';
+import { DIR_MODE, FILE_MODE } from './constants.ts';
 import { deriveDustSeed } from './derivation.ts';
 import type { NetworkConfig } from './network.ts';
 import { type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { collapseForeignGenerations } from './dust-collapse.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
 import { settings } from './settings.ts';
+import { cacheRootDir } from './wallet-cache.ts';
 
 /** Sidecar checkpoint JSON shape (snake_case — matches the Rust `Checkpoint`). */
 export interface SidecarCheckpoint {
@@ -39,6 +39,8 @@ interface NativeFetchOptions {
   initialRetention?: DustRetention;
   signal?: AbortSignal;
   onProgress?: (applied: number, max: number) => void;
+  /** The wallet's cache folder (the state root's when absent): the checkpoint lives beside the other Dust caches. */
+  cacheDir?: string;
 }
 
 /**
@@ -116,8 +118,8 @@ function readCheckpointCursor(path: string): number {
   } catch { return -2; }
 }
 
-function nativeCheckpointPath(networkName: string, pubkeyHex: string): string {
-  const dir = join(homedir(), MIDNIGHT_DIR, CACHE_DIR_NAME, networkName);
+function nativeCheckpointPath(networkName: string, pubkeyHex: string, cacheDir?: string): string {
+  const dir = join(cacheRootDir(cacheDir), networkName);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: DIR_MODE });
   return join(dir, `dust-native-${pubkeyHex.slice(0, 20)}.json`);
 }
@@ -128,8 +130,8 @@ function nativeCheckpointPath(networkName: string, pubkeyHex: string): string {
  * (neither) → all. Called from `mn cache clear` so clearing the cache also forces
  * a fresh native sync (and drops a stale checkpoint after a chain reset).
  */
-export function clearNativeDustCheckpoint(network?: string, pubkeyHex?: string): void {
-  const base = join(homedir(), MIDNIGHT_DIR, CACHE_DIR_NAME);
+export function clearNativeDustCheckpoint(network?: string, pubkeyHex?: string, cacheDir?: string): void {
+  const base = cacheRootDir(cacheDir);
   if (network && pubkeyHex) {
     try { unlinkSync(join(base, network, `dust-native-${pubkeyHex.slice(0, 20)}.json`)); } catch { /* not found is ok */ }
     return;
@@ -167,7 +169,7 @@ export function runDustSyncNative(
 
     const networkName = network.networkId.toLowerCase();
     const pubkeyHex = dustPublicKeyHexFromSeed(seed);
-    const out = nativeCheckpointPath(networkName, pubkeyHex);
+    const out = nativeCheckpointPath(networkName, pubkeyHex, opts.cacheDir);
 
     // Resume selection (out == resume file; the sidecar reads it once at start,
     // then overwrites it with its own checkpoints — kill-safe at this path):

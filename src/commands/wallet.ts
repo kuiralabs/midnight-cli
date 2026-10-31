@@ -2,7 +2,6 @@
 // Subcommands: generate, list, use, info, remove
 
 import * as fs from 'fs';
-import { homedir } from 'os';
 import { type ParsedArgs, getFlag, hasFlag, isMinimalMode } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
 import { mnemonicToEntropy } from '@scure/bip39';
@@ -25,6 +24,7 @@ import { coinKeyOfWallet, type ProtectorResult, type WalletCommandContext, type 
 import { header, keyValue, divider, formatAddress } from '../ui/format.ts';
 import { bold, yellow, dim, green, teal } from '../ui/colors.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
+import { stateRoot } from '../lib/state-root.ts';
 
 export default async function walletCommand(args: ParsedArgs, _signal?: AbortSignal, context?: WalletCommandContext): Promise<void> {
   const subcommand = args.subcommand;
@@ -83,7 +83,7 @@ async function walletGenerate(args: ParsedArgs): Promise<void> {
   const secret = walletSecretFrom(seedHex !== undefined ? { seed: parseSeedHex(seedHex, '--seed') } : { mnemonic: mnemonicStr });
 
   // Checked above: an existing wallet is replaced only with --force.
-  const created = createWallet(name, secret, await passphraseForNewSecret(homedir()), { overwrite: hasFlag(args, 'force') });
+  const created = createWallet(name, secret, await passphraseForNewSecret(), { overwrite: hasFlag(args, 'force') });
   const { addresses, shieldedAddresses, mnemonic, file: savedPath } = created;
   const seedBuffer = created.seed;
   const activeAddress = addresses[networkName];
@@ -383,15 +383,15 @@ async function walletSeed(args: ParsedArgs): Promise<void> {
 
 /** Sets mn's passphrase where none is set, and seals every plain-text wallet under it. */
 async function walletProtect(args: ParsedArgs, protectors: readonly WalletProtector[]): Promise<void> {
-  const home = homedir();
-  const passphrase = await passphraseForNewSecret(home);
-  const report = protectAllWallets(home, passphrase);
+  const root = stateRoot();
+  const passphrase = await passphraseForNewSecret(root);
+  const report = protectAllWallets(root, passphrase);
   const sealed = report.filter((w) => w.sealedNow).map((w) => w.name);
   const alreadySealed = report.filter((w) => !w.sealedNow).map((w) => w.name);
   // What other domains keep for a wallet, sealed by the protectors the caller gave; each is told how to get a wallet's coin key.
   const results: Array<{ name: string; result: ProtectorResult }> = [];
   for (const protector of protectors) {
-    results.push({ name: protector.name, result: await protector.protect(home, passphrase, coinKeyOfWallet) });
+    results.push({ name: protector.name, result: await protector.protect(root, passphrase, coinKeyOfWallet) });
   }
   if (hasFlag(args, 'json')) {
     writeJsonResult({ sealed, alreadySealed, ...Object.fromEntries(results.map(({ name, result }) => [name, result.report])) });

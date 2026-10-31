@@ -4,12 +4,12 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { homedir } from 'os';
-import { MIDNIGHT_DIR, DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE } from './constants.ts';
+import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE } from './constants.ts';
 import { loadCliConfig, saveCliConfig } from './cli-config.ts';
+import { stateRoot } from './state-root.ts';
 
 function getMidnightDir(): string {
-  return path.join(homedir(), MIDNIGHT_DIR);
+  return stateRoot();
 }
 
 export function getWalletsDir(): string {

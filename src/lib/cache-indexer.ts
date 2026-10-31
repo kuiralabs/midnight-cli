@@ -12,9 +12,9 @@
 // removed, and the sync starts from the beginning.
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { CACHE_DIR_NAME, DIR_MODE, FILE_MODE, MIDNIGHT_DIR } from './constants.ts';
+import { DIR_MODE, FILE_MODE } from './constants.ts';
+import { cacheRootDir } from './wallet-cache.ts';
 
 const MARKER = 'indexer.host';
 
@@ -49,7 +49,7 @@ export interface IndexerChange {
  */
 export function bindCachesToIndexer(network: string, indexerUrl: string, cacheDir?: string): IndexerChange | undefined {
   const current = indexerIdentity(indexerUrl);
-  const dir = join(cacheDir ?? join(homedir(), MIDNIGHT_DIR, CACHE_DIR_NAME), network);
+  const dir = join(cacheRootDir(cacheDir), network);
   const marker = join(dir, MARKER);
 
   const recorded = existsSync(marker) ? readFileSync(marker, 'utf-8').trim() : undefined;

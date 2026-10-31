@@ -28,6 +28,7 @@ describe('the process-safety check', () => {
       'console.error = () => {};',
       "process.chdir('/');",
       'const v = process.env.HOME;',
+      "const root = join(homedir(), '.midnight');",
     ].join('\n'));
     expect(findViolations([planted], {}).map((v) => `${v.line} ${v.rule}`)).toEqual([
       '2 writes to the terminal',
@@ -37,6 +38,7 @@ describe('the process-safety check', () => {
       '6 changes directory',
       '1 opens a prompt',
       '7 reads the environment',
+      '8 computes a path from the home directory',
     ]);
   });
 

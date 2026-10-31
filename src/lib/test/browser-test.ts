@@ -4,9 +4,9 @@
 import { execSync, spawn } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { homedir } from 'node:os';
 
 import type { TestSuite, BrowserMode } from './types.ts';
+import { userHome } from '../state-root.ts';
 
 /**
  * Check whether the chrome-devtools MCP server is registered in Claude
@@ -15,7 +15,7 @@ import type { TestSuite, BrowserMode } from './types.ts';
  * or doesn't list the server — all three mean the user must install it.
  */
 function hasChromeDevToolsMcp(): boolean {
-  const path = join(homedir(), '.claude.json');
+  const path = join(userHome(), '.claude.json');
   if (!existsSync(path)) return false;
   try {
     const config = JSON.parse(readFileSync(path, 'utf-8')) as { mcpServers?: Record<string, unknown> };

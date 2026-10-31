@@ -3,9 +3,9 @@
 
 import { execSync, type ExecSyncOptionsWithStringEncoding } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { homedir } from 'os';
 import { join } from 'path';
-import { MIDNIGHT_DIR, LOCALNET_DIR_NAME, DIR_MODE } from './constants.ts';
+import { LOCALNET_DIR_NAME, DIR_MODE } from './constants.ts';
+import { stateRoot } from './state-root.ts';
 
 // Version tag — bump when compose content changes so stale files get overwritten
 export const COMPOSE_VERSION = '3.0.6';
@@ -19,9 +19,10 @@ const NODE_IMAGE = 'midnightntwrk/midnight-node:1.0.0';
 const INDEXER_IMAGE = 'midnightntwrk/indexer-standalone:4.3.3';
 const PROOF_SERVER_IMAGE = 'midnightntwrk/proof-server:8.1.0';
 
-export const LOCALNET_DIR = join(homedir(), MIDNIGHT_DIR, LOCALNET_DIR_NAME);
-const COMPOSE_PATH = join(LOCALNET_DIR, 'compose.yml');
-const VERSION_PATH = join(LOCALNET_DIR, '.version');
+// Built when used, under the state root the host gives; never when this module loads.
+const localnetDir = (): string => join(stateRoot(), LOCALNET_DIR_NAME);
+const composePath = (): string => join(localnetDir(), 'compose.yml');
+const versionPath = (): string => join(localnetDir(), '.version');
 
 // Full compose.yml for midnight-local-network: the ledger-8 stack above, which
 // this ledger-9 build does not start.
@@ -152,7 +153,7 @@ export function assertLocalnetCanStart(): void {
 }
 
 /**
- * Write compose.yml to LOCALNET_DIR if it doesn't exist or the version has changed.
+ * Write compose.yml to the localnet folder if it doesn't exist or the version has changed.
  * Returns true if the file was written, false if it was already up to date.
  *
  * Every path that starts the localnet calls this first, so it is where a
@@ -161,15 +162,15 @@ export function assertLocalnetCanStart(): void {
 export function ensureComposeFile(): boolean {
   assertLocalnetCanStart();
   const versionMatches =
-    existsSync(VERSION_PATH) &&
-    existsSync(COMPOSE_PATH) &&
-    readFileSync(VERSION_PATH, 'utf-8').trim() === COMPOSE_VERSION;
+    existsSync(versionPath()) &&
+    existsSync(composePath()) &&
+    readFileSync(versionPath(), 'utf-8').trim() === COMPOSE_VERSION;
 
   if (versionMatches) return false;
 
-  mkdirSync(LOCALNET_DIR, { recursive: true, mode: DIR_MODE });
-  writeFileSync(COMPOSE_PATH, COMPOSE_YAML, 'utf-8');
-  writeFileSync(VERSION_PATH, COMPOSE_VERSION, 'utf-8');
+  mkdirSync(localnetDir(), { recursive: true, mode: DIR_MODE });
+  writeFileSync(composePath(), COMPOSE_YAML, 'utf-8');
+  writeFileSync(versionPath(), COMPOSE_VERSION, 'utf-8');
   return true;
 }
 
@@ -179,7 +180,7 @@ export function ensureComposeFile(): boolean {
  */
 export function dockerCompose(args: string): string {
   return execSync(
-    `docker compose -f "${COMPOSE_PATH}" ${args}`,
+    `docker compose -f "${composePath()}" ${args}`,
     EXEC_OPTIONS,
   );
 }
@@ -268,7 +269,7 @@ export function waitForHealthy(timeoutMs: number = 120_000, intervalMs: number =
 
 /** Return the compose file path (for display purposes). */
 export function getComposePath(): string {
-  return COMPOSE_PATH;
+  return composePath();
 }
 
 // Container names used in compose.yml — these are the hardcoded container_name values

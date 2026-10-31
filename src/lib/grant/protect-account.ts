@@ -16,7 +16,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Arm } from '@kuiralabs/midnight-account';
 import { changePrivateStatePassword, directoryOwnerStore, ownerDeviceFromSecret } from '@kuiralabs/midnight-account-chain/owner';
-import { MIDNIGHT_DIR } from '../constants.ts';
 import { LEGACY_STORE_PASSWORD, privateStateLocationOf } from './account.ts';
 import { ACCOUNTS_DIR_NAME, accountRecordsDir } from './account-records.ts';
 import {
@@ -98,18 +97,18 @@ export type ProtectedAccount =
   | { network: string; wallet: string; error: string };
 
 /**
- * Seals every plain-text account under `home`, in network and wallet order.
+ * Seals every plain-text account under the state root `stateRootDir`, in network and wallet order.
  * `coinKeyOf` names the shielded coin public key of the wallet an account
  * belongs to. An account that cannot be sealed is named with why, and the
  * others are still sealed.
  */
-export async function protectAllAccounts(home: string, passphrase: string, coinKeyOf: (wallet: string) => Promise<string>): Promise<ProtectedAccount[]> {
-  const root = path.join(home, MIDNIGHT_DIR, ACCOUNTS_DIR_NAME);
+export async function protectAllAccounts(stateRootDir: string, passphrase: string, coinKeyOf: (wallet: string) => Promise<string>): Promise<ProtectedAccount[]> {
+  const root = path.join(stateRootDir, ACCOUNTS_DIR_NAME);
   const report: ProtectedAccount[] = [];
   const dirsIn = (dir: string): string[] => (fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort() : []);
   for (const network of dirsIn(root)) {
     for (const wallet of dirsIn(path.join(root, network))) {
-      const dir = accountRecordsDir(network, wallet, home);
+      const dir = accountRecordsDir(network, wallet, stateRootDir);
       // An empty folder holds no account: an earlier mn made one for a command that then failed.
       if (fs.readdirSync(dir).length === 0) continue;
       try {

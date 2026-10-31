@@ -3,10 +3,10 @@
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, readdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 
-import { MIDNIGHT_DIR, CACHE_VERSION, CACHE_DIR_NAME, DIR_MODE, FILE_MODE } from './constants.ts';
+import { CACHE_VERSION, CACHE_DIR_NAME, DIR_MODE, FILE_MODE } from './constants.ts';
+import { stateRoot } from './state-root.ts';
 
 export interface WalletCacheData {
   shielded: string;
@@ -33,8 +33,13 @@ interface CacheFile {
  * Derive the cache file path for a given address and network.
  * Path: ~/.midnight/cache/<network>/<address-prefix>.json
  */
+/** The cache folder: `cacheDir` when given, else the state root's. Every wallet cache, the Dust and shielded ones and the indexer marker included, lives under it. */
+export function cacheRootDir(cacheDir?: string): string {
+  return cacheDir ?? join(stateRoot(), CACHE_DIR_NAME);
+}
+
 export function getCachePath(address: string, network: string, cacheDir?: string): string {
-  const base = cacheDir ?? join(homedir(), MIDNIGHT_DIR, CACHE_DIR_NAME);
+  const base = cacheRootDir(cacheDir);
   // Use first 20 chars of address as prefix (enough to avoid collisions, short enough for filesystem)
   const prefix = address.slice(0, 20);
   return join(base, network, `${prefix}.json`);
@@ -147,7 +152,7 @@ export function validateWalletCacheChainId(
   // Caller fetches the chain's current genesis hash once and passes it in.
   if (!currentChainId) return []; // node unreachable — skip validation
 
-  const base = cacheDir ?? join(homedir(), MIDNIGHT_DIR, CACHE_DIR_NAME);
+  const base = cacheRootDir(cacheDir);
   const dir = join(base, network);
   if (!existsSync(dir)) return [];
 
@@ -178,7 +183,7 @@ export function validateWalletCacheChainId(
  * If neither is provided, delete all caches.
  */
 export function clearWalletCache(address?: string, network?: string, cacheDir?: string): void {
-  const base = cacheDir ?? join(homedir(), MIDNIGHT_DIR, CACHE_DIR_NAME);
+  const base = cacheRootDir(cacheDir);
 
   if (address && network) {
     // Delete specific cache file

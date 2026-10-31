@@ -13,6 +13,7 @@ import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { getNetworkConfig } from '../lib/network.ts';
 import { openGrantAccount } from '../lib/grant/account.ts';
 import { createAccountKey, isSealedAccount, sealedOwnerStore } from '../lib/grant/sealed-account.ts';
+import { stateRootIn } from './helpers/state-root-in.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const RECORD = { contractAddress: '5e'.repeat(32), bootSalt: '3a'.repeat(32), encryptionSecret: '2b'.repeat(32) };
@@ -21,7 +22,7 @@ const NETWORK = getNetworkConfig('undeployed');
 let home: string;
 let dir: string;
 const open = (passphrase = PASSPHRASE, warn: (line: string) => void = () => {}) =>
-  openGrantAccount(NETWORK, dir, () => {}, { home, source: { env: { [PASSPHRASE_ENV]: passphrase }, prompter: null }, warn });
+  openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), source: { env: { [PASSPHRASE_ENV]: passphrase }, prompter: null }, warn });
 
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-grant-account-'));
@@ -34,7 +35,7 @@ afterEach(() => {
 
 describe('opening an account', () => {
   it('opens a sealed account with the passphrase, its private state under a password of its own', async () => {
-    establishPassphrase(home, PASSPHRASE);
+    establishPassphrase(stateRootIn(home), PASSPHRASE);
     sealedOwnerStore(dir, createAccountKey(dir, PASSPHRASE)).writeOwner(RECORD);
     const account = await open();
     expect(account.protection).toBe('sealed');
@@ -45,7 +46,7 @@ describe('opening an account', () => {
   });
 
   it('refuses a sealed account with another passphrase', async () => {
-    establishPassphrase(home, PASSPHRASE);
+    establishPassphrase(stateRootIn(home), PASSPHRASE);
     createAccountKey(dir, PASSPHRASE);
     await expect(open('not the passphrase at all')).rejects.toThrow(WrongPassphraseError);
   });

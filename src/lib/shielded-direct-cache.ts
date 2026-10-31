@@ -12,15 +12,15 @@
 import { bindCachesToIndexer } from './cache-indexer.ts';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, readdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import { MIDNIGHT_DIR, CACHE_DIR_NAME, DIR_MODE, FILE_MODE } from './constants.ts';
+import { DIR_MODE, FILE_MODE } from './constants.ts';
 import { deriveShieldedSeed } from './derivation.ts';
 import { readShieldedBalanceDirect, type ShieldedDirectOptions } from './shielded-direct.ts';
 import { fetchEventTip, isCursorBeyondTip } from './event-tip.ts';
+import { cacheRootDir } from './wallet-cache.ts';
 
 // v2: ledger-9 states replace ledger-8 ones. Dev-preset localnets share a genesis
 // hash, so the chain-id guard can't keep a ledger-8 cache off a ledger-9 chain.
@@ -52,7 +52,7 @@ export function shieldedCoinPublicKeyHexFromSeed(seedBuffer: Buffer): string {
 }
 
 function shieldedCacheDir(network: string, cacheDir?: string): string {
-  const base = cacheDir ?? join(homedir(), MIDNIGHT_DIR, CACHE_DIR_NAME);
+  const base = cacheRootDir(cacheDir);
   return join(base, network);
 }
 
@@ -146,7 +146,7 @@ export function clearShieldedDirectCache(
   pubkeyHex?: string,
   cacheDir?: string,
 ): void {
-  const base = cacheDir ?? join(homedir(), MIDNIGHT_DIR, CACHE_DIR_NAME);
+  const base = cacheRootDir(cacheDir);
 
   if (network && pubkeyHex) {
     const path = getShieldedCachePath(network, pubkeyHex, cacheDir);
