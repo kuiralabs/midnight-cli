@@ -1,10 +1,11 @@
 // Registering a wallet's NIGHT for Dust generation and waiting until it has
 // Dust to spend. `mn dust register` and `mn dev` both register through here.
 
-import { suppressSdkTransientErrors, waitForLiteSyncedState } from './facade.ts';
-import { ensureDust, suppressRpcNoise } from './transfer.ts';
+import { waitForLiteSyncedState } from './facade.ts';
+import { ensureDust } from './transfer.ts';
 import { defaultRepository } from './wallet-data-repository.ts';
 import type { NetworkConfig } from './network.ts';
+import { onSdkWarning } from './sdk-warnings.ts';
 
 export interface DustRegisterOptions {
   signal?: AbortSignal;
@@ -28,8 +29,7 @@ export interface DustRegistration {
 
 export async function registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions = {}): Promise<DustRegistration> {
   const { signal, onStatus, onSyncProgress, onSyncDetail, onSyncWarning } = options;
-  const unsuppress = suppressSdkTransientErrors(onSyncWarning);
-  const restoreRpc = suppressRpcNoise();
+  const stopListening = onSdkWarning(onSyncWarning);
   try {
     const { result, dustBalance } = await defaultRepository().withFacade(
       seed,
@@ -61,7 +61,6 @@ export async function registerDust(seed: Buffer, networkConfig: NetworkConfig, o
     if (result.txHash) registration.txHash = result.txHash;
     return registration;
   } finally {
-    restoreRpc();
-    unsuppress();
+    stopListening();
   }
 }

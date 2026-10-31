@@ -1,0 +1,128 @@
+#!/usr/bin/env node
+// Checks that library code leaves the host process alone (spec §3.1, decision
+// 20): no writing to the terminal, exiting, installing process handlers,
+// patching console, changing directory, opening a prompt, or reading the
+// environment. Commands, ui/, the shell and the MCP server may; so may the
+// modules marked below as shell concerns. String and template-literal
+// contents and comments are skipped, so the contract runner's generated
+// scripts (which run as their own process) don't count.
+//
+// Usage: node scripts/check-process-safety.mjs
+// Exits 1 when a library does something §3.1 forbids and the allowlist
+// doesn't name it. Imported, it exports findViolations.
+
+import { readFileSync } from 'node:fs';
+import { relative, resolve, dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { homeOf, sourceFiles } from './check-layering.mjs';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const SRC = join(ROOT, 'src');
+
+const RULES = [
+  ['writes to the terminal', /\bprocess\.(stdout|stderr)\.write\s*\(|\bconsole\.(log|error|warn|info|debug)\s*\(/],
+  ['exits', /\bprocess\.exit\s*\(/],
+  ['installs a process handler', /\bprocess\.(on|once|addListener|prependListener)\s*\(/],
+  ['patches console or stdout', /\bconsole\.(log|error|warn|info|debug)\s*=[^=]|\bprocess\.(stdout|stderr)\.write\s*=[^=]/],
+  ['changes directory', /\bprocess\.chdir\s*\(/],
+  ['opens a prompt', /\bfrom\s+['"](node:)?readline['"]|\brequire\(\s*['"](node:)?readline['"]\s*\)/],
+  ['reads the environment', /\bprocess\.env\b/],
+];
+
+// Shell concerns by design (1F): what they do to the process is their job.
+const SHELL_CONCERNS = new Set([
+  'lib/json-output.ts', // the --json output channel
+]);
+
+// What a library still does until its 1F slice lands. Each entry is
+// file → rules it may break; the list only shrinks.
+export const ALLOWED = {
+  // Slice 2, notices
+  'lib/dapp-connector.ts': ['writes to the terminal'],
+  'lib/dev/keys.ts': ['writes to the terminal'],
+  'lib/facade.ts': ['writes to the terminal'],
+  'lib/grant/account.ts': ['writes to the terminal'],
+  'lib/test/browser-test.ts': ['writes to the terminal'],
+  'lib/verbose.ts': ['writes to the terminal'],
+  'lib/wallet-config.ts': ['writes to the terminal'],
+  'lib/ws-rpc.ts': ['writes to the terminal'],
+  // Slice 3, the prompter
+  'lib/approval.ts': ['writes to the terminal', 'opens a prompt'],
+  'lib/test/create-prompt.ts': ['writes to the terminal', 'opens a prompt'],
+  // Slices 3 and 4, the prompter and settings
+  'lib/passphrase.ts': ['opens a prompt', 'reads the environment'],
+  // Slice 4, settings
+  'lib/contract/runner.ts': ['reads the environment'],
+  'lib/dev/compile.ts': ['reads the environment'],
+  'lib/dev/test.ts': ['reads the environment'],
+  'lib/dust-direct.ts': ['reads the environment'],
+  'lib/dust-sync-native.ts': ['reads the environment'],
+  'lib/network.ts': ['reads the environment'],
+  'lib/resolve-network.ts': ['reads the environment'],
+  'lib/seed-resolver.ts': ['reads the environment'],
+};
+
+/** Replaces string, template-literal and comment contents with spaces, keeping line breaks. */
+function codeOnly(source) {
+  let out = '';
+  let i = 0;
+  const blank = (s) => s.replace(/[^\n]/g, ' ');
+  while (i < source.length) {
+    const c = source[i];
+    const next = source[i + 1];
+    if (c === '/' && next === '/') {
+      const end = source.indexOf('\n', i);
+      const stop = end === -1 ? source.length : end;
+      out += blank(source.slice(i, stop));
+      i = stop;
+    } else if (c === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2);
+      const stop = end === -1 ? source.length : end + 2;
+      out += blank(source.slice(i, stop));
+      i = stop;
+    } else if (c === '"' || c === "'" || c === '`') {
+      let j = i + 1;
+      while (j < source.length && source[j] !== c) j += source[j] === '\\' ? 2 : 1;
+      out += c + blank(source.slice(i + 1, j)) + (j < source.length ? c : '');
+      i = j + 1;
+    } else {
+      out += c;
+      i += 1;
+    }
+  }
+  return out;
+}
+
+function isLibrary(file) {
+  const rel = relative(SRC, file);
+  if (rel.startsWith('commands/') || rel.startsWith('ui/') || rel.startsWith('__tests__/')) return false;
+  if (['shell', 'mcp'].includes(homeOf(file))) return false;
+  return !SHELL_CONCERNS.has(rel);
+}
+
+/** Every §3.1 break in library code that the allowlist doesn't name: { file, line, rule }. */
+export function findViolations(files = sourceFiles(), allowed = ALLOWED) {
+  const found = [];
+  for (const file of files.filter(isLibrary)) {
+    const rel = relative(SRC, file);
+    const lines = codeOnly(readFileSync(file, 'utf8')).split('\n');
+    // An import line keeps its specifier: check prompts on the raw source.
+    const raw = readFileSync(file, 'utf8').split('\n');
+    for (const [rule, pattern] of RULES) {
+      if ((allowed[rel] ?? []).includes(rule)) continue;
+      const scan = rule === 'opens a prompt' ? raw : lines;
+      scan.forEach((text, at) => {
+        if (pattern.test(text) && !(rule === 'opens a prompt' && /^\s*(\/\/|\*)/.test(text))) found.push({ file: rel, line: at + 1, rule });
+      });
+    }
+  }
+  return found;
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  const found = findViolations();
+  for (const v of found) process.stdout.write(`src/${v.file}:${v.line}  ${v.rule}\n`);
+  const allowedCount = Object.keys(ALLOWED).length;
+  process.stdout.write(`\n${found.length === 0 ? 'Libraries leave the process alone' : `${found.length} place(s) where a library touches the process`}${allowedCount > 0 ? ` (${allowedCount} file(s) still allowed until their 1F slice)` : ''}.\n`);
+  process.exit(found.length === 0 ? 0 : 1);
+}

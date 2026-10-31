@@ -25,13 +25,13 @@ const SRC = join(ROOT, 'src');
 // under src/ wins. A file that matches nothing fails the check.
 const HOMES = [
   ['shell', /^wallet\.ts$/],
-  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command)\.ts$/],
+  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise)\.ts$/],
   ['shell', /^ui\/(animate|art)\.ts$/],
   ['mcp', /^mcp-server\.ts$/],
   ['mcp', /^lib\/mcp\//],
 
   ['core', /^commands\/(config|help|manual)\.ts$/],
-  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration)\.ts$/],
+  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings)\.ts$/],
   ['core', /^ui\/(colors|format|spinner)\.ts$/],
 
   ['chain', /^commands\/status\.ts$/],

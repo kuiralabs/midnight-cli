@@ -8,7 +8,7 @@ import * as rx from 'rxjs';
 
 import { type NetworkConfig } from './network.ts';
 import { getNetworkId } from './network-id.ts';
-import { type FacadeBundle, hasDustAvailable, quickSync, suppressSdkTransientErrors } from './facade.ts';
+import { type FacadeBundle, hasDustAvailable, quickSync } from './facade.ts';
 import { defaultRepository } from './wallet-data-repository.ts';
 import { verbose } from './verbose.ts';
 import { nightToMicro } from './amount.ts';
@@ -88,6 +88,7 @@ import { awaitDustForFee, sleep } from './dust-wait.ts';
 /** How long the transfer retry waits for Dust to grow when the fee is above the pre-flight threshold. */
 const DUST_GROW_WAIT_MS = 10_000;
 import { toDust } from '../ui/format.ts';
+import { onSdkWarning } from './sdk-warnings.ts';
 
 
 /** Format milliseconds as "Xs" or "Xm Ys" for human-friendly elapsed display. */
@@ -97,27 +98,6 @@ function formatElapsed(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}m ${seconds}s`;
-}
-
-// ── RPC noise suppression ────────────────────────────────────────────
-
-/**
- * Suppress polkadot-js RPC-CORE noise (logs "Custom error: 138" to
- * console.warn/error on each failed submit). Returns a restore function.
- *
- * Called once at the outer level (executeTransfer, dustRegister) —
- * inner functions like registerNightUtxos do NOT suppress separately.
- */
-export function suppressRpcNoise(): () => void {
-  const originalWarn = console.warn;
-  const originalError = console.error;
-  const hasNoise = (args: any[]) => args.some(a => String(a).includes('RPC-CORE'));
-  console.warn = (...args: any[]) => { if (!hasNoise(args)) originalWarn(...args); };
-  console.error = (...args: any[]) => { if (!hasNoise(args)) originalError(...args); };
-  return () => {
-    console.warn = originalWarn;
-    console.error = originalError;
-  };
 }
 
 // ── Dust registration ────────────────────────────────────────────────
@@ -171,7 +151,7 @@ async function submitDustRegistration(
  * Each retry rebuilds the transaction with a newer timestamp, giving a
  * larger time delta and thus a larger allow_fee_payment.
  *
- * Caller is responsible for RPC noise suppression.
+ * The shell keeps the RPC noise off the terminal (sdk-noise.ts).
  */
 export async function registerNightUtxos(
   bundle: FacadeBundle,
@@ -247,7 +227,7 @@ export async function registerNightUtxos(
  * outputs) can be registered later via `midnight dust register`.
  *
  * Used by: executeTransfer (transfer/airdrop commands), dustRegister command.
- * Caller is responsible for RPC noise suppression.
+ * The shell keeps the RPC noise off the terminal (sdk-noise.ts).
  */
 export async function ensureDust(
   bundle: FacadeBundle,
@@ -482,8 +462,7 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
 
   // Suppress SDK transient errors + polkadot-js RPC noise for the duration
   // of the transfer (covers dust registration AND tx submission).
-  const unsuppress = suppressSdkTransientErrors(onSyncWarning);
-  const restoreRpc = suppressRpcNoise();
+  const stopListening = onSdkWarning(onSyncWarning);
 
   try {
     return await defaultRepository().withFacade(
@@ -553,7 +532,6 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
       },
     );
   } finally {
-    restoreRpc();
-    unsuppress();
+    stopListening();
   }
 }

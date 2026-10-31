@@ -18,9 +18,7 @@ import { readShieldedBalanceCached } from '../lib/shielded-direct-cache.ts';
 import { assertLedgerSupported } from '../lib/ledger-guard.ts';
 import { deriveShieldedAddress, deriveUnshieldedAddress } from '../lib/derive-address.ts';
 import { getChainGenesisHash } from '../lib/chain-id.ts';
-import { suppressSdkTransientErrors } from '../lib/facade.ts';
 import { createEtaEstimator, formatSyncStatus } from '../lib/sync-eta.ts';
-import { suppressRpcNoise } from '../lib/transfer.ts';
 import { header, keyValue, divider, formatNight, formatAddress, toNight } from '../ui/format.ts';
 import { bold, dim } from '../ui/colors.ts';
 import { start as startSpinner, type Spinner } from '../ui/spinner.ts';
@@ -195,8 +193,6 @@ async function walletBalance(args: ParsedArgs): Promise<void> {
     indexerWS: getFlag(args, 'indexer-ws'),
   }, networkName);
 
-  const unsuppress = suppressSdkTransientErrors();
-  const restoreRpc = suppressRpcNoise();
   const noCache = hasFlag(args, 'no-cache');
   const isJson = hasFlag(args, 'json');
   const nightToken = ledger.unshieldedToken().raw;
@@ -337,7 +333,5 @@ async function walletBalance(args: ParsedArgs): Promise<void> {
     activeSpinner?.fail('Failed');
     throw err;
   } finally {
-    restoreRpc();
-    unsuppress();
   }
 }

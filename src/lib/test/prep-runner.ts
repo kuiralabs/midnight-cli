@@ -9,9 +9,9 @@ import { resolveWalletPath, unlockWallet } from '../wallet-config.ts';
 import { resolveNetwork } from '../resolve-network.ts';
 import type { NetworkConfig, NetworkName } from '../network.ts';
 import { assertLedger9StackReachable, assertLedgerSupported } from '../ledger-guard.ts';
-import { buildFacade, hasDustAvailable, startAndSyncFacade, stopFacade, suppressSdkTransientErrors, waitForDustAvailable } from '../facade.ts';
+import { buildFacade, hasDustAvailable, startAndSyncFacade, stopFacade, waitForDustAvailable } from '../facade.ts';
 import { loadWalletCache, saveWalletCache } from '../wallet-cache.ts';
-import { executeTransfer, ensureDust, suppressRpcNoise } from '../transfer.ts';
+import { executeTransfer, ensureDust } from '../transfer.ts';
 import { GENESIS_SEED } from '../constants.ts';
 import { deriveUnshieldedAddress } from '../derive-address.ts';
 
@@ -19,6 +19,7 @@ import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallb
 import { startServeOrReuse } from '../serve-manager.ts';
 import { OWN_COMMAND_DUST_WAIT_MS } from '../dust-wait.ts';
 import { startBuild } from './build-manager.ts';
+import { onSdkWarning } from '../sdk-warnings.ts';
 
 /**
  * Run all prep steps defined in the config, in order.
@@ -119,10 +120,9 @@ async function stepBalance(amount: number, config: DappTestConfig, callbacks: Pr
 
   // Check current balance — use fresh cache since localnet may have restarted
   callbacks.onMessage('Checking balance...');
-  const unsuppress = suppressSdkTransientErrors((_tag, msg) => {
+  const stopListening = onSdkWarning((_tag, msg) => {
     callbacks.onMessage(`SDK: ${msg}`);
   });
-  const restoreRpc = suppressRpcNoise();
   bindCachesToIndexer(network, networkConfig.indexerWS);
   const cache = loadWalletCache(address, network);
   const bundle = await buildFacade(seedBuffer, networkConfig, cache);
@@ -149,8 +149,7 @@ async function stepBalance(amount: number, config: DappTestConfig, callbacks: Pr
       return;
     }
   } finally {
-    restoreRpc();
-    unsuppress();
+    stopListening();
     try { await stopFacade(bundle); } catch {}
   }
 
@@ -196,8 +195,6 @@ async function stepDust(config: DappTestConfig, callbacks: PrepCallbacks): Promi
   const seedBuffer = Buffer.from(walletConfig.seed, 'hex');
   const address = walletConfig.addresses[network as NetworkName];
 
-  const unsuppress = suppressSdkTransientErrors();
-  const restoreRpc = suppressRpcNoise();
   bindCachesToIndexer(network, networkConfig.indexerWS);
   const cache = loadWalletCache(address, network);
   const bundle = await buildFacade(seedBuffer, networkConfig, cache);
@@ -238,8 +235,6 @@ async function stepDust(config: DappTestConfig, callbacks: PrepCallbacks): Promi
     callbacks.onMessage('Dust is available');
     try { await saveWalletCache(address, network, bundle.facade); } catch {}
   } finally {
-    restoreRpc();
-    unsuppress();
     try { await stopFacade(bundle); } catch {}
   }
 }

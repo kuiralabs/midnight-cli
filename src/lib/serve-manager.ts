@@ -8,14 +8,14 @@ import { loadWalletConfig, resolveWalletPath, unlockWallet } from './wallet-conf
 import { resolveNetwork } from './resolve-network.ts';
 import { assertLedgerSupported } from './ledger-guard.ts';
 import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName } from './network.ts';
-import { buildFacade, isFacadeSynced, startAndSyncFacade, stopFacade, suppressSdkTransientErrors, waitForDustAvailable } from './facade.ts';
+import { buildFacade, isFacadeSynced, startAndSyncFacade, stopFacade, waitForDustAvailable } from './facade.ts';
 import { bindCachesToIndexer, describeIndexerChange } from './cache-indexer.ts';
 import { loadWalletCache, saveWalletCache } from './wallet-cache.ts';
-import { suppressRpcNoise } from './transfer.ts';
 import { createDAppConnector, type DAppConnectorCallbacks } from './dapp-connector.ts';
 import { createRpcServer, type RpcServer } from './ws-rpc.ts';
 import { DEFAULT_SERVE_PORT } from './constants.ts';
 import type { FacadeBundle } from './facade.ts';
+import { onSdkWarning } from './sdk-warnings.ts';
 
 /** A running mn serve, and how to stop it. */
 export interface ServeHandle {
@@ -234,10 +234,9 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
   const address = config.addresses[networkName];
 
   // Suppress SDK noise
-  const unsuppress = suppressSdkTransientErrors((_tag, msg) => {
+  const stopListening = onSdkWarning((_tag, msg) => {
     onMessage(`SDK: ${msg}`);
   });
-  const restoreRpc = suppressRpcNoise();
 
   // Build & sync facade
   onMessage('Building wallet facade...');
@@ -289,8 +288,7 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
     connector,
     async stop() {
       connector.dispose();
-      restoreRpc();
-      unsuppress();
+      stopListening();
       try { await stopFacade(bundle); } catch { /* best-effort */ }
     },
   };

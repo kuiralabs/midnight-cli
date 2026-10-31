@@ -26,6 +26,7 @@ import { createConfirmationStore } from './lib/mcp/confirmation.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
+import { installSdkNoiseFilters } from './lib/sdk-noise.ts';
 
 // Skill resources — teach MCP clients how to use this CLI conversationally.
 // Split into:
@@ -1193,6 +1194,8 @@ async function main() {
   assertNodeSupported();
   // Endpoint URLs can carry a Blockfrost project id: no response or log shows it.
   hideProjectIdsInOutput();
+  // The SDK's transient errors and RPC noise are filtered for the server's life; tools only listen for them.
+  installSdkNoiseFilters();
   // The server runs facades on demand (balance/transfer/etc.). A cold shielded
   // sync would overflow Node's default heap, so re-exec once at startup with
   // more headroom. No-op when launched via `mn --mcp` (already bumped) or when
