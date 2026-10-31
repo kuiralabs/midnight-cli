@@ -2,6 +2,7 @@
 // Transport layer for the DApp Connector — dispatches RPC calls to handler functions
 
 import { WebSocketServer, WebSocket } from 'ws';
+import { notice } from './notices.ts';
 import type { ErrorCode, APIError } from '@midnightntwrk/dapp-connector-api';
 
 // ── JSON-RPC 2.0 types ──
@@ -222,7 +223,7 @@ export function createRpcServer(options: RpcServerOptions): RpcServer {
   wss.on('error', (err: Error) => {
     // Callers handle this via the close() method or process-level error handling
     // We just need to prevent the uncaught exception
-    process.stderr.write(`WebSocket server error: ${err.message}\n`);
+    notice(`WebSocket server error: ${err.message}`);
   });
 
   wss.on('connection', (ws: WebSocket) => {

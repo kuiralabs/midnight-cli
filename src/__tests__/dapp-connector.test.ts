@@ -28,6 +28,7 @@ import { DustAddress, MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import type { FeeLimits } from '../lib/fee-limits.ts';
 import type { ApprovalOptions } from '../lib/approval.ts';
+import { setNoticeSink } from '../lib/notices.ts';
 import {
   AGENT_SK, NIGHT, WALLET_SK, WALLET_VK, agentPaysMerchant, buildTx, pay, sealedBytes, spend, unsealedBytes,
 } from './helpers/ledger-tx.ts';
@@ -1165,7 +1166,7 @@ describe('dapp-connector', () => {
       it('waits the time the wallet takes to generate the rest, then pays', async () => {
         vi.useFakeTimers();
         const written: string[] = [];
-        process.stderr.write = ((chunk: any) => { written.push(String(chunk)); return true; }) as any;
+        setNoticeSink((line) => written.push(line));
         // 1 DUST: 0.65 more and a little over, 89 seconds at this rate.
         const balance = vi.fn().mockRejectedValueOnce(shortOf(SPECK)).mockResolvedValue({ type: 'UNBOUND' });
         connector = createConnector({ bundleOverrides: { stateFn: growingFrom(Date.now()), balanceUnboundTransaction: balance } });
@@ -1178,6 +1179,7 @@ describe('dapp-connector', () => {
         expect(balance).toHaveBeenCalledTimes(2);
         expect(written.join('')).toContain('Dust: 0.35 of the 1.00 DUST this fee takes; waiting about 2 minutes for the rest...');
         vi.useRealTimers();
+        setNoticeSink(null);
       });
 
       it('refuses at once, with the time, when that is longer than a request waits', async () => {

@@ -9,6 +9,7 @@
 // midnight-level-db under the store name and password it was first made with.
 
 import { homedir } from 'node:os';
+import { notice } from '../notices.ts';
 import { join } from 'node:path';
 import { artefactCache } from '@kuiralabs/midnight-account-chain/artefacts';
 import { type AccountContext, type ProgressEvent, accountContext, describeProgress, networkOf } from '@kuiralabs/midnight-account-chain/context';
@@ -160,7 +161,7 @@ export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir:
   const plainStore = directoryOwnerStore(recordsDir);
   const plainKeys = directoryDeviceKeys(recordsDir);
   if (plainStore.readOwner() !== undefined || plainKeys.read() !== undefined) {
-    (options.warn ?? ((line: string) => process.stderr.write(line + '\n')))(
+    (options.warn ?? notice)(
       `Warning: the account in ${recordsDir} is not protected: its owner key and records are in plain text. Encrypt them with: midnight wallet protect`,
     );
     return { context, store: plainStore, keys: plainKeys, location: { database, store: PRIVATE_STATE_STORE, password: () => LEGACY_STORE_PASSWORD }, protection: 'plain-text' };

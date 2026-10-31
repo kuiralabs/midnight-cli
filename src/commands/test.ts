@@ -491,6 +491,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, signal?: AbortSign
           prompt,
           dappDir,
           logFile: testLogFile,
+          onOutput: (chunk) => process.stdout.write(chunk),
           onMessage: (msg) => {
             if (!jsonMode) process.stderr.write(dim(`  ${msg}`) + '\n');
           },
