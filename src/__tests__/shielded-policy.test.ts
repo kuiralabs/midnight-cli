@@ -6,6 +6,7 @@ describe('shielded-policy', () => {
     expect(networkHasShielded('undeployed')).toBe(true);
     expect(networkHasShielded('preview')).toBe(false);
     expect(networkHasShielded('preprod')).toBe(false);
+    expect(networkHasShielded('stagenet')).toBe(false);
   });
 
   it('enables shielded sync on undeployed regardless of the force flag', () => {
