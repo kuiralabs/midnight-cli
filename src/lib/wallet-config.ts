@@ -4,6 +4,7 @@ import { homedir } from 'os';
 import { MIDNIGHT_DIR, DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE, isValidWalletName } from './constants.ts';
 import { isValidNetworkName, type NetworkName } from './network.ts';
 import { loadCliConfig, saveCliConfig } from './cli-config.ts';
+import { getDefaultWalletPath, getWalletsDir, ensureWalletsDir } from './wallet-paths.ts';
 import { deriveAllAddresses, deriveAllShieldedAddresses } from './derive-address.ts';
 import { isSealedSecret, openSecret, sealSecret } from './keystore.ts';
 import { FileExistsError, writeJsonDurably } from './durable-file.ts';
@@ -71,33 +72,6 @@ export function saveShieldedAddress(
  */
 export function getAddress(config: WalletConfig, network: NetworkName): string {
   return config.addresses[network];
-}
-
-function getMidnightDir(): string {
-  return path.join(homedir(), MIDNIGHT_DIR);
-}
-
-function getWalletsDir(): string {
-  return path.join(getMidnightDir(), WALLETS_DIR_NAME);
-}
-
-function getDefaultWalletPath(): string {
-  return path.join(getMidnightDir(), DEFAULT_WALLET_FILENAME);
-}
-
-function ensureMidnightDir(): void {
-  const dir = getMidnightDir();
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
-  }
-}
-
-function ensureWalletsDir(): void {
-  ensureMidnightDir();
-  const dir = getWalletsDir();
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
-  }
 }
 
 /**
@@ -287,37 +261,6 @@ export function removeWallet(name: string): void {
   }
 
   fs.unlinkSync(walletPath);
-}
-
-/**
- * Migrate old ~/.midnight/wallet.json to ~/.midnight/wallets/default.json.
- * Silent, one-time migration. No-op if wallets/ already has files or old wallet doesn't exist.
- */
-export function migrateOldWallet(): void {
-  const oldPath = getDefaultWalletPath();
-  if (!fs.existsSync(oldPath)) return;
-
-  const walletsDir = getWalletsDir();
-
-  // If wallets/ already has files, don't migrate (user already using multi-wallet)
-  if (fs.existsSync(walletsDir)) {
-    const existing = fs.readdirSync(walletsDir).filter(f => f.endsWith('.json'));
-    if (existing.length > 0) return;
-  }
-
-  // Ensure wallets directory exists
-  ensureWalletsDir();
-
-  // Move old wallet to wallets/default.json
-  const newPath = path.join(walletsDir, `${DEFAULT_WALLET_NAME}.json`);
-  fs.copyFileSync(oldPath, newPath);
-  fs.chmodSync(newPath, FILE_MODE);
-  fs.unlinkSync(oldPath);
-
-  // Set active wallet to default
-  const config = loadCliConfig();
-  config.wallet = DEFAULT_WALLET_NAME;
-  saveCliConfig(config);
 }
 
 /** Throws, with how to make one, when there is no wallet file at `resolvedPath`. */

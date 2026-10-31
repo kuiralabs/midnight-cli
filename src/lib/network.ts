@@ -1,25 +1,17 @@
 import { blockfrostEndpoints, usesBlockfrost } from './blockfrost.ts';
 import { execSync } from 'child_process';
-import { ProtocolVersion } from '@midnightntwrk/wallet-sdk';
 import { loadCliConfig, getEndpointOverridesForNetwork } from './cli-config.ts';
 import { INDEXER_GRAPHQL_PATH, INDEXER_GRAPHQL_WS_PATH } from './constants.ts';
 
 export type NetworkName = 'preprod' | 'preview' | 'undeployed';
 
 /**
- * Where ledger-v9 starts reading each chain, by protocol version. The SDK picks
- * the ledger version from this, and a wrong value doesn't degrade gracefully:
- * it makes the wrong ledger read the chain.
- *
- * This build targets ledger-9-native chains (the localnet reports protocol
- * version 2001000). wallet-sdk 2.0 can't sync against today's ledger-8
- * indexers anyway: it needs the 4.4 indexer schema.
- *
- * When preview/preprod fork to ledger 9, their schedule needs the version
- * the hand-over is enacted at. A chain with ledger-8 history doesn't use
- * the v9-native schedule.
+ * The protocol version ledger 9 starts at on the chains this build targets:
+ * chains born on ledger 9 (the localnet reports 2001000). A plain number, so
+ * the base and the ledger guard need no SDK; the wallet passes the SDK's own
+ * schedule to the facade (`fork-schedule.ts`), and a test keeps the two equal.
  */
-export const FORK_SCHEDULE: ProtocolVersion.ForkSchedule = ProtocolVersion.V9NativeForkSchedule;
+export const LEDGER_9_FORK_VERSION = 2_000_000n;
 
 export interface NetworkConfig {
   indexer: string;

@@ -361,7 +361,7 @@ Working on the CLI itself? Clone, install, build, test:
 git clone https://github.com/kuiralabs/midnight-cli.git
 cd midnight-cli
 npm install
-npm run build       # bun build → dist/wallet.js + dist/mcp-server.js
+npm run build       # bun build → dist/wallet.js + dist/mcp-server.js, sharing code-split chunks
 npm test            # vitest run
 npm run typecheck   # tsc --noEmit
 ```

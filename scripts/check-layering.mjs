@@ -9,13 +9,14 @@
 // and the MCP server dispatch to one.
 //
 // Usage: node scripts/check-layering.mjs [--all]
+// Imported, it exports sourceFiles and homeOf: which package each file of src/ is in.
 // Exits 1 when a file has no package, or an import breaks a rule. The shell and
 // the MCP server are reported but do not fail the check until the command
 // registry rewires them; --all makes them fail too.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'src');
@@ -37,7 +38,7 @@ const HOMES = [
   ['chain', /^lib\/(node-rpc|chain-id|indexer-graphql|graphql-ws-subscription|event-tip|ledger-guard|node-ready|indexer-ready|proof-server-ready|chain-clock|endpoint-check|balance-subscription)\.ts$/],
 
   ['wallet', /^commands\/(wallet|generate|address|genesis-address|info|balance|transfer|airdrop|dust|cache)\.ts$/],
-  ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|wallet-cache|cache-indexer|transfer|transfer-request|sync-eta|wallet-can-pay|wallet-create|airdrop|wallet-protector|chain-caches)\.ts$/],
+  ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|wallet-cache|cache-indexer|transfer|transfer-request|sync-eta|wallet-can-pay|wallet-create|airdrop|wallet-protector|chain-caches|wallet-paths|fork-schedule)\.ts$/],
   ['wallet', /^lib\/(dust-[a-z-]+|shielded-[a-z-]+)\.ts$/],
 
   ['contract', /^commands\/(contract|inspect-cost)\.ts$/],
@@ -78,7 +79,7 @@ const SDK_FREE = new Set(['core', 'chain']);
 // import ... from 'x', export ... from 'x', import 'x', import('x').
 const IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+)(['"])([^'"]+)\1/gm;
 
-function sourceFiles(dir) {
+export function sourceFiles(dir = SRC) {
   const files = [];
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
@@ -91,7 +92,7 @@ function sourceFiles(dir) {
   return files;
 }
 
-function homeOf(file) {
+export function homeOf(file) {
   const rel = relative(SRC, file);
   return HOMES.find(([, pattern]) => pattern.test(rel))?.[0];
 }
@@ -169,5 +170,8 @@ function report({ unhomed, violations }, failDeferred) {
   return problems === 0;
 }
 
-const ok = report(check(), process.argv.includes('--all'));
-process.exit(ok ? 0 : 1);
+// Run as a script; imported (by the SDK-free base test), it only lends its package table.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  const ok = report(check(), process.argv.includes('--all'));
+  process.exit(ok ? 0 : 1);
+}

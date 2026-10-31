@@ -10,7 +10,7 @@ import { classifyError, humanizeNetworkError, EXIT_INVALID_ARGS } from './lib/ex
 import { UsageError, isUsageError } from './lib/errors.ts';
 import { writeJsonError } from './lib/json-output.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
-import { migrateOldWallet } from './lib/wallet-config.ts';
+import { migrateOldWallet } from './lib/wallet-paths.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';

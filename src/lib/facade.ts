@@ -17,7 +17,8 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk';
 import * as rx from 'rxjs';
 
-import { type NetworkConfig, FORK_SCHEDULE } from './network.ts';
+import { type NetworkConfig } from './network.ts';
+import { FORK_SCHEDULE } from './fork-schedule.ts';
 import { getNetworkId } from './network-id.ts';
 import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from './derivation.ts';
 import { type WalletCacheData } from './wallet-cache.ts';

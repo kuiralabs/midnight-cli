@@ -6,11 +6,11 @@ import {
   resolveWalletPath,
   listWallets,
   removeWallet,
-  migrateOldWallet,
   setActiveWallet,
   getActiveWalletName,
   loadWalletConfig,
 } from '../lib/wallet-config.ts';
+import { migrateOldWallet } from '../lib/wallet-paths.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
 import {
   loadCliConfig,
