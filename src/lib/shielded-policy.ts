@@ -9,7 +9,7 @@
 import type { NetworkName } from './network.ts';
 
 /** Networks with no shielded faucet — shielded sync is skipped by default. */
-const NO_SHIELDED_FAUCET: readonly NetworkName[] = ['preview', 'preprod'];
+const NO_SHIELDED_FAUCET: readonly NetworkName[] = ['preview', 'preprod', 'stagenet'];
 
 /** True when shielded funds are actually reachable on this network. */
 export function networkHasShielded(network: NetworkName): boolean {

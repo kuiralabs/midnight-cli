@@ -10,12 +10,14 @@ import { assertLedgerSupported } from './ledger-guard.ts';
 import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName } from './network.ts';
 import { buildFacade, isFacadeSynced, startAndSyncFacade, stopFacade, waitForDustAvailable } from './facade.ts';
 import { bindCachesToIndexer, describeIndexerChange } from './cache-indexer.ts';
-import { loadWalletCache, saveWalletCache } from './wallet-cache.ts';
+import { saveWalletCache } from './wallet-cache.ts';
+import { defaultRepository } from './wallet-data-repository.ts';
 import { createDAppConnector, type DAppConnectorCallbacks } from './dapp-connector.ts';
 import { createRpcServer, type RpcServer } from './ws-rpc.ts';
 import { DEFAULT_SERVE_PORT } from './constants.ts';
 import type { FacadeBundle } from './facade.ts';
 import { onSdkWarning } from './sdk-warnings.ts';
+import { shieldedSyncEnabled } from './shielded-policy.ts';
 
 /** A running mn serve, and how to stop it. */
 export interface ServeHandle {
@@ -246,12 +248,21 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
     onMessage('Building wallet facade...');
     const indexerChange = bindCachesToIndexer(networkName, networkConfig.indexerWS);
     if (indexerChange) onMessage(describeIndexerChange(networkName, indexerChange));
-    const cache = loadWalletCache(address, networkName);
+    // As the repository's own borrowers do: warm the Dust checkpoint, then
+    // restore from it when there is no saved wallet, instead of the SDK
+    // replaying the chain's whole Dust history (minutes on a hosted network).
+    const repo = defaultRepository();
+    // Best-effort, as there: a failed warm-up leaves the sync below to do it.
+    try { await repo.dust(seedBuffer, networkConfig, { onStatus: onMessage }); } catch { /* best-effort */ }
+    const cache = await repo.walletStateToRestore(seedBuffer, networkConfig, networkName);
     const built = await buildFacade(seedBuffer, networkConfig, cache);
     bundle = built;
 
+    // As `mn serve` does: skip the slow shielded sync where shielded is unusable (no faucet).
+    const syncMode = shieldedSyncEnabled(networkName) ? 'full' : 'lite';
     onMessage('Syncing wallet...');
     await startAndSyncFacade(built, {
+      syncMode,
       onProgress: (applied, highest) => {
         if (highest > 0) {
           const pct = Math.min(Math.round((applied / highest) * 100), 100);
@@ -277,7 +288,7 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
       // Reads answer from the state this sync ended on, and from every later
       // one that is synced by the rule the sync used.
       initialState: syncedState,
-      isCurrent: (state) => isFacadeSynced(state, 'full', built.emptyStreams),
+      isCurrent: (state) => isFacadeSynced(state, syncMode, built.emptyStreams),
       dustWaitMs: options.dustWaitMs,
       callbacks: {
         onPhaseStart: (_connId, _method, phase) => {

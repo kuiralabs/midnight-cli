@@ -271,6 +271,16 @@ export class WalletDataRepository {
    * transfer on a hosted network always timed out. Null when there is no
    * checkpoint to start from: the wallet is then built from its keys.
    */
+  /**
+   * The saved state a wallet restores from: its own, else a new wallet's on
+   * the Dust checkpoint (see freshWalletOnDustCheckpoint). Null builds it from
+   * its keys. Every facade mn starts for writing starts from this.
+   */
+  async walletStateToRestore(seed: Buffer, network: NetworkConfig, networkName: NetworkName): Promise<WalletCacheData | null> {
+    return loadWalletCache(deriveUnshieldedAddress(seed, networkName), networkName, this.cacheDir)
+      ?? await this.freshWalletOnDustCheckpoint(seed, network, networkName);
+  }
+
   private async freshWalletOnDustCheckpoint(seed: Buffer, network: NetworkConfig, networkName: NetworkName): Promise<WalletCacheData | null> {
     const checkpoint = loadDustCache(networkName, dustPublicKeyHexFromSeed(seed), this.cacheDir);
     if (!checkpoint || checkpoint.lastAppliedEventId < 0) return null;
@@ -495,8 +505,7 @@ export class WalletDataRepository {
         if (opts.signal?.aborted) throw new Error(CANCELLED_MESSAGE);
         const cacheBeforeBuild = opts.forceFresh
           ? null
-          : loadWalletCache(address, networkName, this.cacheDir)
-            ?? await this.freshWalletOnDustCheckpoint(seed, network, networkName);
+          : await this.walletStateToRestore(seed, network, networkName);
         bundle = await buildFacade(seed, network, cacheBeforeBuild);
         try {
           syncedState = await startAndSyncFacade(bundle, {
