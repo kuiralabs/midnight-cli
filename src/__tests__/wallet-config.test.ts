@@ -21,7 +21,7 @@ const VALID_CONFIG: WalletConfig = {
 
 const PASSPHRASE = 'correct horse battery staple';
 // Unlocking in the test's own home, a plain-text wallet's warning kept out of the output.
-const UNLOCK = { home: TEST_DIR, source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, isTTY: false }, warn: () => {} };
+const UNLOCK = { home: TEST_DIR, source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null }, warn: () => {} };
 
 beforeEach(() => {
   fs.mkdirSync(TEST_DIR, { recursive: true });

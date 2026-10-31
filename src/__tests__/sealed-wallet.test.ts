@@ -25,7 +25,7 @@ const PUBLIC = {
 
 let home: string;
 let file: string;
-const withPassphrase = (passphrase: string) => ({ home, source: { env: { [PASSPHRASE_ENV]: passphrase }, isTTY: false } });
+const withPassphrase = (passphrase: string) => ({ home, source: { env: { [PASSPHRASE_ENV]: passphrase }, prompter: null } });
 
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-sealed-wallet-'));

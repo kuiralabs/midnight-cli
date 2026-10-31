@@ -31,8 +31,9 @@ const HOMES = [
   ['mcp', /^lib\/mcp\//],
 
   ['core', /^commands\/(config|help|manual)\.ts$/],
-  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices)\.ts$/],
-  ['core', /^ui\/(colors|format|spinner)\.ts$/],
+  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter)\.ts$/],
+  ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
+  ['dev', /^ui\/test-create-prompt\.ts$/],
 
   ['chain', /^commands\/status\.ts$/],
   ['chain', /^lib\/(node-rpc|chain-id|indexer-graphql|graphql-ws-subscription|event-tip|ledger-guard|node-ready|indexer-ready|proof-server-ready|chain-clock|endpoint-check|balance-subscription)\.ts$/],

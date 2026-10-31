@@ -16,6 +16,8 @@ import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { installSdkNoiseFilters } from './lib/sdk-noise.ts';
 import { setNoticeSink } from './lib/notices.ts';
+import { setPrompter } from './lib/prompter.ts';
+import { createTerminalPrompter } from './ui/terminal-prompter.ts';
 
 // Commands that start a WalletFacade. They (a) leave WebSocket connections in
 // the event loop that facade.stop() doesn't fully drain — so we must exit
@@ -65,6 +67,9 @@ installSdkNoiseFilters();
 
 // What libraries have for the person at the terminal goes to stderr.
 setNoticeSink((line) => process.stderr.write(line + '\n'));
+
+// Libraries ask their questions (passphrase, approvals) at the terminal.
+setPrompter(createTerminalPrompter());
 
 migrateOldWallet();
 

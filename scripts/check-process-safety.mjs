@@ -37,12 +37,8 @@ const SHELL_CONCERNS = new Set([
 // What a library still does until its 1F slice lands. Each entry is
 // file → rules it may break; the list only shrinks.
 export const ALLOWED = {
-  // Slice 3, the prompter
-  'lib/approval.ts': ['writes to the terminal', 'opens a prompt'],
-  'lib/test/create-prompt.ts': ['writes to the terminal', 'opens a prompt'],
-  // Slices 3 and 4, the prompter and settings
-  'lib/passphrase.ts': ['opens a prompt', 'reads the environment'],
   // Slice 4, settings
+  'lib/passphrase.ts': ['reads the environment'],
   'lib/contract/runner.ts': ['reads the environment'],
   'lib/dev/compile.ts': ['reads the environment'],
   'lib/dev/test.ts': ['reads the environment'],
