@@ -11,7 +11,7 @@ import { DustWallet } from '../../lib/dust-wallet.ts';
 import { WalletFacade, WalletEntrySchema, mergeWalletEntries } from '@midnightntwrk/wallet-sdk/facade';
 import { ShieldedWallet } from '@midnightntwrk/wallet-sdk/shielded';
 import { PublicKey, UnshieldedWallet, createKeystore } from '@midnightntwrk/wallet-sdk/unshielded';
-import { FORK_SCHEDULE } from '../../lib/network.ts';
+import { FORK_SCHEDULE } from '../../lib/fork-schedule.ts';
 import { DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN } from '../../lib/constants.ts';
 import { NETWORK } from './ledger-tx.ts';
 

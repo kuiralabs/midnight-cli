@@ -32,7 +32,7 @@ npx tsx src/wallet.ts <command>
 # Run the MCP server from source
 npx tsx src/mcp-server.ts
 
-# Build the production bundles (dist/wallet.js + dist/mcp-server.js)
+# Build the production bundles (dist/wallet.js + dist/mcp-server.js, and the chunks they load on demand)
 npm run build
 
 # Type-check

@@ -45,7 +45,7 @@
   },
   "scripts": {
     "wallet": "tsx src/wallet.ts",
-    "build": "bun build src/wallet.ts --outfile dist/wallet.js --target node --format esm --packages external --minify --banner \"#!/usr/bin/env node\" && bun build src/mcp-server.ts --outfile dist/mcp-server.js --target node --format esm --packages external --minify --banner \"#!/usr/bin/env node\"",
+    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && bun build src/wallet.ts src/mcp-server.ts --outdir dist --splitting --target node --format esm --packages external --minify --banner \"#!/usr/bin/env node\"",
     "mcp": "tsx src/mcp-server.ts",
     "link": "bun link",
     "prepublishOnly": "npm run build && npm run test",

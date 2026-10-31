@@ -8,7 +8,7 @@ import type { FacadeState, WalletEntry } from '@midnightntwrk/wallet-sdk/facade'
 import type { FinalizedTx } from '@midnightntwrk/wallet-sdk';
 
 import { type FacadeBundle, hasDustAvailable } from './facade.ts';
-import { FORK_SCHEDULE, type NetworkConfig } from './network.ts';
+import { LEDGER_9_FORK_VERSION, type NetworkConfig } from './network.ts';
 import type { ApprovalOptions } from './approval.ts';
 import { promptApproval } from './approval.ts';
 import { createApiError, type RpcHandler, type RpcHandlerContext } from './ws-rpc.ts';
@@ -244,7 +244,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     if (behind.length > 0) {
       const detail = behind.map((w) => `${w} at ${protocolVersions![w]}`).join(', ');
       throw createApiError('Disconnected',
-        `This wallet can't take transactions until all three of its wallets are on ledger 9 (fork at ${FORK_SCHEDULE.v9}); `
+        `This wallet can't take transactions until all three of its wallets are on ledger 9 (fork at ${LEDGER_9_FORK_VERSION}); `
         + `still behind: ${detail}. Wait for them to sync past the fork and retry.`);
     }
   }

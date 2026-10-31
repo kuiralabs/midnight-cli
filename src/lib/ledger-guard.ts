@@ -3,7 +3,7 @@
 // events. So check the chain's protocol version up front and fail with a
 // clear message instead of hanging or failing on a deserialize error.
 
-import { FORK_SCHEDULE, type NetworkConfig } from './network.ts';
+import { LEDGER_9_FORK_VERSION, type NetworkConfig } from './network.ts';
 import { getChainGenesisHash } from './chain-id.ts';
 import { isEndpointError } from './blockfrost.ts';
 import { queryIndexer } from './indexer-graphql.ts';
@@ -24,7 +24,7 @@ export class UnsupportedLedgerError extends Error {
  * unreachable) passes: the real network error surfaces from the call itself.
  */
 export function checkLedgerSupported(network: string, protocolVersion: bigint | null): void {
-  if (protocolVersion !== null && protocolVersion < FORK_SCHEDULE.v9) {
+  if (protocolVersion !== null && protocolVersion < LEDGER_9_FORK_VERSION) {
     throw new UnsupportedLedgerError(network, protocolVersion);
   }
 }
@@ -102,5 +102,5 @@ type WalletKind = 'shielded' | 'unshielded' | 'dust';
  * until this is empty it would read ledger-9 bytes as ledger 8 and refuse them.
  */
 export function walletsBelowLedger9(versions: Readonly<Record<WalletKind, bigint>>): WalletKind[] {
-  return (['shielded', 'unshielded', 'dust'] as const).filter((wallet) => versions[wallet] < FORK_SCHEDULE.v9);
+  return (['shielded', 'unshielded', 'dust'] as const).filter((wallet) => versions[wallet] < LEDGER_9_FORK_VERSION);
 }
