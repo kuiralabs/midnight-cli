@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { notice } from './notices.ts';
 import * as path from 'path';
 import { homedir } from 'os';
 import { MIDNIGHT_DIR, DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE, isValidWalletName } from './constants.ts';
@@ -504,7 +505,7 @@ export async function unlockWallet(walletPath: string, options: UnlockOptions = 
   if (!config.isSealed) {
     if (!warnedPlain.has(resolvedPath) || options.warn !== undefined) {
       warnedPlain.add(resolvedPath);
-      (options.warn ?? ((line: string) => process.stderr.write(line + '\n')))(
+      (options.warn ?? notice)(
         `Warning: wallet ${resolvedPath} is not protected: its seed is in plain text. Encrypt it with: midnight wallet protect`,
       );
     }

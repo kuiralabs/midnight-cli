@@ -27,6 +27,7 @@ import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { installSdkNoiseFilters } from './lib/sdk-noise.ts';
+import { setNoticeSink } from './lib/notices.ts';
 
 // Skill resources — teach MCP clients how to use this CLI conversationally.
 // Split into:
@@ -1196,6 +1197,8 @@ async function main() {
   hideProjectIdsInOutput();
   // The SDK's transient errors and RPC noise are filtered for the server's life; tools only listen for them.
   installSdkNoiseFilters();
+  // Libraries' notices go to stderr, the server's log, as before; stdout is the protocol.
+  setNoticeSink((line) => process.stderr.write(line + '\n'));
   // The server runs facades on demand (balance/transfer/etc.). A cold shielded
   // sync would overflow Node's default heap, so re-exec once at startup with
   // more headroom. No-op when launched via `mn --mcp` (already bumped) or when

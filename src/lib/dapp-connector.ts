@@ -2,6 +2,7 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
+import { notice } from './notices.ts';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
 import type { FacadeState, WalletEntry } from '@midnightntwrk/wallet-sdk/facade';
@@ -272,7 +273,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       txMap!.delete(txHex);
       if (txMap!.size === 0) pendingTxsByConnection.delete(connectionId);
       try { await facade.revert(finalized); } catch { /* best-effort */ }
-      process.stderr.write(dim(`  abandoned tx reverted (${connectionId})`) + '\n');
+      notice(dim(`  abandoned tx reverted (${connectionId})`));
     }, ABANDONED_TX_TIMEOUT_MS);
     txMap.set(txHex, { finalized, timer, feeOnly });
   }
@@ -297,7 +298,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       clearTimeout(entry.timer);
       try { await facade.revert(entry.finalized); } catch { /* best-effort */ }
     }
-    process.stderr.write(dim(`  reverted ${txMap.size} pending tx(s) on disconnect`) + '\n');
+    notice(dim(`  reverted ${txMap.size} pending tx(s) on disconnect`));
   }
 
   function createTtl(): Date {
@@ -463,7 +464,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
   async function assertFeeWithinLimit(dappTx: WalletTransaction<'Unbound'> | WalletTransaction<'Finalized'>, ttl: Date): Promise<void> {
     const fee = await withDustRetry(() => facade.estimateTransactionFee(dappTx, { ttl }));
-    process.stderr.write(dim(`  fee-only: estimated fee ${toDust(fee)} DUST (limit ${toDust(feeLimits.maxFeeSpecks)})`) + '\n');
+    notice(dim(`  fee-only: estimated fee ${toDust(fee)} DUST (limit ${toDust(feeLimits.maxFeeSpecks)})`));
     const reason = feeLimitRefusal(fee, feeLimits);
     if (reason) throw feeLimitError(reason);
   }
@@ -706,13 +707,13 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
         if (growth) {
           const { have, needed, waitMs } = growth;
           if (waitMs === null || waitedForGrowthMs + waitMs > dustWaitMs) throw dustTooFarError(have, needed, waitMs);
-          process.stderr.write(dim(`  Dust: ${roughDust(have)} of the ${roughDust(needed, true)} DUST this fee takes; waiting ${formatWait(waitMs)} for the rest...`) + '\n');
+          notice(dim(`  Dust: ${roughDust(have)} of the ${roughDust(needed, true)} DUST this fee takes; waiting ${formatWait(waitMs)} for the rest...`));
           await sleep(waitMs);
           waitedForGrowthMs += waitMs;
           continue;
         }
         if (attempt >= DUST_RETRY_ATTEMPTS) throw dustExhaustedError(err);
-        process.stderr.write(dim(`  dust unavailable, waiting for recovery (${attempt}/${DUST_RETRY_ATTEMPTS})... [${msg.slice(0, 60)}]`) + '\n');
+        notice(dim(`  dust unavailable, waiting for recovery (${attempt}/${DUST_RETRY_ATTEMPTS})... [${msg.slice(0, 60)}]`));
         // A coin that comes free during the wait (its transaction landed) is
         // tried at once. A coin that was there all along was too small for
         // the fee, and a wait that ran out found none: either way it needs
@@ -1000,7 +1001,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       if (!Array.isArray(methods) || !methods.every((m) => typeof m === 'string' && /^[A-Za-z]\w*$/.test(m))) {
         throw createApiError('InvalidRequest', 'methodNames must be an array of connector method names');
       }
-      process.stderr.write(dim(`  DApp hints usage: ${methods.join(', ')}`) + '\n');
+      notice(dim(`  DApp hints usage: ${methods.join(', ')}`));
     },
   };
 

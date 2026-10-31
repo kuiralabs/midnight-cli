@@ -1,62 +1,56 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-// Reset module state between tests by re-importing
+// Reset module state between tests by re-importing. Verbose lines go out as
+// notices; the CLI's sink writes them to stderr.
 let verbose: typeof import('../lib/verbose.ts');
+let lines: string[];
 
 beforeEach(async () => {
   // Fresh import to reset `enabled` state
   vi.resetModules();
   verbose = await import('../lib/verbose.ts');
+  lines = [];
+  (await import('../lib/notices.ts')).setNoticeSink((line) => lines.push(line));
+});
+
+afterEach(async () => {
+  (await import('../lib/notices.ts')).setNoticeSink(null);
 });
 
 describe('verbose', () => {
   it('is a no-op when not enabled', () => {
-    const writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     verbose.verbose('test', 'hello');
-    expect(writeSpy).not.toHaveBeenCalled();
-    writeSpy.mockRestore();
+    expect(lines).toEqual([]);
   });
 
-  it('writes to stderr when enabled', () => {
-    const writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  it('sends a notice when enabled', () => {
     verbose.enableVerbose();
     verbose.verbose('sync', 'Starting facade...');
 
-    expect(writeSpy).toHaveBeenCalledTimes(1);
-    const output = writeSpy.mock.calls[0]![0] as string;
-    expect(output).toContain('sync');
-    expect(output).toContain('Starting facade...');
-    writeSpy.mockRestore();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('sync');
+    expect(lines[0]).toContain('Starting facade...');
   });
 
   it('includes timestamp in HH:mm:ss.SSS format', () => {
-    const writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     verbose.enableVerbose();
     verbose.verbose('phase', 'msg');
 
-    const output = writeSpy.mock.calls[0]![0] as string;
     // Timestamp pattern: [HH:mm:ss.SSS]
-    expect(output).toMatch(/\[\d{2}:\d{2}:\d{2}\.\d{3}\]/);
-    writeSpy.mockRestore();
+    expect(lines[0]).toMatch(/\[\d{2}:\d{2}:\d{2}\.\d{3}\]/);
   });
 
   it('includes phase and message in output', () => {
-    const writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     verbose.enableVerbose();
     verbose.verbose('facade', 'Node: wss://example.com');
 
-    const output = writeSpy.mock.calls[0]![0] as string;
-    expect(output).toContain('facade: Node: wss://example.com');
-    writeSpy.mockRestore();
+    expect(lines[0]).toContain('facade: Node: wss://example.com');
   });
 
-  it('ends with newline', () => {
-    const writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  it('sends one line per message, which the sink ends', () => {
     verbose.enableVerbose();
     verbose.verbose('test', 'msg');
 
-    const output = writeSpy.mock.calls[0]![0] as string;
-    expect(output).toMatch(/\n$/);
-    writeSpy.mockRestore();
+    expect(lines[0]).not.toContain('\n');
   });
 });

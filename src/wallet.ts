@@ -15,6 +15,7 @@ import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { installSdkNoiseFilters } from './lib/sdk-noise.ts';
+import { setNoticeSink } from './lib/notices.ts';
 
 // Commands that start a WalletFacade. They (a) leave WebSocket connections in
 // the event loop that facade.stop() doesn't fully drain — so we must exit
@@ -61,6 +62,9 @@ hideProjectIdsInOutput();
 
 // The SDK's transient errors and RPC noise are filtered for the whole run; libraries only listen for them.
 installSdkNoiseFilters();
+
+// What libraries have for the person at the terminal goes to stderr.
+setNoticeSink((line) => process.stderr.write(line + '\n'));
 
 migrateOldWallet();
 

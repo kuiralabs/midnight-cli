@@ -1,8 +1,9 @@
-// Verbose logger — writes timestamped diagnostic lines to stderr.
-// Enabled per-command via --verbose / -v flag.
-// All output goes to stderr so stdout stays pipeable.
+// Verbose logger: timestamped diagnostic lines, sent as notices (the shell
+// writes them to stderr, so stdout stays pipeable). Enabled per-command via
+// --verbose / -v flag.
 
 import { dim } from '../ui/colors.ts';
+import { notice } from './notices.ts';
 
 let enabled = false;
 
@@ -11,11 +12,11 @@ export function enableVerbose(): void {
 }
 
 /**
- * Log a verbose diagnostic message to stderr.
+ * Send a verbose diagnostic line as a notice.
  * No-op when verbose mode is disabled.
  */
 export function verbose(phase: string, message: string): void {
   if (!enabled) return;
   const ts = new Date().toISOString().slice(11, 23); // HH:mm:ss.SSS
-  process.stderr.write(dim(`  [${ts}] ${phase}: ${message}`) + '\n');
+  notice(dim(`  [${ts}] ${phase}: ${message}`));
 }

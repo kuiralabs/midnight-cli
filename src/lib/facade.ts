@@ -1,4 +1,5 @@
 import { ShieldedWallet } from '@midnightntwrk/wallet-sdk/shielded';
+import { notice } from './notices.ts';
 import {
   UnshieldedWallet,
   createKeystore,
@@ -150,7 +151,7 @@ export async function buildFacade(
       verbose('facade', 'Cache restore successful');
     } catch (err) {
       verbose('facade', `Cache restore failed: ${(err as Error).message}`);
-      process.stderr.write(`  Cache restore failed, building from scratch: ${(err as Error).message}\n`);
+      notice(`  Cache restore failed, building from scratch: ${(err as Error).message}`);
       facade = await initFresh();
     }
   } else {

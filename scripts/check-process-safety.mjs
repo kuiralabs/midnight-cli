@@ -37,15 +37,6 @@ const SHELL_CONCERNS = new Set([
 // What a library still does until its 1F slice lands. Each entry is
 // file → rules it may break; the list only shrinks.
 export const ALLOWED = {
-  // Slice 2, notices
-  'lib/dapp-connector.ts': ['writes to the terminal'],
-  'lib/dev/keys.ts': ['writes to the terminal'],
-  'lib/facade.ts': ['writes to the terminal'],
-  'lib/grant/account.ts': ['writes to the terminal'],
-  'lib/test/browser-test.ts': ['writes to the terminal'],
-  'lib/verbose.ts': ['writes to the terminal'],
-  'lib/wallet-config.ts': ['writes to the terminal'],
-  'lib/ws-rpc.ts': ['writes to the terminal'],
   // Slice 3, the prompter
   'lib/approval.ts': ['writes to the terminal', 'opens a prompt'],
   'lib/test/create-prompt.ts': ['writes to the terminal', 'opens a prompt'],

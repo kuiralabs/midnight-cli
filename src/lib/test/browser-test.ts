@@ -61,6 +61,8 @@ export interface BrowserTestOptions {
   dappDir: string;
   logFile: string;
   onMessage?: (msg: string) => void;
+  /** The test's own output as it comes, to show beside the log file it also goes to. */
+  onOutput?: (chunk: Buffer) => void;
 }
 
 export interface BrowserTestResult {
@@ -201,9 +203,9 @@ export async function runBrowserTest(options: BrowserTestOptions): Promise<Brows
 
     let timedOut = false;
 
-    // Tee stdout to both terminal and log file
+    // Tee stdout to the caller (the terminal, for mn test) and the log file
     child.stdout?.on('data', (chunk: Buffer) => {
-      process.stdout.write(chunk);
+      options.onOutput?.(chunk);
       logStream.write(chunk);
     });
 
