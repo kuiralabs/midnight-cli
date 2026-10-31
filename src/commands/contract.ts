@@ -10,6 +10,7 @@ import { silentSpinner, start as startSpinner } from '../ui/spinner.ts';
 import { type CommandContext, type Payer, payerFor, resolvePayingTarget } from '../lib/payer.ts';
 import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
 import { validateContractAddress } from '../lib/contract/validate.ts';
+import type { RawStateValue } from '../lib/contract/raw-state.ts';
 import { resolveContractCallRequest, resolveContractDeployRequest, resolveScanDir } from '../lib/contract/request.ts';
 import {
   findContractInfo,
@@ -333,14 +334,35 @@ async function handleState(args: ParsedArgs, signal?: AbortSignal): Promise<void
       throw new Error(`No contract found at address ${address} on ${network}`);
     }
 
-    const stateData = contractState.data ?? contractState;
+    const { describeRawState } = await import('../lib/contract/raw-state.ts');
+    const raw = describeRawState(contractState.data.state);
 
     if (jsonMode) {
-      writeJsonResult({ subcommand: 'state', address, network, raw: stateData });
+      writeJsonResult({ subcommand: 'state', address, network, raw });
     } else {
       process.stderr.write(bold('  Raw State') + '\n');
       process.stderr.write(dim('    (run from dApp root for parsed ledger fields)') + '\n');
-      process.stderr.write(`    ${JSON.stringify(stateData).slice(0, 200)}\n\n`);
+      for (const line of rawStateLines(raw, '    ')) process.stderr.write(line + '\n');
+      process.stderr.write('\n');
     }
+  }
+}
+
+/** The untyped state as indented lines: an array's items by index, a cell's bytes in hex. */
+function rawStateLines(value: RawStateValue, indent: string): string[] {
+  switch (value.type) {
+    case 'null':
+      return [indent + dim('null')];
+    case 'cell':
+      return [indent + 'cell ' + teal(value.value.map((atom) => '0x' + atom).join(' '))];
+    case 'map':
+      return [indent + dim(`Map (${value.size} entries)`)];
+    case 'boundedMerkleTree':
+      return [indent + dim(`Merkle tree (height ${value.height}, root ${value.root === null ? 'none' : '0x' + value.root.join('')})`)];
+    case 'array':
+      return value.items.flatMap((item, i) => {
+        const lines = rawStateLines(item, indent + '  ');
+        return item.type === 'array' ? [indent + `[${i}]`, ...lines] : [indent + `[${i}] ` + lines[0]!.trimStart()];
+      });
   }
 }
