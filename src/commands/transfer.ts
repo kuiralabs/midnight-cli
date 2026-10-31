@@ -10,9 +10,8 @@ import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides } from '../lib/network.ts';
 import { getNetworkId } from '../lib/network-id.ts';
 import { resolveTransferRequest, decodeShieldedRecipient, type TransferRequest } from '../lib/transfer-request.ts';
-import { executeTransfer, ensureDust, suppressRpcNoise } from '../lib/transfer.ts';
+import { executeTransfer, ensureDust } from '../lib/transfer.ts';
 import { nightToMicro } from '../lib/amount.ts';
-import { suppressSdkTransientErrors } from '../lib/facade.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { header, keyValue, divider, formatAddress, successMessage } from '../ui/format.ts';
 import { bold, dim } from '../ui/colors.ts';
@@ -146,8 +145,6 @@ async function shieldedTransfer(
 
   if (isVerbose(args)) enableVerbose();
 
-  const unsuppress = suppressSdkTransientErrors();
-  const restoreRpc = suppressRpcNoise();
   const spinner = startSpinner('Syncing wallet...');
 
   try {
@@ -233,7 +230,5 @@ async function shieldedTransfer(
     spinner.fail('Failed');
     throw err;
   } finally {
-    restoreRpc();
-    unsuppress();
   }
 }

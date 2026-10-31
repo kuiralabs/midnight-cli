@@ -11,7 +11,6 @@ import { resolveSeed } from '../lib/seed-resolver.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides, type NetworkConfig } from '../lib/network.ts';
 import { deriveDustSeed } from '../lib/derivation.ts';
-import { suppressRpcNoise } from '../lib/transfer.ts';
 import { registerDust } from '../lib/dust-register.ts';
 import { checkBalance } from '../lib/balance-subscription.ts';
 import { dustPublicKeyHex } from '../lib/dust-direct-cache.ts';
@@ -52,13 +51,8 @@ export default async function dustCommand(args: ParsedArgs, signal?: AbortSignal
   // export: standalone path. Accepts a raw --seed (so a dApp operator can export a
   // snapshot for its own seed with no named wallet) or falls back to a named wallet.
   if (subcommand === 'export') {
-    // The chain-id check connects to the node; keep polkadot-js's RPC-CORE noise off stderr.
-    const restoreRpc = suppressRpcNoise();
-    try {
-      await dustExport(await resolveSeed(args), networkName, networkConfig, isJson, minimal, signal);
-    } finally {
-      restoreRpc();
-    }
+    // The chain-id check connects to the node; the shell keeps polkadot-js's RPC-CORE noise off stderr.
+    await dustExport(await resolveSeed(args), networkName, networkConfig, isJson, minimal, signal);
     return;
   }
 

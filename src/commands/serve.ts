@@ -7,10 +7,9 @@ import { enableVerbose } from '../lib/verbose.ts';
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides } from '../lib/network.ts';
-import { hasDustAvailable, isFacadeSynced, suppressSdkTransientErrors, waitForDustAvailable } from '../lib/facade.ts';
+import { hasDustAvailable, isFacadeSynced, waitForDustAvailable } from '../lib/facade.ts';
 import { saveWalletCache } from '../lib/wallet-cache.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
-import { suppressRpcNoise } from '../lib/transfer.ts';
 import { createDAppConnector, OPERATOR_REJECTED_MESSAGE, type DAppConnectorCallbacks } from '../lib/dapp-connector.ts';
 import type { PhaseTiming } from '../lib/phase-tracker.ts';
 import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
@@ -23,6 +22,7 @@ import { bold, dim, teal, green, red } from '../ui/colors.ts';
 import { start as startSpinner, getActiveSpinner } from '../ui/spinner.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
 import { UsageError } from '../lib/errors.ts';
+import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
 export default async function serveCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
   rejectNoCacheForWrites(args);
@@ -87,12 +87,11 @@ export default async function serveCommand(args: ParsedArgs, signal?: AbortSigna
 
   // ── Suppress SDK noise ──
 
-  const unsuppress = suppressSdkTransientErrors((_tag, msg) => {
+  const stopListening = onSdkWarning((_tag, msg) => {
     const s = getActiveSpinner();
     if (s) { s.log(dim(`  SDK: ${msg}`)); }
     else { process.stderr.write(dim(`  SDK: ${msg}`) + '\n'); }
   });
-  const restoreRpc = suppressRpcNoise();
 
   if (isVerbose(args)) enableVerbose();
 
@@ -304,8 +303,7 @@ export default async function serveCommand(args: ParsedArgs, signal?: AbortSigna
     },
     onSyncDetail: (detail) => spinner.update(`Syncing wallet... (waiting on: ${detail})`),
   }).finally(() => {
-    restoreRpc();
-    unsuppress();
+    stopListening();
   });
 }
 

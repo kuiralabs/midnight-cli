@@ -19,10 +19,9 @@ import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '..
 import { getNetworkId } from '../lib/network-id.ts';
 import { GENESIS_SEED } from '../lib/constants.ts';
 import { deriveShieldedAddress } from '../lib/derive-address.ts';
-import { ensureDust, suppressRpcNoise } from '../lib/transfer.ts';
+import { ensureDust } from '../lib/transfer.ts';
 import { parseAmount, nightToMicro } from '../lib/amount.ts';
 import { airdropNight } from '../lib/airdrop.ts';
-import { suppressSdkTransientErrors } from '../lib/facade.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { header, keyValue, divider, formatAddress, successMessage } from '../ui/format.ts';
 import { bold, dim } from '../ui/colors.ts';
@@ -278,8 +277,6 @@ async function shieldedAirdrop(
   process.stderr.write(keyValue('Amount', bold(amountNight + ' NIGHT (shielded)')) + '\n');
   process.stderr.write('\n');
 
-  const unsuppress = suppressSdkTransientErrors();
-  const restoreRpc = suppressRpcNoise();
   const spinner = startSpinner('Syncing genesis wallet...');
 
   try {
@@ -358,7 +355,5 @@ async function shieldedAirdrop(
     spinner.fail('Failed');
     throw err;
   } finally {
-    restoreRpc();
-    unsuppress();
   }
 }
