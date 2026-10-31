@@ -9,7 +9,7 @@ import { loadWalletConfig, resolveWalletPath, type WalletConfig } from './wallet
 import { resolveNetworkName } from './resolve-network.ts';
 import { networkIdForName } from './network-id.ts';
 import { shieldedSyncEnabled, shieldedDisabledReason } from './shielded-policy.ts';
-import { parseAmount } from './transfer.ts';
+import { parseAmount } from './amount.ts';
 import type { NetworkName } from './network.ts';
 
 export interface TransferRequest {

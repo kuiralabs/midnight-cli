@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { nightToMicro, parseAmount, validateRecipientAddress, isDustRelatedError } from '../lib/transfer.ts';
+import { validateRecipientAddress, isDustRelatedError } from '../lib/transfer.ts';
+import { nightToMicro, parseAmount } from '../lib/amount.ts';
 import { getNetworkConfig } from '../lib/network.ts';
 import { deriveUnshieldedAddress } from '../lib/derive-address.ts';
 import { GENESIS_SEED, SYNC_ATTEMPT_TIMEOUT_MS, SYNC_ATTEMPT_REMOTE_TIMEOUT_MS } from '../lib/constants.ts';

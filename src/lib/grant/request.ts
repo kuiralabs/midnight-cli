@@ -5,7 +5,7 @@
 import { parseDeviceCode } from './device-code.ts';
 import { type ParsedArgs, getFlag, hasFlag } from '../argv.ts';
 import { UsageError } from '../errors.ts';
-import { nightToMicro, parseAmount } from '../transfer.ts';
+import { nightToMicro, parseAmount } from '../amount.ts';
 
 export const GRANT_SUBCOMMANDS = ['deploy', 'deposit', 'status', 'list', 'issue', 'revoke', 'revoke-all', 'export', 'import', 'device'] as const;
 

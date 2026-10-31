@@ -22,7 +22,7 @@ import { expiredIntents, feeOnlyRefusals, readDAppTransaction, type DAppTxStage,
 import { PartlySignedTransactionError, assertSignable, signRecipe } from './sign-recipe.ts';
 import { decodeSignPayload, signedMessageBytes } from './sign-data.ts';
 import { DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan } from './dust-wait.ts';
-import { formatWait } from './dust-registration-plan.ts';
+import { formatWait } from './duration.ts';
 import { fetchPartialSuccessSegments, type SegmentResult } from './tx-segments.ts';
 import { walletsBelowLedger9 } from './ledger-guard.ts';
 import { TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS } from './constants.ts';

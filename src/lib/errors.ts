@@ -27,3 +27,6 @@ export class UsageError extends Error {
 export function isUsageError(err: unknown): err is UsageError {
   return err instanceof UsageError;
 }
+
+/** What a cancelled operation fails with; the contract runner's classifyError reads it as CANCELLED. */
+export const CANCELLED_MESSAGE = 'Operation cancelled';

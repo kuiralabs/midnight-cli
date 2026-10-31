@@ -3,7 +3,7 @@
 // looking ahead: right after registering 1000 NIGHT a wallet holds ~0.66 DUST
 // and a ledger-9 transfer costs ~0.85, a gap 1000 NIGHT closes in ~20 seconds.
 
-import { formatWait } from './dust-registration-plan.ts';
+import { formatWait } from './duration.ts';
 import { DUST_RETRY_DELAY_MS } from './constants.ts';
 import { dustShortfallOf } from './sdk-errors.ts';
 import { roughDust, toDust } from '../ui/format.ts';

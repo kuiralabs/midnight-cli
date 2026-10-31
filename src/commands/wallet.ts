@@ -21,11 +21,12 @@ import {
 } from '../lib/wallet-config.ts';
 import { passphraseForNewSecret } from '../lib/passphrase.ts';
 import { createWallet, walletFilePath, walletSecretFrom } from '../lib/wallet-create.ts';
+import { coinKeyOfWallet, type ProtectorResult, type WalletCommandContext, type WalletProtector } from '../lib/wallet-protector.ts';
 import { header, keyValue, divider, formatAddress } from '../ui/format.ts';
 import { bold, yellow, dim, green, teal } from '../ui/colors.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
 
-export default async function walletCommand(args: ParsedArgs): Promise<void> {
+export default async function walletCommand(args: ParsedArgs, _signal?: AbortSignal, context?: WalletCommandContext): Promise<void> {
   const subcommand = args.subcommand;
 
   switch (subcommand) {
@@ -44,7 +45,7 @@ export default async function walletCommand(args: ParsedArgs): Promise<void> {
     case 'seed':
       return walletSeed(args);
     case 'protect':
-      return walletProtect(args);
+      return walletProtect(args, context?.protectors ?? []);
     default:
       throw new UsageError(
         `Unknown wallet subcommand: "${subcommand ?? '(none)'}"\n` +
@@ -381,30 +382,29 @@ async function walletSeed(args: ParsedArgs): Promise<void> {
 }
 
 /** Sets mn's passphrase where none is set, and seals every plain-text wallet under it. */
-async function walletProtect(args: ParsedArgs): Promise<void> {
+async function walletProtect(args: ParsedArgs, protectors: readonly WalletProtector[]): Promise<void> {
   const home = homedir();
   const passphrase = await passphraseForNewSecret(home);
   const report = protectAllWallets(home, passphrase);
   const sealed = report.filter((w) => w.sealedNow).map((w) => w.name);
   const alreadySealed = report.filter((w) => !w.sealedNow).map((w) => w.name);
-  // Each account's private state is scoped to its wallet's shielded coin key, which the wallet gives.
-  const { protectAllAccounts } = await import('../lib/grant/protect-account.ts');
-  const { shieldedCoinPublicKeyHexFromSeed } = await import('../lib/shielded-direct-cache.ts');
-  const accounts = await protectAllAccounts(home, passphrase, async (wallet) =>
-    shieldedCoinPublicKeyHexFromSeed(Buffer.from((await unlockWallet(resolveWalletPath(wallet))).seed, 'hex')));
+  // What other domains keep for a wallet, sealed by the protectors the caller gave; each is told how to get a wallet's coin key.
+  const results: Array<{ name: string; result: ProtectorResult }> = [];
+  for (const protector of protectors) {
+    results.push({ name: protector.name, result: await protector.protect(home, passphrase, coinKeyOfWallet) });
+  }
   if (hasFlag(args, 'json')) {
-    writeJsonResult({ sealed, alreadySealed, accounts });
+    writeJsonResult({ sealed, alreadySealed, ...Object.fromEntries(results.map(({ name, result }) => [name, result.report])) });
     return;
   }
   process.stderr.write('\n');
   for (const name of sealed) process.stderr.write(green(`  ✓ ${name}: encrypted`) + '\n');
   for (const name of alreadySealed) process.stderr.write(dim(`  ${name}: already encrypted`) + '\n');
   if (report.length === 0) process.stderr.write(dim('  No wallets yet: each new wallet is encrypted under this passphrase.') + '\n');
-  for (const account of accounts) {
-    const where = `account of ${account.wallet} on ${account.network}`;
-    if ('error' in account) process.stderr.write(yellow(`  ✗ ${where}: not encrypted: ${account.error}`) + '\n');
-    else if (account.outcome === 'sealed-now') process.stderr.write(green(`  ✓ ${where}: owner key, records and private state encrypted`) + '\n');
-    else process.stderr.write(dim(`  ${where}: already encrypted`) + '\n');
+  for (const item of results.flatMap(({ result }) => result.items)) {
+    if ('error' in item) process.stderr.write(yellow(`  ✗ ${item.subject}: not encrypted: ${item.error}`) + '\n');
+    else if (item.outcome === 'sealed-now') process.stderr.write(green(`  ✓ ${item.subject}: ${item.sealedNote}`) + '\n');
+    else process.stderr.write(dim(`  ${item.subject}: already encrypted`) + '\n');
   }
   process.stderr.write('\n' + dim('  Keep the passphrase safe: without it, mn cannot open these wallets.') + '\n\n');
 }

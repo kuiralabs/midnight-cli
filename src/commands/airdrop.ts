@@ -19,7 +19,8 @@ import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '..
 import { getNetworkId } from '../lib/network-id.ts';
 import { GENESIS_SEED } from '../lib/constants.ts';
 import { deriveShieldedAddress } from '../lib/derive-address.ts';
-import { parseAmount, nightToMicro, ensureDust, suppressRpcNoise } from '../lib/transfer.ts';
+import { ensureDust, suppressRpcNoise } from '../lib/transfer.ts';
+import { parseAmount, nightToMicro } from '../lib/amount.ts';
 import { airdropNight } from '../lib/airdrop.ts';
 import { suppressSdkTransientErrors } from '../lib/facade.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';

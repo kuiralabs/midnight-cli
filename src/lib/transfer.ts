@@ -11,7 +11,7 @@ import { getNetworkId } from './network-id.ts';
 import { type FacadeBundle, hasDustAvailable, quickSync, suppressSdkTransientErrors } from './facade.ts';
 import { defaultRepository } from './wallet-data-repository.ts';
 import { verbose } from './verbose.ts';
-import { UsageError } from './errors.ts';
+import { nightToMicro } from './amount.ts';
 import {
   NATIVE_TOKEN_TYPE,
   TOKEN_MULTIPLIER,
@@ -56,57 +56,6 @@ export interface EnsureDustResult {
   txHash?: string;
 }
 
-/** NIGHT's smallest unit is 10^-6 NIGHT. */
-const NIGHT_DECIMALS = 6;
-
-/**
- * Convert NIGHT amount to micro-NIGHT (bigint).
- * Rounds to 6 decimals: amounts from parseAmount never need rounding (it refuses those that would).
- */
-export function nightToMicro(amountNight: number): bigint {
-  if (amountNight <= 0) {
-    throw new Error('Amount must be greater than 0');
-  }
-  if (!Number.isFinite(amountNight)) {
-    throw new Error('Amount must be a finite number');
-  }
-  // Use string math to avoid floating point rounding issues
-  const str = amountNight.toFixed(6);
-  const [whole, frac] = str.split('.');
-  const microStr = whole! + (frac ?? '').padEnd(6, '0');
-  const micro = BigInt(microStr);
-  if (micro <= 0n) {
-    throw new Error('Amount too small — minimum is 0.000001 NIGHT');
-  }
-  return micro;
-}
-
-/**
- * Parse and validate amount string from CLI input: a plain decimal with at
- * most 6 decimals, which a number carries exactly. Returns it in NIGHT.
- */
-export function parseAmount(amountStr: string): number {
-  const text = amountStr.trim();
-  const match = /^(\d*)(?:\.(\d*))?$/.exec(text);
-  if (!match || (match[1] === '' && !match[2])) {
-    throw new UsageError(`Invalid amount: "${amountStr}" — must be a positive number, e.g. 1.5`);
-  }
-  const decimals = match[2] ?? '';
-  if (decimals.length > NIGHT_DECIMALS) {
-    throw new UsageError(`Invalid amount: "${amountStr}" — NIGHT has ${NIGHT_DECIMALS} decimals, this has ${decimals.length}`);
-  }
-  const amount = Number(text);
-  if (amount <= 0) {
-    throw new UsageError(`Invalid amount: "${amountStr}" — must be greater than 0`);
-  }
-  // Amounts travel as numbers; refuse one a number can't carry to the exact smallest unit.
-  const exact = BigInt((match[1] || '0') + decimals.padEnd(NIGHT_DECIMALS, '0'));
-  if (nightToMicro(amount) !== exact) {
-    throw new UsageError(`Invalid amount: "${amountStr}" — too many digits to handle exactly`);
-  }
-  return amount;
-}
-
 /**
  * Validate recipient address format (bech32m, matching network).
  * Returns the decoded UnshieldedAddress for use with the facade.
@@ -131,7 +80,8 @@ export function validateRecipientAddress(address: string, networkConfig: Network
 // that still import from this module.
 export { isDustRelatedError, isSdkInsufficientFundsError } from './sdk-errors.ts';
 import { isColdStartRace, isDustRelatedError } from './sdk-errors.ts';
-import { DustFeeNotGeneratedError, formatWait, planRegistration } from './dust-registration-plan.ts';
+import { DustFeeNotGeneratedError, planRegistration } from './dust-registration-plan.ts';
+import { formatWait } from './duration.ts';
 import { assertChainClockCurrent, fetchChainTime } from './chain-clock.ts';
 import { awaitDustForFee, sleep } from './dust-wait.ts';
 

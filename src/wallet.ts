@@ -90,7 +90,9 @@ async function run(): Promise<void> {
     }
     case 'wallet': {
       const { default: handler } = await import('./commands/wallet.ts');
-      return handler(args);
+      // wallet protect also seals grant's accounts, through the protector grant provides (D24).
+      const { accountProtector } = await import('./lib/grant/account-protector.ts');
+      return handler(args, undefined, { protectors: [accountProtector] });
     }
     case 'generate': {
       process.stderr.write(

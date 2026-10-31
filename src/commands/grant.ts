@@ -25,7 +25,7 @@ import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
 import { dim, yellow } from '../ui/colors.ts';
 import { header, keyValue, formatNight } from '../ui/format.ts';
 import { type Spinner, silentSpinner, start as startSpinner } from '../ui/spinner.ts';
-import { CANCELLED_MESSAGE } from '../lib/contract/runner.ts';
+import { CANCELLED_MESSAGE } from '../lib/errors.ts';
 
 const SPINNER_LABEL: Record<GrantRequest['subcommand'], string> = {
   deploy: 'Deploying the account...',
