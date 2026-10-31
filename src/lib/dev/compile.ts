@@ -33,7 +33,6 @@ export async function runCompile(opts: CompileOptions): Promise<CompileResult> {
   return new Promise<CompileResult>((resolvePromise, rejectPromise) => {
     const child = spawn(bin, args, {
       cwd: opts.project.projectRoot,
-      env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 

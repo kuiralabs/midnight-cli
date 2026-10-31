@@ -12,6 +12,7 @@ import { DIR_MODE, FILE_MODE, MIDNIGHT_DIR } from './constants.ts';
 import { UsageError } from './errors.ts';
 import { openSecret, sealSecret } from './keystore.ts';
 import { currentPrompter, type Prompter } from './prompter.ts';
+import { settings } from './settings.ts';
 
 /** The variable a non-interactive run sets the passphrase in. */
 export const PASSPHRASE_ENV = 'MN_PASSPHRASE';
@@ -50,7 +51,7 @@ const ask = async (source: PassphraseSource, prompter: Prompter, question: strin
 
 /** The passphrase: from MN_PASSPHRASE, else asked for at the terminal. */
 export async function readPassphrase(source: PassphraseSource = {}): Promise<string> {
-  const fromEnv = (source.env ?? process.env)[PASSPHRASE_ENV];
+  const fromEnv = source.env !== undefined ? source.env[PASSPHRASE_ENV] : settings().passphrase;
   if (fromEnv !== undefined && fromEnv.length > 0) return fromEnv;
   const prompter = source.prompter === undefined ? currentPrompter() : source.prompter;
   if (prompter === null || !prompter.isInteractive()) throw new NoPassphraseError();
@@ -95,7 +96,7 @@ const unlocked = new Map<string, string>();
  */
 export async function unlockPassphrase(home: string, source: PassphraseSource = {}): Promise<string> {
   const known = unlocked.get(home);
-  const fromEnv = (source.env ?? process.env)[PASSPHRASE_ENV];
+  const fromEnv = source.env !== undefined ? source.env[PASSPHRASE_ENV] : settings().passphrase;
   if (known !== undefined && (fromEnv === undefined || fromEnv === '' || fromEnv === known)) return known;
   if (!isPassphraseSet(home)) throw new UsageError('mn has no passphrase yet. Set one with: midnight wallet protect');
   const passphrase = await readPassphrase(source);

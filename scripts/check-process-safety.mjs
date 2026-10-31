@@ -34,19 +34,12 @@ const SHELL_CONCERNS = new Set([
   'lib/json-output.ts', // the --json output channel
 ]);
 
-// What a library still does until its 1F slice lands. Each entry is
-// file → rules it may break; the list only shrinks.
+// What a library may still do, and why. Each entry is file → rules it may
+// break; each needs a reason a library can't do otherwise.
 export const ALLOWED = {
-  // Slice 4, settings
-  'lib/passphrase.ts': ['reads the environment'],
+  // Hands the environment on to the script it generates, which runs as its own
+  // process and reads MN_INDEXER_URL and the private-state secret from it; reads nothing itself.
   'lib/contract/runner.ts': ['reads the environment'],
-  'lib/dev/compile.ts': ['reads the environment'],
-  'lib/dev/test.ts': ['reads the environment'],
-  'lib/dust-direct.ts': ['reads the environment'],
-  'lib/dust-sync-native.ts': ['reads the environment'],
-  'lib/network.ts': ['reads the environment'],
-  'lib/resolve-network.ts': ['reads the environment'],
-  'lib/seed-resolver.ts': ['reads the environment'],
 };
 
 /** Replaces string, template-literal and comment contents with spaces, keeping line breaks. */
@@ -110,6 +103,6 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const found = findViolations();
   for (const v of found) process.stdout.write(`src/${v.file}:${v.line}  ${v.rule}\n`);
   const allowedCount = Object.keys(ALLOWED).length;
-  process.stdout.write(`\n${found.length === 0 ? 'Libraries leave the process alone' : `${found.length} place(s) where a library touches the process`}${allowedCount > 0 ? ` (${allowedCount} file(s) still allowed until their 1F slice)` : ''}.\n`);
+  process.stdout.write(`\n${found.length === 0 ? 'Libraries leave the process alone' : `${found.length} place(s) where a library touches the process`}${allowedCount > 0 ? ` (${allowedCount} file(s) allowed, with their reasons)` : ''}.\n`);
   process.exit(found.length === 0 ? 0 : 1);
 }

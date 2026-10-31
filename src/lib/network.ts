@@ -2,6 +2,7 @@ import { blockfrostEndpoints, usesBlockfrost } from './blockfrost.ts';
 import { execSync } from 'child_process';
 import { loadCliConfig, getEndpointOverridesForNetwork } from './cli-config.ts';
 import { INDEXER_GRAPHQL_PATH, INDEXER_GRAPHQL_WS_PATH } from './constants.ts';
+import { settings } from './settings.ts';
 
 export type NetworkName = 'preprod' | 'preview' | 'undeployed';
 
@@ -150,7 +151,7 @@ export function pickLocalStack(found: LocalStackPorts, need: NeededComponents = 
  * undeployed on its default endpoints).
  */
 export function detectLocalStacks(): LocalStackPorts {
-  if (process.env.MN_NO_LOCAL_DETECT === '1') return { node: [], indexer: [], proofServer: [] };
+  if (settings().noLocalDetect) return { node: [], indexer: [], proofServer: [] };
   try {
     return parseLocalStacks(execSync('docker ps --format "{{.Image}}|{{.Ports}}"', { encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }));
   } catch {

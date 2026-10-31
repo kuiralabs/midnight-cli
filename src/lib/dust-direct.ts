@@ -18,6 +18,7 @@ import {
   INITIAL_DUST_GRACE_PERIOD_SECONDS,
 } from './constants.ts';
 import { subscribeGraphqlWs } from './graphql-ws-subscription.ts';
+import { settings } from './settings.ts';
 
 // Set to '1' to disable dust generation-tree collapse (debugging / safety valve).
 export const DUST_COLLAPSE_DISABLE_ENV = 'MN_DISABLE_DUST_COLLAPSE';
@@ -151,7 +152,7 @@ export function readDustBalanceDirect(
     collapse,
   } = options;
 
-  const collapseEnabled = collapse !== false && process.env[DUST_COLLAPSE_DISABLE_ENV] !== '1';
+  const collapseEnabled = collapse !== false && !settings().dustCollapseDisabled;
 
   // Apply events in chunks as they arrive so the final step is cheap and
   // progress updates stay responsive. Replaying 100k events in a single

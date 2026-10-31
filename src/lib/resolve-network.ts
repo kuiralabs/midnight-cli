@@ -14,6 +14,7 @@ import {
 } from './network.ts';
 import { checkProjectId, networkOfProjectId, usesBlockfrost } from './blockfrost.ts';
 import { getBlockfrostProjectId, loadCliConfig, getEndpointOverridesForNetwork } from './cli-config.ts';
+import { settings } from './settings.ts';
 
 export interface NetworkResolutionContext {
   args: ParsedArgs;
@@ -67,7 +68,10 @@ export const SHARED_BLOCKFROST_PROJECT_ID_ENV = 'BLOCKFROST_PROJECT_ID';
 export function resolveBlockfrostProjectId(
   name: NetworkName,
   configDir?: string,
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = {
+    [BLOCKFROST_PROJECT_ID_ENV]: settings().blockfrostProjectId,
+    [SHARED_BLOCKFROST_PROJECT_ID_ENV]: settings().sharedBlockfrostProjectId,
+  },
 ): string | undefined {
   if (!usesBlockfrost(name)) return undefined;
   const own = env[BLOCKFROST_PROJECT_ID_ENV]?.trim();
