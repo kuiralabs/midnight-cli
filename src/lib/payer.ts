@@ -17,22 +17,23 @@ export interface PayingTarget {
 }
 
 /**
- * --network (undeployed when not given), then explicit endpoint flags over the
+ * --network, else the network set with `midnight config set network`, else
+ * undeployed (as every other command), then explicit endpoint flags over the
  * defaults. Without endpoint flags, `undeployed` resolves to whatever local
  * stack docker shows, which is ambiguous when more than one runs.
  */
 export function resolvePayingTarget(args: ParsedArgs, command: string, subcommand: string): PayingTarget {
-  const network = getFlag(args, 'network') ?? 'undeployed';
+  const network = getFlag(args, 'network');
   const endpoints: EndpointOverrides = {
     node: getFlag(args, 'node'),
     indexerWS: getFlag(args, 'indexer-ws'),
     proofServer: getFlag(args, 'proof-server'),
   };
   const { name, config: networkConfig } = resolveNetwork({
-    args: { command, subcommand, positionals: [], flags: { network, ...endpointFlags(endpoints) } },
+    args: { command, subcommand, positionals: [], flags: { ...(network ? { network } : {}), ...endpointFlags(endpoints) } },
   });
   applyEndpointOverrides(networkConfig, endpoints, name);
-  return { network, networkConfig, endpoints };
+  return { network: name, networkConfig, endpoints };
 }
 
 /** A wallet served over the DApp connector's WebSocket, for a script in another process to pay through. */

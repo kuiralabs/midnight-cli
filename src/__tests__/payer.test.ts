@@ -8,6 +8,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { parseArgs } from '../lib/argv.ts';
+import { saveCliConfig } from '../lib/cli-config.ts';
 import { NoPayerError, resolvePayingTarget } from '../lib/payer.ts';
 import { NoAccountError } from '../lib/grant/prepare.ts';
 import { servePayerAt } from '../lib/serve-payer.ts';
@@ -40,6 +41,12 @@ describe('resolvePayingTarget', () => {
     expect(target.networkConfig.node).toBe('ws://localhost:29944');
     expect(target.networkConfig.indexer).toBe('http://localhost:28088/api/v4/graphql');
     expect(target.networkConfig.proofServer).toBe('http://localhost:26300');
+  });
+
+  it('acts on the network set with config set network when none is given, as every other command does', () => {
+    saveCliConfig({ network: 'preprod' });
+    expect(resolvePayingTarget(parseArgs(['contract', 'deploy']), 'contract', 'deploy').network).toBe('preprod');
+    expect(resolvePayingTarget(parseArgs(['contract', 'deploy', '--network', 'preview']), 'contract', 'deploy').network).toBe('preview');
   });
 });
 
