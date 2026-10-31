@@ -151,7 +151,7 @@ export function pickLocalStack(found: LocalStackPorts, need: NeededComponents = 
  * undeployed on its default endpoints).
  */
 export function detectLocalStacks(): LocalStackPorts {
-  if (settings().noLocalDetect) return { node: [], indexer: [], proofServer: [] };
+  if (settings().isLocalDetectOff) return { node: [], indexer: [], proofServer: [] };
   try {
     return parseLocalStacks(execSync('docker ps --format "{{.Image}}|{{.Ports}}"', { encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }));
   } catch {

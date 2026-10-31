@@ -24,8 +24,20 @@ export function reportSdkWarning(tag: string, message: string): void {
   listeners.at(-1)?.(tag, message);
 }
 
-/** A rejection or console.error argument the SDK throws for a transient, retried failure. */
-export function isSdkTransient(value: unknown): boolean {
-  const tag = (value as { _tag?: unknown } | null)?._tag;
-  return (typeof tag === 'string' && tag.startsWith('Wallet.')) || (typeof value === 'string' && value.startsWith('Wallet.'));
+/** What a transient warning says when the SDK gives no message. */
+const TRANSIENT_FALLBACK_MESSAGE = 'transient error';
+/** The tag a bare-string Wallet.* trace is reported under. */
+const STRING_TRACE_TAG = 'Wallet.Sync';
+
+/**
+ * The tag and message of a transient, retried SDK failure, as a rejection or a
+ * console.error argument carries it (a Wallet.* error, or its string trace);
+ * null for anything else.
+ */
+export function sdkTransientWarning(value: unknown): { tag: string; message: string } | null {
+  if (typeof value === 'string') return value.startsWith('Wallet.') ? { tag: STRING_TRACE_TAG, message: TRANSIENT_FALLBACK_MESSAGE } : null;
+  if (typeof value !== 'object' || value === null || !('_tag' in value)) return null;
+  const { _tag: tag, message } = value as { _tag: unknown; message?: unknown };
+  if (typeof tag !== 'string' || !tag.startsWith('Wallet.')) return null;
+  return { tag, message: typeof message === 'string' ? message : TRANSIENT_FALLBACK_MESSAGE };
 }

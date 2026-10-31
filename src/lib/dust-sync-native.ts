@@ -89,7 +89,7 @@ const MN_LEDGER: number = 9;
 
 export function nativeDustSyncAvailable(): boolean {
   if (SIDECAR_LEDGER !== MN_LEDGER) return false;
-  if (settings().nativeDustDisabled) return false;
+  if (settings().isNativeDustOff) return false;
   return resolveSidecarBinary() !== null;
 }
 
@@ -248,7 +248,7 @@ export function adaptResult(cp: SidecarCheckpoint): DustDirectResult {
   // vs ~23 KB collapsed). Apply the same TS collapse the WASM reader uses, reusing
   // the owned-indices + frontier the checkpoint already carries. Idempotent, and it
   // fails safe to the uncollapsed state via the balance+root guard.
-  if (!settings().dustCollapseDisabled) {
+  if (!settings().isDustCollapseOff) {
     const owned = new Set(cp.owned_generation_indices.map((i) => BigInt(i)));
     state = collapseForeignGenerations(state, owned, BigInt(cp.generation_frontier)).state;
   }

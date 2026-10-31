@@ -2,6 +2,7 @@
 // Usage: midnight transfer <to> <amount> [--shielded]
 
 import * as ledger from '@midnightntwrk/ledger-v9';
+import { CANCELLED_MESSAGE } from '../lib/errors.ts';
 import { MidnightBech32m } from '@midnightntwrk/wallet-sdk/address-format';
 import { type ParsedArgs, getFlag, hasFlag, isVerbose, rejectNoCacheForWrites } from '../lib/argv.ts';
 import { enableVerbose } from '../lib/verbose.ts';
@@ -168,7 +169,7 @@ async function shieldedTransfer(
         spinner.update('Checking dust...');
         await ensureDust(bundle, (status: string) => spinner.update(status));
 
-        if (signal?.aborted) throw new Error('Operation cancelled');
+        if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
 
         spinner.update('Building shielded transaction...');
         // Right after another payment the wallet's Dust can be short of this

@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -60,9 +60,22 @@ describe('the SDK-free base', () => {
 });
 
 describe('the built mn', () => {
-  const bin = join(ROOT, 'dist', 'wallet.js');
+  // Built fresh from this checkout with package.json's own build command, so a
+  // stale or missing dist/ can't pass or skip the test. Inside node_modules, so
+  // the bundle's external packages resolve as they do for an installed mn.
+  const out = join(ROOT, 'node_modules', '.cache', 'mn-sdk-loads-build');
 
-  it.skipIf(!existsSync(bin))('loads no Midnight SDK for --version, help or config get', () => {
+  it('loads no Midnight SDK for --version, help or config get', () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { scripts: { build: string } };
+    const bunBuild = pkg.scripts.build.slice(pkg.scripts.build.indexOf('bun build'));
+    expect(bunBuild, 'the build script runs bun build into dist').toContain('--outdir dist ');
+    rmSync(out, { recursive: true, force: true });
+    const build = spawnSync('npx', ['--no-install', ...bunBuild.replace('--outdir dist ', `--outdir ${JSON.stringify(out)} `).split(/\s+(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((a) => a.replace(/^"|"$/g, ''))], {
+      cwd: ROOT, encoding: 'utf8', timeout: 120_000,
+    });
+    expect(build.status, `the build failed: ${build.stderr}`).toBe(0);
+    const bin = join(out, 'wallet.js');
+
     const dir = mkdtempSync(join(tmpdir(), 'mn-sdk-loads-'));
     try {
       const register = sdkHook(dir, 'record');
@@ -72,10 +85,12 @@ describe('the built mn', () => {
           cwd: dir, encoding: 'utf8', timeout: 60_000, input: '', env: { ...process.env, HOME: dir, NO_COLOR: '1' },
         });
         expect(run.status, `${args.join(' ')}: ${run.stderr}`).toBe(0);
-        expect(existsSync(join(dir, 'sdk.log')) ? `${args.join(' ')} loaded the SDK` : 'none', args.join(' ')).toBe('none');
+        const loaded = existsSync(join(dir, 'sdk.log')) ? readFileSync(join(dir, 'sdk.log'), 'utf8').trim().split('\n') : [];
+        expect(loaded, `${args.join(' ')} loaded these Midnight packages before any command needed one`).toEqual([]);
       }
     } finally {
       rmSync(dir, { recursive: true, force: true });
+      rmSync(out, { recursive: true, force: true });
     }
-  }, 120_000);
+  }, 180_000);
 });

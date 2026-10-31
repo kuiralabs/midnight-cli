@@ -19,13 +19,13 @@ describe('settings from the environment', () => {
       MN_PASSPHRASE: 'p', MN_SEED: 's', MN_NO_LOCAL_DETECT: '1', MN_DUST_SYNC_BIN: '/bin/dust-sync',
       MN_DISABLE_NATIVE_DUST: '1', MN_DISABLE_DUST_COLLAPSE: '1', MN_BLOCKFROST_PROJECT_ID: 'nightpreprodAbc123', BLOCKFROST_PROJECT_ID: 'previewXyz',
     })).toEqual({
-      passphrase: 'p', seed: 's', noLocalDetect: true, dustSyncBin: '/bin/dust-sync',
-      nativeDustDisabled: true, dustCollapseDisabled: true, blockfrostProjectId: 'nightpreprodAbc123', sharedBlockfrostProjectId: 'previewXyz',
+      passphrase: 'p', seed: 's', isLocalDetectOff: true, dustSyncBin: '/bin/dust-sync',
+      isNativeDustOff: true, isDustCollapseOff: true, blockfrostProjectId: 'nightpreprodAbc123', sharedBlockfrostProjectId: 'previewXyz',
     });
   });
 
   it('turns a switch on only for 1', () => {
-    expect(settingsFromEnvironment({ MN_NO_LOCAL_DETECT: 'yes', MN_DISABLE_NATIVE_DUST: '0' })).toMatchObject({ noLocalDetect: false, nativeDustDisabled: false });
+    expect(settingsFromEnvironment({ MN_NO_LOCAL_DETECT: 'yes', MN_DISABLE_NATIVE_DUST: '0' })).toMatchObject({ isLocalDetectOff: false, isNativeDustOff: false });
   });
 
   it('reads the source each time, so a variable changed during the run is seen', () => {

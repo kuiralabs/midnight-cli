@@ -21,7 +21,7 @@ import { describeApprovalPolicy } from '../lib/approval.ts';
 import { bold, dim, teal, green, red } from '../ui/colors.ts';
 import { start as startSpinner, getActiveSpinner } from '../ui/spinner.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
-import { UsageError } from '../lib/errors.ts';
+import { UsageError, CANCELLED_MESSAGE } from '../lib/errors.ts';
 import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
 export default async function serveCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
@@ -119,7 +119,7 @@ export default async function serveCommand(args: ParsedArgs, signal?: AbortSigna
     // Save cache after successful sync (checkpoint before opening RPC).
     try { await saveWalletCache(address, networkName, bundle.facade); } catch { /* best-effort */ }
 
-    if (signal?.aborted) throw new Error('Operation cancelled');
+    if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
 
     let server: RpcServer | undefined;
     let connector: ReturnType<typeof createDAppConnector> | undefined;

@@ -152,7 +152,7 @@ export function readDustBalanceDirect(
     collapse,
   } = options;
 
-  const collapseEnabled = collapse !== false && !settings().dustCollapseDisabled;
+  const collapseEnabled = collapse !== false && !settings().isDustCollapseOff;
 
   // Apply events in chunks as they arrive so the final step is cheap and
   // progress updates stay responsive. Replaying 100k events in a single
