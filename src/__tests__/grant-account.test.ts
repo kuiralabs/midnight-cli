@@ -21,7 +21,7 @@ const NETWORK = getNetworkConfig('undeployed');
 let home: string;
 let dir: string;
 const open = (passphrase = PASSPHRASE, warn: (line: string) => void = () => {}) =>
-  openGrantAccount(NETWORK, dir, () => {}, { home, source: { env: { [PASSPHRASE_ENV]: passphrase }, isTTY: false }, warn });
+  openGrantAccount(NETWORK, dir, () => {}, { home, source: { env: { [PASSPHRASE_ENV]: passphrase }, prompter: null }, warn });
 
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-grant-account-'));

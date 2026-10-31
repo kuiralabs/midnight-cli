@@ -1,7 +1,8 @@
 // Terminal approval prompts for DApp Connector write operations
-// Uses Node.js readline (per project constraints — no inquirer)
+// Asks through the prompter the host sets (the CLI's uses readline, per project constraints — no inquirer)
 
-import * as readline from 'node:readline';
+import { notice } from './notices.ts';
+import { currentPrompter } from './prompter.ts';
 import { box } from '../ui/format.ts';
 import { bold, teal, dim, yellow, green, red } from '../ui/colors.ts';
 import type { FeeLimits } from './fee-limits.ts';
@@ -169,73 +170,48 @@ export async function promptApproval(
 ): Promise<ApprovalResult> {
   // Auto-approve checks
   if (options.approveAll) {
-    process.stderr.write(dim(`  Auto-approved: ${request.method}`) + '\n');
+    notice(dim(`  Auto-approved: ${request.method}`));
     return 'approve';
   }
 
   if (options.approveFees && request.feeOnly) {
-    process.stderr.write(dim(`  Auto-approved (fee-only): ${request.method}`) + '\n');
+    notice(dim(`  Auto-approved (fee-only): ${request.method}`));
     return 'approve';
   }
 
   if (options.autoApproveReads && isReadOnlyMethod(request.method)) {
-    process.stderr.write(dim(`  Auto-approved (read-only): ${request.method}`) + '\n');
+    notice(dim(`  Auto-approved (read-only): ${request.method}`));
     return 'approve';
   }
 
   // Non-interactive environment — reject by default
-  if (!process.stdin.isTTY) {
-    process.stderr.write(red('  Cannot prompt for approval: stdin is not a TTY') + '\n');
-    process.stderr.write(dim(`  ${nonInteractiveHint(request, options)}`) + '\n');
+  const prompter = currentPrompter();
+  if (prompter === null || !prompter.isInteractive()) {
+    notice(red('  Cannot prompt for approval: stdin is not a TTY'));
+    notice(dim(`  ${nonInteractiveHint(request, options)}`));
     return 'reject';
   }
 
   // Prevent concurrent prompts from overlapping on stdin
   if (promptActive) {
-    process.stderr.write(red('  Rejected: another approval prompt is active') + '\n');
+    notice(red('  Rejected: another approval prompt is active'));
     return 'reject';
   }
 
-  // Render the approval box to stderr
-  process.stderr.write('\n' + renderApprovalBox(request) + '\n\n');
-
-  // Prompt for user input
+  // Show the approval box, then ask
+  notice('\n' + renderApprovalBox(request) + '\n');
   promptActive = true;
-
-  let rl: readline.Interface;
   try {
-    rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stderr,
-    });
+    const answer = await prompter.ask(yellow('  Approve? [A/r] '));
+    // Input ended before an answer (e.g. piped input ends): reject.
+    if (answer === null) return 'reject';
+    const normalized = answer.trim().toLowerCase();
+    // Default to approve (empty input, 'a', 'approve', 'y', 'yes')
+    return normalized === 'r' || normalized === 'reject' ? 'reject' : 'approve';
   } catch {
-    promptActive = false;
-    process.stderr.write(red('  Cannot create readline interface') + '\n');
+    notice(red('  Cannot create readline interface'));
     return 'reject';
+  } finally {
+    promptActive = false;
   }
-
-  return new Promise<ApprovalResult>((resolve) => {
-    const cleanup = (result: ApprovalResult) => {
-      promptActive = false;
-      rl.close();
-      resolve(result);
-    };
-
-    // Handle stdin closing before user answers (e.g. piped input ends)
-    rl.on('close', () => {
-      if (promptActive) {
-        cleanup('reject');
-      }
-    });
-
-    rl.question(yellow('  Approve? [A/r] '), (answer) => {
-      const normalized = answer.trim().toLowerCase();
-      if (normalized === 'r' || normalized === 'reject') {
-        cleanup('reject');
-      } else {
-        // Default to approve (empty input, 'a', 'approve', 'y', 'yes')
-        cleanup('approve');
-      }
-    });
-  });
 }

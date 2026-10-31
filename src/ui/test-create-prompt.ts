@@ -4,11 +4,11 @@
 
 import { existsSync, statSync } from 'node:fs';
 import * as readline from 'node:readline';
-import { teal, dim, yellow } from '../../ui/colors.ts';
-import type { CreateStrategy, BrowserOptions } from './create.ts';
-import type { CircuitInfo } from '../contract/inspect.ts';
-import type { BrowserMode } from './types.ts';
-import { discoverScreens, discoverScreensInDir, type ScreenCandidate } from './discover-screens.ts';
+import { teal, dim, yellow } from './colors.ts';
+import type { CreateStrategy, BrowserOptions } from '../lib/test/create.ts';
+import type { CircuitInfo } from '../lib/contract/inspect.ts';
+import type { BrowserMode } from '../lib/test/types.ts';
+import { discoverScreens, discoverScreensInDir, type ScreenCandidate } from '../lib/test/discover-screens.ts';
 
 export function isInteractive(): boolean {
   return process.stdin.isTTY === true;

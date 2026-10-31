@@ -1,3 +1,7 @@
+import { createTerminalPrompter } from '../ui/terminal-prompter.ts';
+import { setPrompter } from '../lib/prompter.ts';
+import { setNoticeSink } from '../lib/notices.ts';
+import { PassThrough } from 'node:stream';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   describeApprovalPolicy,
@@ -149,21 +153,27 @@ describe('approval', () => {
       details: [],
     };
 
+    // What approval says goes out as notices; with no prompter set, there is no terminal to ask at.
     let stderrOutput: string[];
-    let origWrite: typeof process.stderr.write;
 
     beforeEach(() => {
       stderrOutput = [];
-      origWrite = process.stderr.write;
-      process.stderr.write = ((...args: any[]) => {
-        stderrOutput.push(String(args[0]));
-        return true;
-      }) as any;
+      setNoticeSink((line) => stderrOutput.push(line + '\n'));
+      setPrompter(null);
     });
 
     afterEach(() => {
-      process.stderr.write = origWrite;
+      setNoticeSink(null);
+      setPrompter(null);
     });
+
+    /** A terminal that answers through a stream, and the stream to type into. */
+    const terminal = () => {
+      const input = new PassThrough();
+      const prompter = createTerminalPrompter({ input, output: new PassThrough(), isTTY: true });
+      setPrompter(prompter);
+      return input;
+    };
 
     it('auto-approves when approveAll is true', async () => {
       const result = await promptApproval(baseRequest, { approveAll: true });
@@ -203,8 +213,6 @@ describe('approval', () => {
     it.each(['balanceUnsealedTransaction', 'balanceSealedTransaction'])(
       'prompts for %s even with autoApproveReads (no terminal: rejected), naming the flags that would approve it',
       async (method) => {
-        const origIsTTY = process.stdin.isTTY;
-        Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
         try {
           const result = await promptApproval({ method, network: 'undeployed', details: [] }, { autoApproveReads: true });
           expect(result).toBe('reject');
@@ -212,7 +220,6 @@ describe('approval', () => {
           expect(written).not.toContain('Auto-approved');
           expect(written).toContain('Balancing prompts like any other write: use --approve-all for non-interactive environments, or --approve-fees');
         } finally {
-          Object.defineProperty(process.stdin, 'isTTY', { value: origIsTTY, configurable: true });
         }
       },
     );
@@ -222,8 +229,6 @@ describe('approval', () => {
     });
 
     it('does not auto-approve balancing when autoApproveReads is false', async () => {
-      const origIsTTY = process.stdin.isTTY;
-      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
 
       const prepRequest: ApprovalRequest = {
         method: 'balanceUnsealedTransaction',
@@ -232,32 +237,18 @@ describe('approval', () => {
       };
       const result = await promptApproval(prepRequest, { autoApproveReads: false });
       expect(result).toBe('reject'); // falls through to non-TTY rejection
-
-      Object.defineProperty(process.stdin, 'isTTY', { value: origIsTTY, configurable: true });
     });
 
     it('does not auto-approve write methods when only autoApproveReads is set', async () => {
       // Non-TTY stdin will cause immediate rejection
-      const origIsTTY = process.stdin.isTTY;
-      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
 
       const result = await promptApproval(baseRequest, { autoApproveReads: true });
       expect(result).toBe('reject');
-
-      Object.defineProperty(process.stdin, 'isTTY', { value: origIsTTY, configurable: true });
     });
 
     describe('fee-only policy (--approve-fees)', () => {
       // Every case runs non-interactively: an agent can't answer a prompt,
       // so anything the policy doesn't approve must be rejected outright.
-      let origIsTTY: boolean | undefined;
-      beforeEach(() => {
-        origIsTTY = process.stdin.isTTY;
-        Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
-      });
-      afterEach(() => {
-        Object.defineProperty(process.stdin, 'isTTY', { value: origIsTTY, configurable: true });
-      });
 
       it.each(['balanceUnsealedTransaction', 'balanceSealedTransaction', 'submitTransaction'])(
         'auto-approves a fee-only %s and says why',
@@ -283,27 +274,15 @@ describe('approval', () => {
     });
 
     it('rejects when stdin is not a TTY', async () => {
-      const origIsTTY = process.stdin.isTTY;
-      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
 
       const result = await promptApproval(baseRequest);
       expect(result).toBe('reject');
 
       const written = stripAnsi(stderrOutput.join(''));
       expect(written).toContain('stdin is not a TTY');
-
-      Object.defineProperty(process.stdin, 'isTTY', { value: origIsTTY, configurable: true });
     });
 
     describe('without a terminal, the hint names what the server could have been started with', () => {
-      let origIsTTY: boolean | undefined;
-      beforeEach(() => {
-        origIsTTY = process.stdin.isTTY;
-        Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
-      });
-      afterEach(() => {
-        Object.defineProperty(process.stdin, 'isTTY', { value: origIsTTY, configurable: true });
-      });
 
       it('suggests --approve-all, or --approve-fees for a fee wallet, on a server with neither', async () => {
         expect(await promptApproval(baseRequest)).toBe('reject');
@@ -321,27 +300,33 @@ describe('approval', () => {
     });
 
     it('rejects concurrent prompts when one is already active', async () => {
-      const origIsTTY = process.stdin.isTTY;
-      Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
-
-      // Start the first prompt — it will block waiting for readline input
+      const input = terminal();
       const first = promptApproval(baseRequest);
 
-      // The second call should immediately reject because promptActive is true
-      const second = await promptApproval(baseRequest);
-      expect(second).toBe('reject');
+      // The second call rejects at once while the first is waiting for its answer.
+      expect(await promptApproval(baseRequest)).toBe('reject');
+      expect(stripAnsi(stderrOutput.join(''))).toContain('another approval prompt is active');
 
-      const written = stripAnsi(stderrOutput.join(''));
-      expect(written).toContain('another approval prompt is active');
+      input.write('a\n');
+      expect(await first).toBe('approve');
+    });
 
-      // Clean up the first prompt by closing stdin's readline
-      // Emit a fake answer to unblock the first prompt
-      process.stdin.emit('data', 'a\n');
-      // Give it a tick to process
-      await new Promise((r) => setTimeout(r, 50));
-      // If still hanging, it'll be cleaned up by process exit — acceptable for test
+    it('asks at the terminal, showing the request: Enter approves, r rejects, and an ended input rejects', async () => {
+      let input = terminal();
+      const approving = promptApproval(baseRequest);
+      input.write('\n');
+      expect(await approving).toBe('approve');
+      expect(stripAnsi(stderrOutput.join(''))).toContain('makeTransfer');
 
-      Object.defineProperty(process.stdin, 'isTTY', { value: origIsTTY, configurable: true });
+      input = terminal();
+      const rejecting = promptApproval(baseRequest);
+      input.write('r\n');
+      expect(await rejecting).toBe('reject');
+
+      input = terminal();
+      const ended = promptApproval(baseRequest);
+      input.end();
+      expect(await ended).toBe('reject');
     });
   });
 });
@@ -365,18 +350,8 @@ describe('describeApprovalPolicy (what mn serve reports, in its header and --jso
   });
 
   describe('matches what promptApproval decides without a terminal', () => {
-    let origIsTTY: boolean | undefined;
-    let origWrite: typeof process.stderr.write;
-    beforeEach(() => {
-      origIsTTY = process.stdin.isTTY;
-      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
-      origWrite = process.stderr.write;
-      process.stderr.write = (() => true) as any;
-    });
-    afterEach(() => {
-      Object.defineProperty(process.stdin, 'isTTY', { value: origIsTTY, configurable: true });
-      process.stderr.write = origWrite;
-    });
+    // No prompter: no terminal to ask at. What approval says is dropped.
+    beforeEach(() => setPrompter(null));
 
     const decide = (method: string, options: ApprovalOptions, feeOnly = false) =>
       promptApproval({ method, network: 'undeployed', details: [], feeOnly }, options);

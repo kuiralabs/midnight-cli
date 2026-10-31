@@ -20,6 +20,7 @@ import {
   unlockPassphrase,
 } from '../lib/passphrase.ts';
 import { FILE_MODE } from '../lib/constants.ts';
+import { createTerminalPrompter } from '../ui/terminal-prompter.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 let home: string;
@@ -38,12 +39,12 @@ const terminal = (...lines: string[]) => {
   let written = '';
   output.on('data', (chunk: Buffer) => { written += chunk.toString('utf8'); });
   const typeNext = (): void => { const line = lines.shift(); if (line !== undefined) input.write(`${line}\n`); };
-  return { io: { env: {}, input, output, isTTY: true, typeNext }, written: () => written };
+  return { io: { env: {}, prompter: createTerminalPrompter({ input, output, isTTY: true }), typeNext }, written: () => written };
 };
 
 describe('reading the passphrase', () => {
   it('takes MN_PASSPHRASE when it is set, asking nothing', async () => {
-    const value = await readPassphrase({ env: { [PASSPHRASE_ENV]: PASSPHRASE }, isTTY: false });
+    const value = await readPassphrase({ env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null });
     expect(value).toBe(PASSPHRASE);
   });
 
@@ -65,7 +66,7 @@ describe('reading the passphrase', () => {
   });
 
   it('refuses where it can neither read the variable nor ask', async () => {
-    await expect(readPassphrase({ env: {}, isTTY: false })).rejects.toThrow(NoPassphraseError);
+    await expect(readPassphrase({ env: {}, prompter: null })).rejects.toThrow(NoPassphraseError);
   });
 });
 
@@ -81,18 +82,18 @@ describe('the one passphrase', () => {
 
   it('unlocks with the passphrase it was set with', async () => {
     establishPassphrase(home, PASSPHRASE);
-    expect(await unlockPassphrase(home, { env: { [PASSPHRASE_ENV]: PASSPHRASE }, isTTY: false })).toBe(PASSPHRASE);
+    expect(await unlockPassphrase(home, { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null })).toBe(PASSPHRASE);
   });
 
   it('refuses any other passphrase once set', async () => {
     establishPassphrase(home, PASSPHRASE);
-    await expect(unlockPassphrase(home, { env: { [PASSPHRASE_ENV]: 'another one' }, isTTY: false })).rejects.toThrow(WrongPassphraseError);
+    await expect(unlockPassphrase(home, { env: { [PASSPHRASE_ENV]: 'another one' }, prompter: null })).rejects.toThrow(WrongPassphraseError);
   });
 
   it('checks a changed MN_PASSPHRASE afresh, never taking the one checked before', async () => {
     establishPassphrase(home, PASSPHRASE);
-    await unlockPassphrase(home, { env: { [PASSPHRASE_ENV]: PASSPHRASE }, isTTY: false });
-    await expect(unlockPassphrase(home, { env: { [PASSPHRASE_ENV]: 'another one' }, isTTY: false })).rejects.toThrow(WrongPassphraseError);
+    await unlockPassphrase(home, { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null });
+    await expect(unlockPassphrase(home, { env: { [PASSPHRASE_ENV]: 'another one' }, prompter: null })).rejects.toThrow(WrongPassphraseError);
   });
 
   it('is not set a second time over the first', () => {
@@ -103,19 +104,19 @@ describe('the one passphrase', () => {
 
 describe('a new secret', () => {
   it('sets the passphrase on a machine with none, and is sealed under it', async () => {
-    const passphrase = await passphraseForNewSecret(home, { env: { [PASSPHRASE_ENV]: PASSPHRASE }, isTTY: false });
+    const passphrase = await passphraseForNewSecret(home, { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null });
     expect(passphrase).toBe(PASSPHRASE);
     expect(isPassphraseSet(home)).toBe(true);
   });
 
   it(`refuses a new passphrase shorter than ${MIN_PASSPHRASE_LENGTH} characters, setting nothing`, async () => {
-    await expect(passphraseForNewSecret(home, { env: { [PASSPHRASE_ENV]: 'too short' }, isTTY: false })).rejects.toThrow(/at least/);
+    await expect(passphraseForNewSecret(home, { env: { [PASSPHRASE_ENV]: 'too short' }, prompter: null })).rejects.toThrow(/at least/);
     expect(isPassphraseSet(home)).toBe(false);
   });
 
   it('takes the passphrase already set, and no other', async () => {
     establishPassphrase(home, PASSPHRASE);
-    await expect(passphraseForNewSecret(home, { env: { [PASSPHRASE_ENV]: 'another passphrase' }, isTTY: false })).rejects.toThrow(WrongPassphraseError);
+    await expect(passphraseForNewSecret(home, { env: { [PASSPHRASE_ENV]: 'another passphrase' }, prompter: null })).rejects.toThrow(WrongPassphraseError);
   });
 });
 

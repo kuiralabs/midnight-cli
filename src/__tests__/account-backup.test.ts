@@ -35,7 +35,7 @@ let there: string;
 let fromDir: string;
 let toDir: string;
 let backup: string;
-const source = (passphrase = PASSPHRASE) => ({ env: { [PASSPHRASE_ENV]: passphrase }, isTTY: false });
+const source = (passphrase = PASSPHRASE) => ({ env: { [PASSPHRASE_ENV]: passphrase }, prompter: null });
 const accountsOf = (home: string) => path.join(home, '.midnight', 'accounts', 'undeployed', 'alice');
 
 const privateStateIn = async (home: string, dir: string) => {

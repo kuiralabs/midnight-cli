@@ -126,7 +126,7 @@ async function handleCreate(args: ParsedArgs, jsonMode: boolean): Promise<void> 
   const { findContractInfo } = await import('../lib/contract/inspect.ts');
   const { buildScaffold } = await import('../lib/test/create.ts');
   const { writeScaffold } = await import('../lib/test/create-writer.ts');
-  const promptHelpers = await import('../lib/test/create-prompt.ts');
+  const promptHelpers = await import('../ui/test-create-prompt.ts');
   const { writeJsonResult } = await import('../lib/json-output.ts');
   const { isInteractive, promptStrategy, promptBrowserOptions, promptCircuit, promptScreen, promptGoal, promptSuiteName } = promptHelpers;
   const ai = await import('../lib/test/ai-scaffold.ts');
@@ -250,10 +250,10 @@ type AiScaffoldDeps = {
   interactive: boolean;
   jsonMode: boolean;
   ai: typeof import('../lib/test/ai-scaffold.ts');
-  promptCircuit: typeof import('../lib/test/create-prompt.ts').promptCircuit;
-  promptScreen: typeof import('../lib/test/create-prompt.ts').promptScreen;
-  promptGoal: typeof import('../lib/test/create-prompt.ts').promptGoal;
-  promptSuiteName: typeof import('../lib/test/create-prompt.ts').promptSuiteName;
+  promptCircuit: typeof import('../ui/test-create-prompt.ts').promptCircuit;
+  promptScreen: typeof import('../ui/test-create-prompt.ts').promptScreen;
+  promptGoal: typeof import('../ui/test-create-prompt.ts').promptGoal;
+  promptSuiteName: typeof import('../ui/test-create-prompt.ts').promptSuiteName;
   discoverScreens: typeof import('../lib/test/discover-screens.ts').discoverScreens;
 };
 
