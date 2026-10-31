@@ -25,12 +25,14 @@ const SRC = join(ROOT, 'src');
 // under src/ wins. A file that matches nothing fails the check.
 const HOMES = [
   ['shell', /^wallet\.ts$/],
+  // help plays the shell's intro, and manual builds the full manual from help's specs (Y24).
+  ['shell', /^commands\/(help|manual)\.ts$/],
   ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise)\.ts$/],
   ['shell', /^ui\/(animate|art)\.ts$/],
   ['mcp', /^mcp-server\.ts$/],
   ['mcp', /^lib\/mcp\//],
 
-  ['core', /^commands\/(config|help|manual)\.ts$/],
+  ['core', /^commands\/config\.ts$/],
   ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
   ['dev', /^ui\/test-create-prompt\.ts$/],
