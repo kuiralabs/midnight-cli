@@ -1,5 +1,7 @@
 // Test framework types — schemas for dapp.test.json, suite configs, assertions, and results.
 
+import type { ServeHandle } from '../serve-manager.ts';
+
 // ── DApp Test Config (dapp.test.json in dApp root) ──
 
 export interface DappTestConfig {
@@ -129,10 +131,7 @@ export interface AssertionResult {
 
 // ── Handles for long-running resources ──
 
-export interface ServeHandle {
-  port: number;
-  stop(): Promise<void>;
-}
+export type { ServeHandle };
 
 export interface BuildHandle {
   port: number;

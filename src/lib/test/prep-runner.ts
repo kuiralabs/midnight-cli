@@ -16,7 +16,7 @@ import { GENESIS_SEED } from '../constants.ts';
 import { deriveUnshieldedAddress } from '../derive-address.ts';
 
 import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallbacks } from './types.ts';
-import { startServeOrReuse } from './serve-manager.ts';
+import { startServeOrReuse } from '../serve-manager.ts';
 import { OWN_COMMAND_DUST_WAIT_MS } from '../dust-wait.ts';
 import { startBuild } from './build-manager.ts';
 

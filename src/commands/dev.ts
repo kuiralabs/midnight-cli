@@ -240,12 +240,13 @@ async function deployContract(project: ProjectInfo): Promise<void> {
     const spinner = startSpinner(`Deploying with ${DEPLOY_WALLET} on ${DEPLOY_NETWORK}...`);
     try {
       const { default: handler } = await import('./contract.ts');
+      const { servePayer } = await import('../lib/serve-payer.ts');
       const result = await captureCommand(handler, {
         command: 'contract',
         subcommand: 'deploy',
         positionals: [],
         flags: { wallet: DEPLOY_WALLET, network: DEPLOY_NETWORK },
-      });
+      }, { payer: servePayer });
       spinner.stop(`Deployed`);
       const address = typeof result.address === 'string' ? result.address : '(unknown)';
       process.stderr.write(`  ${dim('address')}  ${teal(address)}\n`);

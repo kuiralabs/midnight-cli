@@ -2,16 +2,19 @@
 // Used by the MCP server to invoke CLI commands programmatically
 
 import { type ParsedArgs, MINIMAL_FLAG } from './argv.ts';
+import type { CommandContext, Payer } from './payer.ts';
 import { setCaptureTarget } from './json-output.ts';
 import { setProgressTarget } from '../ui/spinner.ts';
 
-type CommandHandler = (args: ParsedArgs, signal?: AbortSignal) => Promise<void>;
+type CommandHandler = (args: ParsedArgs, signal?: AbortSignal, context?: CommandContext) => Promise<void>;
 
 export interface CommandRun {
   /** Cancels the command: those that wait, or run a script, stop when it aborts. */
   signal?: AbortSignal;
   /** Each message the command's spinners say while it runs, --json mode included. */
   onProgress?: (message: string) => void;
+  /** What a command that submits a transaction pays with. */
+  payer?: Payer;
 }
 
 /**
@@ -43,7 +46,7 @@ export interface CommandRun {
 export async function captureCommand(
   handler: CommandHandler,
   args: ParsedArgs,
-  { signal, onProgress }: CommandRun = {},
+  { signal, onProgress, payer }: CommandRun = {},
 ): Promise<Record<string, unknown>> {
   const chunks: string[] = [];
   setCaptureTarget((json) => chunks.push(json));
@@ -54,7 +57,7 @@ export async function captureCommand(
     if (!(MINIMAL_FLAG in args.flags)) {
       args.flags[MINIMAL_FLAG] = true;
     }
-    await handler(args, signal);
+    await handler(args, signal, { payer });
 
     const raw = chunks.join('').trim();
     if (!raw) return {};

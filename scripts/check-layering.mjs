@@ -30,14 +30,14 @@ const HOMES = [
   ['mcp', /^lib\/mcp\//],
 
   ['core', /^commands\/(config|help|manual)\.ts$/],
-  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors)\.ts$/],
+  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors)\.ts$/],
   ['core', /^ui\/(colors|format|spinner)\.ts$/],
 
   ['chain', /^commands\/status\.ts$/],
   ['chain', /^lib\/(node-rpc|chain-id|indexer-graphql|graphql-ws-subscription|event-tip|ledger-guard|node-ready|indexer-ready|proof-server-ready|chain-clock|endpoint-check|balance-subscription)\.ts$/],
 
   ['wallet', /^commands\/(wallet|generate|address|genesis-address|info|balance|transfer|airdrop|dust|cache)\.ts$/],
-  ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|wallet-cache|cache-indexer|transfer|transfer-request|sync-eta)\.ts$/],
+  ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|wallet-cache|cache-indexer|transfer|transfer-request|sync-eta|wallet-can-pay)\.ts$/],
   ['wallet', /^lib\/(dust-[a-z-]+|shielded-[a-z-]+)\.ts$/],
 
   ['contract', /^commands\/(contract|inspect-cost)\.ts$/],
@@ -45,7 +45,7 @@ const HOMES = [
   ['contract', /^lib\/chain-params\.ts$/],
 
   ['connect', /^commands\/serve\.ts$/],
-  ['connect', /^lib\/(dapp-connector|ws-rpc|approval|fee-limits|fee-only-check|sign-data|sign-recipe|tx-inspect|tx-segments|tx-serde|paying-wallet)\.ts$/],
+  ['connect', /^lib\/(dapp-connector|ws-rpc|approval|fee-limits|fee-only-check|sign-data|sign-recipe|tx-inspect|tx-segments|tx-serde|serve-manager|serve-payer)\.ts$/],
 
   ['dev', /^commands\/(dev|test|localnet)\.ts$/],
   ['dev', /^lib\/localnet\.ts$/],

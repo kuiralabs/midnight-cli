@@ -7,7 +7,8 @@ import { writeJsonResult } from '../lib/json-output.ts';
 import { header, keyValue } from '../ui/format.ts';
 import { bold, dim, teal, yellow, green } from '../ui/colors.ts';
 import { silentSpinner, start as startSpinner } from '../ui/spinner.ts';
-import { assertWalletCanPay, openPayingServe, resolvePayingTarget } from '../lib/paying-wallet.ts';
+import { type CommandContext, type Payer, payerFor, resolvePayingTarget } from '../lib/payer.ts';
+import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
 import { validateContractAddress } from '../lib/contract/validate.ts';
 import { resolveContractCallRequest, resolveContractDeployRequest, resolveScanDir } from '../lib/contract/request.ts';
 import {
@@ -25,7 +26,7 @@ function isValidSubcommand(s: string): s is Subcommand {
   return (VALID_SUBCOMMANDS as readonly string[]).includes(s);
 }
 
-export default async function contractCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
+export default async function contractCommand(args: ParsedArgs, signal?: AbortSignal, context?: CommandContext): Promise<void> {
   const subcommand = args.subcommand;
 
   if (!subcommand || !isValidSubcommand(subcommand)) {
@@ -43,9 +44,9 @@ export default async function contractCommand(args: ParsedArgs, signal?: AbortSi
     case 'inspect':
       return handleInspect(args);
     case 'deploy':
-      return handleDeploy(args, signal);
+      return handleDeploy(args, payerFor('contract deploy', context), signal);
     case 'call':
-      return handleCall(args, signal);
+      return handleCall(args, payerFor('contract call', context), signal);
     case 'state':
       return handleState(args, signal);
   }
@@ -104,7 +105,7 @@ async function handleInspect(args: ParsedArgs): Promise<void> {
 
 // ── Deploy ──
 
-async function handleDeploy(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
+async function handleDeploy(args: ParsedArgs, payer: Payer, signal?: AbortSignal): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
   const { dappDir, info, constructorArgs, privateStateSecretKey } = resolveContractDeployRequest(args);
 
@@ -130,7 +131,7 @@ async function handleDeploy(args: ParsedArgs, signal?: AbortSignal): Promise<voi
   await assertWalletCanPay(target, getFlag(args, 'wallet'), jsonMode ? silentSpinner() : startSpinner('Checking wallet...'));
 
   // Start mn serve (or reuse existing)
-  const serve = await openPayingServe(target, getFlag(args, 'wallet'), jsonMode ? silentSpinner() : startSpinner('Starting mn serve...'));
+  const serve = await payer.serve(target, getFlag(args, 'wallet'), jsonMode ? silentSpinner() : startSpinner('Starting mn serve...'));
 
   const spinner = jsonMode ? silentSpinner() : startSpinner('Deploying contract...');
 
@@ -197,7 +198,7 @@ function writeNextStepsHint(address: string, circuits: { name: string; arguments
 
 // ── Call ──
 
-async function handleCall(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
+async function handleCall(args: ParsedArgs, payer: Payer, signal?: AbortSignal): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
   const { dappDir, info, address, circuit, callArgs } = resolveContractCallRequest(args);
 
@@ -218,7 +219,7 @@ async function handleCall(args: ParsedArgs, signal?: AbortSignal): Promise<void>
 
   await assertWalletCanPay(target, getFlag(args, 'wallet'), jsonMode ? silentSpinner() : startSpinner('Checking wallet...'));
 
-  const serve = await openPayingServe(target, getFlag(args, 'wallet'), jsonMode ? silentSpinner() : startSpinner('Starting mn serve...'));
+  const serve = await payer.serve(target, getFlag(args, 'wallet'), jsonMode ? silentSpinner() : startSpinner('Starting mn serve...'));
   const spinner = jsonMode ? silentSpinner() : startSpinner(`Calling ${circuit}...`);
 
   try {

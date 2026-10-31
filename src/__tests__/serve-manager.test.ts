@@ -7,7 +7,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { deriveAllAddresses } from '../lib/derive-address.ts';
-import { serveEndpointMismatch, serveWalletMismatch } from '../lib/test/serve-manager.ts';
+import { serveEndpointMismatch, serveWalletMismatch } from '../lib/serve-manager.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 
 const scratch = { node: 'ws://localhost:29944', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws' };
@@ -89,7 +89,7 @@ describe('startServeOrReuse against a running serve', () => {
   };
 
   it('reuses a serve on the same chain, and does not stop what it did not start', async () => {
-    const { startServeOrReuse } = await import('../lib/test/serve-manager.ts');
+    const { startServeOrReuse } = await import('../lib/serve-manager.ts');
     const serve = await fakeServe({ substrateNodeUri: requested.node, indexerWsUri: requested.indexerWS });
     try {
       const messages: string[] = [];
@@ -97,7 +97,7 @@ describe('startServeOrReuse against a running serve', () => {
       expect(handle.port).toBe(serve.port);
       expect(messages).toContain(`Reusing existing mn serve on port ${serve.port}`);
       await handle.stop(); // a no-op for a reused serve: the fake must still answer
-      const { probeServeNetwork } = await import('../lib/test/serve-manager.ts');
+      const { probeServeNetwork } = await import('../lib/serve-manager.ts');
       expect(await probeServeNetwork(serve.port)).toBe('undeployed');
     } finally {
       await serve.close();
@@ -105,7 +105,7 @@ describe('startServeOrReuse against a running serve', () => {
   });
 
   it('refuses a serve for the same network name on a different chain', async () => {
-    const { startServeOrReuse } = await import('../lib/test/serve-manager.ts');
+    const { startServeOrReuse } = await import('../lib/serve-manager.ts');
     const serve = await fakeServe({ substrateNodeUri: 'ws://localhost:9944', indexerWsUri: 'ws://localhost:8088/api/v4/graphql/ws' });
     try {
       await expect(startServeOrReuse({ port: serve.port, network: 'undeployed', endpoints: requested }))
@@ -141,7 +141,7 @@ describe('startServeOrReuse against a running serve', () => {
     });
 
     it('reuses a serve that pays from that wallet', async () => {
-      const { startServeOrReuse } = await import('../lib/test/serve-manager.ts');
+      const { startServeOrReuse } = await import('../lib/serve-manager.ts');
       const serve = await fakeServe(sameChain, deriveAllAddresses(TWO).undeployed);
       try {
         const handle = await startServeOrReuse({ port: serve.port, network: 'undeployed', endpoints: requested, wallet: 'two' });
@@ -154,7 +154,7 @@ describe('startServeOrReuse against a running serve', () => {
     // Found reading the code: `mn grant --wallet two` beside a running serve
     // for bob had bob pay, with no word of it.
     it('refuses a serve that pays from another wallet, on the same chain', async () => {
-      const { startServeOrReuse } = await import('../lib/test/serve-manager.ts');
+      const { startServeOrReuse } = await import('../lib/serve-manager.ts');
       const bob = deriveAllAddresses(BOB).undeployed;
       const serve = await fakeServe(sameChain, bob);
       try {

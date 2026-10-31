@@ -5,7 +5,7 @@
 
 import { type ParsedArgs, getFlag } from '../argv.ts';
 import { UsageError } from '../errors.ts';
-import { type PayingTarget, resolvePayingTarget } from '../paying-wallet.ts';
+import { type PayingTarget, resolvePayingTarget } from '../payer.ts';
 import { assertWalletFileExists, resolveWalletPath } from '../wallet-config.ts';
 import { assertAccountNetwork, assertNodeRunsAccount } from './account.ts';
 import { accountRecordsDir, accountWalletName, ensureAccountRecordsDir } from './account-records.ts';
