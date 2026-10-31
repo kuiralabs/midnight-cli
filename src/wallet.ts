@@ -17,6 +17,7 @@ import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { installSdkNoiseFilters } from './lib/sdk-noise.ts';
 import { setNoticeSink } from './lib/notices.ts';
 import { setPrompter } from './lib/prompter.ts';
+import { setSettingsSource, settingsFromEnvironment } from './lib/settings.ts';
 import { createTerminalPrompter } from './ui/terminal-prompter.ts';
 
 // Commands that start a WalletFacade. They (a) leave WebSocket connections in
@@ -67,6 +68,9 @@ installSdkNoiseFilters();
 
 // What libraries have for the person at the terminal goes to stderr.
 setNoticeSink((line) => process.stderr.write(line + '\n'));
+
+// Libraries read the environment variables of spec §5.4 as settings, at the moment they need one.
+setSettingsSource(() => settingsFromEnvironment(process.env));
 
 // Libraries ask their questions (passphrase, approvals) at the terminal.
 setPrompter(createTerminalPrompter());

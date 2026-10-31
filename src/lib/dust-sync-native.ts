@@ -16,9 +16,10 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { MIDNIGHT_DIR, CACHE_DIR_NAME, DIR_MODE, FILE_MODE } from './constants.ts';
 import { deriveDustSeed } from './derivation.ts';
 import type { NetworkConfig } from './network.ts';
-import { DUST_COLLAPSE_DISABLE_ENV, type DustDirectResult, type DustRetention } from './dust-direct.ts';
+import { type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { collapseForeignGenerations } from './dust-collapse.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
+import { settings } from './settings.ts';
 
 /** Sidecar checkpoint JSON shape (snake_case — matches the Rust `Checkpoint`). */
 export interface SidecarCheckpoint {
@@ -46,7 +47,7 @@ interface NativeFetchOptions {
  * null when none resolve (→ WASM fallback).
  */
 export function resolveSidecarBinary(): string | null {
-  const fromEnv = process.env.MN_DUST_SYNC_BIN;
+  const fromEnv = settings().dustSyncBin;
   if (fromEnv && existsSync(fromEnv)) return fromEnv;
 
   const exe = process.platform === 'win32' ? 'dust-sync.exe' : 'dust-sync';
@@ -88,7 +89,7 @@ const MN_LEDGER: number = 9;
 
 export function nativeDustSyncAvailable(): boolean {
   if (SIDECAR_LEDGER !== MN_LEDGER) return false;
-  if (process.env.MN_DISABLE_NATIVE_DUST === '1') return false;
+  if (settings().nativeDustDisabled) return false;
   return resolveSidecarBinary() !== null;
 }
 
@@ -247,7 +248,7 @@ export function adaptResult(cp: SidecarCheckpoint): DustDirectResult {
   // vs ~23 KB collapsed). Apply the same TS collapse the WASM reader uses, reusing
   // the owned-indices + frontier the checkpoint already carries. Idempotent, and it
   // fails safe to the uncollapsed state via the balance+root guard.
-  if (process.env[DUST_COLLAPSE_DISABLE_ENV] !== '1') {
+  if (!settings().dustCollapseDisabled) {
     const owned = new Set(cp.owned_generation_indices.map((i) => BigInt(i)));
     state = collapseForeignGenerations(state, owned, BigInt(cp.generation_frontier)).state;
   }

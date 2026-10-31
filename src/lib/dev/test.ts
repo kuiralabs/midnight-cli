@@ -32,7 +32,6 @@ export async function runTests(opts: TestRunnerOptions): Promise<TestResult> {
   return new Promise<TestResult>((resolvePromise, rejectPromise) => {
     const child = spawn(bin, args, {
       cwd: opts.project.projectRoot,
-      env: process.env,
       // Inherit stderr/stdout so test output streams directly. Ignore stdin
       // so the child can't steal the parent's raw-mode keystroke buffer.
       stdio: ['ignore', 'inherit', 'inherit'],

@@ -8,6 +8,8 @@ export default defineConfig({
     // Likewise, local stack detection must not depend on what docker runs on
     // the machine; it's covered with captured docker output in local-stacks.test.ts.
     env: { MN_DISABLE_NATIVE_DUST: '1', MN_NO_LOCAL_DETECT: '1' },
+    // Libraries read those variables, and the ones tests set, as settings the shell gives them.
+    setupFiles: ['src/__tests__/helpers/shell-settings.ts'],
     // Nested checkouts under .claude/ run their own tests; count only this
     // checkout's.
     exclude: [...configDefaults.exclude, '**/.claude/**'],

@@ -6,6 +6,7 @@
 import { getFlag, type ParsedArgs } from './argv.ts';
 import { UsageError } from './errors.ts';
 import { resolveWalletPath, unlockWallet, type WalletConfig } from './wallet-config.ts';
+import { settings } from './settings.ts';
 
 export interface ResolvedSeed {
   /** The wallet seed: 32-byte raw, or 64-byte BIP-39 (mnemonic-derived). */
@@ -54,7 +55,7 @@ export function parseSeedHex(input: string, label: string): Buffer {
  */
 export async function resolveSeedSource(args: ParsedArgs, opts: ResolveSeedOptions = {}): Promise<ResolvedSeed> {
   const seedFlag = getFlag(args, 'seed');
-  const seedSource = seedFlag ?? process.env.MN_SEED;
+  const seedSource = seedFlag ?? settings().seed;
   if (seedSource) {
     return {
       seed: parseSeedHex(seedSource, seedFlag ? '--seed' : 'MN_SEED'),

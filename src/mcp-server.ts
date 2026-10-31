@@ -28,6 +28,7 @@ import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { installSdkNoiseFilters } from './lib/sdk-noise.ts';
 import { setNoticeSink } from './lib/notices.ts';
+import { setSettingsSource, settingsFromEnvironment } from './lib/settings.ts';
 
 // Skill resources — teach MCP clients how to use this CLI conversationally.
 // Split into:
@@ -1199,6 +1200,8 @@ async function main() {
   installSdkNoiseFilters();
   // Libraries' notices go to stderr, the server's log, as before; stdout is the protocol.
   setNoticeSink((line) => process.stderr.write(line + '\n'));
+  // Tools read the environment variables of spec §5.4 as settings, as each is needed.
+  setSettingsSource(() => settingsFromEnvironment(process.env));
   // The server runs facades on demand (balance/transfer/etc.). A cold shielded
   // sync would overflow Node's default heap, so re-exec once at startup with
   // more headroom. No-op when launched via `mn --mcp` (already bumped) or when
