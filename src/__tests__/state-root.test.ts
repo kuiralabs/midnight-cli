@@ -1,5 +1,5 @@
-// Each owner builds its paths under the state root the host gives (spec §7),
-// and the files land where they did before 1G, with the same contents: the
+// Each owner builds its paths under the state root the host gives,
+// and the files land where they did before the state root, with the same contents: the
 // fixture was recorded from the code before the change. A root outside the
 // home gets the same layout and nothing is written to the home; with no root
 // given, a library refuses instead of guessing.
@@ -53,7 +53,7 @@ function layout(root: string, base: string): string[] {
 }
 
 describe('the state root the host gives', () => {
-  it('lays out every owner\'s files as before 1G, with the same contents', async () => {
+  it('lays out every owner\'s files as before the state root, with the same contents', async () => {
     const home = path.join(dir, 'home');
     setHostPathsSource(() => ({ stateRoot: path.join(home, MIDNIGHT_DIR), home }));
     await writeEveryOwnersFiles();

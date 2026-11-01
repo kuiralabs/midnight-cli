@@ -1,4 +1,4 @@
-// Every command honours its call's cancellation (2F, S7). The 13 that ignored
+// Every command honours its call's cancellation. The 13 that ignored
 // it: quick ones never start once cancelled (the runners refuse the call);
 // the ones that write check before each whole write; balance, status and
 // inspect-cost pass the signal into their reads; localnet is in
@@ -171,7 +171,7 @@ describe('inspect-cost passes the signal into its reads', () => {
     await expect(cliCall(inspectCostCommand, parseArgs(['inspect-cost', '--network', 'undeployed', '--indexer-ws', `ws://127.0.0.1:${port}/api/v4/graphql/ws`, '--json']), { signal: call.signal }))
       .rejects.toMatchObject({ code: 'CANCELLED' });
 
-    // Before 2F's S7 it waited out the probe's own 5s time limit, then went on to read the parameters.
+    // Before the signal reached it, it waited out the probe's own 5s time limit, then went on to read the parameters.
     expect(cancelledAt).toBeGreaterThan(0);
     expect(Date.now() - cancelledAt).toBeLessThan(2_000);
     expect(pending).toBe(1);

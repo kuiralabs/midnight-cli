@@ -5,7 +5,7 @@
 // progress ("…, retrying") or only to keep them off the terminal; it never
 // touches the process itself.
 //
-// Each call's warnings are its own (2F, S5). The host keeps one router; each
+// Each call's warnings are its own. The host keeps one router; each
 // call it runs is opened on it, and the shell tags the noise raised while a
 // call runs with that call's identity. A warning with an identity goes to
 // that call's newest listener, and to no other call. One without (raised

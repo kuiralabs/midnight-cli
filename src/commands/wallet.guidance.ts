@@ -1,5 +1,5 @@
 // What the wallet package (wallets, balances, transfers, Dust and the cache)
-// tells agents (plan 2G, D19): its pieces of `help --agent` and of the two
+// tells agents: its pieces of `help --agent` and of the two
 // skills, each naming its section and its place there, and its tools' rows in
 // the manual's tools table.
 

@@ -1,7 +1,7 @@
 // Localnet management — Docker Compose helpers for midnight-local-network
 // Manages a compose.yml at ~/.midnight/localnet/ and runs docker compose:
 // asynchronously, as a step of the call that asked, and killed when that call
-// is cancelled (2F).
+// is cancelled.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -292,7 +292,7 @@ export async function startLocalnet(docker: DockerCall, onStatus: (status: strin
 const CANCELLED_LISTING_TIMEOUT_MS = 10_000;
 
 /**
- * What a cancelled `localnet up` fails with (decision 4): the containers it
+ * What a cancelled `localnet up` fails with: the containers it
  * started stay in place, and the error says which, as Docker lists them now.
  * Listing them is not cancelled with the call (it has been already); it is
  * bounded by its own time limit. When Docker can't list them, the error says

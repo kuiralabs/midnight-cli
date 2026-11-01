@@ -1,5 +1,5 @@
 // Midnight Wallet CLI — MCP Server
-// Exposes all CLI commands as MCP tools via stdio transport
+// Exposes the installed commands' MCP tools via stdio transport
 // Launch: midnight-wallet-mcp (or: node dist/mcp-server.js)
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -36,7 +36,7 @@ import { skillCore, skillFull } from './lib/mcp/skills.ts';
 //           Fetch on demand (errors, multi-step flows, concept questions).
 // The original `midnight-wallet://skill` URI stays as a deprecated alias for
 // /full so existing MCP clients keep working. Both are assembled from the
-// installed packages' guidance at each read (2G).
+// installed packages' guidance at each read.
 const SKILL_CORE_URI = 'midnight-wallet://skill/core';
 const SKILL_FULL_URI = 'midnight-wallet://skill/full';
 const SKILL_LEGACY_URI = 'midnight-wallet://skill';
@@ -97,7 +97,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   const call = toolCall(request.params._meta?.progressToken, extra);
 
   // A parameter outside the tool's schema is refused before anything runs or
-  // a token is given (Y29, 2E). An unknown tool is reported by executeTool.
+  // a token is given. An unknown tool is reported by executeTool.
   const tool = findTool(installedCommands, name);
   const schema = name === CONFIRM_TOOL.name ? CONFIRM_TOOL : tool;
   if (schema !== undefined) {

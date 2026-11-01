@@ -81,7 +81,7 @@ describe('provisionDevWallets', () => {
     const airdrop = steps.airdrop;
     steps.airdrop = async (name, amount, signal) => { await airdrop(name, amount, signal); controller.abort(); };
 
-    // Regression (2F, S7): it failed with the signal's own AbortError, which mn's error codes don't read as CANCELLED.
+    // Regression: it failed with the signal's own AbortError, which mn's error codes don't read as CANCELLED.
     await expect(provisionDevWallets({ names: ['dev-alice'], amountNight: 1000, steps, signal: controller.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
     expect(calls).toEqual(['generate dev-alice', 'airdrop dev-alice 1000']);
   });

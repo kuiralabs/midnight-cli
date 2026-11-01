@@ -1,4 +1,4 @@
-// The `dust` command, described once (plan 2B, spec §4.1).
+// The `dust` command, described once.
 
 import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM } from '../lib/command-definition.ts';
 
@@ -26,7 +26,7 @@ export const dustDefinition: CommandDefinition = {
     {
       name: 'verbose',
       takesValue: false,
-      // Its lines go to the server's stderr, which no agent reads, and it switches verbose on for the whole process (2F).
+      // Its lines go to the server's stderr, which no agent reads.
       agent: { notForAgents: 'diagnostics for a person at a terminal' },
     },
     {
@@ -111,7 +111,7 @@ export const dustDefinition: CommandDefinition = {
         name: 'midnight_dust_status',
         description: 'Dust status. Default: { network, registered, registeredUtxos, unregisteredUtxos, dustBalance, dustAvailable }. Pass { full: true } for sync internals (eventsApplied, ownedUtxos, cached).',
         annotations: { readOnlyHint: true, openWorldHint: true },
-        // As this tool showed them before 2E.
+        // As this tool showed them before tool schemas came from the flags.
         params: [
           { flag: 'wallet' },
           { flag: 'proof-server', schema: { type: 'string' } },

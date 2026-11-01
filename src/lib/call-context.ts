@@ -1,4 +1,4 @@
-// One call, one context (spec §4.4, D21, plan 2F). Every handler gets the
+// One call, one context. Every handler gets the
 // context of its call: its cancellation signal, where its output goes, its
 // progress, its diagnostics, where the SDK's warnings go, its configuration,
 // and the payer and protectors its caller gives. Nothing about a call lives in
@@ -54,7 +54,7 @@ export interface CallDiagnostics {
 
 export type { CallSdkWarnings } from './sdk-warnings.ts';
 
-/** A call's configuration, read when the call starts (decision 1: host-set until phase 3). */
+/** A call's configuration, read when the call starts (set by the host). */
 export interface CallConfig {
   readonly settings: Settings;
   readonly paths: HostPaths;
@@ -62,7 +62,7 @@ export interface CallConfig {
 
 /**
  * The context of one call. `Protector` is what `wallet protect` runs (the
- * wallet package defines it, D24); other commands never look at it.
+ * wallet package defines it); other commands never look at it.
  */
 export interface CallContext<Protector = unknown> {
   /** The call's cancellation, always present. */

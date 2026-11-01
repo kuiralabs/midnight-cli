@@ -1,5 +1,5 @@
 // What the core package (config, and the error codes its base raises) tells
-// agents (plan 2G, D19): its pieces of `help --agent` and of the two skills,
+// agents: its pieces of `help --agent` and of the two skills,
 // each naming its section and its place there, and its tools' rows in the
 // manual's tools table.
 

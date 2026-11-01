@@ -1,4 +1,4 @@
-// The `balance` command, described once (plan 2B, spec §4.1).
+// The `balance` command, described once.
 
 import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM } from '../lib/command-definition.ts';
 
@@ -37,7 +37,7 @@ export const balanceDefinition: CommandDefinition = {
     {
       name: 'verbose',
       takesValue: false,
-      // Its lines go to the server's stderr, which no agent reads, and it switches verbose on for the whole process (2F).
+      // Its lines go to the server's stderr, which no agent reads.
       agent: { notForAgents: 'diagnostics for a person at a terminal' },
     },
     { name: 'wallet', takesValue: true, agent: { type: 'string' } },

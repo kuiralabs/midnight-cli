@@ -1,8 +1,8 @@
 // The unknown-flag refusal. The CLI rejects any flag a command doesn't accept
 // before the command runs: an unrecognised flag used to be silently ignored, so
 // a typo or a malformed argument fell back to defaults (for endpoints, a
-// different chain). The accepted flags come from the command registry (plan
-// 2C): each command's definition, and the registry's global flags.
+// different chain). The accepted flags come from the command registry:
+// each command's definition, and the registry's global flags.
 
 import { type ParsedArgs } from './argv.ts';
 import type { CommandRegistry } from './command-definition.ts';

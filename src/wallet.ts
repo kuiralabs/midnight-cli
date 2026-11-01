@@ -55,7 +55,6 @@ const command = args.command ?? 'help';
 const needsWalletSdk = commandNeedsWalletSdk(installedCommands, command);
 if (needsWalletSdk) await ensureHeapForSync();
 
-// Auto-migrate old ~/.midnight/wallet.json → wallets/default.json (silent, one-time)
 // Endpoint URLs can carry a Blockfrost project id: nothing mn or its libraries print shows it.
 hideProjectIdsInOutput();
 
@@ -66,6 +65,7 @@ const host = installCliHost();
 // Libraries ask their questions (passphrase, approvals) at the terminal.
 setPrompter(createTerminalPrompter());
 
+// Auto-migrate old ~/.midnight/wallet.json → wallets/default.json (silent, one-time)
 migrateOldWallet();
 
 // Global AbortController for clean shutdown on SIGINT/SIGTERM
@@ -93,7 +93,7 @@ async function run(): Promise<CommandOutcome | void> {
     output: processOutput,
     sdkWarnings: host.sdkWarnings,
     loadPayer: async () => (await import('./lib/serve-payer.ts')).servePayer,
-    // wallet protect also seals grant's accounts, through the protector grant provides (D24).
+    // wallet protect also seals grant's accounts, through the protector grant provides.
     loadProtectors: async () => [(await import('./lib/grant/account-protector.ts')).accountProtector],
   });
 }

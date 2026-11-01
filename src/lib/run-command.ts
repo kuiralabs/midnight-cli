@@ -18,13 +18,13 @@ export interface CommandRun {
   sdkWarnings?: SdkWarningCalls;
 }
 
-/** The server's stderr: where a call's text for the person goes (decision 3), never the protocol channel on stdout. */
+/** The server's stderr: where a call's text for the person goes, never the protocol channel on stdout. */
 const serverStderr = (text: string): void => { process.stderr.write(text); };
 
 /**
  * Execute a command handler with --json mode, capturing the JSON result.
  *
- * The call gets a context of its own (2F): its result is kept for this call
+ * The call gets a context of its own: its result is kept for this call
  * alone, as JSON reads it back, so two calls that overlap never see each
  * other's result, and none reaches stdout, the MCP stdio channel. Its text for
  * the person goes to the server's stderr, which clients typically log
@@ -40,7 +40,7 @@ const serverStderr = (text: string): void => { process.stderr.write(text); };
  * shape instead.
  *
  * What the command's spinners say goes to `onProgress` while it runs, and
- * nothing once it is over: each call has its own progress (2F), so two calls
+ * nothing once it is over: each call has its own progress, so two calls
  * at once never report each other's.
  *
  * Returns the result as a JSON object ({} when the command wrote none).

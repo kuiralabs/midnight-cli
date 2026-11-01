@@ -1,4 +1,4 @@
-// Libraries leave the host process alone (spec §3.1). The check finds each
+// Libraries leave the host process alone. The check finds each
 // kind of break in a module planted for it, skips strings and comments, and
 // finds nothing in src/ beyond what its allowlist names. The SDK's noise is
 // filtered by the shell: a transient Wallet.* rejection reaches the library
@@ -71,7 +71,7 @@ describe('the process-safety check', () => {
     expect(findViolations([quiet], {})).toEqual([]);
   });
 
-  it('finds a command writing to the terminal itself, not through its call (2F, S8), and lets ui/ write', () => {
+  it('finds a command writing to the terminal itself, not through its call, and lets ui/ write', () => {
     // Planted under a folder of their own, read as src/ is.
     for (const sub of ['commands', 'ui']) mkdirSync(join(dir, sub));
     const command = join(dir, 'commands', 'planted.ts');
@@ -94,7 +94,7 @@ describe('the process-safety check', () => {
   });
 });
 
-// Nothing about a call lives in module globals (spec §4.4, D21, 2F).
+// Nothing about a call lives in module globals.
 describe("the process-safety check keeps calls' state out of modules", () => {
   const plant = (name: string, lines: string[]) => {
     const file = join(dir, name);
@@ -156,7 +156,7 @@ describe("the process-safety check keeps calls' state out of modules", () => {
       'let other = 0;',
     ]);
     const rel = relative(resolve(ROOT, 'src'), file);
-    expect(found(file, { [rel]: { unlocked: 'shared on purpose', removed: 'removed by S9 (2F)' } })).toEqual([
+    expect(found(file, { [rel]: { unlocked: 'shared on purpose', removed: 'no longer kept' } })).toEqual([
       '2 keeps module state other',
       '0 allowlists module state it no longer keeps removed',
     ]);
@@ -273,7 +273,7 @@ describe('the shell filters the SDK noise', () => {
   });
 });
 
-// Each call's SDK warnings are its own (2F, S5). Regression: one listener
+// Each call's SDK warnings are its own. Regression: one listener
 // stack for the process, whose newest listener got every warning, so two
 // calls at once in the MCP server got each other's.
 describe("the shell gives each call its own SDK warnings", () => {

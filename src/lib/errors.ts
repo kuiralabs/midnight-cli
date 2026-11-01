@@ -31,7 +31,7 @@ export function isUsageError(err: unknown): err is UsageError {
 /** What a cancelled operation fails with; exit-codes' classifyError reads it as CANCELLED. */
 export const CANCELLED_MESSAGE = 'Operation cancelled';
 
-/** A cancelled call (2F): the cancellation error, typed with its code. */
+/** A cancelled call: the cancellation error, typed with its code. */
 export class CancelledError extends Error {
   readonly code = 'CANCELLED';
 

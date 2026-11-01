@@ -1,4 +1,4 @@
-// Agent guidance per package (spec §4.3, D19, plan 2G): each package brings
+// Agent guidance per package: each package brings
 // its pieces of the three texts that teach agents to use mn, the way it brings
 // its commands. `help --agent` is the shell's; the two skills the MCP server
 // serves (skill/core, and skill/full with its legacy alias) are the server's.

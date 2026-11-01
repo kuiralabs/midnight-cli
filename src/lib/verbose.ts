@@ -1,6 +1,6 @@
 // Verbose diagnostics: the timestamped line a call shows when it runs with
 // --verbose / -v. Whether a call is verbose, and where its lines go, is the
-// call's own (its context's diagnostics, 2F): a library that has diagnostics
+// call's own (its context's diagnostics): a library that has diagnostics
 // to give is handed the call's `line` as a VerboseLog, never a switch.
 
 import { dim } from '../ui/colors.ts';

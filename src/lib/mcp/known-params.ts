@@ -16,11 +16,10 @@ export function findUnknownParams(tool: ToolSchema, params: Record<string, unkno
 
 /**
  * Throw a UsageError (INVALID_ARGS) naming every parameter outside the tool's
- * schema (Y29). Each parameter used to become a flag unchecked, so a misspelt
- * one was dropped and the command ran on its defaults; the CLI refuses an
- * unknown flag the same way. Since 2E the schema lists every parameter a tool
- * takes, its command's flags among them, so it is the one check (2C also let
- * through any flag of the command).
+ * schema. Each parameter used to become a flag unchecked, so a misspelt one
+ * was dropped and the command ran on its defaults; the CLI refuses an unknown
+ * flag the same way. The schema lists every parameter a tool takes, its
+ * command's flags among them, so it is the one check.
  */
 export function assertKnownParams(tool: ToolSchema, params: Record<string, unknown>): void {
   const unknown = findUnknownParams(tool, params);

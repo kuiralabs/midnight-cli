@@ -1,5 +1,5 @@
 // Where mn keeps its state, as the host says: the shell's is ~/.midnight, a
-// consumer's is its own (spec §7). Each owner builds its paths under this
+// consumer's is its own. Each owner builds its paths under this
 // root; no library computes a path from the home directory itself. The source
 // is read as each path is built, so a host that changes HOME mid-run (the test
 // run does) is followed. With no source, a library refuses instead of guessing.

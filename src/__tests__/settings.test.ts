@@ -1,4 +1,4 @@
-// The environment variables of spec §5.4 reach libraries only as settings
+// The environment variables reach libraries only as settings
 // the shell gives them: each maps to its setting, and a library with no
 // settings source behaves as if none were set, whatever the environment says.
 

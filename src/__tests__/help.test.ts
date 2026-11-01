@@ -148,7 +148,7 @@ describe('help\'s specs (from the registry)', () => {
   });
 });
 
-describe('help — the lists come from the registry (2D)', () => {
+describe('help — the lists come from the registry', () => {
   /** The intro's command lines, in the order shown: `  name   brief`. */
   function introLines(stderr: string): string[] {
     return stderr.split('\n').filter((line) => /^ {2}[a-z-]+ {2,}\S/.test(line)).map((line) => line.trim().replace(/\s{2,}/, '  '));

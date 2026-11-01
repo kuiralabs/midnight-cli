@@ -74,7 +74,7 @@ describe('the accepted flags match the code', () => {
     'resolveSeedSource(': ['seed', 'wallet'],
     'resolveSeed(': ['seed', 'wallet'],
     'isVerbose(': ['verbose'],
-    // The call's diagnostics are verbose when its --verbose is given (2F): a command that writes them, or hands them to a library, reads it.
+    // The call's diagnostics are verbose when its --verbose is given: a command that writes them, or hands them to a library, reads it.
     'ctx.diagnostics.': ['verbose'],
     'rejectNoCacheForWrites(': ['no-cache'],
     'resolveTransferRequest(': ['shielded', 'force-shielded', 'wallet', 'network'],
@@ -94,7 +94,7 @@ describe('the accepted flags match the code', () => {
   }
 
   // A command's definition (<name>.definition.ts) sits beside it and is not a
-  // command, nor is a package's agent guidance (<package>.guidance.ts, 2G).
+  // command, nor is a package's agent guidance (<package>.guidance.ts).
   const commandFiles = readdirSync(COMMANDS_DIR).filter((f) => f.endsWith('.ts') && !f.endsWith('.definition.ts') && !f.endsWith('.guidance.ts'));
 
   it('has an entry for every command file, and no entry without one', () => {

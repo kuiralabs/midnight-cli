@@ -1,4 +1,4 @@
-// The `help --agent` manual (plan 2G, D19): the shell's skeleton of sections
+// The `help --agent` manual: the shell's skeleton of sections
 // and its own text (the overview, networks, JSON conventions, the MCP server's
 // setup, its tools table and resources), with each installed package's pieces
 // placed in the sections they name. The tools table is generated from the
@@ -30,7 +30,7 @@ export const AGENT_MANUAL_SECTIONS = [
 
 /**
  * The tools table's topic groups, in order. `width` is the description
- * column's, as the hand-written table aligned each group before 2G.
+ * column's, as the old hand-written table aligned each group.
  */
 export const TOOL_GROUPS: readonly { readonly id: string; readonly title: string; readonly width: number }[] = [
   { id: 'wallet-management', title: 'Wallet Management', width: 53 },

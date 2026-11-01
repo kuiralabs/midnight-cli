@@ -14,7 +14,7 @@ import { type ErrorCode } from './exit-codes.ts';
 
 /**
  * Write a structured JSON result to stdout: the CLI's way to write a call's
- * result (its context's output, 2F). Always outputs a single line of JSON
+ * result (its context's output). Always outputs a single line of JSON
  * followed by a newline. The MCP server keeps each call's result in that
  * call's context instead, so nothing here is shared between calls.
  */

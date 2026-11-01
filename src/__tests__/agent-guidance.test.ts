@@ -1,4 +1,4 @@
-// Agent guidance per package (plan 2G, D19): each package is installed with its
+// Agent guidance per package: each package is installed with its
 // pieces of the agent manual and the two skills, and the shell and the MCP
 // server assemble them. What the texts say is pinned by the behaviour snapshot
 // and by the docs/ copies (skill-docs.test.ts); these tests check the

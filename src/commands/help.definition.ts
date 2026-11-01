@@ -1,4 +1,4 @@
-// The `help` command, described once (plan 2B, spec §4.1).
+// The `help` command, described once.
 
 import type { CommandDefinition } from '../lib/command-definition.ts';
 

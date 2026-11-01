@@ -1,4 +1,4 @@
-// The `transfer` command, described once (plan 2B, spec §4.1).
+// The `transfer` command, described once.
 
 import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget } from '../lib/command-definition.ts';
 
@@ -34,7 +34,7 @@ export const transferDefinition: CommandDefinition = {
     {
       name: 'verbose',
       takesValue: false,
-      // Its lines go to the server's stderr, which no agent reads, and it switches verbose on for the whole process (2F).
+      // Its lines go to the server's stderr, which no agent reads.
       agent: { notForAgents: 'diagnostics for a person at a terminal' },
     },
     {

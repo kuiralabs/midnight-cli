@@ -2,8 +2,8 @@
 // Horizontal layout: logo on left, commands on right (all on stderr)
 // Agent-friendly: plain text when piped (non-TTY)
 // JSON mode: outputs capability manifest for agent self-discovery
-// Every list of commands it shows comes from the command registry (plan 2D),
-// and the agent manual from the installed packages' guidance (2G).
+// Every list of commands it shows comes from the command registry, and the
+// agent manual from the installed packages' guidance.
 
 import { type ParsedArgs, hasFlag } from '../lib/argv.ts';
 import { bold, teal, gray, dim } from '../ui/colors.ts';
@@ -105,7 +105,7 @@ function outputJsonManifest(ctx: CallContext): void {
   ctx.output.result(manifest);
 }
 
-// The agent manual: the shell's skeleton and each installed package's pieces (2G).
+// The agent manual: the shell's skeleton and each installed package's pieces.
 function printAgentManual(output: CallOutput): void {
   output.stdout(agentManual(installedCommands));
 }

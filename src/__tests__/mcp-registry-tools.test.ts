@@ -1,5 +1,5 @@
-// The MCP server's tools from a registry (src/lib/mcp/registry-tools.ts, plan
-// 2E), with test commands whose handlers record the argv they get and write
+// The MCP server's tools from a registry (src/lib/mcp/registry-tools.ts),
+// with test commands whose handlers record the argv they get and write
 // their JSON result through their call's context, as a command does.
 
 import { describe, expect, it } from 'vitest';

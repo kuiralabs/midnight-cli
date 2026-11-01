@@ -1,4 +1,4 @@
-// The `localnet` command, described once (plan 2B, spec §4.1).
+// The `localnet` command, described once.
 
 import type { CommandDefinition } from '../lib/command-definition.ts';
 

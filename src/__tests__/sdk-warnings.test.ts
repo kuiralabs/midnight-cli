@@ -1,4 +1,4 @@
-// The router of the SDK's warnings to the calls they came from (2F, S5). The
+// The router of the SDK's warnings to the calls they came from. The
 // shell's filters, which tag a warning with the call that raised it, are
 // tested in a process of their own (process-safety.test.ts).
 

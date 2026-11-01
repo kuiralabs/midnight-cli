@@ -1,15 +1,14 @@
-// One command, described once (spec §4.1, plan 2B): its subcommands, flags,
-// help, the intro's line, whether it needs the wallet SDK, what the shell
-// passes its handler, its handler, and its MCP tools. Plain data and a lazily
-// loaded handler, tied to no CLI framework (D10). Each command's definition
-// sits beside it (src/commands/<name>.definition.ts) and must not load the
-// handler's module until asked, so reading the registry loads no SDK.
+// One command, described once: its subcommands, flags, help, the intro's
+// line, whether it needs the wallet SDK, what the shell passes its handler,
+// its handler, and its MCP tools. Plain data and a lazily loaded handler,
+// tied to no CLI framework. Each command's definition sits beside it
+// (src/commands/<name>.definition.ts) and must not load the handler's module
+// until asked, so reading the registry loads no SDK.
 //
-// The shell's dispatch and flag checks read the registry since 2C; help, the
-// manual and the intro since 2D; the MCP server's tools since 2E, each tool's
-// schema generated from what it takes and its command's flags. Where the old
-// lists disagreed, Y29 (the plan's STATUS) fixes them in 2C–2G. Since 2G a
-// package is installed with its commands and its agent guidance (D19).
+// The shell's dispatch and flag checks, help, the manual, the intro and the
+// MCP server's tools all read the registry; each tool's schema is generated
+// from what it takes and its command's flags. A package is installed with its
+// commands and its agent guidance.
 
 import { FULL_FLAG, type ParsedArgs } from './argv.ts';
 import { type PackageGuidance, type ToolsTableRow, assertDistinctPlaces } from './agent-guidance.ts';
@@ -25,7 +24,7 @@ export interface ParamSchema {
 /** A network as tools show it: one of the networks mn knows (a test keeps it equal to network.ts's). */
 export const NETWORK_PARAM: ParamSchema = { type: 'string', enum: ['preprod', 'preview', 'undeployed'] };
 
-/** The endpoint flags, as the tools that took them unseen until 2E describe them. */
+/** The endpoint flags, as the tools that used to take them unseen describe them. */
 export const ENDPOINT_PARAMS = {
   node: { type: 'string', description: 'Node RPC URL (default: the configured one, or the network\'s)' },
   'indexer-ws': { type: 'string', description: 'Indexer WebSocket URL (default: the configured one, or the network\'s)' },
@@ -69,11 +68,11 @@ export interface CommandHelp {
   readonly jsonFields?: Readonly<Record<string, string>>;
 }
 
-/** What the shell does for a command around its handler. Every handler gets its call's signal (2F). */
+/** What the shell does for a command around its handler. Every handler gets its call's signal. */
 export interface ShellCall {
-  /** The handler gets the shell's payer, the served wallet (D24). */
+  /** The handler gets the shell's payer, the served wallet. */
   readonly payer?: true;
-  /** The handler gets the protectors other packages provide (wallet protect, D24). */
+  /** The handler gets the protectors other packages provide (wallet protect). */
   readonly protectors?: true;
   /** Written to stderr before the handler runs. */
   readonly notice?: string;
@@ -82,7 +81,7 @@ export interface ShellCall {
 }
 
 /**
- * A command's module: its handler takes the call's context (2F) and may return
+ * A command's module: its handler takes the call's context and may return
  * its exit code. Method syntax, so a handler may narrow the protectors it is
  * given (wallet protect's are the wallet package's).
  */
@@ -109,8 +108,8 @@ export interface ToolInputSchema {
  * One parameter of a tool, in its schema's order: one of its own (filling the
  * subcommand slot or a positional, or `full`), or one of its command's flags
  * placed there. A flag shows as its definition's `agent` says, unless the tool
- * gives `schema`: how this tool showed it before 2E, kept so tools/list reads
- * the same.
+ * gives `schema`: how this tool showed it before schemas were generated,
+ * kept so tools/list reads the same.
  */
 export type ToolParam =
   | { readonly name: string; readonly schema: ParamSchema }
@@ -200,7 +199,7 @@ export interface CommandDefinition {
   readonly mcp?: { readonly tools: readonly ToolDefinition[] };
 }
 
-/** A package as the shell installs it: its commands and what it tells agents (spec §6.1, D19). */
+/** A package as the shell installs it: its commands and what it tells agents. */
 export interface CommandPackage {
   readonly name: string;
   readonly commands: readonly CommandDefinition[];
@@ -468,11 +467,11 @@ export function createPackageRegistry(
 }
 
 /**
- * Superseded by the registry (2E: a tool's schema lists every parameter it
- * takes, and is the one check); removal waits for Y13.
+ * Superseded by the registry (a tool's schema lists every parameter it takes,
+ * and is the one check); kept until its last callers go.
  *
  * The flags a call of the tool could set besides its schema's parameters
- * under 2C's interim rule: when its argv passes every other parameter on as a
+ * under the old pass-through rule: when its argv passes every other parameter on as a
  * flag (`flags: 'rest'`), the flags its command accepts and the global ones;
  * otherwise none. Empty for a tool no command defines (the server's own
  * confirm tool).

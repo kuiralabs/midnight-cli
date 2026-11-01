@@ -1,4 +1,4 @@
-// The `generate` command, described once (plan 2B, spec §4.1).
+// The `generate` command, described once.
 
 import type { CommandDefinition } from '../lib/command-definition.ts';
 
@@ -57,6 +57,6 @@ export const generateDefinition: CommandDefinition = {
   needsWalletSdk: false,
   shell: { notice: '\n  Note: "midnight generate" is deprecated.\n  Use "midnight wallet generate <name>" instead.\n\n' },
   load: () => import('./generate.ts'),
-  // Y29: the MCP server can load generate's handler, but its tool was removed (agents use midnight_wallet_generate).
+  // The MCP server can load generate's handler, but its tool was removed (agents use midnight_wallet_generate).
   mcp: { tools: [] },
 };
