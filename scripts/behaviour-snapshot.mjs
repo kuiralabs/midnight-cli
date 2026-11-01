@@ -181,7 +181,7 @@ function sdkLoads(home) {
 
 // ---------- the MCP server ----------
 
-function mcpSession(home) {
+function mcpSession(home, steps = listToolsAndResources) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, [BIN, '--mcp'], { cwd: home, env: cleanEnv(home), stdio: ['pipe', 'pipe', 'pipe'] });
     const timer = setTimeout(() => { child.kill(); reject(new Error('MCP server did not answer in time')); }, TIMEOUT_MS);
@@ -207,14 +207,63 @@ function mcpSession(home) {
     (async () => {
       await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'behaviour-snapshot', version: '1' } });
       child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
-      const tools = await request('tools/list');
-      const resources = await request('resources/list');
-      const contents = {};
-      for (const r of resources.result?.resources ?? []) contents[r.uri] = await request('resources/read', { uri: r.uri });
+      const recorded = await steps(request);
       clearTimeout(timer);
       child.kill();
-      resolvePromise(JSON.parse(normalise(JSON.stringify({ tools, resources, contents }), home)));
+      resolvePromise(JSON.parse(normalise(JSON.stringify(recorded), home)));
     })().catch((error) => { clearTimeout(timer); child.kill(); reject(error); });
+  });
+}
+
+async function listToolsAndResources(request) {
+  const tools = await request('tools/list');
+  const resources = await request('resources/list');
+  const contents = {};
+  for (const r of resources.result?.resources ?? []) contents[r.uri] = await request('resources/read', { uri: r.uri });
+  return { tools, resources, contents };
+}
+
+// What an agent is asked to confirm, tool by tool, and what a tool does with a
+// parameter it doesn't know. Endpoints point at a closed port, so no check
+// reaches a chain; a check that needs one records its refusal.
+const CLOSED = 'http://127.0.0.1:1';
+const CONFIRMATION_CALLS = [
+  ['midnight_transfer', { to: 'bob', amount: '1', network: 'undeployed' }],
+  ['midnight_contract_deploy', { path: '<DAPP>', network: 'undeployed' }],
+  ['midnight_contract_call', { path: '<DAPP>', address: 'ab'.repeat(32), circuit: 'increment', network: 'undeployed' }],
+  ['midnight_grant_deploy', { network: 'undeployed' }],
+  ['midnight_grant_deposit', { amount: '1', network: 'undeployed' }],
+  ['midnight_grant_issue', { network: 'undeployed' }],
+  ['midnight_grant_revoke', { grant: '1', network: 'undeployed' }],
+  ['midnight_grant_revoke_all', { network: 'undeployed' }],
+];
+
+function mcpConfirmations(home) {
+  for (const args of [
+    ['config', 'set', 'node', CLOSED.replace('http', 'ws')], ['config', 'set', 'indexer-ws', `${CLOSED.replace('http', 'ws')}/api/v4/graphql/ws`],
+    ['config', 'set', 'proof-server', CLOSED],
+    ['wallet', 'generate', 'snap', '--seed', SEED, '--network', 'undeployed'], ['wallet', 'generate', 'bob', '--network', 'undeployed'],
+    ['wallet', 'use', 'snap'],
+  ]) runCli(home, args);
+  // A compiled contract's description, as a dApp folder holds it (one circuit, no witnesses).
+  const dapp = join(home, 'dapp');
+  mkdirSync(join(dapp, 'managed', 'counter', 'compiler'), { recursive: true });
+  writeFileSync(join(dapp, 'managed', 'counter', 'compiler', 'contract-info.json'), JSON.stringify({
+    'compiler-version': '0.35.0', 'language-version': '0.27.0', 'runtime-version': '0.20.0',
+    circuits: [{ name: 'increment', pure: false, proof: true, arguments: [], 'result-type': { 'type-name': 'Tuple', types: [] } }],
+    witnesses: [],
+  }));
+  return mcpSession(home, async (request) => {
+    const calls = {};
+    for (const [name, args] of CONFIRMATION_CALLS) {
+      const withDapp = Object.fromEntries(Object.entries(args).map(([k, v]) => [k, v === '<DAPP>' ? dapp : v]));
+      calls[name] = await request('tools/call', { name, arguments: withDapp });
+    }
+    calls['unknown-parameter'] = await request('tools/call', { name: 'midnight_config_get', arguments: { key: 'network', [NOT_A_FLAG]: '1' } });
+    // Last: it removes a wallet.
+    calls['midnight_wallet_remove'] = await request('tools/call', { name: 'midnight_wallet_remove', arguments: { name: 'bob' } });
+    // The pending token is random: recorded as a placeholder.
+    return JSON.parse(JSON.stringify(calls).replace(/\\"token\\":\s*\\"[^\\"]+\\"/g, '\\"token\\": \\"<TOKEN>\\"'));
   });
 }
 
@@ -245,6 +294,13 @@ async function record(dir) {
     for (const [name, value] of Object.entries(offlineCases(offlineHome))) write(`offline/${name}`, value);
   } finally {
     rmSync(offlineHome, { recursive: true, force: true });
+  }
+
+  const confirmHome = mkdtempSync(join(tmpdir(), 'mn-snapshot-'));
+  try {
+    write('mcp-confirmations', await mcpConfirmations(confirmHome));
+  } finally {
+    rmSync(confirmHome, { recursive: true, force: true });
   }
 }
 
