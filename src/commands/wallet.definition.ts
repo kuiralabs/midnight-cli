@@ -155,14 +155,21 @@ export const walletDefinition: CommandDefinition = {
         order: 4,
       },
       {
-        // Y29: marked destructive, yet runs without confirmation. Y29 approved fixing it; 2E keeps it as
-        // it is, since its confirmation text and check are Norman's to decide.
+        // Destructive, so confirmed like the other destructive tools (Y29).
         name: 'midnight_wallet_remove',
         description: 'Remove wallet.',
         annotations: { destructiveHint: true },
         params: [{ name: 'name', schema: { type: 'string' } }],
         required: ['name'],
         argv: { subcommand: 'remove', positionals: ['name'], flags: [] },
+        confirmation: {
+          describe: (params) => `Remove wallet ${params.name}: its file, and the seed in it, is deleted from this machine`,
+          // A wallet that can't be removed is refused before the agent asks the user.
+          async check(params) {
+            const { assertWalletRemovable } = await import('../lib/wallet-config.ts');
+            assertWalletRemovable(String(params.name));
+          },
+        },
         order: 5,
       },
     ],

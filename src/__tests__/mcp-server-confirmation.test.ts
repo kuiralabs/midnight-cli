@@ -28,6 +28,8 @@ beforeAll(async () => {
   home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'mn-mcp-confirm-home-')));
   const env = { ...process.env, HOME: home, NO_COLOR: '1', MN_PASSPHRASE: 'correct horse battery staple' } as Record<string, string>;
   execFileSync(TSX, [path.join(REPO, 'src', 'wallet.ts'), 'wallet', 'generate', 'alice', '--json'], { env, stdio: 'ignore' });
+  execFileSync(TSX, [path.join(REPO, 'src', 'wallet.ts'), 'wallet', 'generate', 'bob', '--json'], { env, stdio: 'ignore' });
+  execFileSync(TSX, [path.join(REPO, 'src', 'wallet.ts'), 'wallet', 'use', 'alice'], { env, stdio: 'ignore' });
   // An account on record for alice.
   recordsDir = path.join(home, '.midnight', 'accounts', 'undeployed', 'alice');
   fs.mkdirSync(recordsDir, { recursive: true, mode: 0o700 });
@@ -65,4 +67,33 @@ describe('midnight_grant_deposit', () => {
     expect(refused).toMatchObject({ error: true, code: 'INVALID_ARGS' });
     expect(refused.token).toBeUndefined();
   }, 60_000);
+});
+
+describe('midnight_wallet_remove', () => {
+  const walletFile = (name: string) => path.join(home, '.midnight', 'wallets', `${name}.json`);
+
+  it('answers with a token naming what is deleted, and removes nothing', async () => {
+    const pending = await call('midnight_wallet_remove', { name: 'bob' });
+
+    expect(pending.pending).toBe(true);
+    expect(pending.tool).toBe('midnight_wallet_remove');
+    expect(pending.description).toBe('Remove wallet bob: its file, and the seed in it, is deleted from this machine');
+    expect(fs.existsSync(walletFile('bob'))).toBe(true);
+  });
+
+  it('refuses the active wallet before any token is given', async () => {
+    const refused = await call('midnight_wallet_remove', { name: 'alice' });
+
+    expect(refused.pending).toBeUndefined();
+    expect(String(refused.message)).toContain('Cannot remove the active wallet "alice"');
+    expect(fs.existsSync(walletFile('alice'))).toBe(true);
+  });
+
+  it('removes the wallet once the token is confirmed', async () => {
+    const pending = await call('midnight_wallet_remove', { name: 'bob' });
+    const done = await call('midnight_confirm_operation', { token: pending.token });
+
+    expect(done).toMatchObject({ wallet: 'bob', removed: true });
+    expect(fs.existsSync(walletFile('bob'))).toBe(false);
+  });
 });

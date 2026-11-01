@@ -316,9 +316,12 @@ describe('the MCP tools, generated from the registry (TOOLS in src/lib/mcp/tools
     expect(NETWORK_PARAM.enum).toStrictEqual(getValidNetworkNames());
   });
 
-  it('needs confirmation for the same tools', () => {
+  // The one tool confirmed since 2E (Y29): it was marked destructive yet ran at once.
+  const NEWLY_CONFIRMED = 'midnight_wallet_remove';
+
+  it('needs confirmation for the same tools, and for wallet remove', () => {
     const rebuilt = new Set(registry.tools.filter((t) => t.confirmation !== undefined).map((t) => t.name));
-    expect(rebuilt).toStrictEqual(REQUIRES_CONFIRMATION);
+    expect(rebuilt).toStrictEqual(new Set([...REQUIRES_CONFIRMATION, NEWLY_CONFIRMED]));
     // Every one checks the call before a token is given, as each had a check.
     for (const tool of registry.tools.filter((t) => t.confirmation !== undefined)) expect(tool.confirmation!.check, tool.name).toBeTypeOf('function');
   });
@@ -330,13 +333,18 @@ describe('the MCP tools, generated from the registry (TOOLS in src/lib/mcp/tools
       { wallet: 'alice', network: 'undeployed', amount: '5', to: 'mn_addr_undeployed1x', args: '[1,2]', path: './dapp', circuit: 'inc', address: '0xab', grant: '3', link: 'l' },
       { wallet: null, network: null, args: '', path: undefined },
     ];
-    const confirmed = registry.tools.filter((t) => t.confirmation !== undefined);
+    const confirmed = registry.tools.filter((t) => t.confirmation !== undefined && t.name !== NEWLY_CONFIRMED);
     expect(confirmed.length).toBe(REQUIRES_CONFIRMATION.size);
     for (const tool of confirmed) {
       for (const params of samples) {
         expect(confirmationText(tool, params), `${tool.name} ${JSON.stringify(params)}`).toBe(describePendingOp(tool.name, params));
       }
     }
+  });
+
+  it('describes removing a wallet as deleting its file and seed', () => {
+    const remove = registry.tools.find((t) => t.name === NEWLY_CONFIRMED)!;
+    expect(confirmationText(remove, { name: 'bob' })).toBe('Remove wallet bob: its file, and the seed in it, is deleted from this machine');
   });
 
   it('lets a tool pass on its command\'s flags beyond its schema only when its argv passes the rest on (2C\'s rule, superseded by the schema)', () => {

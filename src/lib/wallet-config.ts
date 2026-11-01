@@ -230,7 +230,11 @@ export function findWalletByAddress(
  * Remove a named wallet.
  * Refuses if it's the active wallet or the last remaining wallet.
  */
-export function removeWallet(name: string): void {
+/**
+ * Throws, saying why, unless the named wallet can be removed: it exists, and
+ * it is neither the active wallet nor the only one. Returns its file.
+ */
+export function assertWalletRemovable(name: string): string {
   if (!isValidWalletName(name)) {
     throw new Error(
       `Invalid wallet name: "${name}"\nWallet name must be a simple name (no path separators, .json suffix, or special characters).`
@@ -261,7 +265,11 @@ export function removeWallet(name: string): void {
     );
   }
 
-  fs.unlinkSync(walletPath);
+  return walletPath;
+}
+
+export function removeWallet(name: string): void {
+  fs.unlinkSync(assertWalletRemovable(name));
 }
 
 /** Throws, with how to make one, when there is no wallet file at `resolvedPath`. */
