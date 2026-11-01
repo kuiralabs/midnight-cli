@@ -7,6 +7,7 @@ import { createCommandRegistry, type CommandDefinition, type ToolDefinition } fr
 import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from '../lib/mcp/registry-tools.ts';
 import type { CallContext } from '../lib/call-context.ts';
 import { MINIMAL_FLAG, type ParsedArgs } from '../lib/argv.ts';
+import { ownCall } from './helpers/own-call.ts';
 
 const received: ParsedArgs[] = [];
 const command = (tools: ToolDefinition[]): CommandDefinition => ({
@@ -59,20 +60,20 @@ describe('the MCP server\'s tools from a registry', () => {
 
   it('runs a tool\'s command with the argv its parameters map to, in agent mode, and returns its result', async () => {
     received.length = 0;
-    const result = await runTool(findTool(registry, 'thing_make')!, { label: 'cup', size: '3' }, {});
+    const result = await runTool(findTool(registry, 'thing_make')!, { label: 'cup', size: '3' }, ownCall());
     expect(result).toStrictEqual({ subcommand: 'make', size: '3', go: true });
     expect(received).toStrictEqual([{ command: 'thing', subcommand: 'make', positionals: ['cup'], flags: { json: true, size: '3', go: true, [MINIMAL_FLAG]: true } }]);
   });
 
   it('confirms the text a check finds, after running what the check asks, and lets a check refuse', async () => {
     received.length = 0;
-    expect(await confirmationFor(findTool(registry, 'thing_make')!, { label: 'cup', size: '3' }, {})).toBe('Make cup at size 3');
+    expect(await confirmationFor(findTool(registry, 'thing_make')!, { label: 'cup', size: '3' }, ownCall())).toBe('Make cup at size 3');
     // The check ran the command once, without the flag the tool fixes.
     expect(received.map((args) => [args.subcommand, args.flags.go])).toStrictEqual([['show', undefined]]);
-    await expect(confirmationFor(findTool(registry, 'thing_make')!, { label: 'bad' }, {})).rejects.toThrow('not that one');
+    await expect(confirmationFor(findTool(registry, 'thing_make')!, { label: 'bad' }, ownCall())).rejects.toThrow('not that one');
   });
 
   it('confirms the definition\'s text when there is no check', async () => {
-    expect(await confirmationFor(findTool(registry, 'thing_plain')!, {}, {})).toBe('Plain thing');
+    expect(await confirmationFor(findTool(registry, 'thing_plain')!, {}, ownCall())).toBe('Plain thing');
   });
 });

@@ -18,6 +18,7 @@ import inspectCostCommand from '../commands/inspect-cost.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
 import { deriveAllAddresses } from '../lib/derive-address.ts';
 import { localIndexerFlags } from './helpers/local-indexer.ts';
+import { ownCall } from './helpers/own-call.ts';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-run-cmd-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
@@ -53,20 +54,20 @@ afterEach(() => {
 describe('captureCommand', () => {
   it('fails a command that returns a non-zero exit code, with the result it wrote, and passes one that returns 0', async () => {
     const failing: CommandHandler = async (_args, ctx) => { ctx.output.result({ overall: 'fail' }); return { exitCode: 1 }; };
-    const err = await captureCommand(failing, parseArgs(['test', 'run'])).catch((e: unknown) => e);
+    const err = await captureCommand(failing, parseArgs(['test', 'run']), ownCall()).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(CommandFailedError);
     expect((err as CommandFailedError).exitCode).toBe(1);
     expect((err as CommandFailedError).result).toStrictEqual({ overall: 'fail' });
     expect(classifyError(err as Error).exitCode).toBe(1);
 
     const passing: CommandHandler = async (_args, ctx) => { ctx.output.result({ overall: 'pass' }); return { exitCode: 0 }; };
-    expect(await captureCommand(passing, parseArgs(['test', 'run']))).toStrictEqual({ overall: 'pass' });
+    expect(await captureCommand(passing, parseArgs(['test', 'run']), ownCall())).toStrictEqual({ overall: 'pass' });
   });
 
   it('captures JSON output from generate command', async () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const args = parseArgs(['generate', '--network', 'undeployed', '--output', walletFile]);
-    const result = await captureCommand(generateCommand, args);
+    const result = await captureCommand(generateCommand, args, ownCall());
 
     expect(result.addresses).toBeDefined();
     const addrs = result.addresses as Record<string, string>;
@@ -80,7 +81,7 @@ describe('captureCommand', () => {
     saveWalletConfig(TEST_CONFIG, walletFile);
 
     const args = parseArgs(['info', '--wallet', walletFile, '--network', 'undeployed']);
-    const result = await captureCommand(infoCommand, args);
+    const result = await captureCommand(infoCommand, args, ownCall());
 
     expect(result.addresses).toBeDefined();
     expect(result.activeNetwork).toBe('undeployed');
@@ -90,7 +91,7 @@ describe('captureCommand', () => {
 
   it('captures JSON output from address command', async () => {
     const args = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed']);
-    const result = await captureCommand(addressCommand, args);
+    const result = await captureCommand(addressCommand, args, ownCall());
 
     expect((result.address as string).startsWith('mn_addr_undeployed1')).toBe(true);
     expect(result.network).toBe('undeployed');
@@ -99,7 +100,7 @@ describe('captureCommand', () => {
 
   it('captures JSON output from genesis-address command', async () => {
     const args = parseArgs(['genesis-address', '--network', 'undeployed']);
-    const result = await captureCommand(genesisAddressCommand, args);
+    const result = await captureCommand(genesisAddressCommand, args, ownCall());
 
     expect((result.address as string).startsWith('mn_addr_undeployed1')).toBe(true);
     expect(result.network).toBe('undeployed');
@@ -108,7 +109,7 @@ describe('captureCommand', () => {
   it('captures JSON output from inspect-cost command', async () => {
     const local = await localIndexerFlags();
     const args = parseArgs(['inspect-cost', ...local.flags]);
-    const result = await captureCommand(inspectCostCommand, args).finally(local.close);
+    const result = await captureCommand(inspectCostCommand, args, ownCall()).finally(local.close);
 
     expect(result.readTime).toBeDefined();
     expect(result.computeTime).toBeDefined();
@@ -119,7 +120,7 @@ describe('captureCommand', () => {
 
   it('does not leak to real stdout or stderr', async () => {
     const args = parseArgs(['genesis-address', '--network', 'undeployed']);
-    await captureCommand(genesisAddressCommand, args);
+    await captureCommand(genesisAddressCommand, args, ownCall());
 
     // captureOutput intercepts real stdout/stderr — if captureCommand leaked,
     // we'd see output here
@@ -129,12 +130,12 @@ describe('captureCommand', () => {
 
   it('throws original error when handler fails', async () => {
     const args = parseArgs(['info', '--wallet', path.join(TEST_DIR, 'nonexistent.json')]);
-    await expect(captureCommand(infoCommand, args)).rejects.toThrow('Wallet file not found');
+    await expect(captureCommand(infoCommand, args, ownCall())).rejects.toThrow('Wallet file not found');
   });
 
   it('restores stdout/stderr even when handler throws', async () => {
     const args = parseArgs(['info', '--wallet', path.join(TEST_DIR, 'nonexistent.json')]);
-    try { await captureCommand(infoCommand, args); } catch {}
+    try { await captureCommand(infoCommand, args, ownCall()); } catch {}
 
     // Verify stdout/stderr are restored by writing to them
     io.clearStdout();
@@ -153,13 +154,13 @@ describe('captureCommand', () => {
 
     it('injects _minimal: true by default', async () => {
       const sink: { args?: ParsedArgs } = {};
-      await captureCommand(captureArgs(sink), { command: 'x', subcommand: undefined, positionals: [], flags: {} });
+      await captureCommand(captureArgs(sink), { command: 'x', subcommand: undefined, positionals: [], flags: {} }, ownCall());
       expect(sink.args?.flags._minimal).toBe(true);
     });
 
     it('also sets json: true', async () => {
       const sink: { args?: ParsedArgs } = {};
-      await captureCommand(captureArgs(sink), { command: 'x', subcommand: undefined, positionals: [], flags: {} });
+      await captureCommand(captureArgs(sink), { command: 'x', subcommand: undefined, positionals: [], flags: {} }, ownCall());
       expect(sink.args?.flags.json).toBe(true);
     });
 
@@ -167,7 +168,7 @@ describe('captureCommand', () => {
       const sink: { args?: ParsedArgs } = {};
       // Tool handler may want to opt out (e.g. when an agent passes full:true,
       // it sets _full:true; the wallet-list handler reads both flags).
-      await captureCommand(captureArgs(sink), { command: 'x', subcommand: undefined, positionals: [], flags: { _minimal: true, _full: true } });
+      await captureCommand(captureArgs(sink), { command: 'x', subcommand: undefined, positionals: [], flags: { _minimal: true, _full: true } }, ownCall());
       expect(sink.args?.flags._minimal).toBe(true);
       expect(sink.args?.flags._full).toBe(true);
     });
@@ -186,7 +187,7 @@ describe('captureCommand', () => {
         shown.update('Syncing transactions... 40%');
         shown.log('fetching keys/deposit_shielded.prover (11 MB), once, from github.com');
         shown.stop('Synced 3 transactions');
-      }, noArgs(), { onProgress: (message) => said.push(message) });
+      }, noArgs(), ownCall({ onProgress: (message) => said.push(message) }));
       expect(said).toEqual([
         'Starting mn serve...',
         'mn serve ready (port 9932)',
@@ -203,7 +204,7 @@ describe('captureCommand', () => {
       await expect(captureCommand(async (_args, ctx) => {
         left = ctx.progress.silent();
         throw new Error('refused');
-      }, noArgs(), { onProgress: (message) => said.push(message) })).rejects.toThrow('refused');
+      }, noArgs(), ownCall({ onProgress: (message) => said.push(message) }))).rejects.toThrow('refused');
       left?.update('said after the run');
       expect(said).toEqual([]);
     });
@@ -215,19 +216,19 @@ describe('captureCommand', () => {
         expect(ctx.progress.active()).toBe(spinner);
         spinner.stop('Wallet synced');
         expect(ctx.progress.active()).toBeNull();
-      }, noArgs());
+      }, noArgs(), ownCall());
     });
 
     it('hands the command the run\'s signal', async () => {
       const controller = new AbortController();
       let seen: AbortSignal | undefined;
-      await captureCommand(async (_args, ctx) => { seen = ctx.signal; }, noArgs(), { signal: controller.signal });
+      await captureCommand(async (_args, ctx) => { seen = ctx.signal; }, noArgs(), ownCall({ signal: controller.signal }));
       expect(seen).toBe(controller.signal);
     });
 
     it('hands every command a signal, one never cancelled when the run gives none', async () => {
       let seen: AbortSignal | undefined;
-      await captureCommand(async (_args, ctx) => { seen = ctx.signal; }, noArgs());
+      await captureCommand(async (_args, ctx) => { seen = ctx.signal; }, noArgs(), ownCall());
       expect(seen).toBeInstanceOf(AbortSignal);
       expect(seen?.aborted).toBe(false);
     });
@@ -236,7 +237,7 @@ describe('captureCommand', () => {
       const controller = new AbortController();
       controller.abort();
       let ran = false;
-      const err = await captureCommand(async () => { ran = true; }, noArgs(), { signal: controller.signal }).catch((e: unknown) => e);
+      const err = await captureCommand(async () => { ran = true; }, noArgs(), ownCall({ signal: controller.signal })).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(CancelledError);
       expect(classifyError(err as Error).errorCode).toBe('CANCELLED');
       expect(ran).toBe(false);
@@ -258,8 +259,8 @@ describe('captureCommand', () => {
     it('each keeps its own result when they finish in the opposite order they started, and none reaches stdout', async () => {
       const first = gate();
       const second = gate();
-      const a = captureCommand(async (_args, ctx) => { await first.opened; ctx.output.result({ call: 'a' }); }, noArgs());
-      const b = captureCommand(async (_args, ctx) => { await second.opened; ctx.output.result({ call: 'b' }); }, noArgs());
+      const a = captureCommand(async (_args, ctx) => { await first.opened; ctx.output.result({ call: 'a' }); }, noArgs(), ownCall());
+      const b = captureCommand(async (_args, ctx) => { await second.opened; ctx.output.result({ call: 'b' }); }, noArgs(), ownCall());
       second.open();
       expect(await b).toEqual({ call: 'b' });
       first.open();
@@ -284,13 +285,13 @@ describe('captureCommand', () => {
         spinner.update('a: while b runs');
         activeInA = ctx.progress.active();
         spinner.stop('a: done');
-      }, noArgs(), { onProgress: (message) => saidA.push(message) });
+      }, noArgs(), ownCall({ onProgress: (message) => saidA.push(message) }));
       const b = captureCommand(async (_args, ctx) => {
         const spinner = ctx.progress.start('b: started');
         first.open();
         await second.opened;
         spinner.stop('b: done');
-      }, noArgs(), { onProgress: (message) => saidB.push(message) });
+      }, noArgs(), ownCall({ onProgress: (message) => saidB.push(message) }));
       await new Promise((resolve) => setTimeout(resolve, 10));
       second.open();
       await Promise.all([a, b]);
@@ -305,7 +306,7 @@ describe('captureCommand', () => {
         const data: Record<string, unknown> = { balance: '1' };
         ctx.output.result(data);
         data.balance = '2';
-      }, noArgs());
+      }, noArgs(), ownCall());
       expect(result).toEqual({ balance: '1' });
     });
 
@@ -313,7 +314,7 @@ describe('captureCommand', () => {
       await expect(captureCommand(async (_args, ctx) => {
         ctx.output.result({ call: 'first' });
         ctx.output.result({ call: 'second' });
-      }, noArgs())).rejects.toThrow(SecondResultError);
+      }, noArgs(), ownCall())).rejects.toThrow(SecondResultError);
     });
 
     it('sends a command\'s text for the person to the server\'s stderr, never stdout', async () => {
@@ -321,7 +322,7 @@ describe('captureCommand', () => {
         ctx.output.stdout('shown\n');
         ctx.output.stderr('chrome\n');
         ctx.output.result({ ok: true });
-      }, noArgs());
+      }, noArgs(), ownCall());
       expect(io.stdout()).toBe('');
       expect(io.stderr()).toBe('shown\nchrome\n');
     });

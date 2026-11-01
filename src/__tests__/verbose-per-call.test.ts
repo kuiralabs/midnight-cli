@@ -17,6 +17,7 @@ import { WalletDataRepository } from '../lib/wallet-data-repository.ts';
 import type { NetworkConfig } from '../lib/network.ts';
 import balanceCommand from '../commands/balance.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { ownCall } from './helpers/own-call.ts';
 
 // Nothing listens here: each call fails at its first connection, after its first diagnostic.
 const UNREACHABLE = ['--indexer-ws', 'ws://127.0.0.1:1/api/v4/graphql/ws', '--node', 'ws://127.0.0.1:1', '--proof-server', 'http://127.0.0.1:1'];
@@ -47,8 +48,8 @@ afterEach(() => {
 
 describe('verbose, per call', () => {
   it('two balance calls at once, one --verbose: only the verbose one writes diagnostic lines', async () => {
-    const verboseCall = captureCommand(balanceCommand, parseArgs(['balance', VERBOSE_ADDRESS, '--verbose', ...UNREACHABLE]));
-    const quietCall = captureCommand(balanceCommand, parseArgs(['balance', QUIET_ADDRESS, ...UNREACHABLE]));
+    const verboseCall = captureCommand(balanceCommand, parseArgs(['balance', VERBOSE_ADDRESS, '--verbose', ...UNREACHABLE]), ownCall());
+    const quietCall = captureCommand(balanceCommand, parseArgs(['balance', QUIET_ADDRESS, ...UNREACHABLE]), ownCall());
     const outcomes = await Promise.allSettled([verboseCall, quietCall]);
     // Neither reaches an indexer; both fail, each with its own error.
     expect(outcomes.map((o) => o.status)).toEqual(['rejected', 'rejected']);
@@ -57,9 +58,9 @@ describe('verbose, per call', () => {
   });
 
   it('a call after a verbose one is quiet', async () => {
-    await captureCommand(balanceCommand, parseArgs(['balance', VERBOSE_ADDRESS, '--verbose', ...UNREACHABLE])).catch(() => {});
+    await captureCommand(balanceCommand, parseArgs(['balance', VERBOSE_ADDRESS, '--verbose', ...UNREACHABLE]), ownCall()).catch(() => {});
     notices = [];
-    await captureCommand(balanceCommand, parseArgs(['balance', QUIET_ADDRESS, ...UNREACHABLE])).catch(() => {});
+    await captureCommand(balanceCommand, parseArgs(['balance', QUIET_ADDRESS, ...UNREACHABLE]), ownCall()).catch(() => {});
     expect(notices.filter((line) => /\] \w+: /.test(line))).toEqual([]);
   });
 

@@ -18,6 +18,7 @@ import type { ExecRun, ExecRunner } from '../lib/exec-program.ts';
 import { captureCommand } from '../lib/run-command.ts';
 import { parseArgs } from '../lib/argv.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { ownCall } from './helpers/own-call.ts';
 
 /** One run the stand-in was given. */
 interface Run {
@@ -79,7 +80,7 @@ afterEach(() => {
 
 /** Runs `mn localnet <subcommand> --json` as the MCP server does, with the stand-in runner and the call's signal. */
 function localnet(subcommand: string, exec: ExecRunner, signal: AbortSignal): Promise<Record<string, unknown>> {
-  return captureCommand((args, ctx) => runLocalnet(args, ctx, exec), parseArgs(['localnet', subcommand, '--json']), { signal });
+  return captureCommand((args, ctx) => runLocalnet(args, ctx, exec), parseArgs(['localnet', subcommand, '--json']), ownCall({ signal }));
 }
 
 describe('localnet commands, cancelled while Docker runs', () => {
