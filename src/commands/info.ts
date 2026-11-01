@@ -30,10 +30,10 @@ export default async function infoCommand(args: ParsedArgs, ctx: CallContext): P
   }
 
   // Bare active address to stdout (pipeable)
-  process.stdout.write(activeAddress + '\n');
+  ctx.output.stdout(activeAddress + '\n');
 
   // Header
-  process.stderr.write('\n' + header('Wallet Info') + '\n\n');
+  ctx.output.stderr('\n' + header('Wallet Info') + '\n\n');
 
   // Per-network grouping — unshielded + shielded together
   const networks = Object.keys(config.addresses) as Array<keyof typeof config.addresses>;
@@ -44,18 +44,18 @@ export default async function infoCommand(args: ParsedArgs, ctx: CallContext): P
     const shielded = config.shieldedAddresses?.[network as keyof typeof config.addresses];
 
     const label = isActiveNet ? bold(teal(network)) + dim('  (active)') : network;
-    process.stderr.write(`  ${label}\n`);
-    process.stderr.write(`    ${dim('unshielded')}  ${formatAddress(unshielded as string)}\n`);
+    ctx.output.stderr(`  ${label}\n`);
+    ctx.output.stderr(`    ${dim('unshielded')}  ${formatAddress(unshielded as string)}\n`);
     if (shielded) {
-      process.stderr.write(`    ${dim('shielded  ')}  ${formatAddress(shielded)}\n`);
+      ctx.output.stderr(`    ${dim('shielded  ')}  ${formatAddress(shielded)}\n`);
     } else {
-      process.stderr.write(`    ${dim('shielded  ')}  ${dim('(unavailable)')}\n`);
+      ctx.output.stderr(`    ${dim('shielded  ')}  ${dim('(unavailable)')}\n`);
     }
-    if (i < networks.length - 1) process.stderr.write('\n');
+    if (i < networks.length - 1) ctx.output.stderr('\n');
   }
 
   // Footer
-  process.stderr.write('\n' + divider() + '\n\n');
-  process.stderr.write(`  ${dim('created')}  ${config.createdAt}\n`);
-  process.stderr.write(`  ${dim('file   ')}  ${resolvedPath}\n\n`);
+  ctx.output.stderr('\n' + divider() + '\n\n');
+  ctx.output.stderr(`  ${dim('created')}  ${config.createdAt}\n`);
+  ctx.output.stderr(`  ${dim('file   ')}  ${resolvedPath}\n\n`);
 }

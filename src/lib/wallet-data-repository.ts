@@ -18,7 +18,7 @@
 // tests against localnet — accepted scope per architecture-deepening.md.
 
 import { Buffer } from 'node:buffer';
-import { CANCELLED_MESSAGE } from './errors.ts';
+import { CANCELLED_MESSAGE, throwIfCancelled } from './errors.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
 import type { NetworkConfig, NetworkName } from './network.ts';
@@ -163,11 +163,12 @@ export interface RepoDeps {
   now?: () => number;
   /** Tip fetcher. Default: substrate `chain_getBlockHash`. */
   fetchTip?: (network: NetworkConfig, signal?: AbortSignal) => Promise<TipFingerprint>;
-  /** Unshielded balance fetcher. Default: existing `checkBalance` over indexer WS. */
+  /** Unshielded balance fetcher. Default: existing `checkBalance` over indexer WS. `signal` cancels it. */
   fetchUnshielded?: (
     address: string,
     network: NetworkConfig,
     onProgress?: (current: number, highest: number) => void,
+    signal?: AbortSignal,
   ) => Promise<BalanceSummary>;
   /** Dust state fetcher. Default: existing `readDustBalanceDirect` over indexer WS. */
   fetchDust?: (
@@ -192,7 +193,7 @@ export interface RepoDeps {
   /** A ledger event stream's latest id, for the chain-reset check. Default: indexer subscription. */
   fetchEventTip?: (indexerWS: string, stream: LedgerEventStream) => Promise<number | null>;
   /** Chain protocol-version fetcher (ledger-9-only guard). Default: indexer `block { protocolVersion }`. */
-  fetchProtocolVersion?: (indexerHttpUrl: string) => Promise<bigint | null>;
+  fetchProtocolVersion?: (indexerHttpUrl: string, signal?: AbortSignal) => Promise<bigint | null>;
   /** Override cache directory (tests use a tmp dir). */
   cacheDir?: string;
 }
@@ -303,7 +304,7 @@ export class WalletDataRepository {
 
   async dust(seed: Buffer, network: NetworkConfig, opts: ReadOptions = {}): Promise<DustView> {
     const networkName = networkNameOf(network);
-    await assertLedgerSupported(networkName, network, this.fetchProtocolVersion);
+    await assertLedgerSupported(networkName, network, this.fetchProtocolVersion, opts.signal);
     const pubkeyHex = dustPublicKeyHexFromSeed(seed);
     const memoKey = `${networkName}:${pubkeyHex}`;
 
@@ -425,7 +426,7 @@ export class WalletDataRepository {
       if (hit) return { ...hit, fromCache: true };
     }
 
-    const summary = await this.fetchUnshielded(address, network, opts.onProgress);
+    const summary = await this.fetchUnshielded(address, network, opts.onProgress, opts.signal);
     const view: UnshieldedView = { ...summary, fromCache: false, fetchedAt: this.now() };
     await this.memoize(this.unshieldedMemo, memoKey, view, network, opts.signal, opts.log);
     return view;
@@ -475,7 +476,7 @@ export class WalletDataRepository {
       ?? (isRemote ? SYNC_ATTEMPT_REMOTE_MS : SYNC_ATTEMPT_LOCAL_MS);
 
     // On a ledger-8 chain the SDK's sync retries forever; refuse up front.
-    await assertLedgerSupported(networkName, network, this.fetchProtocolVersion);
+    await assertLedgerSupported(networkName, network, this.fetchProtocolVersion, opts.signal);
 
     const currentChainId = await this.fetchChainId(network.node).catch(() => null);
     validateWalletCacheChainId(networkName, currentChainId, this.cacheDir);
@@ -649,6 +650,8 @@ export class WalletDataRepository {
     try {
       tip = await this.getTip(network, signal);
     } catch {
+      // A cancelled call stops here rather than being served the cache.
+      throwIfCancelled(signal);
       // Network down on the tip-check → serve cache. Caller can pass forceFresh
       // if they need certainty over availability.
       return entry.value;
@@ -702,16 +705,17 @@ export class WalletDataRepository {
 
 // ── Default seam implementations ──────────────────────────
 
-function defaultTipFetcher(network: NetworkConfig): Promise<TipFingerprint> {
-  return callNodeRpc<string>({ url: network.node, timeoutMs: 3_000 }, 'chain_getBlockHash', []);
+function defaultTipFetcher(network: NetworkConfig, signal?: AbortSignal): Promise<TipFingerprint> {
+  return callNodeRpc<string>({ url: network.node, timeoutMs: 3_000, signal }, 'chain_getBlockHash', []);
 }
 
 function defaultUnshieldedFetcher(
   address: string,
   network: NetworkConfig,
   onProgress?: (current: number, highest: number) => void,
+  signal?: AbortSignal,
 ): Promise<BalanceSummary> {
-  return checkBalance(address, network.indexerWS, onProgress);
+  return checkBalance(address, network.indexerWS, onProgress, signal);
 }
 
 function defaultDustFetcher(

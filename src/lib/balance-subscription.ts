@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { assertEndpointUsable, endpointRefusalFromWsError } from './blockfrost.ts';
 import { NATIVE_TOKEN_TYPE, BALANCE_CHECK_TIMEOUT_MS } from './constants.ts';
+import { CancelledError } from './errors.ts';
 
 export interface BalanceSummary {
   balances: Map<string, bigint>;
@@ -54,14 +55,17 @@ const SUBSCRIPTION_QUERY = `
 
 /**
  * Check unshielded balance via direct GraphQL WebSocket subscription.
- * Lightweight — no proof server or WalletFacade needed.
+ * Lightweight — no proof server or WalletFacade needed. `signal` cancels it:
+ * the connection closes and the check fails with CancelledError.
  */
 export function checkBalance(
   address: string,
   indexerWS: string,
   onProgress?: (current: number, highest: number) => void,
+  signal?: AbortSignal,
 ): Promise<BalanceSummary> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted === true) { reject(new CancelledError()); return; }
     assertEndpointUsable(indexerWS);
     const ws = new WebSocket(indexerWS, ['graphql-transport-ws']);
 
@@ -97,7 +101,17 @@ export function checkBalance(
 
     const settle = () => {
       clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', onAbort);
     };
+
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      settle();
+      ws.close();
+      reject(new CancelledError());
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
 
     const checkComplete = () => {
       if (!settled && progressReceived && (highestTxId === 0 || lastSeenTxId >= highestTxId)) {
@@ -219,6 +233,7 @@ export function checkBalance(
     timeoutId = setTimeout(() => {
       if (!settled) {
         settled = true;
+        signal?.removeEventListener('abort', onAbort);
         ws.close();
         reject(new Error(
           `Balance check timed out after ${BALANCE_CHECK_TIMEOUT_MS / 1000}s. ` +

@@ -7,6 +7,7 @@ import { LEDGER_9_FORK_VERSION, type NetworkConfig } from './network.ts';
 import { getChainGenesisHash } from './chain-id.ts';
 import { isEndpointError } from './blockfrost.ts';
 import { queryIndexer } from './indexer-graphql.ts';
+import { throwIfCancelled } from './errors.ts';
 
 export class UnsupportedLedgerError extends Error {
   readonly code = 'UNSUPPORTED_LEDGER';
@@ -31,14 +32,15 @@ export function checkLedgerSupported(network: string, protocolVersion: bigint | 
 
 const PROBE_TIMEOUT_MS = 5_000;
 
-/** The chain tip's protocol version from the indexer, or null if it can't be read. */
-export async function fetchProtocolVersion(indexerHttpUrl: string): Promise<bigint | null> {
+/** The chain tip's protocol version from the indexer, or null if it can't be read. A cancelled call fails with CancelledError. */
+export async function fetchProtocolVersion(indexerHttpUrl: string, signal?: AbortSignal): Promise<bigint | null> {
   try {
     const data = await queryIndexer<{ block?: { protocolVersion?: number } }>(
-      indexerHttpUrl, '{ block { protocolVersion } }', undefined, PROBE_TIMEOUT_MS);
+      indexerHttpUrl, '{ block { protocolVersion } }', undefined, PROBE_TIMEOUT_MS, signal);
     const version = data.block?.protocolVersion;
     return typeof version === 'number' ? BigInt(version) : null;
   } catch (err) {
+    throwIfCancelled(signal);
     // An endpoint that can't serve the request as configured (no Blockfrost
     // project id, one it refuses, a host that was shut down) says what to do.
     if (isEndpointError(err)) throw err;
@@ -46,13 +48,14 @@ export async function fetchProtocolVersion(indexerHttpUrl: string): Promise<bigi
   }
 }
 
-/** Probe the network's indexer and throw UnsupportedLedgerError on a ledger-8 chain. */
+/** Probe the network's indexer and throw UnsupportedLedgerError on a ledger-8 chain. `signal` cancels the probe. */
 export async function assertLedgerSupported(
   networkName: string,
   network: NetworkConfig,
-  fetchVersion: (indexerHttpUrl: string) => Promise<bigint | null> = fetchProtocolVersion,
+  fetchVersion: (indexerHttpUrl: string, signal?: AbortSignal) => Promise<bigint | null> = fetchProtocolVersion,
+  signal?: AbortSignal,
 ): Promise<void> {
-  checkLedgerSupported(networkName, await fetchVersion(network.indexer));
+  checkLedgerSupported(networkName, await fetchVersion(network.indexer, signal));
 }
 
 /**

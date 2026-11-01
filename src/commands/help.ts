@@ -13,7 +13,7 @@ import { installedCommands } from '../lib/installed-commands.ts';
 import { commandHelpSpecs, introBriefs, type CommandHelpSpec } from '../lib/command-definition.ts';
 import { hasShownIntroThisSession, markIntroShown } from '../lib/intro-marker.ts';
 import { UsageError } from '../lib/errors.ts';
-import type { CallContext } from '../lib/call-context.ts';
+import type { CallContext, CallOutput } from '../lib/call-context.ts';
 import { PKG_NAME, PKG_VERSION, PKG_DESCRIPTION } from '../lib/pkg.ts';
 import { INDEXER_GRAPHQL_WS_PATH } from '../lib/constants.ts';
 
@@ -659,36 +659,36 @@ function buildRightColumn(): string[] {
 }
 
 // Plain text output for non-TTY / agent-friendly
-function printPlainHelp(): void {
-  process.stderr.write('\nCommands:\n\n');
+function printPlainHelp(output: CallOutput): void {
+  output.stderr('\nCommands:\n\n');
   for (const [name, brief] of introBriefs(installedCommands)) {
-    process.stderr.write(`  ${name.padEnd(18)}${brief}\n`);
+    output.stderr(`  ${name.padEnd(18)}${brief}\n`);
   }
-  process.stderr.write('\n  Usage: midnight <command> (or: mn <command>)\n');
-  process.stderr.write('  --json flag available on all commands\n');
-  process.stderr.write('  midnight help --agent   AI & MCP reference\n\n');
+  output.stderr('\n  Usage: midnight <command> (or: mn <command>)\n');
+  output.stderr('  --json flag available on all commands\n');
+  output.stderr('  midnight help --agent   AI & MCP reference\n\n');
 }
 
-function printCommandHelp(spec: CommandSpec): void {
-  process.stdout.write('\n' + header(spec.name) + '\n\n');
-  process.stdout.write(`  ${spec.description}\n\n`);
-  process.stdout.write(gray('Usage:') + '\n');
-  process.stdout.write(`  ${spec.usage}\n\n`);
+function printCommandHelp(output: CallOutput, spec: CommandSpec): void {
+  output.stdout('\n' + header(spec.name) + '\n\n');
+  output.stdout(`  ${spec.description}\n\n`);
+  output.stdout(gray('Usage:') + '\n');
+  output.stdout(`  ${spec.usage}\n\n`);
 
   if (spec.flags && spec.flags.length > 0) {
-    process.stdout.write(gray('Flags:') + '\n');
+    output.stdout(gray('Flags:') + '\n');
     for (const flag of spec.flags) {
-      process.stdout.write(`  ${flag}\n`);
+      output.stdout(`  ${flag}\n`);
     }
-    process.stdout.write('\n');
+    output.stdout('\n');
   }
 
   if (spec.examples && spec.examples.length > 0) {
-    process.stdout.write(gray('Examples:') + '\n');
+    output.stdout(gray('Examples:') + '\n');
     for (const example of spec.examples) {
-      process.stdout.write(`  ${dim('$')} ${example}\n`);
+      output.stdout(`  ${dim('$')} ${example}\n`);
     }
-    process.stdout.write('\n');
+    output.stdout('\n');
   }
 }
 
@@ -714,7 +714,7 @@ function outputJsonManifest(ctx: CallContext): void {
   ctx.output.result(manifest);
 }
 
-function printAgentManual(): void {
+function printAgentManual(output: CallOutput): void {
   const manual = `
 MIDNIGHT CLI — AI Agent & MCP Reference
 ========================================
@@ -1283,13 +1283,13 @@ EXAMPLE CLI COMMANDS
   # DApps connect at ws://localhost:9932
 `;
 
-  process.stdout.write(manual);
+  output.stdout(manual);
 }
 
 export default async function helpCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // Agent manual: comprehensive reference for AI agents
   if (hasFlag(args, 'agent')) {
-    printAgentManual();
+    printAgentManual(ctx.output);
     return;
   }
 
@@ -1311,14 +1311,14 @@ export default async function helpCommand(args: ParsedArgs, ctx: CallContext): P
         `Available commands: ${specs.map(s => s.name).join(', ')}`
       );
     }
-    printCommandHelp(spec);
+    printCommandHelp(ctx.output, spec);
     return;
   }
 
   // General help: horizontal layout (logo + commands side by side)
   if (!process.stderr.isTTY) {
     // Agent-friendly: plain text, no animation, no ANSI
-    printPlainHelp();
+    printPlainHelp(ctx.output);
     return;
   }
   const rightColumn = buildRightColumn();

@@ -17,6 +17,7 @@ import { header, keyValue, divider, formatAddress } from '../ui/format.ts';
 import { bold, yellow, dim, green } from '../ui/colors.ts';
 import type { CallContext } from '../lib/call-context.ts';
 import { getDefaultWalletPath } from '../lib/wallet-paths.ts';
+import { throwIfCancelled } from '../lib/errors.ts';
 
 export default async function generateCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const networkName = resolveNetworkName({ args });
@@ -74,7 +75,10 @@ export default async function generateCommand(args: ParsedArgs, ctx: CallContext
   };
   const secrets = mnemonic ? { seed: seedBuffer.toString('hex'), mnemonic } : { seed: seedBuffer.toString('hex') };
 
-  const savedPath = writeSealedWallet(targetPath, config, secrets, await passphraseForNewSecret(), { overwrite: hasFlag(args, 'force') });
+  const passphrase = await passphraseForNewSecret();
+  // Cancelled while the passphrase was asked for: no wallet is written.
+  throwIfCancelled(ctx.signal);
+  const savedPath = writeSealedWallet(targetPath, config, secrets, passphrase, { overwrite: hasFlag(args, 'force') });
 
   // JSON mode
   if (hasFlag(args, 'json')) {
@@ -92,24 +96,24 @@ export default async function generateCommand(args: ParsedArgs, ctx: CallContext
   }
 
   // Active address to stdout (pipeable)
-  process.stdout.write(activeAddress + '\n');
+  ctx.output.stdout(activeAddress + '\n');
 
   // Details to stderr
-  process.stderr.write('\n' + header('Wallet Generated') + '\n\n');
-  process.stderr.write(keyValue('Network', networkName) + '\n');
-  process.stderr.write(keyValue('Address', formatAddress(activeAddress)) + '\n');
-  process.stderr.write(keyValue('File', savedPath) + '\n');
-  process.stderr.write('\n');
+  ctx.output.stderr('\n' + header('Wallet Generated') + '\n\n');
+  ctx.output.stderr(keyValue('Network', networkName) + '\n');
+  ctx.output.stderr(keyValue('Address', formatAddress(activeAddress)) + '\n');
+  ctx.output.stderr(keyValue('File', savedPath) + '\n');
+  ctx.output.stderr('\n');
 
   if (mnemonic) {
-    process.stderr.write(yellow(bold('  MNEMONIC (save securely!):')) + '\n');
-    process.stderr.write(`  ${mnemonic}\n\n`);
+    ctx.output.stderr(yellow(bold('  MNEMONIC (save securely!):')) + '\n');
+    ctx.output.stderr(`  ${mnemonic}\n\n`);
   }
 
-  process.stderr.write(yellow(bold('  SEED (hex):')) + '\n');
-  process.stderr.write(`  ${seedBuffer.toString('hex')}\n\n`);
+  ctx.output.stderr(yellow(bold('  SEED (hex):')) + '\n');
+  ctx.output.stderr(`  ${seedBuffer.toString('hex')}\n\n`);
 
-  process.stderr.write(divider() + '\n');
-  process.stderr.write(dim('  Next: midnight info | midnight balance') + '\n\n');
-  process.stderr.write(green('✓') + ' Wallet saved\n');
+  ctx.output.stderr(divider() + '\n');
+  ctx.output.stderr(dim('  Next: midnight info | midnight balance') + '\n\n');
+  ctx.output.stderr(green('✓') + ' Wallet saved\n');
 }

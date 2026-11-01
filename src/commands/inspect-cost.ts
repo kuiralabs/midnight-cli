@@ -9,7 +9,7 @@ import { bold, dim } from '../ui/colors.ts';
 import type { CallContext } from '../lib/call-context.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { fetchLedgerParameters } from '../lib/chain-params.ts';
-import { assertLedgerSupported } from '../lib/ledger-guard.ts';
+import { assertLedgerSupported, fetchProtocolVersion } from '../lib/ledger-guard.ts';
 
 interface SyntheticCost {
   readTime: bigint;
@@ -64,8 +64,8 @@ const UNITS: Record<string, string> = {
 export default async function inspectCostCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const { name: networkName, config } = resolveNetwork({ args });
   // A ledger-8 chain's parameters aren't ledger-9 ones: refuse it like every other chain read.
-  await assertLedgerSupported(networkName, config);
-  const { height, params } = await fetchLedgerParameters(config.indexer);
+  await assertLedgerSupported(networkName, config, fetchProtocolVersion, ctx.signal);
+  const { height, params } = await fetchLedgerParameters(config.indexer, ctx.signal);
   const limits = deriveBlockLimits(params);
 
   // JSON mode
@@ -76,19 +76,19 @@ export default async function inspectCostCommand(args: ParsedArgs, ctx: CallCont
 
   // Bare data to stdout (pipeable)
   for (const [dimension, value] of Object.entries(limits)) {
-    process.stdout.write(`${dimension}=${value}\n`);
+    ctx.output.stdout(`${dimension}=${value}\n`);
   }
 
   // Formatted details to stderr
-  process.stderr.write('\n' + header('Block Limits') + '\n\n');
-  process.stderr.write(dim(`  From the ledger parameters of block ${height} on ${networkName}`) + '\n\n');
+  ctx.output.stderr('\n' + header('Block Limits') + '\n\n');
+  ctx.output.stderr(dim(`  From the ledger parameters of block ${height} on ${networkName}`) + '\n\n');
 
   for (const [dimension, value] of Object.entries(limits)) {
     const unit = UNITS[dimension] ?? '';
-    process.stderr.write(keyValue(dimension, `${bold(value.toLocaleString())} ${dim(unit)}`) + '\n');
+    ctx.output.stderr(keyValue(dimension, `${bold(value.toLocaleString())} ${dim(unit)}`) + '\n');
   }
 
-  process.stderr.write('\n' + divider() + '\n');
-  process.stderr.write(dim('  bytesWritten is typically the tightest constraint') + '\n');
-  process.stderr.write(dim('  for large contract deployments.') + '\n\n');
+  ctx.output.stderr('\n' + divider() + '\n');
+  ctx.output.stderr(dim('  bytesWritten is typically the tightest constraint') + '\n');
+  ctx.output.stderr(dim('  for large contract deployments.') + '\n\n');
 }

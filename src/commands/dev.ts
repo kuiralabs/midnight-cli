@@ -5,7 +5,7 @@
 import { resolve, relative } from 'node:path';
 import { type ParsedArgs } from '../lib/argv.ts';
 import { payerFor } from '../lib/payer.ts';
-import type { CallContext } from '../lib/call-context.ts';
+import type { CallContext, CallOutput } from '../lib/call-context.ts';
 import { isPassphraseSet, unlockPassphrase } from '../lib/passphrase.ts';
 import { detectProject, type ProjectInfo } from '../lib/dev/detect-project.ts';
 import { runCompile, type CompileResult } from '../lib/dev/compile.ts';
@@ -31,7 +31,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
   const { signal } = ctx;
   const startDir = resolve(args.positionals[0] ?? process.cwd());
 
-  process.stderr.write('\n' + header('mn dev') + '\n\n');
+  ctx.output.stderr('\n' + header('mn dev') + '\n\n');
 
   // ── Phase 1: detect project ───────────────────────────────
   const project: ProjectInfo = detectProject(startDir);
@@ -47,9 +47,9 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
     );
   }
 
-  process.stderr.write(keyValue('Project', project.projectRoot) + '\n');
-  process.stderr.write(keyValue('Sources', `${project.sourceFiles.length} .compact file(s)`) + '\n');
-  process.stderr.write(keyValue('Compile', `npm run ${project.compileScript}`) + '\n\n');
+  ctx.output.stderr(keyValue('Project', project.projectRoot) + '\n');
+  ctx.output.stderr(keyValue('Sources', `${project.sourceFiles.length} .compact file(s)`) + '\n');
+  ctx.output.stderr(keyValue('Compile', `npm run ${project.compileScript}`) + '\n\n');
 
   // ── Phase 2: ensure localnet running ──────────────────────
   const localnetSpinner = ctx.progress.start('Checking localnet...');
@@ -104,7 +104,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
   // ── Phase 4: first compile pass ───────────────────────────
   lastCompile = await compileAndReport(project, ctx);
   if (!lastCompile.success) {
-    process.stderr.write(dim('\n  Fix the errors above and save — mn dev will recompile automatically.\n'));
+    ctx.output.stderr(dim('\n  Fix the errors above and save — mn dev will recompile automatically.\n'));
   }
 
   // ── Phase 5: start watcher ────────────────────────────────
@@ -136,19 +136,19 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
     extension: '.compact',
     onChange: async (changed) => {
       const rel = changed.map((p) => relative(project.projectRoot, p)).join(', ');
-      process.stderr.write('\n' + dim(`  Changed: ${rel}`) + '\n');
+      ctx.output.stderr('\n' + dim(`  Changed: ${rel}`) + '\n');
       await runPass();
     },
     onError: (err) => {
-      process.stderr.write(red('  watch error: ') + err.message + '\n');
+      ctx.output.stderr(red('  watch error: ') + err.message + '\n');
     },
   });
 
-  process.stderr.write('\n' + divider() + '\n');
+  ctx.output.stderr('\n' + divider() + '\n');
   const watchedLabel = project.sourceDirs.map((d) => relative(project.projectRoot, d) || '.').join(', ');
-  process.stderr.write(dim('  Watching ') + teal(watchedLabel) + dim(' — save to recompile.') + '\n');
+  ctx.output.stderr(dim('  Watching ') + teal(watchedLabel) + dim(' — save to recompile.') + '\n');
   const testHint = project.testScript ? bold('[t]') + dim(` test (${project.testScript})   `) : '';
-  process.stderr.write(dim('  ') + bold('[d]') + dim(' deploy   ') + testHint + bold('[q]') + dim(' quit\n\n'));
+  ctx.output.stderr(dim('  ') + bold('[d]') + dim(' deploy   ') + testHint + bold('[q]') + dim(' quit\n\n'));
 
   // ── Phase 6: keystroke dispatcher + wait until aborted ────
   // Unlock mn's passphrase now, while stdin is still a plain terminal: once the
@@ -165,15 +165,15 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
     actions: {
       d: async () => {
         if (deployInFlight) {
-          process.stderr.write(dim('  Deploy already in flight — ignoring key press.\n'));
+          ctx.output.stderr(dim('  Deploy already in flight — ignoring key press.\n'));
           return;
         }
         if (testInFlight) {
-          process.stderr.write(dim('  Tests are running — wait for them to finish before deploying.\n'));
+          ctx.output.stderr(dim('  Tests are running — wait for them to finish before deploying.\n'));
           return;
         }
         if (!lastCompile?.success) {
-          process.stderr.write(yellow('  Cannot deploy — last compile did not succeed. Fix and save first.\n'));
+          ctx.output.stderr(yellow('  Cannot deploy — last compile did not succeed. Fix and save first.\n'));
           return;
         }
         deployInFlight = true;
@@ -185,24 +185,24 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
       },
       t: async () => {
         if (testInFlight) {
-          process.stderr.write(dim('  Tests already in flight — ignoring key press.\n'));
+          ctx.output.stderr(dim('  Tests already in flight — ignoring key press.\n'));
           return;
         }
         if (deployInFlight) {
-          process.stderr.write(dim('  Deploy in flight — wait for it to finish before running tests.\n'));
+          ctx.output.stderr(dim('  Deploy in flight — wait for it to finish before running tests.\n'));
           return;
         }
         if (!project.testScript) {
-          process.stderr.write(yellow('  No test script found. Add "test:dev" or "test" to package.json.\n'));
+          ctx.output.stderr(yellow('  No test script found. Add "test:dev" or "test" to package.json.\n'));
           return;
         }
         if (!lastCompile?.success) {
-          process.stderr.write(yellow('  Cannot run tests — last compile did not succeed. Fix and save first.\n'));
+          ctx.output.stderr(yellow('  Cannot run tests — last compile did not succeed. Fix and save first.\n'));
           return;
         }
         testInFlight = true;
         try {
-          await runProjectTests(project, abortController.signal);
+          await runProjectTests(ctx.output, project, abortController.signal);
         } finally {
           testInFlight = false;
         }
@@ -216,7 +216,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
     const onAbort = () => {
       keys.stop();
       watcher.stop();
-      process.stderr.write('\n' + dim('  mn dev stopped.') + '\n');
+      ctx.output.stderr('\n' + dim('  mn dev stopped.') + '\n');
       resolvePromise();
     };
     if (abortController.signal.aborted) { onAbort(); return; }
@@ -235,8 +235,8 @@ async function deployContract(project: ProjectInfo, ctx: CallContext): Promise<v
   const witnessNames = await readDeclaredWitnesses(project.projectRoot);
   if (witnessNames.length > 0 && !findWitnessFile(project.projectRoot)) {
     const message = buildMissingWitnessError({ projectRoot: project.projectRoot, witnessNames });
-    process.stderr.write(yellow(`  ✗ Cannot auto-deploy:\n`));
-    for (const line of message.split('\n')) process.stderr.write(dim(`    ${line}\n`));
+    ctx.output.stderr(yellow(`  ✗ Cannot auto-deploy:\n`));
+    for (const line of message.split('\n')) ctx.output.stderr(dim(`    ${line}\n`));
     return;
   }
 
@@ -246,28 +246,28 @@ async function deployContract(project: ProjectInfo, ctx: CallContext): Promise<v
     // The payer is the caller's (the CLI passes the serve payer), as for contract and grant.
     const deployed = await deployDevContract(project.projectRoot, DEPLOY_WALLET, DEPLOY_NETWORK, payerFor('dev deploy', ctx), ctx.progress.silent(), ctx.sdkWarnings);
     spinner.stop(`Deployed`);
-    process.stderr.write(`  ${dim('address')}  ${teal(deployed.address)}\n`);
+    ctx.output.stderr(`  ${dim('address')}  ${teal(deployed.address)}\n`);
   } catch (err) {
     spinner.fail('Deploy failed');
     const message = err instanceof Error ? err.message : String(err);
-    process.stderr.write(red('  ' + message) + '\n');
+    ctx.output.stderr(red('  ' + message) + '\n');
   }
 }
 
-async function runProjectTests(project: ProjectInfo, signal?: AbortSignal): Promise<void> {
-  process.stderr.write(dim(`\n  Running npm run ${project.testScript}...\n`));
+async function runProjectTests(output: CallOutput, project: ProjectInfo, signal?: AbortSignal): Promise<void> {
+  output.stderr(dim(`\n  Running npm run ${project.testScript}...\n`));
   try {
     // runTests passes cwd: project.projectRoot to spawn — no parent chdir needed.
     // The tests stream their output to this terminal as they run.
     const result = await runTests({ project, signal, output: 'inherit' });
     if (result.success) {
-      process.stderr.write(`  ${dim('─')} Tests passed ${dim(`(${formatDuration(result.durationMs)})`)}\n`);
+      output.stderr(`  ${dim('─')} Tests passed ${dim(`(${formatDuration(result.durationMs)})`)}\n`);
     } else {
-      process.stderr.write(`  ${dim('─')} ${red(`Tests failed`)} ${dim(`(exit ${result.exitCode}, ${formatDuration(result.durationMs)})`)}\n`);
+      output.stderr(`  ${dim('─')} ${red(`Tests failed`)} ${dim(`(exit ${result.exitCode}, ${formatDuration(result.durationMs)})`)}\n`);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    process.stderr.write(red('  Test runner error: ') + message + '\n');
+    output.stderr(red('  Test runner error: ') + message + '\n');
   }
 }
 
@@ -295,15 +295,15 @@ async function compileAndReport(project: ProjectInfo, ctx: CallContext): Promise
     } else {
       spinner.fail(`Compile failed ${dim(`(${formatDuration(result.durationMs)})`)}`);
       if (result.stderr.trim()) {
-        process.stderr.write(dim('  ─ stderr ─') + '\n');
-        process.stderr.write(yellow(indent(result.stderr.trim(), '  ')) + '\n');
+        ctx.output.stderr(dim('  ─ stderr ─') + '\n');
+        ctx.output.stderr(yellow(indent(result.stderr.trim(), '  ')) + '\n');
       }
     }
     return result;
   } catch (err) {
     spinner.fail('Compile error');
     const message = err instanceof Error ? err.message : String(err);
-    process.stderr.write(red('  ' + message) + '\n');
+    ctx.output.stderr(red('  ' + message) + '\n');
     return {
       success: false,
       durationMs: 0,

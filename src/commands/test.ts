@@ -2,11 +2,12 @@
 // Usage: midnight test <run|list|results> [options]
 // Discovers dapp.test.json in the current directory and executes test suites.
 
+import { StringDecoder } from 'node:string_decoder';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { type ParsedArgs, getFlag, hasFlag } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
-import type { CallContext, CallProgress, CommandOutcome } from '../lib/call-context.ts';
+import type { CallContext, CallOutput, CallProgress, CommandOutcome } from '../lib/call-context.ts';
 import { header, keyValue, divider } from '../ui/format.ts';
 import { bold, dim, green, red, teal, yellow } from '../ui/colors.ts';
 import type { Spinner } from '../ui/spinner.ts';
@@ -168,7 +169,7 @@ async function handleCreate(args: ParsedArgs, jsonMode: boolean, ctx: CallContex
   // The spinner lives one level down, around just the claude subprocess
   // call inside aiCliScaffold / aiUiScaffold.
   const scaffold = aiOptIn
-    ? await tryAiScaffold({ strategy, info, dappDir, browser, network, suiteName, goalFlag, screenFlag, interactive, jsonMode, ai, promptCircuit, promptScreen, promptGoal, promptSuiteName, discoverScreens, progress: ctx.progress })
+    ? await tryAiScaffold({ strategy, info, dappDir, browser, network, suiteName, goalFlag, screenFlag, interactive, jsonMode, ai, promptCircuit, promptScreen, promptGoal, promptSuiteName, discoverScreens, progress: ctx.progress, output: ctx.output })
       ?? buildScaffold(info.circuits, { contractName: info.name, suiteName, strategy, browser, network })
     : buildScaffold(info.circuits, { contractName: info.name, suiteName, strategy, browser, network });
 
@@ -199,9 +200,9 @@ async function handleCreate(args: ParsedArgs, jsonMode: boolean, ctx: CallContex
     return;
   }
 
-  process.stderr.write('\n' + header(`Test scaffold: ${info.name}`) + '\n\n');
+  ctx.output.stderr('\n' + header(`Test scaffold: ${info.name}`) + '\n\n');
   for (const path of result.written) {
-    process.stderr.write(`  ${green('✓')} ${path}\n`);
+    ctx.output.stderr(`  ${green('✓')} ${path}\n`);
   }
   const editTarget = strategy === 'browser'
     ? {
@@ -217,19 +218,19 @@ async function handleCreate(args: ParsedArgs, jsonMode: boolean, ctx: CallContex
   // need private state populated by the dApp UI — running them from a CLI
   // suite crashes with "Cannot read properties of undefined".
   if (scaffold.excludedCircuits && scaffold.excludedCircuits.length > 0) {
-    process.stderr.write('\n' + dim('  Skipped (not CLI-testable):') + '\n');
+    ctx.output.stderr('\n' + dim('  Skipped (not CLI-testable):') + '\n');
     for (const ex of scaffold.excludedCircuits) {
-      process.stderr.write(`    ${yellow('!')} ${ex.name} ${dim('— ' + ex.reason)}\n`);
+      ctx.output.stderr(`    ${yellow('!')} ${ex.name} ${dim('— ' + ex.reason)}\n`);
     }
-    process.stderr.write(dim('    These need the dApp UI to populate private state first.\n'));
-    process.stderr.write(dim('    Cover them with a browser-strategy suite (mn test create --strategy ui).\n'));
+    ctx.output.stderr(dim('    These need the dApp UI to populate private state first.\n'));
+    ctx.output.stderr(dim('    Cover them with a browser-strategy suite (mn test create --strategy ui).\n'));
   }
 
-  process.stderr.write('\n' + dim('  Next:') + '\n');
-  process.stderr.write(dim('    Edit  ') + teal(`tests/suites/${scaffold.suiteName}/${editTarget.file}`) + '\n');
-  process.stderr.write(dim('          ') + dim(editTarget.hint) + '\n');
-  process.stderr.write(dim('    Run   ') + teal(`mn test run --suite ${scaffold.suiteName}`) + '\n');
-  process.stderr.write(dim('    List  ') + teal('mn test list') + dim('   (see every suite in this project)') + '\n\n');
+  ctx.output.stderr('\n' + dim('  Next:') + '\n');
+  ctx.output.stderr(dim('    Edit  ') + teal(`tests/suites/${scaffold.suiteName}/${editTarget.file}`) + '\n');
+  ctx.output.stderr(dim('          ') + dim(editTarget.hint) + '\n');
+  ctx.output.stderr(dim('    Run   ') + teal(`mn test run --suite ${scaffold.suiteName}`) + '\n');
+  ctx.output.stderr(dim('    List  ') + teal('mn test list') + dim('   (see every suite in this project)') + '\n\n');
 }
 
 /**
@@ -256,6 +257,8 @@ type AiScaffoldDeps = {
   discoverScreens: typeof import('../lib/test/discover-screens.ts').discoverScreens;
   /** The call's progress, for the spinner while Claude scaffolds. */
   progress: CallProgress;
+  /** Where the call's text for the person goes. */
+  output: CallOutput;
 };
 
 async function tryAiScaffold(deps: AiScaffoldDeps): Promise<import('../lib/test/create.ts').ScaffoldOutput | null> {
@@ -271,7 +274,7 @@ async function tryAiScaffold(deps: AiScaffoldDeps): Promise<import('../lib/test/
     }
     return await aiUiScaffold(deps, goal);
   } catch (err) {
-    process.stderr.write(`\n  ${dim('AI scaffold failed, falling back to deterministic:')} ${(err as Error).message}\n`);
+    deps.output.stderr(`\n  ${dim('AI scaffold failed, falling back to deterministic:')} ${(err as Error).message}\n`);
     return null;
   }
 }
@@ -326,11 +329,11 @@ async function aiCliScaffold(deps: AiScaffoldDeps, goal: string | undefined): Pr
     const deps2 = analyzeWitnessDependencies(source, witnessNames).byCircuit;
     const usedWitnesses = deps2.get(targetCircuit.name);
     if (usedWitnesses && usedWitnesses.length > 0) {
-      process.stderr.write(
+      deps.output.stderr(
         '\n  ' + yellow('!') +
         ` ${targetCircuit.name} calls ${usedWitnesses.join(', ')} — a witness that reads private state.\n`,
       );
-      process.stderr.write(
+      deps.output.stderr(
         dim('    The CLI suite will deploy + run, but expect a "Cannot read properties of undefined" failure\n') +
         dim('    unless the dApp UI populates that state first. Consider --strategy ui instead.\n'),
       );
@@ -419,18 +422,18 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
 
   // Header
   if (!jsonMode) {
-    process.stderr.write('\n' + header(`E2E Test: ${config.name}`) + '\n\n');
-    process.stderr.write(keyValue('Network', config.network ?? 'undeployed') + '\n');
-    if (config.port) process.stderr.write(keyValue('Port', String(config.port)) + '\n');
+    ctx.output.stderr('\n' + header(`E2E Test: ${config.name}`) + '\n\n');
+    ctx.output.stderr(keyValue('Network', config.network ?? 'undeployed') + '\n');
+    if (config.port) ctx.output.stderr(keyValue('Port', String(config.port)) + '\n');
     if (selectedSuite) {
-      process.stderr.write(keyValue('Suite', selectedSuite.suite.name) + '\n');
-      process.stderr.write(keyValue('Strategy', selectedSuite.suite.strategy) + '\n');
+      ctx.output.stderr(keyValue('Suite', selectedSuite.suite.name) + '\n');
+      ctx.output.stderr(keyValue('Strategy', selectedSuite.suite.strategy) + '\n');
       if (selectedSuite.suite.strategy === 'browser') {
         const mode = resolveBrowserMode(selectedSuite.suite);
-        process.stderr.write(keyValue('Browser Mode', mode) + '\n');
+        ctx.output.stderr(keyValue('Browser Mode', mode) + '\n');
       }
     }
-    process.stderr.write('\n');
+    ctx.output.stderr('\n');
   }
 
   // Prep context for resource tracking + teardown
@@ -439,13 +442,13 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
 
   // Register teardown on abort
   const teardownLog = (msg: string) => {
-    if (!jsonMode) process.stderr.write(dim(`  [teardown] ${msg}`) + '\n');
+    if (!jsonMode) ctx.output.stderr(dim(`  [teardown] ${msg}`) + '\n');
   };
   signal?.addEventListener('abort', () => runTeardown(prep, teardownLog), { once: true });
 
   try {
     // ── Prep phase ──
-    if (!jsonMode) process.stderr.write(bold('  Prep\n'));
+    if (!jsonMode) ctx.output.stderr(bold('  Prep\n'));
 
     // One spinner per step: it ends on the step's own mark, pass or fail.
     let spinner: Spinner | null = null;
@@ -469,7 +472,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
 
     prepResults.push(...results);
 
-    if (!jsonMode) process.stderr.write('\n');
+    if (!jsonMode) ctx.output.stderr('\n');
 
     // ── Test execution ──
     let testExitCode = 0;
@@ -487,31 +490,36 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
         testLogFile = join(dappDir, 'tests', 'results', `${suite.name}_${timestamp.replace(/[:.]/g, '-')}_claude.log`);
 
         if (!jsonMode) {
-          process.stderr.write(bold('  Browser Test\n'));
-          process.stderr.write(dim('  Claude will take over the terminal. Output is also logged.\n\n'));
+          ctx.output.stderr(bold('  Browser Test\n'));
+          ctx.output.stderr(dim('  Claude will take over the terminal. Output is also logged.\n\n'));
         }
 
+        // stdout carries the --json result alone; the test's own output then goes to stderr.
+        const writeTestOutput = jsonMode ? ctx.output.stderr : ctx.output.stdout;
+        // Its bytes as text, a character split across two chunks kept whole.
+        const testOutput = new StringDecoder('utf8');
         const browserResult = await runBrowserTest({
           suite,
           prompt,
           dappDir,
           logFile: testLogFile,
-          // stdout carries the --json result alone; the test's own output then goes to stderr.
-          onOutput: (chunk) => (jsonMode ? process.stderr : process.stdout).write(chunk),
+          onOutput: (chunk) => writeTestOutput(testOutput.write(chunk)),
           terminal: 'inherit',
           onMessage: (msg) => {
-            if (!jsonMode) process.stderr.write(dim(`  ${msg}`) + '\n');
+            if (!jsonMode) ctx.output.stderr(dim(`  ${msg}`) + '\n');
           },
         });
 
+        const unfinished = testOutput.end();
+        if (unfinished !== '') writeTestOutput(unfinished);
         testExitCode = browserResult.exitCode;
 
         if (!jsonMode) {
-          process.stderr.write('\n');
+          ctx.output.stderr('\n');
           if (browserResult.timedOut) {
-            process.stderr.write(`  ${red('✗')} Browser test timed out\n`);
+            ctx.output.stderr(`  ${red('✗')} Browser test timed out\n`);
           } else {
-            process.stderr.write(`  ${testExitCode === 0 ? green('✓') : red('✗')} Claude exited with code ${testExitCode}\n`);
+            ctx.output.stderr(`  ${testExitCode === 0 ? green('✓') : red('✗')} Claude exited with code ${testExitCode}\n`);
           }
         }
       } else if (suite.strategy === 'cli') {
@@ -521,8 +529,8 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
         }
 
         if (!jsonMode) {
-          process.stderr.write(bold('  CLI Test\n'));
-          process.stderr.write(dim(`  Executing ${actionsConfig.actions.length} action(s)\n\n`));
+          ctx.output.stderr(bold('  CLI Test\n'));
+          ctx.output.stderr(dim(`  Executing ${actionsConfig.actions.length} action(s)\n\n`));
         }
 
         const { runActions, diffState } = await import('../lib/test/actions-runner.ts');
@@ -564,7 +572,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
                   spinner.stop(`${action.id}: ${result.message ?? 'pass'}`);
                 } else if (result.status === 'skip') {
                   spinner.clear();
-                  process.stderr.write(`${yellow('⊘')} ${action.id}: ${result.message ?? 'skipped'}\n`);
+                  ctx.output.stderr(`${yellow('⊘')} ${action.id}: ${result.message ?? 'skipped'}\n`);
                 } else {
                   spinner.fail(`${action.id}: ${result.message ?? 'fail'}`);
                 }
@@ -575,7 +583,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
                 const diffs = diffState(result.stateBefore, result.stateAfter);
                 if (diffs.length > 0) {
                   for (const d of diffs) {
-                    process.stderr.write(dim(`      ${d.field}: ${d.before} → `) + teal(d.after) + '\n');
+                    ctx.output.stderr(dim(`      ${d.field}: ${d.before} → `) + teal(d.after) + '\n');
                   }
                 }
               }
@@ -592,14 +600,14 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
         testExitCode = actionsFailed ? 1 : 0;
 
         if (!jsonMode) {
-          process.stderr.write('\n');
+          ctx.output.stderr('\n');
           const passed = actionResults.filter(r => r.status === 'pass').length;
           const skipped = actionResults.filter(r => r.status === 'skip').length;
           const failed = actionResults.filter(r => r.status === 'fail').length;
           let summary = green(String(passed) + ' passed');
           if (skipped > 0) summary += `, ${yellow(String(skipped) + ' skipped')}`;
           if (failed > 0) summary += `, ${red(String(failed) + ' failed')}`;
-          process.stderr.write(`  Actions: ${summary}\n`);
+          ctx.output.stderr(`  Actions: ${summary}\n`);
         }
 
         // Store action results for the final result JSON
@@ -607,7 +615,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
       }
     } else {
       if (!jsonMode) {
-        process.stderr.write(dim('  No test suites found — only prep was run\n'));
+        ctx.output.stderr(dim('  No test suites found — only prep was run\n'));
       }
     }
 
@@ -622,14 +630,14 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
     if (selectedSuite) {
       const assertions = loadAssertions(selectedSuite.suiteDir);
       if (assertions && assertions.post.length > 0) {
-        if (!jsonMode) process.stderr.write('\n' + bold('  Assertions\n'));
+        if (!jsonMode) ctx.output.stderr('\n' + bold('  Assertions\n'));
         assertionResults = await runAssertions(assertions.post, assertionContext);
 
         if (!jsonMode) {
           for (const r of assertionResults) {
             const icon = r.status === 'pass' ? green('✓') : red('✗');
             const msg = r.message ? dim(` — ${r.message}`) : '';
-            process.stderr.write(`  ${icon} ${r.id}${msg}\n`);
+            ctx.output.stderr(`  ${icon} ${r.id}${msg}\n`);
           }
         }
       }
@@ -672,9 +680,9 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
     if (jsonMode) {
       ctx.output.result(runResult as unknown as Record<string, unknown>);
     } else {
-      process.stderr.write('\n' + divider() + '\n');
-      process.stderr.write(`  ${overall === 'pass' ? green(bold('PASS')) : red(bold('FAIL'))} — ${config.name} (${duration}s)\n`);
-      process.stderr.write(dim(`  Results: ${resultPath}`) + '\n\n');
+      ctx.output.stderr('\n' + divider() + '\n');
+      ctx.output.stderr(`  ${overall === 'pass' ? green(bold('PASS')) : red(bold('FAIL'))} — ${config.name} (${duration}s)\n`);
+      ctx.output.stderr(dim(`  Results: ${resultPath}`) + '\n\n');
     }
 
     // A failed suite ends the call with exit code 1, which the shell sets.
@@ -704,20 +712,20 @@ function handleList(jsonMode: boolean, ctx: CallContext): void {
     return;
   }
 
-  process.stderr.write('\n' + header(`Tests: ${config.name}`) + '\n\n');
+  ctx.output.stderr('\n' + header(`Tests: ${config.name}`) + '\n\n');
 
   if (suites.length === 0) {
-    process.stderr.write(dim('  No test suites found.\n'));
-    process.stderr.write(dim(`  Create tests/suites/<name>/suite.json to add one.\n`));
+    ctx.output.stderr(dim('  No test suites found.\n'));
+    ctx.output.stderr(dim(`  Create tests/suites/<name>/suite.json to add one.\n`));
   } else {
     for (const { suite } of suites) {
-      process.stderr.write(`  ${bold(teal(suite.name))}\n`);
-      process.stderr.write(`  ${dim(suite.description)}\n`);
-      process.stderr.write(dim(`  strategy: ${suite.strategy}`) + (suite.timeout ? dim(`, timeout: ${suite.timeout}s`) : '') + '\n\n');
+      ctx.output.stderr(`  ${bold(teal(suite.name))}\n`);
+      ctx.output.stderr(`  ${dim(suite.description)}\n`);
+      ctx.output.stderr(dim(`  strategy: ${suite.strategy}`) + (suite.timeout ? dim(`, timeout: ${suite.timeout}s`) : '') + '\n\n');
     }
   }
 
-  process.stderr.write('\n');
+  ctx.output.stderr('\n');
 }
 
 // ── results ──
@@ -739,35 +747,35 @@ function handleResults(args: ParsedArgs, jsonMode: boolean, ctx: CallContext): v
     return;
   }
 
-  process.stderr.write('\n' + header(`Results: ${config.name}`) + '\n\n');
+  ctx.output.stderr('\n' + header(`Results: ${config.name}`) + '\n\n');
 
   if (results.length === 0) {
-    process.stderr.write(dim('  No test results found.\n'));
-    process.stderr.write(dim(`  Run "midnight test run" to generate results.\n`));
+    ctx.output.stderr(dim('  No test results found.\n'));
+    ctx.output.stderr(dim(`  Run "midnight test run" to generate results.\n`));
   } else {
     for (const result of results) {
       const icon = result.status === 'pass' ? green('✓') : red('✗');
       const statusStr = result.status === 'pass' ? green(bold('PASS')) : red(bold('FAIL'));
-      process.stderr.write(`  ${icon} ${bold(result.suite)} — ${statusStr} (${result.duration}s)\n`);
-      process.stderr.write(dim(`    ${result.timestamp} | ${result.network} | ${result.strategy}`) + '\n');
+      ctx.output.stderr(`  ${icon} ${bold(result.suite)} — ${statusStr} (${result.duration}s)\n`);
+      ctx.output.stderr(dim(`    ${result.timestamp} | ${result.network} | ${result.strategy}`) + '\n');
 
       // Prep summary
       const prepFailed = result.prep.filter(p => p.status === 'fail');
       if (prepFailed.length > 0) {
-        process.stderr.write(red(`    prep: ${prepFailed.length} failed`) + '\n');
+        ctx.output.stderr(red(`    prep: ${prepFailed.length} failed`) + '\n');
       }
 
       // Assertion summary
       const assertFailed = result.assertions.filter(a => a.status === 'fail');
       if (assertFailed.length > 0) {
-        process.stderr.write(red(`    assertions: ${assertFailed.length} failed`) + '\n');
+        ctx.output.stderr(red(`    assertions: ${assertFailed.length} failed`) + '\n');
       }
 
-      process.stderr.write('\n');
+      ctx.output.stderr('\n');
     }
   }
 
-  process.stderr.write('\n');
+  ctx.output.stderr('\n');
 }
 
 // ── Helpers ──

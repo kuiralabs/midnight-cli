@@ -133,22 +133,22 @@ async function dustExport(
       return;
     }
 
-    process.stdout.write(result.snapshot + '\n');
+    ctx.output.stdout(result.snapshot + '\n');
     if (minimal) return;
-    process.stderr.write('\n' + keyValue('Network', result.network) + '\n');
-    process.stderr.write(keyValue('Dust balance', formatDust(result.balance)) + '\n');
-    process.stderr.write(keyValue('Snapshot offset', String(result.offset)) + '\n');
+    ctx.output.stderr('\n' + keyValue('Network', result.network) + '\n');
+    ctx.output.stderr(keyValue('Dust balance', formatDust(result.balance)) + '\n');
+    ctx.output.stderr(keyValue('Snapshot offset', String(result.offset)) + '\n');
     if (result.partial) {
       // Loud, because a partial snapshot restores without error and then quietly
       // hands the remaining events back to the SDK's cold sync — the exact failure
       // this command exists to prevent.
-      process.stderr.write(
+      ctx.output.stderr(
         '\n' + yellow(bold('⚠ Snapshot is INCOMPLETE — the sync did not reach the chain tip.')) + '\n' +
         dim('  Restoring it still beats a cold start, but the wallet has events left to catch up on.') + '\n' +
         dim('  Re-run `mn dust export` to resume from this checkpoint and finish.') + '\n',
       );
     }
-    process.stderr.write('\n' + dim('Restore with the wallet SDK dustSerializedState to skip the cold dust sync.') + '\n');
+    ctx.output.stderr('\n' + dim('Restore with the wallet SDK dustSerializedState to skip the cold dust sync.') + '\n');
   } catch (err) {
     spinner.fail('Failed');
     throw err;
@@ -169,8 +169,8 @@ async function dustRegistrationPreCheck(
   indexerWS: string,
   ctx: CallContext,
 ): Promise<PreCheckResult> {
-  process.stderr.write('\n' + header('Dust Status') + '\n\n');
-  process.stderr.write(keyValue('Network', networkName) + '\n\n');
+  ctx.output.stderr('\n' + header('Dust Status') + '\n\n');
+  ctx.output.stderr(keyValue('Network', networkName) + '\n\n');
 
   const spinner = ctx.progress.start(`Checking registration on ${networkName}...`);
 
@@ -180,7 +180,7 @@ async function dustRegistrationPreCheck(
         const pct = Math.min(Math.round((current / highest) * 100), 100);
         spinner.update(pct >= 100 ? 'Checking registration...' : `Checking registration... ${pct}%`);
       }
-    });
+    }, ctx.signal);
 
     if (ctx.signal.aborted) throw new Error(CANCELLED_MESSAGE);
 
@@ -230,21 +230,21 @@ function printUnregisteredStatus(
   }
 
   // Machine-readable to stdout
-  process.stdout.write('registered=no\n');
-  process.stdout.write(`registered_utxos=${registeredUtxos}\n`);
-  process.stdout.write(`unregistered_utxos=${unregisteredUtxos}\n`);
+  ctx.output.stdout('registered=no\n');
+  ctx.output.stdout(`registered_utxos=${registeredUtxos}\n`);
+  ctx.output.stdout(`unregistered_utxos=${unregisteredUtxos}\n`);
 
   // Formatted to stderr
-  process.stderr.write(keyValue('Registered', bold('no')) + '\n');
-  process.stderr.write(keyValue('UTXOs', `${registeredUtxos} registered, ${unregisteredUtxos} unregistered`) + '\n');
+  ctx.output.stderr(keyValue('Registered', bold('no')) + '\n');
+  ctx.output.stderr(keyValue('UTXOs', `${registeredUtxos} registered, ${unregisteredUtxos} unregistered`) + '\n');
 
   if (totalUtxos === 0) {
-    process.stderr.write('\n' + dim('No NIGHT UTXOs at this address. Fund the wallet first.') + '\n');
+    ctx.output.stderr('\n' + dim('No NIGHT UTXOs at this address. Fund the wallet first.') + '\n');
   } else {
-    process.stderr.write('\n' + dim('Not generating dust. Run: midnight dust register') + '\n');
+    ctx.output.stderr('\n' + dim('Not generating dust. Run: midnight dust register') + '\n');
   }
 
-  process.stderr.write('\n' + divider() + '\n\n');
+  ctx.output.stderr('\n' + divider() + '\n\n');
 }
 
 async function dustRegister(
@@ -254,8 +254,8 @@ async function dustRegister(
   ctx: CallContext,
 ): Promise<void> {
   const networkName = networkConfig.networkId.toLowerCase();
-  process.stderr.write('\n' + header('Dust Register') + '\n\n');
-  process.stderr.write(keyValue('Network', networkName) + '\n\n');
+  ctx.output.stderr('\n' + header('Dust Register') + '\n\n');
+  ctx.output.stderr(keyValue('Network', networkName) + '\n\n');
 
   const spinner = ctx.progress.start('Syncing wallet...');
 
@@ -285,8 +285,8 @@ async function dustRegister(
       return;
     }
 
-    process.stdout.write(dustBal.toString() + '\n');
-    process.stderr.write('\n' + successMessage(
+    ctx.output.stdout(dustBal.toString() + '\n');
+    ctx.output.stderr('\n' + successMessage(
       result.alreadyAvailable
         ? `Dust tokens already available: ${formatDust(dustBal)}`
         : `Dust tokens available: ${formatDust(dustBal)}`,
@@ -354,21 +354,21 @@ async function dustStatusDirect(
     }
 
     // Machine-readable to stdout
-    process.stdout.write('registered=yes\n');
-    process.stdout.write(`dust=${view.balance}\n`);
-    process.stdout.write(`registered_utxos=${registeredUtxos}\n`);
-    process.stdout.write(`unregistered_utxos=${unregisteredUtxos}\n`);
+    ctx.output.stdout('registered=yes\n');
+    ctx.output.stdout(`dust=${view.balance}\n`);
+    ctx.output.stdout(`registered_utxos=${registeredUtxos}\n`);
+    ctx.output.stdout(`unregistered_utxos=${unregisteredUtxos}\n`);
 
     // Formatted to stderr
-    process.stderr.write(keyValue('Registered', bold('yes')) + '\n');
-    process.stderr.write(keyValue('UTXOs', `${registeredUtxos} registered, ${unregisteredUtxos} unregistered`) + '\n');
-    process.stderr.write(keyValue('Dust Balance', bold(formatDust(view.balance))) + '\n');
-    process.stderr.write(keyValue('Dust Available', view.availableCoins > 0 ? 'yes' : 'no') + '\n');
-    process.stderr.write(keyValue('Events applied', view.eventsApplied.toString() + (view.fromCache ? ' (delta)' : '')) + '\n');
+    ctx.output.stderr(keyValue('Registered', bold('yes')) + '\n');
+    ctx.output.stderr(keyValue('UTXOs', `${registeredUtxos} registered, ${unregisteredUtxos} unregistered`) + '\n');
+    ctx.output.stderr(keyValue('Dust Balance', bold(formatDust(view.balance))) + '\n');
+    ctx.output.stderr(keyValue('Dust Available', view.availableCoins > 0 ? 'yes' : 'no') + '\n');
+    ctx.output.stderr(keyValue('Events applied', view.eventsApplied.toString() + (view.fromCache ? ' (delta)' : '')) + '\n');
     if (unregisteredUtxos > 0) {
-      process.stderr.write('\n' + dim(`${unregisteredUtxos} UTXO(s) not yet registered. Run: midnight dust register`) + '\n');
+      ctx.output.stderr('\n' + dim(`${unregisteredUtxos} UTXO(s) not yet registered. Run: midnight dust register`) + '\n');
     }
-    process.stderr.write('\n' + divider() + '\n\n');
+    ctx.output.stderr('\n' + divider() + '\n\n');
   } catch (err) {
     spinner.fail('Failed');
     throw err;

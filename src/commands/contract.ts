@@ -3,7 +3,7 @@
 import { resolve } from 'node:path';
 import { type ParsedArgs, getFlag, hasFlag, requireFlag } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
-import type { CallContext } from '../lib/call-context.ts';
+import type { CallContext, CallOutput } from '../lib/call-context.ts';
 import { header, keyValue } from '../ui/format.ts';
 import { bold, dim, teal, yellow, green } from '../ui/colors.ts';
 
@@ -68,41 +68,41 @@ async function handleInspect(args: ParsedArgs, ctx: CallContext): Promise<void> 
     return;
   }
 
-  process.stderr.write('\n' + header(`Contract: ${info.name}`) + '\n\n');
-  process.stderr.write(keyValue('Compiler', info.compilerVersion) + '\n');
-  process.stderr.write(keyValue('Language', info.languageVersion) + '\n');
-  process.stderr.write(keyValue('Runtime', info.runtimeVersion) + '\n');
+  ctx.output.stderr('\n' + header(`Contract: ${info.name}`) + '\n\n');
+  ctx.output.stderr(keyValue('Compiler', info.compilerVersion) + '\n');
+  ctx.output.stderr(keyValue('Language', info.languageVersion) + '\n');
+  ctx.output.stderr(keyValue('Runtime', info.runtimeVersion) + '\n');
 
-  process.stderr.write('\n' + bold('  Circuits') + '\n');
+  ctx.output.stderr('\n' + bold('  Circuits') + '\n');
   if (info.circuits.length === 0) {
-    process.stderr.write(dim('    (none)') + '\n');
+    ctx.output.stderr(dim('    (none)') + '\n');
   } else {
     for (const circuit of info.circuits) {
       const sig = formatCircuitSignature(circuit);
       const flags = formatCircuitFlags(circuit);
       const flagColor = circuit.pure ? teal(flags) : yellow(flags);
-      process.stderr.write(`    ${sig}  ${dim('—')} ${flagColor}\n`);
+      ctx.output.stderr(`    ${sig}  ${dim('—')} ${flagColor}\n`);
     }
   }
 
-  process.stderr.write('\n' + bold('  Witnesses') + '\n');
+  ctx.output.stderr('\n' + bold('  Witnesses') + '\n');
   if (info.witnesses.length === 0) {
-    process.stderr.write(dim('    (none)') + '\n');
+    ctx.output.stderr(dim('    (none)') + '\n');
   } else {
     for (const witness of info.witnesses) {
-      process.stderr.write(`    ${formatWitnessSignature(witness)}\n`);
+      ctx.output.stderr(`    ${formatWitnessSignature(witness)}\n`);
     }
   }
 
   if (info.siblings.length > 0) {
-    process.stderr.write('\n' + bold('  Other contracts in this project') + '\n');
+    ctx.output.stderr('\n' + bold('  Other contracts in this project') + '\n');
     for (const name of info.siblings) {
-      process.stderr.write(`    ${teal(name)}\n`);
+      ctx.output.stderr(`    ${teal(name)}\n`);
     }
-    process.stderr.write('\n' + dim('  Inspect a sibling: mn contract inspect --name <name>') + '\n');
+    ctx.output.stderr('\n' + dim('  Inspect a sibling: mn contract inspect --name <name>') + '\n');
   }
 
-  process.stderr.write('\n');
+  ctx.output.stderr('\n');
 }
 
 // ── Deploy ──
@@ -113,19 +113,19 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
   const { info, constructorArgs } = request;
 
   if (!jsonMode) {
-    process.stderr.write('\n' + header('Contract Deploy') + '\n\n');
+    ctx.output.stderr('\n' + header('Contract Deploy') + '\n\n');
   }
 
   const target = resolvePayingTarget(args, 'contract', 'deploy');
   const { network } = target;
 
   if (!jsonMode) {
-    process.stderr.write(keyValue('Contract', info.name) + '\n');
-    process.stderr.write(keyValue('Network', network) + '\n');
+    ctx.output.stderr(keyValue('Contract', info.name) + '\n');
+    ctx.output.stderr(keyValue('Network', network) + '\n');
     if (constructorArgs.length > 0) {
-      process.stderr.write(keyValue('Constructor args', String(constructorArgs.length)) + '\n');
+      ctx.output.stderr(keyValue('Constructor args', String(constructorArgs.length)) + '\n');
     }
-    process.stderr.write('\n');
+    ctx.output.stderr('\n');
   }
 
   const deployed = await deployContract({
@@ -149,12 +149,12 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
       network,
     });
   } else {
-    process.stderr.write('\n');
-    process.stderr.write(keyValue('Address', deployed.address) + '\n');
-    process.stderr.write('\n' + green('  ✓ Deploy successful') + '\n');
-    writeNextStepsHint(deployed.address, info.circuits, network);
+    ctx.output.stderr('\n');
+    ctx.output.stderr(keyValue('Address', deployed.address) + '\n');
+    ctx.output.stderr('\n' + green('  ✓ Deploy successful') + '\n');
+    writeNextStepsHint(ctx.output, deployed.address, info.circuits, network);
     // Pipeable address on stdout for shell composition (e.g. `addr=$(mn contract deploy)`).
-    process.stdout.write(deployed.address + '\n');
+    ctx.output.stdout(deployed.address + '\n');
   }
 }
 
@@ -164,18 +164,18 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
  * and adds a call command when at least one circuit takes no arguments
  * (those run as-is without --args).
  */
-function writeNextStepsHint(address: string, circuits: { name: string; arguments: unknown[] }[], network: string): void {
+function writeNextStepsHint(output: CallOutput, address: string, circuits: { name: string; arguments: unknown[] }[], network: string): void {
   const networkFlag = network === 'undeployed' ? '' : ` --network ${network}`;
-  process.stderr.write('\n' + dim('  Next:') + '\n');
-  process.stderr.write(dim('    mn contract state --address ') + teal(address) + dim(networkFlag) + '\n');
+  output.stderr('\n' + dim('  Next:') + '\n');
+  output.stderr(dim('    mn contract state --address ') + teal(address) + dim(networkFlag) + '\n');
   const noArgCircuit = circuits.find((c) => c.arguments.length === 0);
   if (noArgCircuit) {
-    process.stderr.write(
+    output.stderr(
       dim('    mn contract call --address ') + teal(address) +
       dim(' --circuit ') + teal(noArgCircuit.name) + dim(networkFlag) + '\n',
     );
   }
-  process.stderr.write('\n');
+  output.stderr('\n');
 }
 
 // ── Call ──
@@ -186,16 +186,16 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
   const { info, address, circuit } = request;
 
   if (!jsonMode) {
-    process.stderr.write('\n' + header('Contract Call') + '\n\n');
+    ctx.output.stderr('\n' + header('Contract Call') + '\n\n');
   }
 
   const target = resolvePayingTarget(args, 'contract', 'call');
   const { network } = target;
 
   if (!jsonMode) {
-    process.stderr.write(keyValue('Contract', info.name) + '\n');
-    process.stderr.write(keyValue('Circuit', circuit) + '\n');
-    process.stderr.write(keyValue('Address', address.slice(0, 20) + '...') + '\n\n');
+    ctx.output.stderr(keyValue('Contract', info.name) + '\n');
+    ctx.output.stderr(keyValue('Circuit', circuit) + '\n');
+    ctx.output.stderr(keyValue('Address', address.slice(0, 20) + '...') + '\n\n');
   }
 
   const called = await callContract({
@@ -218,7 +218,7 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
       status: called.status,
     });
   } else {
-    process.stderr.write('\n' + green('  ✓ Circuit call successful') + '\n\n');
+    ctx.output.stderr('\n' + green('  ✓ Circuit call successful') + '\n\n');
   }
 }
 
@@ -237,9 +237,9 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const { network, networkConfig } = resolvePayingTarget(args, 'contract', 'state');
 
   if (!jsonMode) {
-    process.stderr.write('\n' + header('Contract State') + '\n\n');
-    process.stderr.write(keyValue('Address', address.slice(0, 20) + '...') + '\n');
-    process.stderr.write(keyValue('Network', network) + '\n\n');
+    ctx.output.stderr('\n' + header('Contract State') + '\n\n');
+    ctx.output.stderr(keyValue('Address', address.slice(0, 20) + '...') + '\n');
+    ctx.output.stderr(keyValue('Network', network) + '\n\n');
   }
 
   // Try parsed ledger state via runner (needs compiled contract in dApp)
@@ -273,17 +273,17 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
       const hasMaps = Object.keys(result.maps).length > 0;
 
       if (hasFields || hasMaps) {
-        process.stderr.write(bold('  Ledger State') + '\n');
+        ctx.output.stderr(bold('  Ledger State') + '\n');
         for (const [key, value] of Object.entries(result.fields)) {
-          process.stderr.write(`    ${key}: ${teal(value)}` + '\n');
+          ctx.output.stderr(`    ${key}: ${teal(value)}` + '\n');
         }
         for (const [key, info] of Object.entries(result.maps)) {
-          process.stderr.write(`    ${key}: ${dim(`Map (${(info as any).size} entries)`)}` + '\n');
+          ctx.output.stderr(`    ${key}: ${dim(`Map (${(info as any).size} entries)`)}` + '\n');
         }
       } else {
-        process.stderr.write(dim('  (no ledger fields found)') + '\n');
+        ctx.output.stderr(dim('  (no ledger fields found)') + '\n');
       }
-      process.stderr.write('\n');
+      ctx.output.stderr('\n');
     }
   } catch (err) {
     // If runner fails (no compiled contract in cwd), fall back to raw state
@@ -303,10 +303,10 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
     if (jsonMode) {
       ctx.output.result({ subcommand: 'state', address, network, raw });
     } else {
-      process.stderr.write(bold('  Raw State') + '\n');
-      process.stderr.write(dim('    (run from dApp root for parsed ledger fields)') + '\n');
-      for (const line of rawStateLines(raw, '    ')) process.stderr.write(line + '\n');
-      process.stderr.write('\n');
+      ctx.output.stderr(bold('  Raw State') + '\n');
+      ctx.output.stderr(dim('    (run from dApp root for parsed ledger fields)') + '\n');
+      for (const line of rawStateLines(raw, '    ')) ctx.output.stderr(line + '\n');
+      ctx.output.stderr('\n');
     }
   }
 }

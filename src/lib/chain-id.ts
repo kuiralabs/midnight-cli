@@ -5,6 +5,7 @@
 // preprod reset that advanced the chain past our cache).
 
 import { callNodeRpc } from './node-rpc.ts';
+import { throwIfCancelled } from './errors.ts';
 
 /** Memoise genesis-hash lookups so back-to-back commands don't re-fetch. */
 const CHAIN_ID_MEMO = new Map<string, { hash: string; fetchedAt: number }>();
@@ -14,16 +15,18 @@ const MEMO_TTL_MS = 60_000;
  * Fetch the chain's genesis block hash via substrate JSON-RPC.
  * Returns null when the node is unreachable — caller should treat that as
  * "skip validation, proceed best-effort" rather than as a hard failure.
+ * A cancelled call fails with CancelledError instead.
  */
-export async function getChainGenesisHash(nodeWsUrl: string): Promise<string | null> {
+export async function getChainGenesisHash(nodeWsUrl: string, signal?: AbortSignal): Promise<string | null> {
   const cached = CHAIN_ID_MEMO.get(nodeWsUrl);
   if (cached && Date.now() - cached.fetchedAt < MEMO_TTL_MS) return cached.hash;
   try {
-    const hash = await callNodeRpc<string>({ url: nodeWsUrl, timeoutMs: 5_000 }, 'chain_getBlockHash', [0]);
+    const hash = await callNodeRpc<string>({ url: nodeWsUrl, timeoutMs: 5_000, signal }, 'chain_getBlockHash', [0]);
     if (typeof hash !== 'string' || !hash.startsWith('0x')) return null;
     CHAIN_ID_MEMO.set(nodeWsUrl, { hash, fetchedAt: Date.now() });
     return hash;
   } catch {
+    throwIfCancelled(signal);
     return null;
   }
 }
