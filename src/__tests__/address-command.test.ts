@@ -5,6 +5,7 @@ import * as os from 'os';
 import addressCommand from '../commands/address.ts';
 import { parseArgs } from '../lib/argv.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { cliCall } from './helpers/cli-call.ts';
 
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
 const TEST_DIR = path.join(os.tmpdir(), `midnight-address-cmd-test-${process.pid}`);
@@ -28,14 +29,14 @@ afterEach(() => {
 describe('address command', () => {
   it('derives address and outputs to stdout', async () => {
     const args = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed']);
-    await addressCommand(args);
+    await cliCall(addressCommand, args);
     const out = io.stdout().trim();
     expect(out.startsWith('mn_addr_undeployed1')).toBe(true);
   });
 
   it('outputs bare address to stdout (single line, pipeable)', async () => {
     const args = parseArgs(['address', '--seed', TEST_SEED, '--network', 'preprod']);
-    await addressCommand(args);
+    await cliCall(addressCommand, args);
     const lines = io.stdout().trim().split('\n');
     expect(lines).toHaveLength(1);
     expect(lines[0]!.startsWith('mn_addr_preprod1')).toBe(true);
@@ -43,7 +44,7 @@ describe('address command', () => {
 
   it('stderr contains metadata', async () => {
     const args = parseArgs(['address', '--seed', TEST_SEED, '--network', 'preprod']);
-    await addressCommand(args);
+    await cliCall(addressCommand, args);
     const err = io.stderr();
     expect(err).toContain('Network');
     expect(err).toContain('preprod');
@@ -54,12 +55,12 @@ describe('address command', () => {
 
   it('supports --index flag for key derivation', async () => {
     const args0 = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed', '--index', '0']);
-    await addressCommand(args0);
+    await cliCall(addressCommand, args0);
     const addr0 = io.stdout().trim();
 
     io.clearStdout();
     const args1 = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed', '--index', '1']);
-    await addressCommand(args1);
+    await cliCall(addressCommand, args1);
     const addr1 = io.stdout().trim();
 
     expect(addr0).not.toBe(addr1);
@@ -68,7 +69,7 @@ describe('address command', () => {
 
   it('stderr shows the correct key index', async () => {
     const args = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed', '--index', '3']);
-    await addressCommand(args);
+    await cliCall(addressCommand, args);
     const err = io.stderr();
     expect(err).toContain('3');
     expect(err).toContain('NightExternal/3');
@@ -76,20 +77,20 @@ describe('address command', () => {
 
   it('accepts 0x-prefixed seed', async () => {
     const args = parseArgs(['address', '--seed', '0x' + TEST_SEED, '--network', 'undeployed']);
-    await addressCommand(args);
+    await cliCall(addressCommand, args);
     const out = io.stdout().trim();
     expect(out.startsWith('mn_addr_undeployed1')).toBe(true);
   });
 
   it('resolves the seed from MN_SEED when --seed is absent', async () => {
     const refArgs = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed']);
-    await addressCommand(refArgs);
+    await cliCall(addressCommand, refArgs);
     const fromFlag = io.stdout().trim();
 
     io.clearStdout();
     process.env.MN_SEED = TEST_SEED;
     const envArgs = parseArgs(['address', '--network', 'undeployed']);
-    await addressCommand(envArgs);
+    await cliCall(addressCommand, envArgs);
     const fromEnv = io.stdout().trim();
 
     expect(fromEnv).toBe(fromFlag);
@@ -99,12 +100,12 @@ describe('address command', () => {
     const otherSeed = '0000000000000000000000000000000000000000000000000000000000000003';
     process.env.MN_SEED = otherSeed;
     const args = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed']);
-    await addressCommand(args);
+    await cliCall(addressCommand, args);
     const fromFlag = io.stdout().trim();
 
     io.clearStdout();
     delete process.env.MN_SEED;
-    await addressCommand(parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed']));
+    await cliCall(addressCommand, parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed']));
     const seedOnly = io.stdout().trim();
 
     expect(fromFlag).toBe(seedOnly);
@@ -119,12 +120,12 @@ describe('address command', () => {
     }));
 
     const refArgs = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed']);
-    await addressCommand(refArgs);
+    await cliCall(addressCommand, refArgs);
     const fromSeed = io.stdout().trim();
 
     io.clearStdout();
     const walletArgs = parseArgs(['address', '--wallet', walletFile, '--network', 'undeployed']);
-    await addressCommand(walletArgs);
+    await cliCall(addressCommand, walletArgs);
     const fromWallet = io.stdout().trim();
 
     expect(fromWallet).toBe(fromSeed);
@@ -134,27 +135,27 @@ describe('address command', () => {
 describe('address command — error handling', () => {
   it('throws a clear error naming every seed source when none is provided', async () => {
     const args = parseArgs(['address', '--network', 'undeployed']);
-    await expect(addressCommand(args)).rejects.toThrow('address needs a seed source');
-    await expect(addressCommand(args)).rejects.toThrow('--seed');
-    await expect(addressCommand(args)).rejects.toThrow('MN_SEED');
-    await expect(addressCommand(args)).rejects.toThrow('--wallet');
+    await expect(cliCall(addressCommand, args)).rejects.toThrow('address needs a seed source');
+    await expect(cliCall(addressCommand, args)).rejects.toThrow('--seed');
+    await expect(cliCall(addressCommand, args)).rejects.toThrow('MN_SEED');
+    await expect(cliCall(addressCommand, args)).rejects.toThrow('--wallet');
   });
 
   it('throws for an invalid MN_SEED', async () => {
     process.env.MN_SEED = 'aabb';
     const args = parseArgs(['address', '--network', 'undeployed']);
-    await expect(addressCommand(args)).rejects.toThrow('64 or 128 hex characters');
-    await expect(addressCommand(args)).rejects.toThrow('MN_SEED');
+    await expect(cliCall(addressCommand, args)).rejects.toThrow('64 or 128 hex characters');
+    await expect(cliCall(addressCommand, args)).rejects.toThrow('MN_SEED');
   });
 
   it('throws for non-hex seed', async () => {
     const args = parseArgs(['address', '--seed', 'not-a-hex-string-at-all!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!', '--network', 'undeployed']);
-    await expect(addressCommand(args)).rejects.toThrow('64 or 128 hex characters');
+    await expect(cliCall(addressCommand, args)).rejects.toThrow('64 or 128 hex characters');
   });
 
   it('throws for short seed', async () => {
     const args = parseArgs(['address', '--seed', 'aabb', '--network', 'undeployed']);
-    await expect(addressCommand(args)).rejects.toThrow('64 or 128 hex characters');
+    await expect(cliCall(addressCommand, args)).rejects.toThrow('64 or 128 hex characters');
   });
 
   it('throws for negative key index', async () => {
@@ -165,16 +166,16 @@ describe('address command — error handling', () => {
       positionals: [] as string[],
       flags: { seed: TEST_SEED, network: 'undeployed', index: '-1' } as Record<string, string | true>,
     };
-    await expect(addressCommand(args)).rejects.toThrow('non-negative integer');
+    await expect(cliCall(addressCommand, args)).rejects.toThrow('non-negative integer');
   });
 
   it('throws for non-numeric key index', async () => {
     const args = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed', '--index', 'abc']);
-    await expect(addressCommand(args)).rejects.toThrow('non-negative integer');
+    await expect(cliCall(addressCommand, args)).rejects.toThrow('non-negative integer');
   });
 
   it('throws for float key index', async () => {
     const args = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed', '--index', '2.5']);
-    await expect(addressCommand(args)).rejects.toThrow('non-negative integer');
+    await expect(cliCall(addressCommand, args)).rejects.toThrow('non-negative integer');
   });
 });

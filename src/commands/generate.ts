@@ -15,10 +15,10 @@ import { passphraseForNewSecret } from '../lib/passphrase.ts';
 import { parseSeedHex } from '../lib/seed-resolver.ts';
 import { header, keyValue, divider, formatAddress } from '../ui/format.ts';
 import { bold, yellow, dim, green } from '../ui/colors.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { getDefaultWalletPath } from '../lib/wallet-paths.ts';
 
-export default async function generateCommand(args: ParsedArgs): Promise<void> {
+export default async function generateCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const networkName = resolveNetworkName({ args });
   const outputPath = getFlag(args, 'output');
 
@@ -87,7 +87,7 @@ export default async function generateCommand(args: ParsedArgs): Promise<void> {
       createdAt: config.createdAt,
     };
     if (mnemonic) result.mnemonic = mnemonic;
-    writeJsonResult(result);
+    ctx.output.result(result);
     return;
   }
 

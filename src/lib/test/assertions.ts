@@ -133,7 +133,7 @@ function checkPortListening(check: AssertionCheck): Promise<boolean> {
  *
  * Customize per-suite via params.markers (string[]).
  */
-const DEFAULT_FAILURE_MARKERS = [
+const DEFAULT_FAILURE_MARKERS: readonly string[] = [
   'FAILED',
   '❌',
   'did not pass',

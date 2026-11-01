@@ -7,9 +7,9 @@ import { isValidNetworkName, type NetworkName } from '../lib/network.ts';
 import { UsageError } from '../lib/errors.ts';
 import { getConfigValue, setConfigValue, unsetConfigValue, getValidConfigKeys } from '../lib/cli-config.ts';
 import { green } from '../ui/colors.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 
-export default async function configCommand(args: ParsedArgs): Promise<void> {
+export default async function configCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const action = args.subcommand;
 
   if (!action || !['get', 'set', 'unset'].includes(action)) {
@@ -37,7 +37,7 @@ export default async function configCommand(args: ParsedArgs): Promise<void> {
   if (action === 'get') {
     const value = getConfigValue(key, undefined, scope);
     if (hasFlag(args, 'json')) {
-      writeJsonResult({ action: 'get', key, value });
+      ctx.output.result({ action: 'get', key, value });
       return;
     }
     process.stdout.write(value + '\n');
@@ -45,7 +45,7 @@ export default async function configCommand(args: ParsedArgs): Promise<void> {
     unsetConfigValue(key, undefined, scope);
     const displayValue = key === 'network' ? '(default)' : '(removed)';
     if (hasFlag(args, 'json')) {
-      writeJsonResult({ action: 'unset', key, value: displayValue });
+      ctx.output.result({ action: 'unset', key, value: displayValue });
       return;
     }
     process.stderr.write(green('✓') + ` ${key} ${displayValue}\n`);
@@ -58,7 +58,7 @@ export default async function configCommand(args: ParsedArgs): Promise<void> {
     // A project id is a secret: what was set is said the way `config get` shows it.
     const shown = key === 'blockfrost-project-id' ? getConfigValue(key, undefined, scope) : value;
     if (hasFlag(args, 'json')) {
-      writeJsonResult({ action: 'set', key, value: shown });
+      ctx.output.result({ action: 'set', key, value: shown });
       return;
     }
     process.stderr.write(green('✓') + ` ${key} = ${shown}\n`);

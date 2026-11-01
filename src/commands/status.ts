@@ -13,7 +13,7 @@ import { resolveBlockfrostProjectId } from '../lib/resolve-network.ts';
 import { header, divider } from '../ui/format.ts';
 import { bold, dim, teal, green, red, gray } from '../ui/colors.ts';
 import { start as startSpinner } from '../ui/spinner.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext, CommandOutcome } from '../lib/call-context.ts';
 
 // ── Types matching status.json contract ──
 
@@ -368,7 +368,7 @@ function renderIssues(issues: Issue[], networkFilter?: string): void {
 
 // ── Command ──
 
-export default async function statusCommand(args: ParsedArgs): Promise<void> {
+export default async function statusCommand(args: ParsedArgs, ctx: CallContext): Promise<CommandOutcome | void> {
   const jsonMode = hasFlag(args, 'json');
   const showAll = hasFlag(args, 'all');
   const watchMode = hasFlag(args, 'watch');
@@ -447,7 +447,7 @@ export default async function statusCommand(args: ParsedArgs): Promise<void> {
 
     if (canaryError) result.canaryError = canaryError;
 
-    writeJsonResult(result);
+    ctx.output.result(result);
 
     const worstStatus = targetNetworks.reduce((worst, name) => {
       const merged = { ...(status?.networks[name] ?? {}), ...(liveByNetwork[name] ?? {}) };
@@ -457,9 +457,7 @@ export default async function statusCommand(args: ParsedArgs): Promise<void> {
       return worst;
     }, 'up' as string);
 
-    if (worstStatus === 'down') process.exitCode = 2;
-    else if (worstStatus === 'degraded') process.exitCode = 1;
-    return;
+    return outcomeOf(worstStatus);
   }
 
   // ── Render ──
@@ -541,6 +539,11 @@ export default async function statusCommand(args: ParsedArgs): Promise<void> {
     return worst;
   }, 'up' as string);
 
-  if (worstStatus === 'down') process.exitCode = 2;
-  else if (worstStatus === 'degraded') process.exitCode = 1;
+  return outcomeOf(worstStatus);
+}
+
+/** The exit code a status ends with, which the shell sets: 2 when a network is down, 1 when one is degraded. */
+function outcomeOf(worstStatus: string): CommandOutcome | void {
+  if (worstStatus === 'down') return { exitCode: 2 };
+  if (worstStatus === 'degraded') return { exitCode: 1 };
 }

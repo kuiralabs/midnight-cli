@@ -3,11 +3,11 @@
 import { resolve } from 'node:path';
 import { type ParsedArgs, getFlag, hasFlag, requireFlag } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { header, keyValue } from '../ui/format.ts';
 import { bold, dim, teal, yellow, green } from '../ui/colors.ts';
 import { silentSpinner, start as startSpinner } from '../ui/spinner.ts';
-import { type CommandContext, type Payer, payerFor, resolvePayingTarget } from '../lib/payer.ts';
+import { type Payer, payerFor, resolvePayingTarget } from '../lib/payer.ts';
 import { deployContract } from '../lib/contract/deploy.ts';
 import { callContract } from '../lib/contract/call.ts';
 import { validateContractAddress } from '../lib/contract/validate.ts';
@@ -28,7 +28,7 @@ function isValidSubcommand(s: string): s is Subcommand {
   return (VALID_SUBCOMMANDS as readonly string[]).includes(s);
 }
 
-export default async function contractCommand(args: ParsedArgs, signal?: AbortSignal, context?: CommandContext): Promise<void> {
+export default async function contractCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const subcommand = args.subcommand;
 
   if (!subcommand || !isValidSubcommand(subcommand)) {
@@ -44,19 +44,19 @@ export default async function contractCommand(args: ParsedArgs, signal?: AbortSi
 
   switch (subcommand) {
     case 'inspect':
-      return handleInspect(args);
+      return handleInspect(args, ctx);
     case 'deploy':
-      return handleDeploy(args, payerFor('contract deploy', context), signal);
+      return handleDeploy(args, payerFor('contract deploy', ctx), ctx);
     case 'call':
-      return handleCall(args, payerFor('contract call', context), signal);
+      return handleCall(args, payerFor('contract call', ctx), ctx);
     case 'state':
-      return handleState(args, signal);
+      return handleState(args, ctx);
   }
 }
 
 // ── Inspect ──
 
-async function handleInspect(args: ParsedArgs): Promise<void> {
+async function handleInspect(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
   const startDir = resolveScanDir(args);
   const contractName = getFlag(args, 'name');
@@ -64,7 +64,7 @@ async function handleInspect(args: ParsedArgs): Promise<void> {
   const { info } = findContractInfo(startDir, contractName);
 
   if (jsonMode) {
-    writeJsonResult(toJsonOutput(info));
+    ctx.output.result(toJsonOutput(info));
     return;
   }
 
@@ -107,7 +107,7 @@ async function handleInspect(args: ParsedArgs): Promise<void> {
 
 // ── Deploy ──
 
-async function handleDeploy(args: ParsedArgs, payer: Payer, signal?: AbortSignal): Promise<void> {
+async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
   const request = resolveContractDeployRequest(args);
   const { info, constructorArgs } = request;
@@ -134,14 +134,14 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, signal?: AbortSignal
     wallet: getFlag(args, 'wallet'),
     payer,
     progress: (message) => jsonMode ? silentSpinner() : startSpinner(message),
-    signal,
+    signal: ctx.signal,
   });
 
   if (jsonMode) {
     // JSON path emits a single line of structured output on stdout. The
     // bare address line below is for the human "pipe through head" workflow
     // and would pollute the JSON stream.
-    writeJsonResult({
+    ctx.output.result({
       subcommand: 'deploy',
       contractName: deployed.contractName,
       address: deployed.address,
@@ -179,7 +179,7 @@ function writeNextStepsHint(address: string, circuits: { name: string; arguments
 
 // ── Call ──
 
-async function handleCall(args: ParsedArgs, payer: Payer, signal?: AbortSignal): Promise<void> {
+async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
   const request = resolveContractCallRequest(args);
   const { info, address, circuit } = request;
@@ -203,11 +203,11 @@ async function handleCall(args: ParsedArgs, payer: Payer, signal?: AbortSignal):
     wallet: getFlag(args, 'wallet'),
     payer,
     progress: (message) => jsonMode ? silentSpinner() : startSpinner(message),
-    signal,
+    signal: ctx.signal,
   });
 
   if (jsonMode) {
-    writeJsonResult({
+    ctx.output.result({
       subcommand: 'call',
       contractName: called.contractName,
       circuit,
@@ -222,7 +222,7 @@ async function handleCall(args: ParsedArgs, payer: Payer, signal?: AbortSignal):
 
 // ── State ──
 
-async function handleState(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
+async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
   const dappDir = resolve(getFlag(args, 'path') ?? process.cwd());
   const scanDir = resolveScanDir(args);
@@ -253,13 +253,13 @@ async function handleState(args: ParsedArgs, signal?: AbortSignal): Promise<void
       contractName: info.name,
       contractAddress: address,
       onMessage: (msg) => spinner.update(msg),
-      signal,
+      signal: ctx.signal,
     });
 
     spinner.stop('State retrieved');
 
     if (jsonMode) {
-      writeJsonResult({
+      ctx.output.result({
         subcommand: 'state',
         address,
         network,
@@ -299,7 +299,7 @@ async function handleState(args: ParsedArgs, signal?: AbortSignal): Promise<void
     const raw = describeRawState(contractState.data.state);
 
     if (jsonMode) {
-      writeJsonResult({ subcommand: 'state', address, network, raw });
+      ctx.output.result({ subcommand: 'state', address, network, raw });
     } else {
       process.stderr.write(bold('  Raw State') + '\n');
       process.stderr.write(dim('    (run from dApp root for parsed ledger fields)') + '\n');

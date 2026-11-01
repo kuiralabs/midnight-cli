@@ -20,11 +20,11 @@ import { parseFeeLimits } from '../lib/fee-limits.ts';
 import { describeApprovalPolicy } from '../lib/approval.ts';
 import { bold, dim, teal, green, red } from '../ui/colors.ts';
 import { start as startSpinner, getActiveSpinner } from '../ui/spinner.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { UsageError, CANCELLED_MESSAGE } from '../lib/errors.ts';
 import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
-export default async function serveCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
+export default async function serveCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
   // ── Parse args ──
 
@@ -119,7 +119,7 @@ export default async function serveCommand(args: ParsedArgs, signal?: AbortSigna
     // Save cache after successful sync (checkpoint before opening RPC).
     try { await saveWalletCache(address, networkName, bundle.facade); } catch { /* best-effort */ }
 
-    if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+    if (ctx.signal.aborted) throw new Error(CANCELLED_MESSAGE);
 
     let server: RpcServer | undefined;
     let connector: ReturnType<typeof createDAppConnector> | undefined;
@@ -242,7 +242,7 @@ export default async function serveCommand(args: ParsedArgs, signal?: AbortSigna
     process.stderr.write(dim('  Press Ctrl+C to stop') + '\n\n');
 
     if (jsonMode) {
-      writeJsonResult({
+      ctx.output.result({
         port,
         network: networkName,
         address,
@@ -256,15 +256,11 @@ export default async function serveCommand(args: ParsedArgs, signal?: AbortSigna
     // We don't register our own signal handlers — wallet.ts handles that.
 
     await new Promise<void>((resolve) => {
-      if (signal) {
-        if (signal.aborted) {
-          resolve();
-        } else {
-          signal.addEventListener('abort', () => resolve(), { once: true });
-        }
+      if (ctx.signal.aborted) {
+        resolve();
+      } else {
+        ctx.signal.addEventListener('abort', () => resolve(), { once: true });
       }
-      // If no signal provided (e.g. direct invocation), the WebSocket server
-      // keeps the event loop alive. Process will exit via external SIGKILL.
     });
 
       // ── Shutdown ──
@@ -293,7 +289,7 @@ export default async function serveCommand(args: ParsedArgs, signal?: AbortSigna
     requireStrictSync: true,
     // Save logic is conditional (skip if pending txs) — done manually above.
     skipAutoSave: true,
-    signal,
+    signal: ctx.signal,
     onStatus: (s) => spinner.update(s),
     onSyncProgress: (applied, highest) => {
       if (highest > 0) {

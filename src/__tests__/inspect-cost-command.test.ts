@@ -9,6 +9,7 @@ import { parseArgs } from '../lib/argv.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { startLocalIndexer, type LocalIndexer } from './helpers/local-indexer.ts';
 import { LEDGER9_PARAMETERS_HEX } from './fixtures/ledger9-parameters.ts';
+import { cliCall } from './helpers/cli-call.ts';
 
 let io: CapturedOutput;
 let indexer: LocalIndexer | undefined;
@@ -20,7 +21,7 @@ const servesBlock = (height: number, ledgerParameters: string, protocolVersion =
 /** inspect-cost against the local indexer, with explicit endpoints so no config or detection is involved. */
 async function run(extra: string[] = []): Promise<void> {
   const ws = indexer!.url.replace(/^http:/, 'ws:') + '/ws';
-  await inspectCostCommand(parseArgs(['inspect-cost', '--network', 'undeployed', '--indexer-ws', ws,
+  await cliCall(inspectCostCommand, parseArgs(['inspect-cost', '--network', 'undeployed', '--indexer-ws', ws,
     '--node', 'ws://127.0.0.1:9', '--proof-server', 'http://127.0.0.1:9', ...extra]));
 }
 

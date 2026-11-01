@@ -24,6 +24,6 @@ export const devDefinition: CommandDefinition = {
   intro: { brief: 'Contract dev loop (watch + deploy)', order: 11 },
   // It provisions wallets itself (airdrop, Dust registration), whose facades' WebSocket handles aren't reliably reclaimed.
   needsWalletSdk: true,
-  shell: { signal: true, payer: true },
+  shell: { payer: true },
   load: () => import('./dev.ts'),
 };

@@ -10,6 +10,7 @@
 import { type CommandRun, captureCommand } from '../run-command.ts';
 import { FULL_FLAG, type ParsedArgs } from '../argv.ts';
 import { UsageError } from '../errors.ts';
+import type { CommandModule } from '../command-definition.ts';
 
 // ── Tool definitions ────────────────────────────────────────
 
@@ -144,9 +145,7 @@ async function checkSendingWallet(params: Record<string, unknown>): Promise<void
 // Lazy-import command handlers via static import() paths so bun can bundle them.
 // Template-literal imports like `import('../../commands/${name}.ts')` are not resolvable
 // at build time, so each command is listed explicitly.
-type CommandHandler = (args: ParsedArgs, signal?: AbortSignal) => Promise<void>;
-
-export const handlerLoaders: Record<string, () => Promise<{ default: CommandHandler }>> = {
+export const handlerLoaders: Record<string, () => Promise<CommandModule>> = {
   'generate':        () => import('../../commands/generate.ts'),
   'info':            () => import('../../commands/info.ts'),
   'balance':         () => import('../../commands/balance.ts'),

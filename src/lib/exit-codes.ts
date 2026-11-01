@@ -111,6 +111,9 @@ export function classifyError(err: Error): ClassifiedError {
   if (code === ERROR_CODES.DUST_GENERATING) {
     return { exitCode: EXIT_INSUFFICIENT_BALANCE, errorCode: ERROR_CODES.DUST_GENERATING };
   }
+  if (code === ERROR_CODES.CANCELLED) {
+    return { exitCode: EXIT_CANCELLED, errorCode: ERROR_CODES.CANCELLED };
+  }
   if (code === ERROR_CODES.CHAIN_CLOCK_BEHIND) {
     return { exitCode: EXIT_NETWORK_ERROR, errorCode: ERROR_CODES.CHAIN_CLOCK_BEHIND };
   }

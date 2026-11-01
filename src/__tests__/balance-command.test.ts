@@ -8,6 +8,7 @@ import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts'
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { cliCall } from './helpers/cli-call.ts';
 
 // The balance command's checks that need no chain. Those that read a live
 // indexer are in balance-command.live.test.ts (npm run test:live).
@@ -53,22 +54,22 @@ afterEach(() => {
 describe('balance command — address resolution errors', () => {
   it('throws when no address given and wallet file is missing', async () => {
     const args = parseArgs(['balance', '--wallet', path.join(TEST_DIR, 'nonexistent.json')]);
-    await expect(balanceCommand(args)).rejects.toThrow('Wallet file not found');
+    await expect(cliCall(balanceCommand, args)).rejects.toThrow('Wallet file not found');
   });
 });
 
 describe('balance command — shielded flag errors', () => {
   it('throws when --shielded used without wallet file', async () => {
     const args = parseArgs(['balance', '--shielded', '--wallet', path.join(TEST_DIR, 'nonexistent.json')]);
-    await expect(balanceCommand(args)).rejects.toThrow('Wallet file not found');
+    await expect(cliCall(balanceCommand, args)).rejects.toThrow('Wallet file not found');
   });
 
   it('rejects --shielded on a positional address not owned by any wallet', async () => {
     // Shielded balances need the seed; a bare address we don't own can't be
     // decrypted, so we fail with a clear pointer to the wallet-based form.
     const args = parseArgs(['balance', EMPTY_ADDRESS, '--shielded', '--network', 'undeployed']);
-    await expect(balanceCommand(args)).rejects.toThrow(/Shielded balances are private/);
-    await expect(balanceCommand(args)).rejects.toThrow(/--wallet <name> --shielded/);
+    await expect(cliCall(balanceCommand, args)).rejects.toThrow(/Shielded balances are private/);
+    await expect(cliCall(balanceCommand, args)).rejects.toThrow(/--wallet <name> --shielded/);
   });
 });
 
@@ -79,7 +80,7 @@ describe('balance command — --indexer-ws override', () => {
     // an earlier test in this file.
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--indexer-ws', 'ws://localhost:19999', '--no-cache']);
     try {
-      await balanceCommand(args);
+      await cliCall(balanceCommand, args);
       expect.fail('Should have thrown');
     } catch (err: any) {
       expect(err.message).toContain('WebSocket');
@@ -90,7 +91,7 @@ describe('balance command — --indexer-ws override', () => {
 describe('balance command — network inference from address HRP', () => {
   it('throws a clear error when --network conflicts with the address HRP', async () => {
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'preprod']);
-    await expect(balanceCommand(args)).rejects.toThrow(/belongs to undeployed.*--network is preprod/);
+    await expect(cliCall(balanceCommand, args)).rejects.toThrow(/belongs to undeployed.*--network is preprod/);
   });
 });
 

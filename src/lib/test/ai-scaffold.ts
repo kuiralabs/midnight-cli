@@ -88,8 +88,8 @@ const DEFAULT_SERVE_PORT = 9932;
 const DEFAULT_TIMEOUT_CLI = 300;
 const DEFAULT_TIMEOUT_BROWSER = 600;
 
-const CLI_PREP: PrepStepId[] = ['cache-clear', 'localnet-up', 'balance:1000', 'dust', 'mn-serve'];
-const BROWSER_PREP: PrepStepId[] = [...CLI_PREP, 'build-and-serve'];
+const CLI_PREP: readonly PrepStepId[] = ['cache-clear', 'localnet-up', 'balance:1000', 'dust', 'mn-serve'];
+const BROWSER_PREP: readonly PrepStepId[] = [...CLI_PREP, 'build-and-serve'];
 
 // ── Production claude runner ───────────────────────────────────────
 
@@ -399,7 +399,7 @@ export async function generateCliScaffoldWithAI(
   const dappConfig: DappTestConfig = {
     name: inputs.contract.name,
     network,
-    prep: CLI_PREP,
+    prep: [...CLI_PREP],
   };
 
   const suite: TestSuite = {
@@ -484,7 +484,7 @@ export async function generateUiScaffoldWithAI(
     port: inputs.port,
     buildCmd: inputs.buildCmd,
     url,
-    prep: BROWSER_PREP,
+    prep: [...BROWSER_PREP],
   };
   if (inputs.buildDir) dappConfig.buildDir = inputs.buildDir;
 

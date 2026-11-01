@@ -7,6 +7,7 @@ import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts'
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { cliCall } from './helpers/cli-call.ts';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-dust-cmd-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
@@ -36,7 +37,7 @@ describe('dust command — subcommand validation', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['dust', '--wallet', walletFile]);
-    await expect(dustCommand(args)).rejects.toThrow('Missing or invalid subcommand');
+    await expect(cliCall(dustCommand, args)).rejects.toThrow('Missing or invalid subcommand');
   });
 
   it('throws for an unknown subcommand', async () => {
@@ -49,7 +50,7 @@ describe('dust command — subcommand validation', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['dust', 'foobar', '--wallet', walletFile]);
-    await expect(dustCommand(args)).rejects.toThrow('Missing or invalid subcommand');
+    await expect(cliCall(dustCommand, args)).rejects.toThrow('Missing or invalid subcommand');
   });
 
   it('shows available subcommands in error message', async () => {
@@ -63,7 +64,7 @@ describe('dust command — subcommand validation', () => {
 
     const args = parseArgs(['dust', '--wallet', walletFile]);
     try {
-      await dustCommand(args);
+      await cliCall(dustCommand, args);
       expect.fail('Should have thrown');
     } catch (err: any) {
       expect(err.message).toContain('register');
@@ -73,6 +74,6 @@ describe('dust command — subcommand validation', () => {
 
   it('throws when no wallet file exists', async () => {
     const args = parseArgs(['dust', 'status', '--wallet', path.join(TEST_DIR, 'nonexistent.json')]);
-    await expect(dustCommand(args)).rejects.toThrow('Wallet file not found');
+    await expect(cliCall(dustCommand, args)).rejects.toThrow('Wallet file not found');
   });
 });

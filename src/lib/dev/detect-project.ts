@@ -56,7 +56,7 @@ const CANDIDATE_DIRS = ['.', 'contract/src', 'contract', 'src'] as const;
  */
 const MAX_SCAN_DEPTH = 4;
 
-const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'managed', 'target']);
+const IGNORED_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git', 'dist', 'build', 'managed', 'target']);
 
 export function detectProject(startDir: string): ProjectInfo {
   const rootDir = resolve(startDir);

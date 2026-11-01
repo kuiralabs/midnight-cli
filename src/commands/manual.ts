@@ -6,6 +6,7 @@
 
 import { spawn } from 'node:child_process';
 import { type ParsedArgs, hasFlag, getFlag } from '../lib/argv.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { bold, dim, teal, yellow, white } from '../ui/colors.ts';
 import { helpSpecs, type CommandSpec } from './help.ts';
 import { PKG_NAME, PKG_VERSION, PKG_REPOSITORY_URL } from '../lib/pkg.ts';
@@ -289,13 +290,12 @@ async function pageOrPrint(text: string, usePager: boolean): Promise<void> {
   });
 }
 
-export default async function manualCommand(args: ParsedArgs): Promise<void> {
+export default async function manualCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const usePager = !hasFlag(args, 'no-pager');
 
   // --json: emit a structured object so agents can ingest the manual.
   if (hasFlag(args, 'json')) {
-    const { writeJsonResult } = await import('../lib/json-output.ts');
-    writeJsonResult({
+    ctx.output.result({
       name: PKG_NAME,
       version: PKG_VERSION,
       manual: buildManual(),

@@ -20,32 +20,32 @@ import {
 } from '../lib/wallet-config.ts';
 import { passphraseForNewSecret } from '../lib/passphrase.ts';
 import { createWallet, walletFilePath, walletSecretFrom } from '../lib/wallet-create.ts';
-import { coinKeyOfWallet, type ProtectorResult, type WalletCommandContext, type WalletProtector } from '../lib/wallet-protector.ts';
+import { coinKeyOfWallet, type ProtectorResult, type WalletCommandContext } from '../lib/wallet-protector.ts';
 import { header, keyValue, divider, formatAddress } from '../ui/format.ts';
 import { bold, yellow, dim, green, teal } from '../ui/colors.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { stateRoot } from '../lib/state-root.ts';
 
-export default async function walletCommand(args: ParsedArgs, _signal?: AbortSignal, context?: WalletCommandContext): Promise<void> {
+export default async function walletCommand(args: ParsedArgs, ctx: WalletCommandContext): Promise<void> {
   const subcommand = args.subcommand;
 
   switch (subcommand) {
     case 'generate':
-      return walletGenerate(args);
+      return walletGenerate(args, ctx);
     case 'list':
     case 'ls':
-      return walletList(args);
+      return walletList(args, ctx);
     case 'use':
-      return walletUse(args);
+      return walletUse(args, ctx);
     case 'info':
-      return walletInfo(args);
+      return walletInfo(args, ctx);
     case 'remove':
     case 'rm':
-      return walletRemove(args);
+      return walletRemove(args, ctx);
     case 'seed':
-      return walletSeed(args);
+      return walletSeed(args, ctx);
     case 'protect':
-      return walletProtect(args, context?.protectors ?? []);
+      return walletProtect(args, ctx);
     default:
       throw new UsageError(
         `Unknown wallet subcommand: "${subcommand ?? '(none)'}"\n` +
@@ -55,7 +55,7 @@ export default async function walletCommand(args: ParsedArgs, _signal?: AbortSig
   }
 }
 
-async function walletGenerate(args: ParsedArgs): Promise<void> {
+async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const name = args.positionals[0];
   if (!name) {
     throw new Error(
@@ -102,7 +102,7 @@ async function walletGenerate(args: ParsedArgs): Promise<void> {
       active: true,
     };
     if (mnemonic) result.mnemonic = mnemonic;
-    writeJsonResult(result);
+    ctx.output.result(result);
     return;
   }
 
@@ -135,7 +135,7 @@ async function walletGenerate(args: ParsedArgs): Promise<void> {
   process.stderr.write(green('✓') + ' Wallet saved\n');
 }
 
-async function walletList(args: ParsedArgs): Promise<void> {
+async function walletList(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const wallets = listWallets();
   const networkName = resolveNetworkName({ args });
 
@@ -145,7 +145,7 @@ async function walletList(args: ParsedArgs): Promise<void> {
     // captureCommand injecting _minimal for MCP calls. Tool exposes
     // `full: true` (→ _full flag) to opt back into the human shape.
     if (isMinimalMode(args)) {
-      writeJsonResult({
+      ctx.output.result({
         activeNetwork: networkName,
         wallets: wallets.map((w) => ({
           name: w.name,
@@ -157,7 +157,7 @@ async function walletList(args: ParsedArgs): Promise<void> {
       });
       return;
     }
-    writeJsonResult({
+    ctx.output.result({
       activeNetwork: networkName,
       wallets: wallets.map((w) => ({
         name: w.name,
@@ -208,7 +208,7 @@ async function walletList(args: ParsedArgs): Promise<void> {
   process.stderr.write(dim(`  ● = active wallet · network: ${networkName} · details: midnight wallet info <name>`) + '\n\n');
 }
 
-async function walletUse(args: ParsedArgs): Promise<void> {
+async function walletUse(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const name = args.positionals[0];
   if (!name) {
     throw new Error(
@@ -219,14 +219,14 @@ async function walletUse(args: ParsedArgs): Promise<void> {
   setActiveWallet(name);
 
   if (hasFlag(args, 'json')) {
-    writeJsonResult({ wallet: name, active: true });
+    ctx.output.result({ wallet: name, active: true });
     return;
   }
 
   process.stderr.write(green('✓') + ` Active wallet set to "${name}"\n`);
 }
 
-async function walletInfo(args: ParsedArgs): Promise<void> {
+async function walletInfo(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // Accept both `wallet info <name>` (positional) and `wallet info --wallet <name>`
   // (flag, consistent with balance/dust/transfer); fall back to the active wallet.
   const name = getFlag(args, 'wallet') ?? args.positionals[0] ?? getActiveWalletName();
@@ -241,7 +241,7 @@ async function walletInfo(args: ParsedArgs): Promise<void> {
     // of long strings) and bookkeeping fields. Agents pass `full: true` to
     // get the human shape (per-network maps, createdAt, file).
     if (isMinimalMode(args)) {
-      writeJsonResult({
+      ctx.output.result({
         name,
         active: isActive,
         network: networkName,
@@ -260,7 +260,7 @@ async function walletInfo(args: ParsedArgs): Promise<void> {
       active: isActive,
     };
     if (config.shieldedAddresses) result.shieldedAddresses = config.shieldedAddresses;
-    writeJsonResult(result);
+    ctx.output.result(result);
     return;
   }
 
@@ -296,7 +296,7 @@ async function walletInfo(args: ParsedArgs): Promise<void> {
   process.stderr.write(`  ${dim('active ')}  ${isActive ? green('yes') : 'no'}\n\n`);
 }
 
-async function walletRemove(args: ParsedArgs): Promise<void> {
+async function walletRemove(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const name = args.positionals[0];
   if (!name) {
     throw new Error(
@@ -307,14 +307,14 @@ async function walletRemove(args: ParsedArgs): Promise<void> {
   removeWallet(name);
 
   if (hasFlag(args, 'json')) {
-    writeJsonResult({ wallet: name, removed: true });
+    ctx.output.result({ wallet: name, removed: true });
     return;
   }
 
   process.stderr.write(green('✓') + ` Wallet "${name}" removed\n`);
 }
 
-async function walletSeed(args: ParsedArgs): Promise<void> {
+async function walletSeed(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // Accept both `wallet seed <name>` and `wallet seed --wallet <name>`.
   const name = getFlag(args, 'wallet') ?? args.positionals[0] ?? getActiveWalletName();
   const walletPath = resolveWalletPath(name);
@@ -342,7 +342,7 @@ async function walletSeed(args: ParsedArgs): Promise<void> {
     const result: Record<string, unknown> = { name, seed: raw.seed };
     if (raw.mnemonic) result.mnemonic = raw.mnemonic;
     if (entropyHex) result.entropy = entropyHex;
-    writeJsonResult(result);
+    ctx.output.result(result);
     return;
   }
 
@@ -382,7 +382,7 @@ async function walletSeed(args: ParsedArgs): Promise<void> {
 }
 
 /** Sets mn's passphrase where none is set, and seals every plain-text wallet under it. */
-async function walletProtect(args: ParsedArgs, protectors: readonly WalletProtector[]): Promise<void> {
+async function walletProtect(args: ParsedArgs, ctx: WalletCommandContext): Promise<void> {
   const root = stateRoot();
   const passphrase = await passphraseForNewSecret(root);
   const report = protectAllWallets(root, passphrase);
@@ -390,11 +390,11 @@ async function walletProtect(args: ParsedArgs, protectors: readonly WalletProtec
   const alreadySealed = report.filter((w) => !w.sealedNow).map((w) => w.name);
   // What other domains keep for a wallet, sealed by the protectors the caller gave; each is told how to get a wallet's coin key.
   const results: Array<{ name: string; result: ProtectorResult }> = [];
-  for (const protector of protectors) {
+  for (const protector of ctx.protectors ?? []) {
     results.push({ name: protector.name, result: await protector.protect(root, passphrase, coinKeyOfWallet) });
   }
   if (hasFlag(args, 'json')) {
-    writeJsonResult({ sealed, alreadySealed, ...Object.fromEntries(results.map(({ name, result }) => [name, result.report])) });
+    ctx.output.result({ sealed, alreadySealed, ...Object.fromEntries(results.map(({ name, result }) => [name, result.report])) });
     return;
   }
   process.stderr.write('\n');

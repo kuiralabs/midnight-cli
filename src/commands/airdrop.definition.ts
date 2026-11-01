@@ -67,7 +67,7 @@ export const airdropDefinition: CommandDefinition = {
   },
   intro: { brief: 'Fund from genesis wallet', order: 7 },
   needsWalletSdk: true,
-  shell: { signal: true },
+  shell: {},
   load: () => import('./airdrop.ts'),
   mcp: {
     tools: [

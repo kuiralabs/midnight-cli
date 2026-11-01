@@ -12,32 +12,14 @@
 
 import { type ErrorCode } from './exit-codes.ts';
 
-// ── Capture target ───────────────────────────────────────
-// When set, writeJsonResult sends output to this callback instead of stdout.
-// Used by captureCommand (MCP server) to avoid hijacking process.stdout.write,
-// which would conflict with StdioServerTransport.
-let captureTarget: ((json: string) => void) | null = null;
-
 /**
- * Redirect writeJsonResult output to a callback instead of stdout.
- * Pass null to restore normal stdout behavior.
+ * Write a structured JSON result to stdout: the CLI's way to write a call's
+ * result (its context's output, 2F). Always outputs a single line of JSON
+ * followed by a newline. The MCP server keeps each call's result in that
+ * call's context instead, so nothing here is shared between calls.
  */
-export function setCaptureTarget(fn: ((json: string) => void) | null): void {
-  captureTarget = fn;
-}
-
-/**
- * Write a structured JSON result to stdout.
- * Always outputs a single line of JSON followed by a newline.
- * If a capture target is set, output goes there instead.
- */
-export function writeJsonResult(data: Record<string, unknown>): void {
-  const json = JSON.stringify(data) + '\n';
-  if (captureTarget) {
-    captureTarget(json);
-  } else {
-    process.stdout.write(json);
-  }
+export function writeJsonResult(data: Readonly<Record<string, unknown>>): void {
+  process.stdout.write(JSON.stringify(data) + '\n');
 }
 
 /**
@@ -51,9 +33,5 @@ export function writeJsonError(err: Error, errorCode: ErrorCode, exitCode: numbe
     message: err.message,
     exitCode,
   }) + '\n';
-  if (captureTarget) {
-    captureTarget(json);
-  } else {
-    process.stdout.write(json);
-  }
+  process.stdout.write(json);
 }

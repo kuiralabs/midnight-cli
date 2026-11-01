@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { captureCommand } from '../lib/run-command.ts';
+import { SecondResultError } from '../lib/call-context.ts';
+import { CancelledError } from '../lib/errors.ts';
+import { classifyError } from '../lib/exit-codes.ts';
 import { silentSpinner, start as startSpinner } from '../ui/spinner.ts';
 import { parseArgs, type ParsedArgs } from '../lib/argv.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
@@ -192,8 +195,76 @@ describe('captureCommand', () => {
     it('hands the command the run\'s signal', async () => {
       const controller = new AbortController();
       let seen: AbortSignal | undefined;
-      await captureCommand(async (_args, signal) => { seen = signal; }, noArgs(), { signal: controller.signal });
+      await captureCommand(async (_args, ctx) => { seen = ctx.signal; }, noArgs(), { signal: controller.signal });
       expect(seen).toBe(controller.signal);
+    });
+
+    it('hands every command a signal, one never cancelled when the run gives none', async () => {
+      let seen: AbortSignal | undefined;
+      await captureCommand(async (_args, ctx) => { seen = ctx.signal; }, noArgs());
+      expect(seen).toBeInstanceOf(AbortSignal);
+      expect(seen?.aborted).toBe(false);
+    });
+
+    it('never starts a call already cancelled: CANCELLED, the command not run', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      let ran = false;
+      const err = await captureCommand(async () => { ran = true; }, noArgs(), { signal: controller.signal }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(CancelledError);
+      expect(classifyError(err as Error).errorCode).toBe('CANCELLED');
+      expect(ran).toBe(false);
+    });
+  });
+
+  // Regression (2F, S2): the capture target was one module global. Two calls
+  // in one server that overlapped shared it: the first to finish cleared it,
+  // and the other's result fell through to stdout, the MCP protocol channel,
+  // while its call returned {}.
+  describe('two calls at once', () => {
+    const noArgs = (): ParsedArgs => ({ command: 'x', subcommand: undefined, positionals: [], flags: {} });
+    const gate = () => {
+      let open!: () => void;
+      const opened = new Promise<void>((resolve) => { open = resolve; });
+      return { open, opened };
+    };
+
+    it('each keeps its own result when they finish in the opposite order they started, and none reaches stdout', async () => {
+      const first = gate();
+      const second = gate();
+      const a = captureCommand(async (_args, ctx) => { await first.opened; ctx.output.result({ call: 'a' }); }, noArgs());
+      const b = captureCommand(async (_args, ctx) => { await second.opened; ctx.output.result({ call: 'b' }); }, noArgs());
+      second.open();
+      expect(await b).toEqual({ call: 'b' });
+      first.open();
+      expect(await a).toEqual({ call: 'a' });
+      expect(io.stdout()).toBe('');
+    });
+
+    it('keeps a result as it was written: a change the command makes after is not seen', async () => {
+      const result = await captureCommand(async (_args, ctx) => {
+        const data: Record<string, unknown> = { balance: '1' };
+        ctx.output.result(data);
+        data.balance = '2';
+      }, noArgs());
+      expect(result).toEqual({ balance: '1' });
+    });
+
+    it('refuses a second result in one call', async () => {
+      await expect(captureCommand(async (_args, ctx) => {
+        ctx.output.result({ call: 'first' });
+        ctx.output.result({ call: 'second' });
+      }, noArgs())).rejects.toThrow(SecondResultError);
+    });
+
+    it('sends a command\'s text for the person to the server\'s stderr, never stdout', async () => {
+      await captureCommand(async (_args, ctx) => {
+        ctx.output.stdout('shown\n');
+        ctx.output.stderr('chrome\n');
+        ctx.output.result({ ok: true });
+      }, noArgs());
+      expect(io.stdout()).toBe('');
+      expect(io.stderr()).toBe('shown\nchrome\n');
     });
   });
 });

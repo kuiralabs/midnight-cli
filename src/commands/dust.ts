@@ -19,10 +19,10 @@ import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { header, keyValue, divider, formatDust, successMessage, toDust } from '../ui/format.ts';
 import { bold, dim, yellow } from '../ui/colors.ts';
 import { start as startSpinner } from '../ui/spinner.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
-export default async function dustCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
+export default async function dustCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const subcommand = args.subcommand;
 
   if (!subcommand || (subcommand !== 'register' && subcommand !== 'status' && subcommand !== 'export')) {
@@ -55,7 +55,7 @@ export default async function dustCommand(args: ParsedArgs, signal?: AbortSignal
     // The chain-id check connects to the node; keep polkadot-js's RPC-CORE noise off stderr.
     const stopListening = onSdkWarning(undefined);
     try {
-      await dustExport(await resolveSeed(args), networkName, networkConfig, isJson, minimal, signal);
+      await dustExport(await resolveSeed(args), networkName, networkConfig, isJson, minimal, ctx);
     } finally {
       stopListening();
     }
@@ -74,16 +74,16 @@ export default async function dustCommand(args: ParsedArgs, signal?: AbortSignal
       address,
       networkName,
       networkConfig.indexerWS,
-      signal,
+      ctx.signal,
     );
     if (!preCheck.isRegistered) {
-      printUnregisteredStatus(networkName, preCheck, isJson, minimal);
+      printUnregisteredStatus(networkName, preCheck, isJson, minimal, ctx);
       return;
     }
     // Registered → read balance directly from indexer (bypasses the dust-wallet
     // SDK's `isConnected` hang). No facade needed for a read-only query.
     const useCache = !hasFlag(args, 'no-cache');
-    await dustStatusDirect(seedBuffer, networkConfig, preCheck, isJson, minimal, useCache, signal);
+    await dustStatusDirect(seedBuffer, networkConfig, preCheck, isJson, minimal, useCache, ctx);
     return;
   }
 
@@ -91,7 +91,7 @@ export default async function dustCommand(args: ParsedArgs, signal?: AbortSignal
   // The repo's withFacade owns: validate caches, pre-prime dust, build facade,
   // sync (with retry), save, invalidate, stop. We just provide the work.
   rejectNoCacheForWrites(args);
-  await dustRegister(seedBuffer, networkConfig, isJson, signal);
+  await dustRegister(seedBuffer, networkConfig, isJson, ctx);
 }
 
 // export: fast dust-direct sync → emit a facade-restorable snapshot. The snapshot
@@ -102,12 +102,12 @@ async function dustExport(
   networkConfig: NetworkConfig,
   jsonMode: boolean,
   minimal: boolean,
-  signal?: AbortSignal,
+  ctx: CallContext,
 ): Promise<void> {
   const spinner = startSpinner(`Reading dust events from ${networkName}...`);
   try {
     const result = await exportDustSnapshot(seedBuffer, networkName, networkConfig, {
-      signal,
+      signal: ctx.signal,
       onProgress: (applied, maxIdSeen) => spinner.update(
         maxIdSeen > 0
           ? `Reading dust events... ${applied}/${maxIdSeen + 1}`
@@ -121,7 +121,7 @@ async function dustExport(
     );
 
     if (jsonMode) {
-      writeJsonResult({
+      ctx.output.result({
         subcommand: 'export',
         network: result.network,
         dustPublicKey: result.dustPublicKey,
@@ -206,13 +206,14 @@ function printUnregisteredStatus(
   preCheck: PreCheckResult,
   jsonMode: boolean,
   minimal: boolean,
+  ctx: CallContext,
 ): void {
   const { registeredUtxos, unregisteredUtxos } = preCheck;
   const totalUtxos = registeredUtxos + unregisteredUtxos;
 
   if (jsonMode) {
     if (minimal) {
-      writeJsonResult({
+      ctx.output.result({
         network: networkName,
         registered: false,
         registeredUtxos,
@@ -220,7 +221,7 @@ function printUnregisteredStatus(
       });
       return;
     }
-    writeJsonResult({
+    ctx.output.result({
       subcommand: 'status',
       registered: false,
       registeredUtxos,
@@ -252,7 +253,7 @@ async function dustRegister(
   seedBuffer: Buffer,
   networkConfig: NetworkConfig,
   jsonMode: boolean,
-  signal?: AbortSignal,
+  ctx: CallContext,
 ): Promise<void> {
   const networkName = networkConfig.networkId.toLowerCase();
   process.stderr.write('\n' + header('Dust Register') + '\n\n');
@@ -262,7 +263,7 @@ async function dustRegister(
 
   try {
     const result = await registerDust(seedBuffer, networkConfig, {
-      signal,
+      signal: ctx.signal,
       onStatus: (s) => spinner.update(s),
       onSyncProgress: (applied, highest) => {
         if (highest > 0) {
@@ -280,7 +281,7 @@ async function dustRegister(
     if (jsonMode) {
       const json: Record<string, unknown> = { subcommand: 'register', dustBalance: toDust(dustBal) };
       if (result.txHash) json.txHash = result.txHash;
-      writeJsonResult(json);
+      ctx.output.result(json);
       return;
     }
 
@@ -306,7 +307,7 @@ async function dustStatusDirect(
   jsonMode: boolean,
   minimal: boolean,
   useCache: boolean,
-  signal?: AbortSignal,
+  ctx: CallContext,
 ): Promise<void> {
   const networkName = networkConfig.networkId.toLowerCase();
   const spinner = startSpinner(`Reading dust events from ${networkName}...`);
@@ -314,7 +315,7 @@ async function dustStatusDirect(
   try {
     const view = await defaultRepository().dust(seedBuffer, networkConfig, {
       forceFresh: !useCache,
-      signal,
+      signal: ctx.signal,
       onStatus: (msg) => spinner.update(msg),
     });
 
@@ -326,7 +327,7 @@ async function dustStatusDirect(
       // Slim drops eventsApplied/ownedUtxos/cached/subcommand — internal
       // sync details an agent doesn't need to act on.
       if (minimal) {
-        writeJsonResult({
+        ctx.output.result({
           network: networkName,
           registered: true,
           registeredUtxos,
@@ -336,7 +337,7 @@ async function dustStatusDirect(
         });
         return;
       }
-      writeJsonResult({
+      ctx.output.result({
         subcommand: 'status',
         registered: true,
         registeredUtxos,

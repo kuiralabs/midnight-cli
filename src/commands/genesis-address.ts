@@ -6,16 +6,16 @@ import { deriveUnshieldedAddress } from '../lib/derive-address.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { keyValue, divider, formatAddress } from '../ui/format.ts';
 import { dim } from '../ui/colors.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 
-export default async function genesisAddressCommand(args: ParsedArgs): Promise<void> {
+export default async function genesisAddressCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const networkName = resolveNetworkName({ args });
   const seedBuffer = Buffer.from(GENESIS_SEED, 'hex');
   const address = deriveUnshieldedAddress(seedBuffer, networkName);
 
   // JSON mode
   if (hasFlag(args, 'json')) {
-    writeJsonResult({ address, network: networkName });
+    ctx.output.result({ address, network: networkName });
     return;
   }
 

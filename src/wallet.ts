@@ -7,7 +7,8 @@ import { parseArgs, hasFlag } from './lib/argv.ts';
 import { errorMessage, usageMessage } from './ui/format.ts';
 import { assertKnownFlags } from './lib/command-flags.ts';
 import { installedCommands } from './lib/installed-commands.ts';
-import { commandNeedsWalletSdk, dispatchCommand } from './lib/command-dispatch.ts';
+import { commandNeedsWalletSdk, dispatchCommand, processOutput } from './lib/command-dispatch.ts';
+import type { CommandOutcome } from './lib/call-context.ts';
 import { classifyError, humanizeNetworkError, EXIT_INVALID_ARGS } from './lib/exit-codes.ts';
 import { isUsageError } from './lib/errors.ts';
 import { writeJsonError } from './lib/json-output.ts';
@@ -80,7 +81,7 @@ function handleShutdown() {
 process.on('SIGINT', handleShutdown);
 process.on('SIGTERM', handleShutdown);
 
-async function run(): Promise<void> {
+async function run(): Promise<CommandOutcome | void> {
   // An unrecognised flag is refused before anything runs, instead of being
   // ignored and the command falling back to defaults.
   if (!helpRequested) assertKnownFlags(args, installedCommands);
@@ -89,16 +90,17 @@ async function run(): Promise<void> {
   // The command, what the shell gives its handler, a notice or a refusal: all from its definition.
   return dispatchCommand(installedCommands, command, args, {
     signal,
+    output: processOutput,
     loadPayer: async () => (await import('./lib/serve-payer.ts')).servePayer,
     // wallet protect also seals grant's accounts, through the protector grant provides (D24).
     loadProtectors: async () => [(await import('./lib/grant/account-protector.ts')).accountProtector],
-    writeNotice: (text) => process.stderr.write(text),
   });
 }
 
-run().then(() => {
+run().then((outcome) => {
   // A command can finish without throwing and still have failed: a test run
-  // whose suite fails sets process.exitCode, and that is the code to leave with.
+  // whose suite fails returns its exit code, and the shell leaves with it.
+  if (outcome !== undefined) process.exitCode = outcome.exitCode;
   // A command that started the wallet SDK leaves WebSocket connections in the
   // event loop that facade.stop() doesn't fully drain, so it exits explicitly.
   if (needsWalletSdk) {

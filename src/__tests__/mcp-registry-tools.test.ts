@@ -1,11 +1,11 @@
 // The MCP server's tools from a registry (src/lib/mcp/registry-tools.ts, plan
 // 2E), with test commands whose handlers record the argv they get and write
-// their JSON result as a command does.
+// their JSON result through their call's context, as a command does.
 
 import { describe, expect, it } from 'vitest';
 import { createCommandRegistry, type CommandDefinition, type ToolDefinition } from '../lib/command-definition.ts';
 import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from '../lib/mcp/registry-tools.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { MINIMAL_FLAG, type ParsedArgs } from '../lib/argv.ts';
 
 const received: ParsedArgs[] = [];
@@ -16,9 +16,9 @@ const command = (tools: ToolDefinition[]): CommandDefinition => ({
   needsWalletSdk: false,
   shell: {},
   load: async () => ({
-    default: async (args: ParsedArgs) => {
+    default: async (args: ParsedArgs, ctx: CallContext) => {
       received.push(structuredClone(args));
-      writeJsonResult({ subcommand: args.subcommand, size: args.flags.size ?? null, go: args.flags.go === true });
+      ctx.output.result({ subcommand: args.subcommand, size: args.flags.size ?? null, go: args.flags.go === true });
     },
   }),
   mcp: { tools },

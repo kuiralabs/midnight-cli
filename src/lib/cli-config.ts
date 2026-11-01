@@ -62,7 +62,7 @@ function resolveConfigKey(key: string): string {
   return CONFIG_KEY_ALIASES[key] ?? key;
 }
 
-const ENDPOINT_KEYS = new Set(['proof-server', 'node', 'indexer-ws']);
+const ENDPOINT_KEYS: ReadonlySet<string> = new Set(['proof-server', 'node', 'indexer-ws']);
 
 function isValidUrl(value: string): boolean {
   return /^(https?|wss?):\/\/\S+/.test(value);

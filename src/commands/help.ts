@@ -13,7 +13,7 @@ import { installedCommands } from '../lib/installed-commands.ts';
 import { commandHelpSpecs, introBriefs, type CommandHelpSpec } from '../lib/command-definition.ts';
 import { hasShownIntroThisSession, markIntroShown } from '../lib/intro-marker.ts';
 import { UsageError } from '../lib/errors.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { PKG_NAME, PKG_VERSION, PKG_DESCRIPTION } from '../lib/pkg.ts';
 import { INDEXER_GRAPHQL_WS_PATH } from '../lib/constants.ts';
 
@@ -692,7 +692,7 @@ function printCommandHelp(spec: CommandSpec): void {
   }
 }
 
-function outputJsonManifest(): void {
+function outputJsonManifest(ctx: CallContext): void {
   const manifest = {
     cli: {
       name: PKG_NAME,
@@ -711,7 +711,7 @@ function outputJsonManifest(): void {
     })),
   };
 
-  writeJsonResult(manifest);
+  ctx.output.result(manifest);
 }
 
 function printAgentManual(): void {
@@ -1286,7 +1286,7 @@ EXAMPLE CLI COMMANDS
   process.stdout.write(manual);
 }
 
-export default async function helpCommand(args: ParsedArgs): Promise<void> {
+export default async function helpCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // Agent manual: comprehensive reference for AI agents
   if (hasFlag(args, 'agent')) {
     printAgentManual();
@@ -1295,7 +1295,7 @@ export default async function helpCommand(args: ParsedArgs): Promise<void> {
 
   // JSON mode: output capability manifest
   if (hasFlag(args, 'json')) {
-    outputJsonManifest();
+    outputJsonManifest(ctx);
     return;
   }
 

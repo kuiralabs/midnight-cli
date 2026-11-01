@@ -77,7 +77,7 @@ export function describeApprovalPolicy(options: ApprovalOptions, feeLimits: FeeL
 
 // ── Read-only method set ──
 
-const READ_ONLY_METHODS = new Set([
+const READ_ONLY_METHODS: ReadonlySet<string> = new Set([
   'getShieldedBalances',
   'getUnshieldedBalances',
   'getDustBalance',
@@ -95,7 +95,7 @@ const READ_ONLY_METHODS = new Set([
  * So they prompt like any other write, unless the server runs with
  * --approve-all, or --approve-fees for a fee-only balance.
  */
-const PREP_METHODS = new Set([
+const PREP_METHODS: ReadonlySet<string> = new Set([
   'balanceUnsealedTransaction',
   'balanceSealedTransaction',
 ]);

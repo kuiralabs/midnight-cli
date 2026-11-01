@@ -6,7 +6,7 @@ import { type ParsedArgs, hasFlag } from '../lib/argv.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { header, keyValue, divider } from '../ui/format.ts';
 import { bold, dim } from '../ui/colors.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { fetchLedgerParameters } from '../lib/chain-params.ts';
 import { assertLedgerSupported } from '../lib/ledger-guard.ts';
@@ -61,7 +61,7 @@ const UNITS: Record<string, string> = {
   bytesChurned: 'bytes',
 };
 
-export default async function inspectCostCommand(args: ParsedArgs): Promise<void> {
+export default async function inspectCostCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const { name: networkName, config } = resolveNetwork({ args });
   // A ledger-8 chain's parameters aren't ledger-9 ones: refuse it like every other chain read.
   await assertLedgerSupported(networkName, config);
@@ -70,7 +70,7 @@ export default async function inspectCostCommand(args: ParsedArgs): Promise<void
 
   // JSON mode
   if (hasFlag(args, 'json')) {
-    writeJsonResult({ ...limits, network: networkName, height });
+    ctx.output.result({ ...limits, network: networkName, height });
     return;
   }
 
