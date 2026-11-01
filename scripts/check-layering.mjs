@@ -26,36 +26,37 @@ const SRC = join(ROOT, 'src');
 const HOMES = [
   ['shell', /^wallet\.ts$/],
   // help plays the shell's intro, and manual builds the full manual from help's specs (Y24).
-  ['shell', /^commands\/(help|manual)\.ts$/],
-  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host)\.ts$/],
+  ['shell', /^commands\/(help|manual)(\.definition)?\.ts$/],
+  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host|installed-commands)\.ts$/],
   ['shell', /^ui\/(animate|art)\.ts$/],
   ['mcp', /^mcp-server\.ts$/],
   ['mcp', /^lib\/mcp\//],
 
-  ['core', /^commands\/config\.ts$/],
-  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root)\.ts$/],
+  // A command's definition (<name>.definition.ts) lives in its command's package.
+  ['core', /^commands\/config(\.definition)?\.ts$/],
+  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
   ['dev', /^ui\/(test-create-prompt|dev-keys)\.ts$/],
 
-  ['chain', /^commands\/status\.ts$/],
+  ['chain', /^commands\/status(\.definition)?\.ts$/],
   ['chain', /^lib\/(node-rpc|chain-id|indexer-graphql|graphql-ws-subscription|event-tip|ledger-guard|node-ready|indexer-ready|proof-server-ready|chain-clock|endpoint-check|balance-subscription)\.ts$/],
 
-  ['wallet', /^commands\/(wallet|generate|address|genesis-address|info|balance|transfer|airdrop|dust|cache)\.ts$/],
+  ['wallet', /^commands\/(wallet|generate|address|genesis-address|info|balance|transfer|airdrop|dust|cache)(\.definition)?\.ts$/],
   ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|wallet-cache|cache-indexer|transfer|transfer-request|sync-eta|wallet-can-pay|wallet-create|airdrop|wallet-protector|chain-caches|wallet-paths|fork-schedule)\.ts$/],
   ['wallet', /^lib\/(dust-[a-z-]+|shielded-[a-z-]+)\.ts$/],
 
-  ['contract', /^commands\/(contract|inspect-cost)\.ts$/],
+  ['contract', /^commands\/(contract|inspect-cost)(\.definition)?\.ts$/],
   ['contract', /^lib\/contract\//],
   ['contract', /^lib\/chain-params\.ts$/],
 
-  ['connect', /^commands\/serve\.ts$/],
+  ['connect', /^commands\/serve(\.definition)?\.ts$/],
   ['connect', /^lib\/(dapp-connector|ws-rpc|approval|fee-limits|fee-only-check|sign-data|sign-recipe|tx-inspect|tx-segments|tx-serde|serve-manager|serve-payer)\.ts$/],
 
-  ['dev', /^commands\/(dev|test|localnet)\.ts$/],
+  ['dev', /^commands\/(dev|test|localnet)(\.definition)?\.ts$/],
   ['dev', /^lib\/localnet\.ts$/],
   ['dev', /^lib\/(dev|test)\//],
 
-  ['grant', /^commands\/grant\.ts$/],
+  ['grant', /^commands\/grant(\.definition)?\.ts$/],
   ['grant', /^lib\/grant\//],
 ];
 

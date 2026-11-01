@@ -57,6 +57,25 @@ describe('the SDK-free base', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 180_000);
+
+  it('reads the command registry, every definition and tool, with every Midnight SDK import refused', () => {
+    // A definition loads its handler only when asked, so help and dispatch can read them all for free.
+    const dir = mkdtempSync(join(tmpdir(), 'mn-sdk-free-registry-'));
+    try {
+      const script = join(dir, 'read-registry.mjs');
+      writeFileSync(script, [
+        `const { installedCommands } = await import(${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'lib', 'installed-commands.ts')).href)});`,
+        'console.log(JSON.stringify([installedCommands.commands.length, installedCommands.tools.length]));',
+      ].join('\n'));
+      const run = spawnSync(process.execPath, ['--import', 'tsx', '--import', pathToFileURL(sdkHook(dir, 'refuse')).href, script], {
+        cwd: ROOT, encoding: 'utf8', timeout: 120_000, env: { ...process.env, HOME: dir },
+      });
+      expect(run.status, run.stderr).toBe(0);
+      expect(JSON.parse(run.stdout.trim().split('\n').at(-1)!)).toEqual([21, 37]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 180_000);
 });
 
 describe('the built mn', () => {

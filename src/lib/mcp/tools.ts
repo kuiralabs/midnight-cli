@@ -1,0 +1,994 @@
+// The MCP server's tools: what each is, how its parameters become the
+// command's argv, and which need the user's confirmation. Apart from the
+// server (src/mcp-server.ts) so the tool list can be read without starting
+// one, by the test that checks the command registry rebuilds it (plan 2B).
+
+import { type CommandRun, captureCommand } from '../run-command.ts';
+import { FULL_FLAG, type ParsedArgs } from '../argv.ts';
+
+// ── Tool definitions ────────────────────────────────────────
+
+export interface ToolAnnotations {
+  /** Tool does not modify state (safe to call without confirmation). */
+  readOnlyHint?: boolean;
+  /** Tool may perform destructive actions — moves funds, deletes files, tears down infra. */
+  destructiveHint?: boolean;
+  /** Repeated calls with same args yield the same result. */
+  idempotentHint?: boolean;
+  /** Tool touches the network / chain / external process (Docker, indexer, node). */
+  openWorldHint?: boolean;
+}
+
+export interface ToolDef {
+  name: string;
+  description: string;
+  annotations?: ToolAnnotations;
+  inputSchema: {
+    type: 'object';
+    properties: Record<string, { type: string; description?: string; enum?: string[] }>;
+    required?: string[];
+  };
+  /** Runs the tool; `call` carries the client's cancellation and takes the run's progress. */
+  handler: (params: Record<string, unknown>, call: CommandRun) => Promise<Record<string, unknown>>;
+  /**
+   * For a tool behind confirmation: checks the arguments before a token is
+   * issued, throwing what the handler would, so the user is never asked to
+   * confirm a request that can't run. When it returns text, that is what the
+   * request comes to as the check found it, and the user is asked to confirm
+   * that instead of the tool's arguments.
+   */
+  check?: (params: Record<string, unknown>, call: CommandRun) => Promise<string | void>;
+}
+
+// Helper: build ParsedArgs from MCP tool parameters
+function buildArgs(
+  command: string,
+  params: Record<string, unknown>,
+  subcommand?: string,
+): ParsedArgs {
+  const flags: Record<string, string | true> = { json: true };
+  const positionals: string[] = [];
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) continue;
+    // Standard agent escape hatch: an MCP arg of `full: true` means
+    // "give me the human shape, not the slim agent shape". Translate to
+    // the internal `_full` flag so handlers reading isMinimalMode pick
+    // it up. No CLI command uses `--full` directly, so the rename is safe.
+    const flagKey = key === 'full' ? FULL_FLAG : key;
+    if (typeof value === 'boolean') {
+      if (value) flags[flagKey] = true;
+    } else {
+      flags[flagKey] = String(value);
+    }
+  }
+
+  return {
+    command,
+    subcommand,
+    positionals,
+    flags,
+  };
+}
+
+/** midnight_transfer's { to, amount } as `transfer <to> <amount>`. */
+function transferArgs(params: Record<string, unknown>): ParsedArgs {
+  const args = buildArgs('transfer', params, params.to as string | undefined);
+  args.positionals = params.amount === undefined ? [] : [String(params.amount)];
+  delete args.flags.to;
+  delete args.flags.amount;
+  return args;
+}
+
+const GRANT_COMMON_PROPERTIES = {
+  wallet: { type: 'string', description: 'The wallet that owns the account and pays the fees' },
+  network: { type: 'string', enum: ['undeployed'], description: 'Only undeployed (a local ledger-9 stack)' },
+};
+
+/** A grant tool's params as `grant <subcommand> [positional]`, the named param moved to the positional. */
+function grantArgs(subcommand: string, params: Record<string, unknown>, positional?: string, extraFlags: Record<string, true> = {}): ParsedArgs {
+  const args = buildArgs('grant', params, subcommand);
+  if (positional !== undefined) {
+    if (params[positional] !== undefined) args.positionals = [String(params[positional])];
+    delete args.flags[positional];
+  }
+  Object.assign(args.flags, extraFlags);
+  return args;
+}
+
+/** A grant request can run: its arguments, the network, the account and the wallet are all in order. */
+async function checkGrant(args: ParsedArgs, params: Record<string, unknown>): Promise<void> {
+  const { prepareGrant } = await import('../grant/prepare.ts');
+  await prepareGrant(args);
+  await checkSendingWallet(params);
+}
+
+/** The wallet a deploy or call pays from exists and can be read. */
+async function checkSendingWallet(params: Record<string, unknown>): Promise<void> {
+  const { loadWalletConfig, resolveWalletPath } = await import('../wallet-config.ts');
+  loadWalletConfig(resolveWalletPath(params.wallet as string | undefined));
+}
+
+// Lazy-import command handlers via static import() paths so bun can bundle them.
+// Template-literal imports like `import('../../commands/${name}.ts')` are not resolvable
+// at build time, so each command is listed explicitly.
+type CommandHandler = (args: ParsedArgs, signal?: AbortSignal) => Promise<void>;
+
+export const handlerLoaders: Record<string, () => Promise<{ default: CommandHandler }>> = {
+  'generate':        () => import('../../commands/generate.ts'),
+  'info':            () => import('../../commands/info.ts'),
+  'balance':         () => import('../../commands/balance.ts'),
+  'address':         () => import('../../commands/address.ts'),
+  'genesis-address': () => import('../../commands/genesis-address.ts'),
+  'inspect-cost':    () => import('../../commands/inspect-cost.ts'),
+  'airdrop':         () => import('../../commands/airdrop.ts'),
+  'transfer':        () => import('../../commands/transfer.ts'),
+  'dust':            () => import('../../commands/dust.ts'),
+  'cache':           () => import('../../commands/cache.ts'),
+  'config':          () => import('../../commands/config.ts'),
+  'localnet':        () => import('../../commands/localnet.ts'),
+  'wallet':          () => import('../../commands/wallet.ts'),
+  'status':          () => import('../../commands/status.ts'),
+  'contract':        () => import('../../commands/contract.ts'),
+  'grant':           () => import('../../commands/grant.ts'),
+  'test':            () => import('../../commands/test.ts'),
+};
+
+async function importHandler(name: string) {
+  const loader = handlerLoaders[name];
+  if (!loader) throw new Error(`Unknown command handler: ${name}`);
+  const mod = await loader();
+  return mod.default;
+}
+
+export const TOOLS: ToolDef[] = [
+  // midnight_generate (deprecated) removed from MCP surface — agents should use
+  // midnight_wallet_generate. The CLI `mn generate` command still exists for humans.
+  {
+    name: 'midnight_wallet_generate',
+    description: 'Create wallet.',
+    annotations: { destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        seed: { type: 'string', description: '64 or 128 hex chars (32-byte raw or 64-byte BIP-39)' },
+        mnemonic: { type: 'string', description: 'BIP-39 24 words' },
+        force: { type: 'string' },
+      },
+      required: ['name'],
+    },
+    async handler(params, call) {
+      const name = params.name as string;
+      const args = buildArgs('wallet', params, 'generate');
+      args.positionals = [name];
+      delete args.flags.name;
+      if (params.force === 'true' || params.force === true) args.flags.force = true;
+      const handler = await importHandler('wallet');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_wallet_list',
+    description: 'List wallets. Default: per-wallet { name, active, network, address, shieldedAddress } scoped to the active network. Pass { full: true } for the 3-network addresses + shieldedAddresses maps.',
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        full: {
+          type: 'boolean',
+          description: 'Return full per-network addresses + shieldedAddresses maps (the same shape `mn wallet list --json` emits). Default false (slim).',
+        },
+      },
+    },
+    async handler({ full }: { full?: boolean }, call) {
+      const flags: Record<string, string | true> = { json: true };
+      if (full) flags[FULL_FLAG] = true;
+      const args: ParsedArgs = {
+        command: 'wallet',
+        subcommand: 'list',
+        positionals: [],
+        flags,
+      };
+      const handler = await importHandler('wallet');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_wallet_use',
+    description: 'Set active wallet.',
+    annotations: { idempotentHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+      },
+      required: ['name'],
+    },
+    async handler(params, call) {
+      const name = params.name as string;
+      const args: ParsedArgs = {
+        command: 'wallet',
+        subcommand: 'use',
+        positionals: [name],
+        flags: { json: true },
+      };
+      const handler = await importHandler('wallet');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_wallet_info',
+    description: 'Show wallet details. Default: { name, active, network, address, shieldedAddress } scoped to the active network. Pass { full: true } for the per-network maps + createdAt + file path.',
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        full: {
+          type: 'boolean',
+          description: 'Return the full per-network addresses + shieldedAddresses maps and bookkeeping fields (matches `mn wallet info <name> --json`). Default false (slim).',
+        },
+      },
+    },
+    async handler(params, call) {
+      const name = params.name as string | undefined;
+      const full = params.full as boolean | undefined;
+      const flags: Record<string, string | true> = { json: true };
+      if (full) flags[FULL_FLAG] = true;
+      const args: ParsedArgs = {
+        command: 'wallet',
+        subcommand: 'info',
+        positionals: name ? [name] : [],
+        flags,
+      };
+      const handler = await importHandler('wallet');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_wallet_remove',
+    description: 'Remove wallet.',
+    annotations: { destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+      },
+      required: ['name'],
+    },
+    async handler(params, call) {
+      const name = params.name as string;
+      const args: ParsedArgs = {
+        command: 'wallet',
+        subcommand: 'remove',
+        positionals: [name],
+        flags: { json: true },
+      };
+      const handler = await importHandler('wallet');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_info',
+    description: 'Wallet metadata.',
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        wallet: { type: 'string' },
+      },
+    },
+    async handler(params, call) {
+      const args = buildArgs('info', params);
+      const handler = await importHandler('info');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_balance',
+    description: 'NIGHT balance. Default: { network, unshielded, shielded } — no echoed addresses. Pass { full: true } for the human shape including address + shieldedAddress.',
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        address: { type: 'string' },
+        wallet: { type: 'string' },
+        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        'indexer-ws': { type: 'string' },
+        full: {
+          type: 'boolean',
+          description: 'Include the queried address + shieldedAddress in the response (matches `mn balance --json`). Default false (slim).',
+        },
+      },
+    },
+    async handler(params, call) {
+      const address = params.address as string | undefined;
+      const args = buildArgs('balance', params, address);
+      // Remove address from flags since it's a positional (subcommand)
+      delete args.flags.address;
+      const handler = await importHandler('balance');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_address',
+    description: 'Derive address from seed.',
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        seed: { type: 'string', description: '64 or 128 hex chars (32-byte raw or 64-byte BIP-39)' },
+        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        index: { type: 'string' },
+      },
+      required: ['seed'],
+    },
+    async handler(params, call) {
+      const args = buildArgs('address', params);
+      const handler = await importHandler('address');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_genesis_address',
+    description: 'Genesis address.',
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+      },
+    },
+    async handler(params, call) {
+      const args = buildArgs('genesis-address', params);
+      const handler = await importHandler('genesis-address');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_inspect_cost',
+    description: 'The chain\'s current block limits, from its latest block\'s ledger parameters.',
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        network: { type: 'string', description: 'Network to read (default: the selected one)' },
+      },
+    },
+    async handler(params, call) {
+      const args = buildArgs('inspect-cost', params.network ? { network: params.network } : {});
+      const handler = await importHandler('inspect-cost');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_airdrop',
+    description: 'Fund from genesis (undeployed). `wallet` accepts a wallet name, a wallet JSON path, or a raw bech32m address (mn_addr_… or mn_shield-addr_…). Add `shielded: "true"` to fund a shielded balance.',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        amount: { type: 'string', description: 'NIGHT' },
+        wallet: { type: 'string', description: 'Destination: wallet name, JSON path, or bech32m address' },
+        shielded: { type: 'string', description: 'Set to "true" for shielded airdrop' },
+      },
+      required: ['amount'],
+    },
+    async handler(params, call) {
+      const amount = params.amount as string;
+      const args = buildArgs('airdrop', params, amount);
+      delete args.flags.amount;
+      const handler = await importHandler('airdrop');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_transfer',
+    description: 'Send NIGHT (returns pending token; see skill).',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'bech32m' },
+        amount: { type: 'string', description: 'NIGHT' },
+        wallet: { type: 'string' },
+      },
+      required: ['to', 'amount'],
+    },
+    async handler(params, call) {
+      const handler = await importHandler('transfer');
+      return captureCommand(handler, transferArgs(params), call);
+    },
+    async check(params) {
+      const { resolveTransferRequest } = await import('../transfer-request.ts');
+      resolveTransferRequest(transferArgs(params));
+    },
+  },
+  {
+    name: 'midnight_dust_register',
+    description: 'Register for dust.',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        wallet: { type: 'string' },
+      },
+    },
+    async handler(params, call) {
+      const args = buildArgs('dust', params, 'register');
+      const handler = await importHandler('dust');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_dust_status',
+    description: 'Dust status. Default: { network, registered, registeredUtxos, unregisteredUtxos, dustBalance, dustAvailable }. Pass { full: true } for sync internals (eventsApplied, ownedUtxos, cached).',
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        wallet: { type: 'string' },
+        'proof-server': { type: 'string' },
+        node: { type: 'string' },
+        'indexer-ws': { type: 'string' },
+        'no-cache': { type: 'string' },
+        full: {
+          type: 'boolean',
+          description: 'Include sync internals (eventsApplied, ownedUtxos, cached) in the response (matches `mn dust status --json`). Default false (slim).',
+        },
+      },
+    },
+    async handler(params, call) {
+      const args = buildArgs('dust', params, 'status');
+      const handler = await importHandler('dust');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_config_get',
+    description: 'Read config.',
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: { type: 'string' },
+        network: { type: 'string', description: 'For node / indexer-ws / proof-server: the network to read or write them for (default: the selected network)' },
+      },
+      required: ['key'],
+    },
+    async handler(params, call) {
+      const key = params.key as string;
+      const args: ParsedArgs = {
+        command: 'config',
+        subcommand: 'get',
+        positionals: [key],
+        flags: { json: true, ...(params.network ? { network: params.network as string } : {}) },
+      };
+      const handler = await importHandler('config');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_config_set',
+    description: 'Write config.',
+    annotations: { idempotentHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: { type: 'string' },
+        network: { type: 'string', description: 'For node / indexer-ws / proof-server: the network to read or write them for (default: the selected network)' },
+        value: { type: 'string' },
+      },
+      required: ['key', 'value'],
+    },
+    async handler(params, call) {
+      const key = params.key as string;
+      const value = params.value as string;
+      const args: ParsedArgs = {
+        command: 'config',
+        subcommand: 'set',
+        positionals: [key, value],
+        flags: { json: true, ...(params.network ? { network: params.network as string } : {}) },
+      };
+      const handler = await importHandler('config');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_cache_clear',
+    description: 'Clear sync cache.',
+    annotations: { destructiveHint: true, idempotentHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        wallet: { type: 'string' },
+      },
+    },
+    async handler(params, call) {
+      const args = buildArgs('cache', params, 'clear');
+      const handler = await importHandler('cache');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_config_unset',
+    description: 'Reset config.',
+    annotations: { idempotentHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: { type: 'string' },
+        network: { type: 'string', description: 'For node / indexer-ws / proof-server: the network to read or write them for (default: the selected network)' },
+      },
+      required: ['key'],
+    },
+    async handler(params, call) {
+      const key = params.key as string;
+      const args: ParsedArgs = {
+        command: 'config',
+        subcommand: 'unset',
+        positionals: [key],
+        flags: { json: true, ...(params.network ? { network: params.network as string } : {}) },
+      };
+      const handler = await importHandler('config');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_localnet_up',
+    description: 'Refused on this ledger-9 build: mn\'s localnet is ledger 8 and no ledger-9 indexer image is published. Run a ledger-9 stack yourself and point mn at it (config_set node / indexer-ws / proof-server).',
+    annotations: { openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+    async handler(_params, call) {
+      const args: ParsedArgs = {
+        command: 'localnet',
+        subcommand: 'up',
+        positionals: [],
+        flags: { json: true },
+      };
+      const handler = await importHandler('localnet');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_localnet_stop',
+    description: 'Stop localnet (preserves state).',
+    annotations: { idempotentHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+    async handler(_params, call) {
+      const args: ParsedArgs = {
+        command: 'localnet',
+        subcommand: 'stop',
+        positionals: [],
+        flags: { json: true },
+      };
+      const handler = await importHandler('localnet');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_localnet_down',
+    description: 'Localnet teardown (volumes + undeployed cache).',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+    async handler(_params, call) {
+      const args: ParsedArgs = {
+        command: 'localnet',
+        subcommand: 'down',
+        positionals: [],
+        flags: { json: true },
+      };
+      const handler = await importHandler('localnet');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_localnet_status',
+    description: 'Localnet status.',
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+    async handler(_params, call) {
+      const args: ParsedArgs = {
+        command: 'localnet',
+        subcommand: 'status',
+        positionals: [],
+        flags: { json: true },
+      };
+      const handler = await importHandler('localnet');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_localnet_clean',
+    description: 'Remove stray containers.',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+    async handler(_params, call) {
+      const args: ParsedArgs = {
+        command: 'localnet',
+        subcommand: 'clean',
+        positionals: [],
+        flags: { json: true },
+      };
+      const handler = await importHandler('localnet');
+      return captureCommand(handler, args, call);
+    },
+  },
+  // {
+  //   name: 'midnight_status',
+  //   description: 'Show Midnight network health — runs live probes and overlays canary monitoring data',
+  //   inputSchema: {
+  //     type: 'object',
+  //     properties: {
+  //       network: { type: 'string', description: 'Network to check: preprod, preview, undeployed', enum: ['preprod', 'preview', 'undeployed'] },
+  //       all: { type: 'string', description: 'Set to "true" to show all networks' },
+  //     },
+  //   },
+  //   async handler(params) {
+  //     const args = buildArgs('status', params);
+  //     if (params.all === 'true' || params.all === true) args.flags.all = true;
+  //     const handler = await importHandler('status');
+  //     return captureCommand(handler, args, call);
+  //   },
+  // },
+  // status command disabled — currently being reworked
+
+  // ── Contract operations ──────────────────────────────────────────
+  {
+    name: 'midnight_contract_inspect',
+    description: 'Inspect a compiled Compact contract: name, circuits (with arg/return types), witnesses, compiler/language/runtime versions. Reads managed/<name>/compiler/contract-info.json under the dapp dir. Returns a `siblings` array listing other contracts in the same project — call again with `name` to inspect a sibling.',
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path to dApp directory (defaults to cwd)' },
+        managed: { type: 'string', description: 'Direct path to a managed/<name>/ directory (overrides path)' },
+        name: { type: 'string', description: 'Specific contract name to inspect when the project has multiple (see siblings field)' },
+      },
+    },
+    async handler(params, call) {
+      const args = buildArgs('contract', params, 'inspect');
+      const handler = await importHandler('contract');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_contract_state',
+    description: 'Read the current ledger state of a deployed contract. Returns the ledger fields as a JSON object.',
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        address: { type: 'string', description: 'Contract address (hex)' },
+        wallet: { type: 'string' },
+        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        path: { type: 'string', description: 'dApp directory (defaults to cwd; needed to find the compiled artifact for state decoding)' },
+        managed: { type: 'string', description: 'Direct path to a managed/<name>/ directory (overrides path-based contract scan)' },
+        name: { type: 'string', description: 'Specific contract name when the project has multiple' },
+      },
+      required: ['address'],
+    },
+    async handler(params, call) {
+      const args = buildArgs('contract', params, 'state');
+      const handler = await importHandler('contract');
+      return captureCommand(handler, args, call);
+    },
+  },
+  {
+    name: 'midnight_contract_deploy',
+    description: 'Deploy a compiled Compact contract (returns pending token; agent must show the description and redeem via midnight_confirm_operation).',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        wallet: { type: 'string' },
+        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        args: { type: 'string', description: 'JSON-encoded array or object of constructor arguments' },
+        path: { type: 'string', description: 'dApp directory (defaults to cwd)' },
+        managed: { type: 'string', description: 'Direct path to a managed/<name>/ directory (overrides path-based contract scan)' },
+        name: { type: 'string', description: 'Specific contract name when the project has multiple' },
+      },
+    },
+    async handler(params, call) {
+      const args = buildArgs('contract', params, 'deploy');
+      const handler = await importHandler('contract');
+      return captureCommand(handler, args, call);
+    },
+    async check(params) {
+      const { resolveContractDeployRequest } = await import('../contract/request.ts');
+      resolveContractDeployRequest(buildArgs('contract', params, 'deploy'));
+      await checkSendingWallet(params);
+    },
+  },
+  {
+    name: 'midnight_contract_call',
+    description: 'Call a circuit on a deployed contract (returns pending token; agent must show the description and redeem via midnight_confirm_operation).',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        address: { type: 'string', description: 'Contract address (hex)' },
+        circuit: { type: 'string', description: 'Circuit name to invoke' },
+        wallet: { type: 'string' },
+        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        args: { type: 'string', description: 'JSON-encoded array or object of circuit arguments' },
+        path: { type: 'string', description: 'dApp directory (defaults to cwd)' },
+        managed: { type: 'string', description: 'Direct path to a managed/<name>/ directory (overrides path-based contract scan)' },
+        name: { type: 'string', description: 'Specific contract name when the project has multiple' },
+      },
+      required: ['address', 'circuit'],
+    },
+    async handler(params, call) {
+      const args = buildArgs('contract', params, 'call');
+      const handler = await importHandler('contract');
+      return captureCommand(handler, args, call);
+    },
+    async check(params) {
+      const { resolveContractCallRequest } = await import('../contract/request.ts');
+      resolveContractCallRequest(buildArgs('contract', params, 'call'));
+      await checkSendingWallet(params);
+    },
+  },
+
+  // ── Grants: the wallet owner's account (experimental) ────────────
+  {
+    name: 'midnight_grant_status',
+    description: 'The wallet\'s account: address, owner key, what it holds, number of grants (see skill).',
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    inputSchema: { type: 'object', properties: { ...GRANT_COMMON_PROPERTIES } },
+    async handler(params, call) {
+      return captureCommand(await importHandler('grant'), grantArgs('status', params), call);
+    },
+  },
+  {
+    name: 'midnight_grant_list',
+    description: 'Every grant on the wallet\'s account, with its limits and whether it is live.',
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    inputSchema: { type: 'object', properties: { ...GRANT_COMMON_PROPERTIES } },
+    async handler(params, call) {
+      return captureCommand(await importHandler('grant'), grantArgs('list', params), call);
+    },
+  },
+  {
+    name: 'midnight_grant_request',
+    description: 'What issuing from an agent\'s grant request link would grant: who spends, who they can pay, and the limits (mn\'s defaults for any not given). Issues nothing. Show the user this before midnight_grant_issue.',
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        link: { type: 'string', description: 'The grant request link' },
+        cap: { type: 'string', description: 'Most the grant may ever pay (smallest unit)' },
+        'per-call': { type: 'string', description: 'Most one payment may be' },
+        'max-coin': { type: 'string', description: 'Largest coin the agent may take to pay from' },
+        'expires-in': { type: 'string', description: 'Seconds the grant lasts' },
+        ...GRANT_COMMON_PROPERTIES,
+      },
+      required: ['link'],
+    },
+    async handler(params, call) {
+      return captureCommand(await importHandler('grant'), grantArgs('issue', params, 'link'), call);
+    },
+  },
+  {
+    name: 'midnight_grant_deploy',
+    description: 'Deploy the wallet\'s account and activate its owner key (returns pending token). Takes about 48 DUST from the wallet (17 at once for the largest of five transactions) and a few minutes. Its owner key is made on this machine and kept encrypted under mn\'s passphrase (MN_PASSPHRASE).',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...GRANT_COMMON_PROPERTIES,
+      },
+    },
+    async handler(params, call) {
+      return captureCommand(await importHandler('grant'), grantArgs('deploy', params), call);
+    },
+    async check(params) {
+      await checkGrant(grantArgs('deploy', params), params);
+    },
+  },
+  {
+    name: 'midnight_grant_deposit',
+    description: 'Move shielded NIGHT from the wallet into its account, where a grant lets an agent spend it (returns pending token). The wallet needs that much shielded NIGHT, plus Dust for the fee. mn has no command to take it back out.',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        amount: { type: 'string', description: 'NIGHT to deposit, e.g. "2" (up to 6 decimals)' },
+        ...GRANT_COMMON_PROPERTIES,
+      },
+      required: ['amount'],
+    },
+    async handler(params, call) {
+      return captureCommand(await importHandler('grant'), grantArgs('deposit', params, 'amount'), call);
+    },
+    async check(params) {
+      const args = grantArgs('deposit', params, 'amount');
+      const { prepareGrant } = await import('../grant/prepare.ts');
+      const { request, walletName, target, account } = await prepareGrant(args);
+      await checkSendingWallet(params);
+      if (request.subcommand !== 'deposit' || account === null) throw new Error('A deposit was prepared as something else');
+      return `Deposit ${request.amount} shielded NIGHT (${request.value} in the smallest unit) from wallet ${walletName} into its account ${account.address} on ${target.network}`;
+    },
+  },
+  {
+    name: 'midnight_grant_issue',
+    description: 'Issue a grant from an agent\'s request link (returns pending token, whose description gives the grant\'s terms as the account package read them). Lets that agent spend from the account within the limits.',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        link: { type: 'string', description: 'The grant request link' },
+        cap: { type: 'string', description: 'Most the grant may ever pay (smallest unit)' },
+        'per-call': { type: 'string', description: 'Most one payment may be' },
+        'max-coin': { type: 'string', description: 'Largest coin the agent may take to pay from' },
+        'expires-in': { type: 'string', description: 'Seconds the grant lasts' },
+        ...GRANT_COMMON_PROPERTIES,
+      },
+      required: ['link'],
+    },
+    async handler(params, call) {
+      return captureCommand(await importHandler('grant'), grantArgs('issue', params, 'link', { yes: true }), call);
+    },
+    // The link is read by the account package before a token is issued: a link
+    // that isn't one is refused here, and the user confirms the grant's terms
+    // as the build reports them, not a link they can't read.
+    async check(params, call) {
+      await checkGrant(grantArgs('issue', params, 'link', { yes: true }), params);
+      const shown = await captureCommand(await importHandler('grant'), grantArgs('issue', params, 'link'), call);
+      const { describeGrantTerms } = await import('../grant/request.ts');
+      return `Issue a grant on ${shown.wallet}'s account on ${shown.network}, letting an agent spend from it within these terms `
+        + `(amounts in the token's smallest unit; limits not given took mn's defaults): ${describeGrantTerms(shown.request)}`;
+    },
+  },
+  {
+    name: 'midnight_grant_revoke',
+    description: 'Revoke one grant, by its id or slot (returns pending token).',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        grant: { type: 'string', description: 'Grant id (64 hex) or slot number' },
+        ...GRANT_COMMON_PROPERTIES,
+      },
+      required: ['grant'],
+    },
+    async handler(params, call) {
+      return captureCommand(await importHandler('grant'), grantArgs('revoke', params, 'grant'), call);
+    },
+    async check(params) {
+      await checkGrant(grantArgs('revoke', params, 'grant'), params);
+    },
+  },
+  {
+    name: 'midnight_grant_revoke_all',
+    description: 'Revoke every grant on the wallet\'s account (returns pending token).',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: { type: 'object', properties: { ...GRANT_COMMON_PROPERTIES } },
+    async handler(params, call) {
+      return captureCommand(await importHandler('grant'), grantArgs('revoke-all', params), call);
+    },
+    async check(params) {
+      await checkGrant(grantArgs('revoke-all', params), params);
+    },
+  },
+
+  // ── Test framework ───────────────────────────────────────────────
+  {
+    name: 'midnight_test_create',
+    description: 'Generate a test scaffold for the contract. Two paths: (1) AI-assisted — pass `goal` (and optionally `screen` for UI strategy) and the scaffold is generated by Claude reading the contract + screen source, producing a focused suite with realistic args / on-screen labels. (2) Deterministic — pass `no-ai: true` (or omit goal/screen in non-interactive mode) for boilerplate scaffolds that the user reviews. CLI strategy emits dapp.test.json + tests/suites/<name>/{suite,actions,assertions}.json. Browser strategy emits prompt.md instead of actions.json plus the browser fields in dapp.test.json — required: port, build-cmd. Use force:true to overwrite.',
+    annotations: { destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'dApp directory (defaults to cwd)' },
+        name: { type: 'string', description: 'Specific contract name when the project has multiple' },
+        suite: { type: 'string', description: 'Suite directory name under tests/suites/ (auto-derived from circuit/screen when AI scaffolds)' },
+        strategy: { type: 'string', enum: ['cli', 'browser'], description: 'cli (default): drive contracts via actions.json. browser: drive a real UI via Claude + Chrome via prompt.md.' },
+        network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+        goal: { type: 'string', description: 'AI mode: one-line success criterion this suite should verify (e.g. "round goes from 0 to 1 after increment"). Triggers AI scaffolding.' },
+        screen: { type: 'string', description: 'AI mode + browser strategy: name of the screen component to focus on (e.g. "loan-request-form" or "LoanRequestForm"). Auto-discovered from src/components, src/pages, src/screens.' },
+        'no-ai': { type: 'boolean', description: 'Force deterministic scaffolder even when claude CLI is available.' },
+        port: { type: 'string', description: 'Browser strategy only — dev server port (e.g. "4173").' },
+        'build-cmd': { type: 'string', description: 'Browser strategy only — shell command that builds + serves the UI (e.g. "npm run dev").' },
+        'build-dir': { type: 'string', description: 'Browser strategy only — subdir the build runs in (monorepo case).' },
+        url: { type: 'string', description: 'Browser strategy only — full URL Claude opens (default http://localhost:<port>/).' },
+        'browser-mode': { type: 'string', enum: ['dom', 'vision', 'script'], description: 'Browser strategy only — how Claude perceives the page. dom (HTML/React UIs, fast, needs chrome-devtools-mcp), vision (canvas games, slow), script (advanced, needs hooks). Default: dom for AI scaffolds.' },
+        force: { type: 'boolean', description: 'Overwrite existing files instead of aborting on collision' },
+      },
+    },
+    async handler(params, call) {
+      const args = buildArgs('test', params, 'create');
+      const handler = await importHandler('test');
+      return captureCommand(handler, args, call);
+    },
+  },
+
+  // ── Localnet logs ────────────────────────────────────────────────
+  {
+    name: 'midnight_localnet_logs',
+    description: 'Snapshot of recent localnet logs (last N lines per service, no streaming). Returns { tail, lines: string[] }.',
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tail: { type: 'string', description: 'Number of lines to retrieve (default 200)' },
+      },
+    },
+    async handler(params, call) {
+      const args = buildArgs('localnet', params, 'logs');
+      // tail default: 200 if not specified by agent
+      if (!args.flags.tail) args.flags.tail = '200';
+      const handler = await importHandler('localnet');
+      return captureCommand(handler, args, call);
+    },
+  },
+
+  {
+    name: 'midnight_confirm_operation',
+    description: 'Redeem a pending token (confirm step).',
+    annotations: { destructiveHint: true, openWorldHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token: { type: 'string' },
+      },
+      required: ['token'],
+    },
+    async handler() {
+      // Redemption is handled by the CallTool wrapper below — this handler
+      // is only reached if the wrapper fails to intercept. Treat as a bug.
+      throw new Error('midnight_confirm_operation reached the inner handler — this is an MCP wiring bug');
+    },
+  },
+];
+
+/**
+ * Tools that require the two-step confirmation flow: those with a `check`,
+ * which runs only in that flow. On first call, we return a pending token; the
+ * agent must call midnight_confirm_operation with the token to actually
+ * execute. Derived, so a tool given a check can't be left out and run at once.
+ */
+export const REQUIRES_CONFIRMATION = new Set<string>(TOOLS.filter((tool) => tool.check !== undefined).map((tool) => tool.name));
+
+export function describePendingOp(tool: string, params: Record<string, unknown>): string {
+  const network = (params.network as string | undefined) ?? 'active network';
+  const wallet = (params.wallet as string | undefined) ?? 'active wallet';
+  switch (tool) {
+    case 'midnight_transfer':
+      return `Send ${params.amount} NIGHT from ${wallet} to ${params.to} on ${network}`;
+    case 'midnight_contract_deploy': {
+      const argsHint = params.args ? ` with args ${params.args}` : '';
+      return `Deploy contract from ${params.path ?? 'current directory'} as ${wallet} on ${network}${argsHint}`;
+    }
+    case 'midnight_contract_call': {
+      const argsHint = params.args ? ` with args ${params.args}` : '';
+      return `Call circuit ${params.circuit} on contract ${params.address} as ${wallet} on ${network}${argsHint}`;
+    }
+    case 'midnight_grant_deploy':
+      return `Deploy an account for ${wallet} on ${network}; its owner key is made on this machine and kept encrypted under mn's passphrase`;
+    case 'midnight_grant_revoke':
+      return `Revoke grant ${params.grant} on ${wallet}'s account on ${network}`;
+    case 'midnight_grant_revoke_all':
+      return `Revoke every grant on ${wallet}'s account on ${network}`;
+    default:
+      return `Execute ${tool} with ${JSON.stringify(params)}`;
+  }
+}

@@ -1,0 +1,166 @@
+// The `wallet` command, described once (plan 2B, spec §4.1).
+
+import type { CommandDefinition } from '../lib/command-definition.ts';
+
+export const walletDefinition: CommandDefinition = {
+  name: 'wallet',
+  subcommands: ['generate', 'list', 'use', 'info', 'remove', 'seed', 'protect'],
+  flags: [
+    {
+      name: 'entropy',
+      takesValue: false,
+      subcommands: ['seed'],
+      help: [
+        '--entropy           Also output the 32-byte BIP-39 entropy alongside the',
+        '                    64-byte PBKDF2 seed (use when another tool expects',
+        '                    the shorter entropy format — NB: the two derive',
+        '                    DIFFERENT Midnight wallets from the same mnemonic)',
+      ],
+    },
+    {
+      name: 'force',
+      takesValue: false,
+      subcommands: ['generate'],
+      help: ['--force             Overwrite existing wallet file'],
+    },
+    {
+      name: 'mnemonic',
+      takesValue: true,
+      subcommands: ['generate'],
+      help: ['--mnemonic "..."    Restore from BIP-39 mnemonic (24 words)'],
+    },
+    {
+      name: 'network',
+      takesValue: true,
+      subcommands: ['generate'],
+      help: ['--network <name>    Network: preprod, preview, undeployed'],
+    },
+    {
+      name: 'seed',
+      takesValue: true,
+      subcommands: ['generate'],
+      help: [
+        '--seed <hex>        Restore from a seed: 64 or 128 hex chars (32-byte raw or 64-byte BIP-39)',
+      ],
+    },
+    { name: 'wallet', takesValue: true, subcommands: ['info', 'seed'] },
+  ],
+  help: {
+    description: 'Manage named wallets (generate, list, use, info, remove, seed, protect)',
+    usage: 'midnight wallet <generate|list|use|info|remove|seed|protect> [args]',
+    flags: [
+      'generate <name>     Create a new named wallet and set it as active',
+      'list                Show all wallets with active marker',
+      'use <name>          Set active wallet',
+      'info [name]         Show wallet details (active wallet if no name)',
+      'remove <name>       Delete a wallet (refuses active or last wallet)',
+      'seed [name]         Reveal the seed + mnemonic (prompts for confirmation)',
+      'protect             Set mn\'s passphrase and encrypt every plain-text wallet',
+      '                    under it (new wallets are always encrypted). The',
+      '                    passphrase is asked at a terminal, or read from',
+      '                    MN_PASSPHRASE; every secret mn keeps uses this one',
+      '',
+      'generate flags:',
+      { flag: 'network' },
+      { flag: 'seed' },
+      { flag: 'mnemonic' },
+      { flag: 'force' },
+      '',
+      'seed flags:',
+      { flag: 'entropy' },
+      '--json              Print JSON (skips interactive confirmation)',
+    ],
+    examples: [
+      'midnight wallet generate alice --network preprod',
+      'midnight wallet list',
+      'midnight wallet use alice',
+      'midnight wallet info alice',
+      'midnight wallet remove bob',
+      'midnight wallet seed alice --entropy',
+      'midnight wallet protect',
+    ],
+    jsonFields: {
+      name: 'Wallet name',
+      address: 'Wallet address (bech32m)',
+      network: 'Network name',
+      active: 'Whether this is the active wallet',
+      wallets: 'Array of wallet info objects (list only)',
+    },
+  },
+  intro: { brief: 'Manage named wallets', order: 1 },
+  needsWalletSdk: false,
+  shell: { protectors: true },
+  load: () => import('./wallet.ts'),
+  mcp: {
+    tools: [
+      {
+        name: 'midnight_wallet_generate',
+        description: 'Create wallet.',
+        annotations: { destructiveHint: true },
+        inputSchema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
+            seed: { type: 'string', description: '64 or 128 hex chars (32-byte raw or 64-byte BIP-39)' },
+            mnemonic: { type: 'string', description: 'BIP-39 24 words' },
+            force: { type: 'string' },
+          },
+          required: ['name'],
+        },
+        argv: { subcommand: 'generate', positionals: ['name'], flags: 'rest', trueStrings: ['force'] },
+        order: 1,
+      },
+      {
+        name: 'midnight_wallet_list',
+        description: 'List wallets. Default: per-wallet { name, active, network, address, shieldedAddress } scoped to the active network. Pass { full: true } for the 3-network addresses + shieldedAddresses maps.',
+        annotations: { readOnlyHint: true, idempotentHint: true },
+        inputSchema: {
+          type: 'object',
+          properties: {
+            full: {
+              type: 'boolean',
+              description: 'Return full per-network addresses + shieldedAddresses maps (the same shape `mn wallet list --json` emits). Default false (slim).',
+            },
+          },
+        },
+        argv: { subcommand: 'list', flags: ['full'] },
+        order: 2,
+      },
+      {
+        name: 'midnight_wallet_use',
+        description: 'Set active wallet.',
+        annotations: { idempotentHint: true },
+        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        argv: { subcommand: 'use', positionals: ['name'], flags: [] },
+        order: 3,
+      },
+      {
+        name: 'midnight_wallet_info',
+        description: 'Show wallet details. Default: { name, active, network, address, shieldedAddress } scoped to the active network. Pass { full: true } for the per-network maps + createdAt + file path.',
+        annotations: { readOnlyHint: true, idempotentHint: true },
+        inputSchema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            full: {
+              type: 'boolean',
+              description: 'Return the full per-network addresses + shieldedAddresses maps and bookkeeping fields (matches `mn wallet info <name> --json`). Default false (slim).',
+            },
+          },
+        },
+        argv: { subcommand: 'info', positionals: ['name'], flags: ['full'] },
+        order: 4,
+      },
+      {
+        // Y29: marked destructive, yet runs without confirmation; recorded as it is, fixed in 2E.
+        name: 'midnight_wallet_remove',
+        description: 'Remove wallet.',
+        annotations: { destructiveHint: true },
+        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        argv: { subcommand: 'remove', positionals: ['name'], flags: [] },
+        order: 5,
+      },
+    ],
+  },
+};

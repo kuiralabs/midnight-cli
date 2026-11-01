@@ -85,7 +85,8 @@ describe('COMMAND_FLAGS matches the code', () => {
     return flags;
   }
 
-  const commandFiles = readdirSync(COMMANDS_DIR).filter((f) => f.endsWith('.ts'));
+  // A command's definition (<name>.definition.ts) sits beside it and is not a command.
+  const commandFiles = readdirSync(COMMANDS_DIR).filter((f) => f.endsWith('.ts') && !f.endsWith('.definition.ts'));
 
   it('has an entry for every command file, and no entry without one', () => {
     expect(Object.keys(COMMAND_FLAGS).sort()).toEqual(commandFiles.map((f) => f.replace(/\.ts$/, '')).sort());
