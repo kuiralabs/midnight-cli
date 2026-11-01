@@ -3,6 +3,7 @@
 // mn serve RPC (`rpcCall`) is stubbed.
 
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { CancelledError } from '../lib/errors.ts';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -259,9 +260,9 @@ describe('a cancelled run', () => {
     const dappDir = mkdtempSync(join(tmpdir(), 'mn-cancelled-run-'));
     try {
       const common = { dappDir, networkConfig: NETWORK, managedDir: join(dappDir, 'managed', 'counter'), contractName: 'counter', signal: AbortSignal.abort() };
-      await expect(runDeploy({ ...common, servePort: 9932 })).rejects.toThrow('Operation cancelled');
-      await expect(runCall({ ...common, servePort: 9932, contractAddress: 'ab'.repeat(32), circuit: 'increment' })).rejects.toThrow('Operation cancelled');
-      await expect(runState({ ...common, contractAddress: 'ab'.repeat(32) })).rejects.toThrow('Operation cancelled');
+      await expect(runDeploy({ ...common, servePort: 9932 })).rejects.toBeInstanceOf(CancelledError);
+      await expect(runCall({ ...common, servePort: 9932, contractAddress: 'ab'.repeat(32), circuit: 'increment' })).rejects.toBeInstanceOf(CancelledError);
+      await expect(runState({ ...common, contractAddress: 'ab'.repeat(32) })).rejects.toBeInstanceOf(CancelledError);
       expect(readdirSync(dappDir)).toEqual([]);
     } finally {
       rmSync(dappDir, { recursive: true, force: true });

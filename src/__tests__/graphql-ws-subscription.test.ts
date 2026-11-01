@@ -4,6 +4,7 @@
 // closed-early / initial-silence / error / abort) is exercised end-to-end.
 
 import { describe, it, expect, afterEach } from 'vitest';
+import { CancelledError } from '../lib/errors.ts';
 import { WebSocketServer, type WebSocket as WsSocket } from 'ws';
 
 import { subscribeGraphqlWs } from '../lib/graphql-ws-subscription.ts';
@@ -118,12 +119,12 @@ describe('subscribeGraphqlWs — settle semantics', () => {
     await expect(sub(url).run).rejects.toThrow(/GraphQL error: bad/);
   });
 
-  it('abort rejects with Operation cancelled', async () => {
+  it('abort rejects with CancelledError', async () => {
     const url = await startServer((ws) => ws.send(next({ done: false })));
     const ac = new AbortController();
     const p = sub(url, { idleMs: 60_000, timeoutMs: 60_000, signal: ac.signal }).run;
     setTimeout(() => ac.abort(), 30);
-    await expect(p).rejects.toThrow(/Operation cancelled/);
+    await expect(p).rejects.toBeInstanceOf(CancelledError);
   });
 
   it('a throw inside onNext rejects with that error', async () => {

@@ -20,7 +20,7 @@ import { describeApprovalPolicy } from '../lib/approval.ts';
 import { bold, dim, teal, green, red } from '../ui/colors.ts';
 import type { Spinner } from '../ui/spinner.ts';
 import type { CallContext } from '../lib/call-context.ts';
-import { UsageError, CANCELLED_MESSAGE } from '../lib/errors.ts';
+import { UsageError, throwIfCancelled } from '../lib/errors.ts';
 
 export default async function serveCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
@@ -115,7 +115,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
     // Save cache after successful sync (checkpoint before opening RPC).
     try { await saveWalletCache(address, networkName, bundle.facade); } catch { /* best-effort */ }
 
-    if (ctx.signal.aborted) throw new Error(CANCELLED_MESSAGE);
+    throwIfCancelled(ctx.signal);
 
     let server: RpcServer | undefined;
     let connector: ReturnType<typeof createDAppConnector> | undefined;

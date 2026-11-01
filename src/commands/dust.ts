@@ -4,7 +4,7 @@
 import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, rejectNoCacheForWrites } from '../lib/argv.ts';
-import { UsageError, CANCELLED_MESSAGE } from '../lib/errors.ts';
+import { UsageError, throwIfCancelled } from '../lib/errors.ts';
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveSeed } from '../lib/seed-resolver.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
@@ -182,7 +182,7 @@ async function dustRegistrationPreCheck(
       }
     }, ctx.signal);
 
-    if (ctx.signal.aborted) throw new Error(CANCELLED_MESSAGE);
+    throwIfCancelled(ctx.signal);
 
     const { registeredUtxos, unregisteredUtxos } = summary;
     spinner.stop('Registration checked');

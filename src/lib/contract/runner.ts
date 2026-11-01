@@ -13,7 +13,7 @@ import type { NetworkConfig } from '../network.ts';
 import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
 import { coerceArg } from './arg-coerce.ts';
 import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
-import { CANCELLED_MESSAGE } from '../errors.ts';
+import { CancelledError, throwIfCancelled } from '../errors.ts';
 
 // The generated deploy/call script imports SDK packages by bare specifier
 // (`@midnight-ntwrk/midnight-js-contracts`, `ws`, etc.); without help, Node
@@ -737,7 +737,7 @@ export function scriptRuntime(
 
 /** Runs a generated script and returns what it wrote to stdout. Throws its marked error when it fails. */
 export async function executeScript({ dir: dappDir, script, onMessage, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal, findRuntime = scriptRuntime }: ScriptRun): Promise<string> {
-  if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+  throwIfCancelled(signal);
   // ESM resolution walks up from the importing file's location to find
   // node_modules; NODE_PATH does NOT work for ESM. Three different files
   // need to resolve bare imports during a deploy:
@@ -805,7 +805,7 @@ export async function executeScript({ dir: dappDir, script, onMessage, env: extr
     child.on('close', (code) => {
       settle();
       if (signal?.aborted) {
-        reject(new Error(CANCELLED_MESSAGE));
+        reject(new CancelledError());
         return;
       }
       if (code !== 0) {
