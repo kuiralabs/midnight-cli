@@ -9,6 +9,7 @@ import type { CommandDefinition, CommandRegistry } from './command-definition.ts
 import { UsageError } from './errors.ts';
 import { writeJsonResult } from './json-output.ts';
 import type { Payer } from './payer.ts';
+import type { CallSdkWarnings, SdkWarningCalls } from './sdk-warnings.ts';
 import type { WalletProtector } from './wallet-protector.ts';
 
 /** What the shell can give a handler: its call's signal and output, and, as its definition's `shell` field asks, the payer or protectors, loaded only then. */
@@ -16,6 +17,8 @@ export interface ShellProvisions {
   readonly signal: AbortSignal;
   /** Where the call's output goes; a definition's notice goes to its stderr, before the handler loads. */
   readonly output: OutputSink;
+  /** The host's calls: each call runs in one, with its own SDK warnings. */
+  readonly sdkWarnings: SdkWarningCalls;
   readonly loadPayer: () => Promise<Payer>;
   readonly loadProtectors: () => Promise<readonly WalletProtector[]>;
 }
@@ -44,13 +47,14 @@ export function findInstalledCommand(registry: CommandRegistry, name: string): C
   return definition;
 }
 
-/** The call's context: its signal, its output and --verbose, and the payer or the protectors when its definition asks for them. */
-async function cliCallContext(definition: CommandDefinition, args: ParsedArgs, provisions: ShellProvisions): Promise<CallContext<WalletProtector>> {
+/** The call's context: its signal, its output, its SDK warnings and --verbose, and the payer or the protectors when its definition asks for them. */
+async function cliCallContext(definition: CommandDefinition, args: ParsedArgs, provisions: ShellProvisions, sdkWarnings: CallSdkWarnings): Promise<CallContext<WalletProtector>> {
   const { payer, protectors } = definition.shell;
   return createCallContext({
     args,
     signal: provisions.signal,
     output: provisions.output,
+    sdkWarnings,
     ...(payer === true ? { payer: await provisions.loadPayer() } : {}),
     ...(protectors === true ? { protectors: await provisions.loadProtectors() } : {}),
   });
@@ -67,5 +71,5 @@ export async function dispatchCommand(registry: CommandRegistry, name: string, a
   if (definition.shell.unavailable !== undefined) throw new Error(definition.shell.unavailable);
   if (definition.shell.notice !== undefined) provisions.output.stderr(definition.shell.notice);
   const { default: handler } = await definition.load();
-  return runHandler(handler, args, await cliCallContext(definition, args, provisions));
+  return provisions.sdkWarnings.run(async (sdkWarnings) => runHandler(handler, args, await cliCallContext(definition, args, provisions, sdkWarnings)));
 }

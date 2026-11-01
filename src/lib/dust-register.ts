@@ -6,7 +6,8 @@ import { CANCELLED_MESSAGE } from './errors.ts';
 import { ensureDust } from './transfer.ts';
 import { defaultRepository } from './wallet-data-repository.ts';
 import type { NetworkConfig } from './network.ts';
-import { onSdkWarning } from './sdk-warnings.ts';
+import type { CallSdkWarnings } from './sdk-warnings.ts';
+import type { VerboseLog } from './verbose.ts';
 
 export interface DustRegisterOptions {
   signal?: AbortSignal;
@@ -18,6 +19,10 @@ export interface DustRegisterOptions {
   onSyncDetail?: (detail: string) => void;
   /** A transient SDK error the sync is retrying past. */
   onSyncWarning?: (tag: string, message: string) => void;
+  /** The call's SDK warnings, listened to for the whole registration. */
+  sdkWarnings: CallSdkWarnings;
+  /** The call's verbose lines. */
+  log?: VerboseLog;
 }
 
 export interface DustRegistration {
@@ -28,9 +33,9 @@ export interface DustRegistration {
   dustBalance: bigint;
 }
 
-export async function registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions = {}): Promise<DustRegistration> {
-  const { signal, onStatus, onSyncProgress, onSyncDetail, onSyncWarning } = options;
-  const stopListening = onSdkWarning(onSyncWarning);
+export async function registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions): Promise<DustRegistration> {
+  const { signal, onStatus, onSyncProgress, onSyncDetail, onSyncWarning, sdkWarnings, log } = options;
+  const stopListening = sdkWarnings.listen(onSyncWarning);
   try {
     const { result, dustBalance } = await defaultRepository().withFacade(
       seed,
@@ -56,6 +61,7 @@ export async function registerDust(seed: Buffer, networkConfig: NetworkConfig, o
         onStatus,
         onSyncProgress,
         onSyncDetail,
+        log,
       },
     );
     const registration: DustRegistration = { alreadyAvailable: result.alreadyAvailable, dustBalance };

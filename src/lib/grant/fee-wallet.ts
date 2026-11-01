@@ -5,6 +5,7 @@ import type { FeeWallet } from '@kuiralabs/midnight-account-chain/owner';
 import { NATIVE_TOKEN_TYPE } from '../constants.ts';
 import type { Payer, PayingTarget } from '../payer.ts';
 import type { Spinner } from '../../ui/spinner.ts';
+import type { CallSdkWarnings } from '../sdk-warnings.ts';
 
 /** A fee wallet in this process, and how to stop it. */
 export interface PayingWallet {
@@ -14,10 +15,10 @@ export interface PayingWallet {
   stop: () => Promise<void>;
 }
 
-/** The payer's wallet for `target`, as the account package's fee wallet. Stopping it stops the wallet. */
-export async function openPayingWallet(payer: Payer, target: PayingTarget, wallet: string | undefined, progress: Spinner): Promise<PayingWallet> {
+/** The payer's wallet for `target`, as the account package's fee wallet, keeping the SDK's warnings to the paying call's `sdkWarnings`. Stopping it stops the wallet. */
+export async function openPayingWallet(payer: Payer, target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings): Promise<PayingWallet> {
   const { feeWalletOver } = await import('@kuiralabs/midnight-account-chain/connector');
-  const connection = await payer.connect(target, wallet, progress);
+  const connection = await payer.connect(target, wallet, progress, sdkWarnings);
   try {
     const feeWallet = await feeWalletOver({
       getShieldedAddresses: async () => (await connection.call('getShieldedAddresses', {})) as { shieldedCoinPublicKey: string; shieldedEncryptionPublicKey: string },

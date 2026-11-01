@@ -36,6 +36,7 @@ import type { CallContext, CommandOutcome } from '../lib/call-context.ts';
 import { hostPaths } from '../lib/state-root.ts';
 import { settings } from '../lib/settings.ts';
 import type { Payer } from '../lib/payer.ts';
+import { createSdkWarningRouter, sdkWarningCallsOn } from '../lib/sdk-warnings.ts';
 import type { WalletProtector } from '../lib/wallet-protector.ts';
 import { COMMAND_SPECS } from '../commands/help.ts';
 import { COMMAND_BRIEFS } from '../ui/art.ts';
@@ -108,6 +109,7 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry since 2C)
   const provisions: ShellProvisions = {
     signal: controller.signal,
     output,
+    sdkWarnings: sdkWarningCallsOn(createSdkWarningRouter()),
     loadPayer: async () => payer,
     loadProtectors: async () => [protector],
   };

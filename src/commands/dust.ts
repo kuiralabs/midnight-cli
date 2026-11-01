@@ -3,9 +3,8 @@
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import { type ParsedArgs, getFlag, hasFlag, isVerbose, isMinimalMode, rejectNoCacheForWrites } from '../lib/argv.ts';
+import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, rejectNoCacheForWrites } from '../lib/argv.ts';
 import { UsageError, CANCELLED_MESSAGE } from '../lib/errors.ts';
-import { enableVerbose } from '../lib/verbose.ts';
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveSeed } from '../lib/seed-resolver.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
@@ -18,9 +17,8 @@ import { exportDustSnapshot } from '../lib/dust-export.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { header, keyValue, divider, formatDust, successMessage, toDust } from '../ui/format.ts';
 import { bold, dim, yellow } from '../ui/colors.ts';
-import { start as startSpinner } from '../ui/spinner.ts';
+
 import type { CallContext } from '../lib/call-context.ts';
-import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
 export default async function dustCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const subcommand = args.subcommand;
@@ -45,7 +43,6 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
     indexerWS: getFlag(args, 'indexer-ws'),
   }, networkName);
 
-  if (isVerbose(args)) enableVerbose();
   const isJson = hasFlag(args, 'json');
   const minimal = isMinimalMode(args);
 
@@ -53,7 +50,7 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
   // snapshot for its own seed with no named wallet) or falls back to a named wallet.
   if (subcommand === 'export') {
     // The chain-id check connects to the node; keep polkadot-js's RPC-CORE noise off stderr.
-    const stopListening = onSdkWarning(undefined);
+    const stopListening = ctx.sdkWarnings.listen(undefined);
     try {
       await dustExport(await resolveSeed(args), networkName, networkConfig, isJson, minimal, ctx);
     } finally {
@@ -74,7 +71,7 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
       address,
       networkName,
       networkConfig.indexerWS,
-      ctx.signal,
+      ctx,
     );
     if (!preCheck.isRegistered) {
       printUnregisteredStatus(networkName, preCheck, isJson, minimal, ctx);
@@ -104,10 +101,11 @@ async function dustExport(
   minimal: boolean,
   ctx: CallContext,
 ): Promise<void> {
-  const spinner = startSpinner(`Reading dust events from ${networkName}...`);
+  const spinner = ctx.progress.start(`Reading dust events from ${networkName}...`);
   try {
     const result = await exportDustSnapshot(seedBuffer, networkName, networkConfig, {
       signal: ctx.signal,
+      log: ctx.diagnostics.line,
       onProgress: (applied, maxIdSeen) => spinner.update(
         maxIdSeen > 0
           ? `Reading dust events... ${applied}/${maxIdSeen + 1}`
@@ -169,12 +167,12 @@ async function dustRegistrationPreCheck(
   address: string,
   networkName: string,
   indexerWS: string,
-  signal?: AbortSignal,
+  ctx: CallContext,
 ): Promise<PreCheckResult> {
   process.stderr.write('\n' + header('Dust Status') + '\n\n');
   process.stderr.write(keyValue('Network', networkName) + '\n\n');
 
-  const spinner = startSpinner(`Checking registration on ${networkName}...`);
+  const spinner = ctx.progress.start(`Checking registration on ${networkName}...`);
 
   try {
     const summary = await checkBalance(address, indexerWS, (current, highest) => {
@@ -184,7 +182,7 @@ async function dustRegistrationPreCheck(
       }
     });
 
-    if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+    if (ctx.signal.aborted) throw new Error(CANCELLED_MESSAGE);
 
     const { registeredUtxos, unregisteredUtxos } = summary;
     spinner.stop('Registration checked');
@@ -259,11 +257,13 @@ async function dustRegister(
   process.stderr.write('\n' + header('Dust Register') + '\n\n');
   process.stderr.write(keyValue('Network', networkName) + '\n\n');
 
-  const spinner = startSpinner('Syncing wallet...');
+  const spinner = ctx.progress.start('Syncing wallet...');
 
   try {
     const result = await registerDust(seedBuffer, networkConfig, {
       signal: ctx.signal,
+      sdkWarnings: ctx.sdkWarnings,
+      log: ctx.diagnostics.line,
       onStatus: (s) => spinner.update(s),
       onSyncProgress: (applied, highest) => {
         if (highest > 0) {
@@ -310,12 +310,13 @@ async function dustStatusDirect(
   ctx: CallContext,
 ): Promise<void> {
   const networkName = networkConfig.networkId.toLowerCase();
-  const spinner = startSpinner(`Reading dust events from ${networkName}...`);
+  const spinner = ctx.progress.start(`Reading dust events from ${networkName}...`);
 
   try {
     const view = await defaultRepository().dust(seedBuffer, networkConfig, {
       forceFresh: !useCache,
       signal: ctx.signal,
+      log: ctx.diagnostics.line,
       onStatus: (msg) => spinner.update(msg),
     });
 

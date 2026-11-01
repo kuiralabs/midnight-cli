@@ -1,6 +1,7 @@
 // Test framework types — schemas for dapp.test.json, suite configs, assertions, and results.
 
 import type { ServeHandle } from '../serve-manager.ts';
+import type { CallSdkWarnings } from '../sdk-warnings.ts';
 
 // ── DApp Test Config (dapp.test.json in dApp root) ──
 
@@ -142,15 +143,18 @@ export interface BuildHandle {
 // ── Prep context — accumulates resources for teardown ──
 
 export interface PrepContext {
+  /** The SDK warnings of the call that runs the prep: the steps that run the SDK listen to them. */
+  sdkWarnings: CallSdkWarnings;
   serveHandle?: ServeHandle;
   buildHandle?: BuildHandle;
   cleanups: (() => Promise<void>)[];
   addCleanup(fn: () => Promise<void>): void;
 }
 
-export function createPrepContext(): PrepContext {
+export function createPrepContext(sdkWarnings: CallSdkWarnings): PrepContext {
   const cleanups: (() => Promise<void>)[] = [];
   return {
+    sdkWarnings,
     cleanups,
     addCleanup(fn: () => Promise<void>) {
       cleanups.push(fn);

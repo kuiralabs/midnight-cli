@@ -22,7 +22,7 @@ import { type PayingWallet, openPayingWallet } from '../lib/grant/fee-wallet.ts'
 import { payerFor } from '../lib/payer.ts';
 import { dim } from '../ui/colors.ts';
 import { header, keyValue, formatNight } from '../ui/format.ts';
-import { type Spinner, silentSpinner, start as startSpinner } from '../ui/spinner.ts';
+import type { Spinner } from '../ui/spinner.ts';
 import { CANCELLED_MESSAGE } from '../lib/errors.ts';
 
 const SPINNER_LABEL: Record<GrantRequest['subcommand'], string> = {
@@ -55,7 +55,7 @@ export default async function grantCommand(args: ParsedArgs, ctx: CallContext): 
   const { request, target, walletName, recordsDir, account } = await prepareGrant(args);
   const jsonMode = hasFlag(args, 'json');
   const walletFlag = getFlag(args, 'wallet');
-  const spinnerFor = (label: string): Spinner => (jsonMode ? silentSpinner() : startSpinner(label));
+  const spinnerFor = (label: string): Spinner => (jsonMode ? ctx.progress.silent() : ctx.progress.start(label));
 
   if (!jsonMode) {
     process.stderr.write('\n' + header(`Grant: ${request.subcommand}`) + '\n\n');
@@ -71,7 +71,7 @@ export default async function grantCommand(args: ParsedArgs, ctx: CallContext): 
   // Reading the account or a request submits nothing: a wallet with no Dust can still do it, and none is opened.
   const payer = paysAFee(request) ? payerFor(`grant ${request.subcommand}`, ctx) : undefined;
   const funds = payer ? await payer.assertCanPay(target, walletFlag, spinnerFor('Checking wallet...')) : undefined;
-  const paying = payer ? await openPayingWallet(payer, target, walletFlag, spinnerFor('Opening the wallet...')) : undefined;
+  const paying = payer ? await openPayingWallet(payer, target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings) : undefined;
   try {
     await runOwned(request, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor, throwIfCancelled }, ctx);
   } finally {

@@ -4,6 +4,7 @@
 import type { Payer, PayingTarget } from '../payer.ts';
 import { withServedWallet } from './served-wallet.ts';
 import type { Spinner } from '../../ui/spinner.ts';
+import type { CallSdkWarnings } from '../sdk-warnings.ts';
 import type { ContractCallRequest } from './request.ts';
 
 export interface CallContractParams {
@@ -14,6 +15,8 @@ export interface CallContractParams {
   payer: Payer;
   /** Starts the progress line for each step, given its first message. */
   progress: (message: string) => Spinner;
+  /** The paying call's SDK warnings, which a wallet served in this process keeps to. */
+  sdkWarnings: CallSdkWarnings;
   signal?: AbortSignal;
 }
 
@@ -25,11 +28,11 @@ export interface CalledCircuit {
   status: string;
 }
 
-export async function callContract({ request, target, wallet, payer, progress, signal }: CallContractParams): Promise<CalledCircuit> {
+export async function callContract({ request, target, wallet, payer, progress, sdkWarnings, signal }: CallContractParams): Promise<CalledCircuit> {
   const { dappDir, info, address, circuit, callArgs } = request;
   const { runCall } = await import('./runner.ts');
 
-  return withServedWallet({ target, wallet, payer, progress }, { running: `Calling ${circuit}...`, done: `${circuit} called`, failed: 'Call failed' }, async (servePort, spinner) => {
+  return withServedWallet({ target, wallet, payer, progress, sdkWarnings }, { running: `Calling ${circuit}...`, done: `${circuit} called`, failed: 'Call failed' }, async (servePort, spinner) => {
     const result = await runCall({
       dappDir,
       networkConfig: target.networkConfig,

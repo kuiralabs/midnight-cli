@@ -16,7 +16,7 @@ import {
 } from '../lib/localnet.ts';
 import { header, divider } from '../ui/format.ts';
 import { bold, green, red, dim, yellow } from '../ui/colors.ts';
-import { start as startSpinner } from '../ui/spinner.ts';
+
 import type { CallContext } from '../lib/call-context.ts';
 
 const VALID_SUBCOMMANDS = ['up', 'stop', 'down', 'status', 'logs', 'clean'] as const;
@@ -45,7 +45,7 @@ async function handleUp(jsonMode: boolean, ctx: CallContext): Promise<void> {
     process.stderr.write(dim(`  Wrote compose.yml to ${getComposePath()}`) + '\n');
   }
 
-  const spinner = startSpinner('Starting local network...');
+  const spinner = ctx.progress.start('Starting local network...');
 
   try {
     dockerCompose('up -d');
@@ -134,7 +134,7 @@ async function handleUp(jsonMode: boolean, ctx: CallContext): Promise<void> {
 }
 
 async function handleStop(jsonMode: boolean, ctx: CallContext): Promise<void> {
-  const spinner = startSpinner('Stopping local network...');
+  const spinner = ctx.progress.start('Stopping local network...');
 
   try {
     dockerCompose('stop');
@@ -150,7 +150,7 @@ async function handleStop(jsonMode: boolean, ctx: CallContext): Promise<void> {
 }
 
 async function handleDown(jsonMode: boolean, ctx: CallContext): Promise<void> {
-  const spinner = startSpinner('Tearing down local network...');
+  const spinner = ctx.progress.start('Tearing down local network...');
 
   try {
     dockerCompose('down --volumes');
@@ -213,7 +213,7 @@ async function handleStatus(jsonMode: boolean, ctx: CallContext): Promise<void> 
 }
 
 async function handleClean(jsonMode: boolean, ctx: CallContext): Promise<void> {
-  const spinner = startSpinner('Removing conflicting containers...');
+  const spinner = ctx.progress.start('Removing conflicting containers...');
 
   try {
     // First try compose down to clean up any compose-managed resources

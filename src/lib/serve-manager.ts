@@ -16,7 +16,7 @@ import { createDAppConnector, type DAppConnectorCallbacks } from './dapp-connect
 import { createRpcServer, type RpcServer } from './ws-rpc.ts';
 import { DEFAULT_SERVE_PORT } from './constants.ts';
 import type { FacadeBundle } from './facade.ts';
-import { onSdkWarning } from './sdk-warnings.ts';
+import type { CallSdkWarnings } from './sdk-warnings.ts';
 import { shieldedSyncEnabled } from './shielded-policy.ts';
 
 /** A running mn serve, and how to stop it. */
@@ -34,6 +34,8 @@ export interface ServeManagerOptions {
   onMessage?: (msg: string) => void;
   /** The longest a request waits for the wallet's Dust to grow to a fee (the connector's default when unset). */
   dustWaitMs?: number;
+  /** The SDK warnings of the call that serves, listened to while its wallet runs. */
+  sdkWarnings: CallSdkWarnings;
 }
 
 /** The network and endpoints a serve for these options must use. */
@@ -236,7 +238,7 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
   const address = config.addresses[networkName];
 
   // The SDK's transient warnings, as progress, until the connector is stopped
-  const stopListening = onSdkWarning((_tag, msg) => {
+  const stopListening = options.sdkWarnings.listen((_tag, msg) => {
     onMessage(`SDK: ${msg}`);
   });
   // A failure before the connector is handed back stops what was started, so

@@ -3,8 +3,7 @@
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { MidnightBech32m } from '@midnightntwrk/wallet-sdk/address-format';
-import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, isVerbose } from '../lib/argv.ts';
-import { enableVerbose, verbose } from '../lib/verbose.ts';
+import { type ParsedArgs, getFlag, hasFlag, isMinimalMode } from '../lib/argv.ts';
 import { type NetworkName, isValidNetworkName } from '../lib/network.ts';
 import { saveShieldedAddress, findWalletByAddress } from '../lib/wallet-config.ts';
 import { resolveSeedSource } from '../lib/seed-resolver.ts';
@@ -21,9 +20,8 @@ import { getChainGenesisHash } from '../lib/chain-id.ts';
 import { createEtaEstimator, formatSyncStatus } from '../lib/sync-eta.ts';
 import { header, keyValue, divider, formatNight, formatAddress, toNight } from '../ui/format.ts';
 import { bold, dim } from '../ui/colors.ts';
-import { start as startSpinner, type Spinner } from '../ui/spinner.ts';
+import type { Spinner } from '../ui/spinner.ts';
 import type { CallContext } from '../lib/call-context.ts';
-import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
 export default async function balanceCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // Positional address → unshielded only (lightweight, no facade)
@@ -50,9 +48,8 @@ function inferNetworkFromAddress(address: string): NetworkName | null {
 // ── Positional address: unshielded only via GraphQL ──
 
 async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void> {
-  if (isVerbose(args)) enableVerbose();
   const address = args.subcommand!;
-  verbose('balance', `address=${address}`);
+  ctx.diagnostics.line('balance', `address=${address}`);
 
   // Bech32m addresses encode the network in their HRP
   // (mn_addr_undeployed1..., mn_addr_preprod1..., mn_addr_preview1...).
@@ -82,7 +79,7 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
   if (hasFlag(args, 'shielded')) {
     const owned = findWalletByAddress(address);
     if (owned) {
-      verbose('balance', `shielded positional → wallet ${owned.wallet.name} on ${owned.network}`);
+      ctx.diagnostics.line('balance', `shielded positional → wallet ${owned.wallet.name} on ${owned.network}`);
       const delegated: ParsedArgs = {
         ...args,
         flags: { ...args.flags, wallet: owned.wallet.file, network: owned.network },
@@ -103,11 +100,12 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
     indexerWS: getFlag(args, 'indexer-ws'),
   }, networkName);
 
-  const spinner = startSpinner(`Checking balance on ${networkName}...`);
+  const spinner = ctx.progress.start(`Checking balance on ${networkName}...`);
 
   try {
     const result = await defaultRepository().unshielded(address, networkConfig, {
       forceFresh: hasFlag(args, 'no-cache'),
+      log: ctx.diagnostics.line,
       onProgress: (current, highest) => {
         if (highest > 0) {
           const pct = Math.round((current / highest) * 100);
@@ -177,12 +175,11 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
 // ── Wallet-based: full facade sync, both unshielded + shielded ──
 
 async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> {
-  if (isVerbose(args)) enableVerbose();
   const { name: networkName, config: networkConfig } = resolveNetwork({ args });
-  verbose('balance', `network=${networkName} indexerWS=${networkConfig.indexerWS}`);
+  ctx.diagnostics.line('balance', `network=${networkName} indexerWS=${networkConfig.indexerWS}`);
   // Seed source: --seed → MN_SEED → --wallet <name> → active wallet (shared resolver).
   const { seed: seedBuffer, walletPath, config } = await resolveSeedSource(args);
-  verbose('balance', `wallet path=${walletPath ?? '(from --seed/MN_SEED)'}`);
+  ctx.diagnostics.line('balance', `wallet path=${walletPath ?? '(from --seed/MN_SEED)'}`);
   // Derive the unshielded address from the seed so a --seed/MN_SEED caller (no wallet
   // file) behaves identically to a named wallet — for a wallet this equals the stored one.
   const address = config?.addresses[networkName] ?? deriveUnshieldedAddress(seedBuffer, networkName);
@@ -195,7 +192,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
   }, networkName);
 
   // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
-  const stopListening = onSdkWarning(undefined);
+  const stopListening = ctx.sdkWarnings.listen(undefined);
   const noCache = hasFlag(args, 'no-cache');
   const isJson = hasFlag(args, 'json');
   const nightToken = ledger.unshieldedToken().raw;
@@ -216,15 +213,16 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
     }
 
     // ── Phase 1: fast unshielded via GraphQL (no facade, no proof server) ──
-    if (!isJson) activeSpinner = startSpinner('Checking unshielded...');
-    verbose('balance', `phase=unshielded forceFresh=${noCache}`);
+    if (!isJson) activeSpinner = ctx.progress.start('Checking unshielded...');
+    ctx.diagnostics.line('balance', `phase=unshielded forceFresh=${noCache}`);
     const unshieldedResult = await defaultRepository().unshielded(address, networkConfig, {
       forceFresh: noCache,
+      log: ctx.diagnostics.line,
       // Quiet by design — this finishes in <1s on most networks.
     });
     const unshieldedBalance = unshieldedResult.balances.get(nightToken) ?? 0n;
     const unshieldedUtxos = unshieldedResult.utxoCount;
-    verbose('balance', `unshielded fromCache=${unshieldedResult.fromCache} utxos=${unshieldedUtxos} txs=${unshieldedResult.txCount}`);
+    ctx.diagnostics.line('balance', `unshielded fromCache=${unshieldedResult.fromCache} utxos=${unshieldedUtxos} txs=${unshieldedResult.txCount}`);
 
     if (activeSpinner) {
       activeSpinner.stop('Unshielded ready');
@@ -255,7 +253,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
     let pendingCoins = 0;
 
     if (shieldedEnabled) {
-      if (!isJson) activeSpinner = startSpinner('Syncing shielded...');
+      if (!isJson) activeSpinner = ctx.progress.start('Syncing shielded...');
       const eta = createEtaEstimator();
       const networkId = getNetworkId(networkConfig.networkId);
 

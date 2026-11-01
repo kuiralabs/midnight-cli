@@ -21,7 +21,7 @@ import { startKeyDispatcher } from '../ui/dev-keys.ts';
 import { findWitnessFile, buildMissingWitnessError } from '../lib/contract/witness-discovery.ts';
 import { header, divider, keyValue } from '../ui/format.ts';
 import { bold, dim, red, teal, yellow } from '../ui/colors.ts';
-import { start as startSpinner } from '../ui/spinner.ts';
+
 
 /** Wallet used when `d` deploys. Must be one of the provisioned dev-* names. */
 const DEPLOY_WALLET = 'dev-alice';
@@ -52,7 +52,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
   process.stderr.write(keyValue('Compile', `npm run ${project.compileScript}`) + '\n\n');
 
   // ── Phase 2: ensure localnet running ──────────────────────
-  const localnetSpinner = startSpinner('Checking localnet...');
+  const localnetSpinner = ctx.progress.start('Checking localnet...');
   try {
     const result = await ensureLocalnetRunning((msg) => localnetSpinner.update(msg));
     const stateLabel = {
@@ -65,12 +65,13 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
   }
 
   // ── Phase 3: provision dev wallets ────────────────────────
-  const walletSpinner = startSpinner('Provisioning dev wallets...');
+  const walletSpinner = ctx.progress.start('Provisioning dev wallets...');
   try {
     const provisioned = await provisionDevWallets({
       names: DEFAULT_DEV_WALLET_NAMES,
       amountNight: DEFAULT_DEV_AIRDROP_AMOUNT,
       signal,
+      sdkWarnings: ctx.sdkWarnings,
       onProgress: (name, phase) => {
         const label = {
           creating: 'generating',
@@ -101,7 +102,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
   let compileQueued = false;
 
   // ── Phase 4: first compile pass ───────────────────────────
-  lastCompile = await compileAndReport(project, signal);
+  lastCompile = await compileAndReport(project, ctx);
   if (!lastCompile.success) {
     process.stderr.write(dim('\n  Fix the errors above and save — mn dev will recompile automatically.\n'));
   }
@@ -119,7 +120,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
     }
     compileInFlight = true;
     try {
-      lastCompile = await compileAndReport(project, signal);
+      lastCompile = await compileAndReport(project, ctx);
     } finally {
       compileInFlight = false;
       if (compileQueued) {
@@ -239,11 +240,11 @@ async function deployContract(project: ProjectInfo, ctx: CallContext): Promise<v
     return;
   }
 
-  const spinner = startSpinner(`Deploying with ${DEPLOY_WALLET} on ${DEPLOY_NETWORK}...`);
+  const spinner = ctx.progress.start(`Deploying with ${DEPLOY_WALLET} on ${DEPLOY_NETWORK}...`);
   try {
     const { deployDevContract } = await import('../lib/dev/deploy.ts');
     // The payer is the caller's (the CLI passes the serve payer), as for contract and grant.
-    const deployed = await deployDevContract(project.projectRoot, DEPLOY_WALLET, DEPLOY_NETWORK, payerFor('dev deploy', ctx));
+    const deployed = await deployDevContract(project.projectRoot, DEPLOY_WALLET, DEPLOY_NETWORK, payerFor('dev deploy', ctx), ctx.progress.silent(), ctx.sdkWarnings);
     spinner.stop(`Deployed`);
     process.stderr.write(`  ${dim('address')}  ${teal(deployed.address)}\n`);
   } catch (err) {
@@ -285,10 +286,10 @@ async function readDeclaredWitnesses(projectRoot: string): Promise<string[]> {
   }
 }
 
-async function compileAndReport(project: ProjectInfo, signal?: AbortSignal): Promise<CompileResult> {
-  const spinner = startSpinner('Compiling...');
+async function compileAndReport(project: ProjectInfo, ctx: CallContext): Promise<CompileResult> {
+  const spinner = ctx.progress.start('Compiling...');
   try {
-    const result = await runCompile({ project, signal });
+    const result = await runCompile({ project, signal: ctx.signal });
     if (result.success) {
       spinner.stop(`Compiled ${dim(`(${formatDuration(result.durationMs)})`)}`);
     } else {

@@ -11,7 +11,7 @@ import { type NetworkConfig } from './network.ts';
 import { getNetworkId } from './network-id.ts';
 import { type FacadeBundle, hasDustAvailable, quickSync } from './facade.ts';
 import { defaultRepository } from './wallet-data-repository.ts';
-import { verbose } from './verbose.ts';
+import type { VerboseLog } from './verbose.ts';
 import { nightToMicro } from './amount.ts';
 import {
   NATIVE_TOKEN_TYPE,
@@ -45,6 +45,10 @@ export interface TransferParams {
    */
   onSubmittingTick?: (elapsedMs: number) => void;
   onSyncWarning?: (tag: string, message: string) => void;
+  /** The call's SDK warnings, listened to for the whole transfer. */
+  sdkWarnings: CallSdkWarnings;
+  /** The call's verbose lines. */
+  log?: VerboseLog;
 }
 
 export interface TransferResult {
@@ -89,7 +93,7 @@ import { awaitDustForFee, sleep } from './dust-wait.ts';
 /** How long the transfer retry waits for Dust to grow when the fee is above the pre-flight threshold. */
 const DUST_GROW_WAIT_MS = 10_000;
 import { toDust } from '../ui/format.ts';
-import { onSdkWarning } from './sdk-warnings.ts';
+import type { CallSdkWarnings } from './sdk-warnings.ts';
 
 
 /** Format milliseconds as "Xs" or "Xm Ys" for human-friendly elapsed display. */
@@ -318,6 +322,7 @@ async function buildAndSubmitTransfer(
   onDust?: (status: string) => void,
   onSubmittingTick?: (elapsedMs: number) => void,
   signal?: AbortSignal,
+  log?: VerboseLog,
 ): Promise<string> {
   const startTime = Date.now();
   // Use DUST_TIMEOUT_MS (2 min) not DUST_REGISTRATION_TIMEOUT_MS (10 min) —
@@ -335,7 +340,7 @@ async function buildAndSubmitTransfer(
 
       const ttl = new Date(Date.now() + TX_TTL_MINUTES * 60 * 1000);
 
-      verbose('transfer', 'Building transfer transaction...');
+      log?.('transfer', 'Building transfer transaction...');
       const unprovenRecipe = await bundle.facade.transferTransaction(
         [
           {
@@ -352,10 +357,10 @@ async function buildAndSubmitTransfer(
         { ttl, payFees: true },
       );
 
-      verbose('transfer', 'Signing recipe...');
+      log?.('transfer', 'Signing recipe...');
       const signedRecipe = await bundle.facade.signRecipe(unprovenRecipe, bundle.keystore.signDataAsync);
 
-      verbose('transfer', 'Generating ZK proof...');
+      log?.('transfer', 'Generating ZK proof...');
       onProving?.();
       const finalizedTx = await Promise.race([
         bundle.facade.finalizeRecipe(signedRecipe),
@@ -364,7 +369,7 @@ async function buildAndSubmitTransfer(
         }),
       ]);
 
-      verbose('transfer', 'Submitting transaction to node...');
+      log?.('transfer', 'Submitting transaction to node...');
       onSubmitting?.();
       // SDK v4's facade.submitTransaction blocks until block finalization
       // (typically 12 to 30s on hosted networks). Tick a 1-second timer so
@@ -379,7 +384,7 @@ async function buildAndSubmitTransfer(
       } finally {
         if (tickInterval) clearInterval(tickInterval);
       }
-      verbose('transfer', `Transaction submitted: ${txHash}`);
+      log?.('transfer', `Transaction submitted: ${txHash}`);
       return txHash;
     } catch (err: any) {
       lastError = err;
@@ -456,6 +461,8 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
     onSubmitting,
     onSubmittingTick,
     onSyncWarning,
+    sdkWarnings,
+    log,
   } = params;
 
   const amount = nightToMicro(amountNight);
@@ -463,7 +470,7 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
 
   // Suppress SDK transient errors + polkadot-js RPC noise for the duration
   // of the transfer (covers dust registration AND tx submission).
-  const stopListening = onSdkWarning(onSyncWarning);
+  const stopListening = sdkWarnings.listen(onSyncWarning);
 
   try {
     return await defaultRepository().withFacade(
@@ -472,10 +479,10 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
       async ({ bundle, state }) => {
         if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
 
-        verbose('transfer', 'Sync complete, checking balance...');
+        log?.('transfer', 'Sync complete, checking balance...');
         const unshieldedBalance = state.unshielded.balances[ledger.unshieldedToken().raw] ?? 0n;
         const availableCoinCount = state.unshielded.availableCoins?.length ?? 0;
-        verbose('transfer', `Balance: ${Number(unshieldedBalance) / TOKEN_MULTIPLIER} NIGHT, coins: ${availableCoinCount}`);
+        log?.('transfer', `Balance: ${Number(unshieldedBalance) / TOKEN_MULTIPLIER} NIGHT, coins: ${availableCoinCount}`);
         if (unshieldedBalance < amount) {
           const haveNight = Number(unshieldedBalance) / TOKEN_MULTIPLIER;
           throw new Error(
@@ -490,7 +497,7 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
 
         if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
 
-        verbose('transfer', 'Ensuring dust availability...');
+        log?.('transfer', 'Ensuring dust availability...');
         const dustResult = await ensureDust(bundle, onDust, state);
         // When ensureDust had to wait, it returned once any Dust showed (right
         // after registering that can be less than the fee): wait for the fee on
@@ -503,11 +510,11 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
           ]).finally(() => clearTimeout(timer));
           if (current) await awaitDustForFee(current.dust, MIN_DUST_FOR_TRANSFER, onDust, signal);
         }
-        verbose('transfer', 'Dust available');
+        log?.('transfer', 'Dust available');
 
         if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
 
-        verbose('transfer', 'Building and submitting transaction...');
+        log?.('transfer', 'Building and submitting transaction...');
         const txHash = await buildAndSubmitTransfer(
           bundle,
           decodedAddress,
@@ -517,6 +524,7 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
           onDust,
           onSubmittingTick,
           signal,
+          log,
         );
         return { txHash, amountMicroNight: amount };
       },
@@ -530,6 +538,7 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
         onSyncProgress: onSync,
         onSyncDetail,
         onSyncWarning,
+        log,
       },
     );
   } finally {

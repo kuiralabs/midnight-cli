@@ -78,15 +78,6 @@ export const ALLOWED = {
 // call's state is allowed only until the step of 2F that moves it into the
 // call's context; what is shared on purpose holds no call's state.
 export const ALLOWED_STATE = {
-  // Today's per-call globals, each removed by its step of 2F.
-  'ui/spinner.ts': {
-    progressTarget: 'removed by S3 (2F): the progress target',
-    active: 'removed by S3 (2F): the active spinner',
-  },
-  'lib/verbose.ts': { enabled: 'removed by S4 (2F): the verbose switch' },
-  'lib/sdk-warnings.ts': { listeners: 'removed by S5 (2F): the SDK-warning listener stack' },
-  'lib/approval.ts': { promptActive: 'removed by S6 (2F): the approval prompt flag, which moves into the terminal prompter' },
-
   // Shared on purpose: none holds a call's state.
   'lib/passphrase.ts': { unlocked: 'shared on purpose: the passphrase this process has unlocked, by state root (one prompt per run)' },
   'lib/wallet-data-repository.ts': { defaultRepo: 'shared on purpose: the wallet repository, whose cache long-lived MCP sessions share across calls' },

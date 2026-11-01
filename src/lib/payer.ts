@@ -7,6 +7,7 @@ import { type ParsedArgs, getFlag } from './argv.ts';
 import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig } from './network.ts';
 import { resolveNetwork } from './resolve-network.ts';
 import type { Spinner } from '../ui/spinner.ts';
+import type { CallSdkWarnings } from './sdk-warnings.ts';
 
 /** The network a command acts on, with its endpoints resolved. */
 export interface PayingTarget {
@@ -70,8 +71,10 @@ export interface Payer {
    * its own wallet.
    */
   assertCanPay: (target: PayingTarget, wallet: string | undefined, progress: Spinner) => Promise<PayingFunds>;
-  serve: (target: PayingTarget, wallet: string | undefined, progress: Spinner) => Promise<ServedWallet>;
-  connect: (target: PayingTarget, wallet: string | undefined, progress: Spinner) => Promise<WalletConnection>;
+  /** Serves the wallet; one that runs in this process keeps the SDK's warnings to the paying call's `sdkWarnings`. */
+  serve: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings) => Promise<ServedWallet>;
+  /** Opens the wallet in this process, keeping the SDK's warnings to the paying call's `sdkWarnings`. */
+  connect: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings) => Promise<WalletConnection>;
 }
 
 /** What a command's caller gives it for one call. */

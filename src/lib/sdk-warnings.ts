@@ -1,36 +1,94 @@
 // The SDK's transient errors (Wallet.Sync: Internal Server Error, …) surface
 // as unhandled rejections and console.error calls, which the shell filters
-// (sdk-noise.ts) while some call listens here. A call that runs the SDK listens
-// for its length, to show them as progress ("…, retrying") or only to keep
-// them off the terminal; it never touches the process itself. The latest
-// listener gets each warning, as the innermost suppression did before.
+// (sdk-noise.ts) while some call listens. A call that runs the SDK listens
+// through its context (ctx.sdkWarnings) for its length, to show them as
+// progress ("…, retrying") or only to keep them off the terminal; it never
+// touches the process itself.
+//
+// Each call's warnings are its own (2F, S5). The host keeps one router; each
+// call it runs is opened on it, and the shell tags the noise raised while a
+// call runs with that call's identity. A warning with an identity goes to
+// that call's newest listener, and to no other call. One without (raised
+// where the identity didn't carry) goes to the one call listening; with
+// several listening it goes to none, rather than to the wrong one. Either way
+// it stays off the terminal while any call listens.
 
-type SdkWarningListener = (tag: string, message: string) => void;
+/** Where a transient SDK warning goes: its tag (Wallet.Sync) and message. */
+export type SdkWarningListener = (tag: string, message: string) => void;
 
-const listeners: SdkWarningListener[] = [];
+/** Where one call's SDK warnings go while it runs the SDK (its context's sdkWarnings). */
+export interface CallSdkWarnings {
+  /** Sends them to `listener` until the returned function is called; with none, they are only kept off the terminal. */
+  listen(listener: SdkWarningListener | undefined): () => void;
+}
 
-/**
- * Sends the SDK's transient warnings to `listener` until the returned function
- * is called. With no listener they are only kept off the terminal. The shell's
- * filters act only while someone listens, as the suppression they replace did.
- */
-export function onSdkWarning(listener: SdkWarningListener | undefined): () => void {
-  listener ??= () => {};
-  listeners.push(listener);
-  return () => {
-    const at = listeners.lastIndexOf(listener);
-    if (at >= 0) listeners.splice(at, 1);
+/** A call opened on a router: the identity its warnings carry, and where they go. */
+export interface SdkWarningCall {
+  readonly id: number;
+  readonly warnings: CallSdkWarnings;
+}
+
+/** The host's router of the SDK's warnings to the calls they came from. */
+export interface SdkWarningRouter {
+  /** Opens a call: its identity, and its warnings to listen to. */
+  openCall(): SdkWarningCall;
+  /** True while some call listens: the shell's filters act only then. */
+  isListening(): boolean;
+  /**
+   * Hands one warning on: with `callId`, to that call's newest listener, or
+   * to none when that call isn't listening; without one, to the one call
+   * listening, or to none when several are.
+   */
+  route(callId: number | undefined, tag: string, message: string): void;
+}
+
+/** A router with no calls open yet. */
+export function createSdkWarningRouter(): SdkWarningRouter {
+  // Each listening call's listeners, oldest first; a call that stops listening leaves.
+  const listening = new Map<number, SdkWarningListener[]>();
+  let lastId = 0;
+  return {
+    openCall() {
+      lastId += 1;
+      const id = lastId;
+      return {
+        id,
+        warnings: {
+          listen(listener) {
+            const own = listener ?? (() => {});
+            listening.set(id, [...(listening.get(id) ?? []), own]);
+            return () => {
+              const listeners = listening.get(id) ?? [];
+              const at = listeners.lastIndexOf(own);
+              if (at < 0) return;
+              const left = listeners.filter((_, i) => i !== at);
+              if (left.length === 0) listening.delete(id);
+              else listening.set(id, left);
+            };
+          },
+        },
+      };
+    },
+    isListening: () => listening.size > 0,
+    route(callId, tag, message) {
+      const listeners = callId !== undefined ? listening.get(callId) : listening.size === 1 ? [...listening.values()][0] : undefined;
+      listeners?.at(-1)?.(tag, message);
+    },
   };
 }
 
-/** True while some call is listening: the shell's filters act only then. */
-export function isListeningForSdkWarnings(): boolean {
-  return listeners.length > 0;
+/** How a runner gives each call it runs its SDK warnings. The host's knows which call raised one (sdk-noise.ts). */
+export interface SdkWarningCalls {
+  /** Runs one call, its warnings given to `run`. */
+  run<T>(run: (warnings: CallSdkWarnings) => Promise<T>): Promise<T>;
 }
 
-/** Hands one transient SDK warning to the latest listener, if any. */
-export function reportSdkWarning(tag: string, message: string): void {
-  listeners.at(-1)?.(tag, message);
+/**
+ * Calls opened on `router` whose noise carries no identity: a runner with no
+ * host's filters (a test, a program's own runner) gives its calls these.
+ */
+export function sdkWarningCallsOn(router: SdkWarningRouter): SdkWarningCalls {
+  return { run: (run) => run(router.openCall().warnings) };
 }
 
 /** What a transient warning says when the SDK gives no message. */

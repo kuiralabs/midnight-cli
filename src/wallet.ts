@@ -61,7 +61,7 @@ hideProjectIdsInOutput();
 
 // What the libraries get from their host: the SDK noise filters, notices on
 // stderr, settings from the environment, and the state root ~/.midnight.
-installCliHost();
+const host = installCliHost();
 
 // Libraries ask their questions (passphrase, approvals) at the terminal.
 setPrompter(createTerminalPrompter());
@@ -91,6 +91,7 @@ async function run(): Promise<CommandOutcome | void> {
   return dispatchCommand(installedCommands, command, args, {
     signal,
     output: processOutput,
+    sdkWarnings: host.sdkWarnings,
     loadPayer: async () => (await import('./lib/serve-payer.ts')).servePayer,
     // wallet protect also seals grant's accounts, through the protector grant provides (D24).
     loadProtectors: async () => [(await import('./lib/grant/account-protector.ts')).accountProtector],

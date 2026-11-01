@@ -3,7 +3,7 @@ import { captureCommand } from '../lib/run-command.ts';
 import { SecondResultError } from '../lib/call-context.ts';
 import { CancelledError } from '../lib/errors.ts';
 import { classifyError } from '../lib/exit-codes.ts';
-import { silentSpinner, start as startSpinner } from '../ui/spinner.ts';
+import type { Spinner } from '../ui/spinner.ts';
 import { parseArgs, type ParsedArgs } from '../lib/argv.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import * as fs from 'fs';
@@ -166,11 +166,11 @@ describe('captureCommand', () => {
 
     it('sends what a command\'s spinner says to onProgress, a --json command\'s silent spinner too', async () => {
       const said: string[] = [];
-      await captureCommand(async () => {
-        const quiet = silentSpinner();
+      await captureCommand(async (_args, ctx) => {
+        const quiet = ctx.progress.silent();
         quiet.update('Starting mn serve...');
         quiet.stop('mn serve ready (port 9932)');
-        const shown = startSpinner('Checking balance on undeployed...');
+        const shown = ctx.progress.start('Checking balance on undeployed...');
         shown.update('Syncing transactions... 40%');
         shown.log('fetching keys/deposit_shielded.prover (11 MB), once, from github.com');
         shown.stop('Synced 3 transactions');
@@ -187,9 +187,23 @@ describe('captureCommand', () => {
 
     it('sends nothing once the run is over, even when it failed', async () => {
       const said: string[] = [];
-      await expect(captureCommand(async () => { throw new Error('refused'); }, noArgs(), { onProgress: (message) => said.push(message) })).rejects.toThrow('refused');
-      silentSpinner().update('a later command');
+      let left: Spinner | undefined;
+      await expect(captureCommand(async (_args, ctx) => {
+        left = ctx.progress.silent();
+        throw new Error('refused');
+      }, noArgs(), { onProgress: (message) => said.push(message) })).rejects.toThrow('refused');
+      left?.update('said after the run');
       expect(said).toEqual([]);
+    });
+
+    it('tells the command which of its spinners runs now, and none once it stops', async () => {
+      await captureCommand(async (_args, ctx) => {
+        expect(ctx.progress.active()).toBeNull();
+        const spinner = ctx.progress.start('Syncing wallet...');
+        expect(ctx.progress.active()).toBe(spinner);
+        spinner.stop('Wallet synced');
+        expect(ctx.progress.active()).toBeNull();
+      }, noArgs());
     });
 
     it('hands the command the run\'s signal', async () => {
@@ -239,6 +253,39 @@ describe('captureCommand', () => {
       first.open();
       expect(await a).toEqual({ call: 'a' });
       expect(io.stdout()).toBe('');
+    });
+
+    // Regression (2F, S3): the progress target and the active spinner were
+    // module globals. The second call to start took the target, so what the
+    // first call's spinners said went to the second call's client, and the
+    // first call's went nowhere once the second ended.
+    it('each keeps its own progress: what one call\'s spinners say never reaches the other\'s client', async () => {
+      const first = gate();
+      const second = gate();
+      const saidA: string[] = [];
+      const saidB: string[] = [];
+      let activeInA: Spinner | null | undefined;
+      const a = captureCommand(async (_args, ctx) => {
+        const spinner = ctx.progress.silent();
+        spinner.update('a: before b starts');
+        await first.opened;
+        spinner.update('a: while b runs');
+        activeInA = ctx.progress.active();
+        spinner.stop('a: done');
+      }, noArgs(), { onProgress: (message) => saidA.push(message) });
+      const b = captureCommand(async (_args, ctx) => {
+        const spinner = ctx.progress.start('b: started');
+        first.open();
+        await second.opened;
+        spinner.stop('b: done');
+      }, noArgs(), { onProgress: (message) => saidB.push(message) });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      second.open();
+      await Promise.all([a, b]);
+      expect(saidA).toEqual(['a: before b starts', 'a: while b runs', 'a: done']);
+      expect(saidB).toEqual(['b: started', 'b: done']);
+      // b's spinner is b's: a has none running.
+      expect(activeInA).toBeNull();
     });
 
     it('keeps a result as it was written: a change the command makes after is not seen', async () => {

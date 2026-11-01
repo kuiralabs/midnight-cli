@@ -12,7 +12,7 @@ import { isValidNetworkName, resolveNetworkConfig, type NetworkName } from '../l
 import { resolveBlockfrostProjectId } from '../lib/resolve-network.ts';
 import { header, divider } from '../ui/format.ts';
 import { bold, dim, teal, green, red, gray } from '../ui/colors.ts';
-import { start as startSpinner } from '../ui/spinner.ts';
+
 import type { CallContext, CommandOutcome } from '../lib/call-context.ts';
 
 // ── Types matching status.json contract ──
@@ -377,7 +377,7 @@ export default async function statusCommand(args: ParsedArgs, ctx: CallContext):
   const detected = (await tryDetectNetwork(args)) ?? 'preprod';
 
   // Fetch canary data + run local probes in parallel
-  const spinner = startSpinner('Checking network status...');
+  const spinner = ctx.progress.start('Checking network status...');
 
   let status: StatusJson | null = null;
   let issues: IssuesJson | null = null;

@@ -187,8 +187,11 @@ describe('the shell filters the SDK noise', () => {
     const script = join(dir, 'noise.mjs');
     writeFileSync(script, [
       `const { installSdkNoiseFilters } = await import(${JSON.stringify(join(ROOT, 'src/lib/sdk-noise.ts'))});`,
-      `const { onSdkWarning } = await import(${JSON.stringify(join(ROOT, 'src/lib/sdk-warnings.ts'))});`,
-      'installSdkNoiseFilters();',
+      `const { WebSocket, WebSocketServer } = await import(${JSON.stringify(join(ROOT, 'node_modules/ws/wrapper.mjs'))});`,
+      'const calls = installSdkNoiseFilters();',
+      // A call that starts listening and stays open, as a library inside it does. What
+      // the script raises at its top level comes from outside any call: it carries no identity.
+      'const listen = (listener) => calls.run(async (warnings) => warnings.listen(listener));',
       body,
     ].join('\n'));
     return spawnSync(process.execPath, ['--import', 'tsx', script], { cwd: ROOT, encoding: 'utf8', timeout: 60_000 });
@@ -196,7 +199,7 @@ describe('the shell filters the SDK noise', () => {
 
   it('hands a transient Wallet.* rejection to the listening library and goes on', () => {
     const result = run([
-      "onSdkWarning((tag, message) => console.log('warned', tag, message));",
+      "await listen((tag, message) => console.log('warned', tag, message));",
       "Promise.reject(Object.assign(new Error('Internal Server Error'), { _tag: 'Wallet.Sync' }));",
       "console.warn('RPC-CORE: submitAndWatchExtrinsic: Custom error: 138');",
       "setTimeout(() => console.log('still running'), 50);",
@@ -208,7 +211,7 @@ describe('the shell filters the SDK noise', () => {
 
   it("hands the SDK's Wallet.* console.error traces, object or string, to the listener, and prints anything else", () => {
     const result = run([
-      "onSdkWarning((tag, message) => console.log('warned', tag, message));",
+      "await listen((tag, message) => console.log('warned', tag, message));",
       "console.error({ _tag: 'Wallet.Sync', message: 'Internal Server Error' });",
       "console.error('Wallet.Sync: Internal Server Error\\n    at somewhere');",
       "console.error('a real problem');",
@@ -222,7 +225,7 @@ describe('the shell filters the SDK noise', () => {
     const result = run([
       "console.error({ _tag: 'Wallet.Sync', message: 'Internal Server Error' });",
       "console.warn('RPC-CORE: submitAndWatchExtrinsic: Custom error: 138');",
-      "const stop = onSdkWarning(undefined);",
+      "const stop = await listen(undefined);",
       "console.warn('RPC-CORE: kept off while listening');",
       "stop();",
     ].join('\n'));
@@ -239,7 +242,7 @@ describe('the shell filters the SDK noise', () => {
   });
 
   it('still exits 1 on a rejection that is only a string, even one starting Wallet.', () => {
-    const result = run("onSdkWarning(() => console.log('warned'));\nPromise.reject('Wallet.Sync: not an SDK error object');\nsetTimeout(() => console.log('still running'), 500);");
+    const result = run("await listen(() => console.log('warned'));\nPromise.reject('Wallet.Sync: not an SDK error object');\nsetTimeout(() => console.log('still running'), 500);");
     expect(result.status).toBe(1);
     expect(result.stdout).toBe('');
   });
@@ -249,5 +252,124 @@ describe('the shell filters the SDK noise', () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('a real failure');
     expect(result.stdout).not.toContain('still running');
+  });
+});
+
+// Each call's SDK warnings are its own (2F, S5). Regression: one listener
+// stack for the process, whose newest listener got every warning, so two
+// calls at once in the MCP server got each other's.
+describe("the shell gives each call its own SDK warnings", () => {
+  const run = (body: string) => {
+    const script = join(dir, 'calls.mjs');
+    writeFileSync(script, [
+      `const { installSdkNoiseFilters } = await import(${JSON.stringify(join(ROOT, 'src/lib/sdk-noise.ts'))});`,
+      `const { WebSocket, WebSocketServer } = await import(${JSON.stringify(join(ROOT, 'node_modules/ws/wrapper.mjs'))});`,
+      'const calls = installSdkNoiseFilters();',
+      'const listen = (listener) => calls.run(async (warnings) => warnings.listen(listener));',
+      "const sdkError = (message, tag = 'Wallet.Sync') => Object.assign(new Error(message), { _tag: tag });",
+      'const said = [];',
+      body,
+    ].join('\n'));
+    return spawnSync(process.execPath, ['--import', 'tsx', script], { cwd: ROOT, encoding: 'utf8', timeout: 60_000 });
+  };
+
+  it('two calls at once: what each raises from its timers and its WebSocket callbacks reaches it alone, and none reaches the terminal', () => {
+    const result = run([
+      // A server outside both calls: it answers each socket from its own callbacks, a little later.
+      'const server = new WebSocketServer({ port: 0 });',
+      "await new Promise((resolve) => server.once('listening', resolve));",
+      "server.on('connection', (socket) => socket.on('message', (m) => setTimeout(() => socket.send(String(m)), 5)));",
+      'const call = (name) => calls.run(async (warnings) => {',
+      '  const stop = warnings.listen((tag, message) => said.push(`${name} got ${tag} ${message}`));',
+      '  await new Promise((done) => {',
+      '    setTimeout(() => Promise.reject(sdkError(`${name}: timer rejection`)), 10);',
+      "    setTimeout(() => console.error({ _tag: 'Wallet.Sync', message: `${name}: timer trace` }), 15);",
+      "    setInterval(function tick() { console.error({ _tag: 'Wallet.Sync', message: `${name}: interval trace` }); clearInterval(this); }, 20);",
+      '    const socket = new WebSocket(`ws://127.0.0.1:${server.address().port}`);',
+      "    socket.on('open', () => socket.send(name));",
+      "    socket.on('message', () => {",
+      "      console.error({ _tag: 'Wallet.Sync', message: `${name}: socket trace` });",
+      "      Promise.reject(sdkError(`${name}: socket rejection`, 'Wallet.Indexer'));",
+      "      console.warn('RPC-CORE: submitAndWatchExtrinsic: Custom error: 138');",
+      '      socket.close();',
+      '      setTimeout(done, 40);',
+      '    });',
+      '  });',
+      '  stop();',
+      '});',
+      "await Promise.all([call('a'), call('b')]);",
+      'server.close();',
+      "console.log(said.sort().join('\\n'));",
+    ].join('\n'));
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim().split('\n')).toEqual([
+      'a got Wallet.Indexer a: socket rejection',
+      'a got Wallet.Sync a: interval trace',
+      'a got Wallet.Sync a: socket trace',
+      'a got Wallet.Sync a: timer rejection',
+      'a got Wallet.Sync a: timer trace',
+      'b got Wallet.Indexer b: socket rejection',
+      'b got Wallet.Sync b: interval trace',
+      'b got Wallet.Sync b: socket trace',
+      'b got Wallet.Sync b: timer rejection',
+      'b got Wallet.Sync b: timer trace',
+    ]);
+    expect(result.stderr).toBe('');
+  });
+
+  it("goes to the newest listener of the call that raised it, and to no other call's", () => {
+    const result = run([
+      "await listen((tag, message) => said.push(`other call: ${message}`));",
+      'await calls.run(async (warnings) => {',
+      "  warnings.listen((tag, message) => said.push(`outer: ${message}`));",
+      "  const stopInner = warnings.listen((tag, message) => said.push(`inner: ${message}`));",
+      "  console.error({ _tag: 'Wallet.Sync', message: 'first' });",
+      '  stopInner();',
+      "  console.error({ _tag: 'Wallet.Sync', message: 'second' });",
+      '});',
+      'console.log(JSON.stringify(said));',
+    ].join('\n'));
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(['inner: first', 'outer: second']);
+  });
+
+  it("a call's warning after it stopped listening goes to no other call, and stays off the terminal while one listens", () => {
+    const result = run([
+      "await listen((tag, message) => said.push(`other call: ${message}`));",
+      'await calls.run(async (warnings) => {',
+      '  warnings.listen(undefined)();',
+      "  console.error({ _tag: 'Wallet.Sync', message: 'after it stopped' });",
+      "  await new Promise((resolve) => { Promise.reject(sdkError('rejected after it stopped')); setTimeout(resolve, 20); });",
+      '});',
+      'console.log(JSON.stringify(said));',
+    ].join('\n'));
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([]);
+    expect(result.stderr).toBe('');
+  });
+
+  it('a warning from outside any call goes to the one call listening', () => {
+    const result = run([
+      "await listen((tag, message) => said.push(`the call: ${message}`));",
+      "console.error({ _tag: 'Wallet.Sync', message: 'from nowhere' });",
+      "Promise.reject(sdkError('rejected from nowhere'));",
+      'setTimeout(() => console.log(JSON.stringify(said)), 50);',
+    ].join('\n'));
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(['the call: from nowhere', 'the call: rejected from nowhere']);
+  });
+
+  it('a warning from outside any call while several listen goes to none of them, and stays off the terminal', () => {
+    const result = run([
+      "await listen((tag, message) => said.push(`a: ${message}`));",
+      "await listen((tag, message) => said.push(`b: ${message}`));",
+      "console.error({ _tag: 'Wallet.Sync', message: 'from nowhere' });",
+      "Promise.reject(sdkError('rejected from nowhere'));",
+      "console.warn('RPC-CORE: submitAndWatchExtrinsic: Custom error: 138');",
+      'setTimeout(() => console.log(JSON.stringify(said)), 50);',
+    ].join('\n'));
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([]);
+    expect(result.stderr).toBe('');
   });
 });

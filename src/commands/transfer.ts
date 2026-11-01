@@ -4,8 +4,7 @@
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { CANCELLED_MESSAGE } from '../lib/errors.ts';
 import { MidnightBech32m } from '@midnightntwrk/wallet-sdk/address-format';
-import { type ParsedArgs, getFlag, hasFlag, isVerbose, rejectNoCacheForWrites } from '../lib/argv.ts';
-import { enableVerbose } from '../lib/verbose.ts';
+import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '../lib/argv.ts';
 import { saveShieldedAddress, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides } from '../lib/network.ts';
@@ -16,10 +15,9 @@ import { nightToMicro } from '../lib/amount.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { header, keyValue, divider, formatAddress, successMessage } from '../ui/format.ts';
 import { bold, dim } from '../ui/colors.ts';
-import { start as startSpinner, trackElapsed } from '../ui/spinner.ts';
+import { trackElapsed } from '../ui/spinner.ts';
 import type { CallContext } from '../lib/call-context.ts';
 import { DUST_SHORT_WAIT_MS, payWhenDustCovers } from '../lib/dust-wait.ts';
-import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
 export default async function transferCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
@@ -52,8 +50,7 @@ async function unshieldedTransfer(
   process.stderr.write(keyValue('Amount', bold(amountNight + ' NIGHT')) + '\n');
   process.stderr.write('\n');
 
-  if (isVerbose(args)) enableVerbose();
-  const spinner = startSpinner('Starting wallet...');
+  const spinner = ctx.progress.start('Starting wallet...');
 
   try {
     const result = await executeTransfer({
@@ -62,6 +59,8 @@ async function unshieldedTransfer(
       recipientAddress,
       amountNight,
       signal: ctx.signal,
+      log: ctx.diagnostics.line,
+      sdkWarnings: ctx.sdkWarnings,
       onSync(applied, highest) {
         if (highest > 0) {
           const pct = Math.min(Math.round((applied / highest) * 100), 100);
@@ -145,11 +144,10 @@ async function shieldedTransfer(
   process.stderr.write(keyValue('Amount', bold(amountNight + ' NIGHT (shielded)')) + '\n');
   process.stderr.write('\n');
 
-  if (isVerbose(args)) enableVerbose();
 
   // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
-  const stopListening = onSdkWarning(undefined);
-  const spinner = startSpinner('Syncing wallet...');
+  const stopListening = ctx.sdkWarnings.listen(undefined);
+  const spinner = ctx.progress.start('Syncing wallet...');
 
   try {
     const txHash = await defaultRepository().withFacade(
@@ -207,6 +205,7 @@ async function shieldedTransfer(
       },
       {
         syncMode: 'full',
+        log: ctx.diagnostics.line,
         requireStrictSync: true,
         signal: ctx.signal,
         onStatus: (s) => spinner.update(s),
