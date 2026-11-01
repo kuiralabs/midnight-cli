@@ -89,9 +89,9 @@ describe('the built mn', () => {
     const bunBuild = pkg.scripts.build.slice(pkg.scripts.build.indexOf('bun build'));
     expect(bunBuild, 'the build script runs bun build into dist').toContain('--outdir dist ');
     rmSync(out, { recursive: true, force: true });
-    const build = spawnSync('npx', ['--no-install', ...bunBuild.replace('--outdir dist ', `--outdir ${JSON.stringify(out)} `).split(/\s+(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((a) => a.replace(/^"|"$/g, ''))], {
-      cwd: ROOT, encoding: 'utf8', timeout: 120_000,
-    });
+    // bun from PATH, as npm run build finds it: npx would look for an npm package named bun.
+    const [bun, ...bunArgs] = bunBuild.replace('--outdir dist ', `--outdir ${JSON.stringify(out)} `).split(/\s+(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((a) => a.replace(/^"|"$/g, ''));
+    const build = spawnSync(bun!, bunArgs, { cwd: ROOT, encoding: 'utf8', timeout: 120_000 });
     expect(build.status, `the build failed: ${build.stderr}`).toBe(0);
     const bin = join(out, 'wallet.js');
 
