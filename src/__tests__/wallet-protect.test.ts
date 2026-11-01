@@ -2,7 +2,7 @@
 // seals every plain-text wallet under it, saying which it sealed; run again,
 // it seals nothing new; with another passphrase than the one set, it changes
 // nothing. The accounts grant keeps are sealed by the protector grant
-// provides, which the CLI passes in (decision 24); without it, wallet seals
+// provides, which the CLI passes in; without it, wallet seals
 // only wallets.
 
 import * as fs from 'node:fs';

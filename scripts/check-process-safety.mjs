@@ -1,16 +1,15 @@
 #!/usr/bin/env node
-// Checks that library code leaves the host process alone (spec §3.1, decision
-// 20): no writing to the terminal, exiting, installing process handlers,
+// Checks that library code leaves the host process alone: no writing to the terminal, exiting, installing process handlers,
 // patching console, changing directory, opening a prompt, reading the
-// environment, or computing a path from the home directory (spec §7). Commands, ui/, the shell and the MCP server may; so may the
+// environment, or computing a path from the home directory. Commands, ui/, the shell and the MCP server may; so may the
 // modules marked below as shell concerns. Commands may not write to the
-// terminal either (2F, S8): their text goes through their call's output
+// terminal either: their text goes through their call's output
 // (ctx.output.stdout / stderr), which the CLI writes to the process's streams
 // and the MCP server to its stderr. String and template-literal
 // contents and comments are skipped, so the contract runner's generated
 // scripts (which run as their own process) don't count.
 //
-// And that nothing about a call lives in module globals (spec §4.4, D21, 2F):
+// And that nothing about a call lives in module globals:
 //   - library, ui and command code keeps no mutable state at module level (a
 //     `let` or `var`, or a Map, Set or array that isn't typed readonly, or an
 //     empty object to fill); what is shared on purpose is allowlisted by name,
@@ -21,8 +20,8 @@
 //     call's context explicitly.
 //
 // Usage: node scripts/check-process-safety.mjs
-// Exits 1 when a library does something §3.1 forbids, or any code breaks the
-// 2F rules, and the allowlist doesn't name it. Imported, it exports
+// Exits 1 when a library does something the rules above forbid, or any code
+// breaks the module-state rules, and the allowlist doesn't name it. Imported, it exports
 // findViolations.
 
 import { readFileSync } from 'node:fs';
@@ -43,7 +42,7 @@ const RULES = [
   ['reads the environment', /\bprocess\.env\b/],
   ['reads the terminal', /\bprocess\.stdin\b|\bsetRawMode\s*\(/],
   ['hands a child the terminal', /\bstdio\s*:\s*['"]inherit['"]|['"]inherit['"]/],
-  // Spec §7: the host gives the state root; a library never builds a path from the home directory.
+  // The host gives the state root; a library never builds a path from the home directory.
   ['computes a path from the home directory', /\bhomedir\s*\(|\bos\.homedir\b/],
 ];
 
@@ -52,7 +51,7 @@ const RAW_RULES = new Set(['opens a prompt', 'hands a child the terminal']);
 // What a command may not do: its text for the person goes through its call's output.
 const COMMAND_RULES = RULES.filter(([rule]) => rule === 'writes to the terminal');
 
-// The 2F rules, each with the code it applies to.
+// The module-state rules, each with the code it applies to.
 const MODULE_STATE = 'keeps module state';
 const STALE_STATE = 'allowlists module state it no longer keeps';
 const AMBIENT = 'keeps ambient per-call storage';
@@ -66,7 +65,7 @@ const CALL_RULES = [
   [AMBIENT, /\bfrom\s+['"](node:)?async_hooks['"]|\brequire\(\s*['"](node:)?async_hooks['"]\s*\)/, notNoiseFilter, true],
 ];
 
-// Shell concerns by design (1F): what they do to the process is their job.
+// Shell concerns by design: what they do to the process is their job.
 const SHELL_CONCERNS = new Set([
   'lib/json-output.ts', // the --json output channel
 ]);
@@ -80,9 +79,8 @@ export const ALLOWED = {
   'lib/contract/runner.ts': ['reads the environment'],
 };
 
-// Module-level state that the 2F rule allows, by file and name, and why. A
-// call's state is allowed only until the step of 2F that moves it into the
-// call's context; what is shared on purpose holds no call's state.
+// Module-level state that the module-state rule allows, by file and name, and
+// why. A call's state is allowed only until it moves into the call's context; what is shared on purpose holds no call's state.
 export const ALLOWED_STATE = {
   // Shared on purpose: none holds a call's state.
   'lib/passphrase.ts': { unlocked: 'shared on purpose: the passphrase this process has unlocked, by state root (one prompt per run)' },
@@ -90,7 +88,7 @@ export const ALLOWED_STATE = {
   'lib/chain-id.ts': { CHAIN_ID_MEMO: 'shared on purpose: the chain-id memo, by endpoint' },
   'lib/ws-rpc.ts': { connectionCounter: 'shared on purpose: the RPC connection id counter, unique across servers in the process' },
   'lib/wallet-config.ts': { warnedPlain: 'shared on purpose: each plain-text wallet is warned about once per run' },
-  // The host sources, set once by the host at start (decision 1: host-set until phase 3; handlers see them through the context).
+  // The host sources, set once by the host at start (handlers see them through the context).
   'lib/settings.ts': { source: 'shared on purpose: the host sets the settings source once' },
   'lib/state-root.ts': { source: 'shared on purpose: the host sets the paths source once' },
   'lib/notices.ts': { sink: 'shared on purpose: the host sets the notice sink once' },
@@ -252,8 +250,8 @@ function isLibrary(rel, file) {
 const isCommand = (rel) => rel.startsWith('commands/');
 
 /**
- * Every §3.1 break in library code, every terminal write in a command, and
- * every 2F break, that the allowlists don't name: { file, line, rule }, and
+ * Every break of the library rules, every terminal write in a command, and
+ * every module-state break, that the allowlists don't name: { file, line, rule }, and
  * the name for module state. `src` is the folder the files' kinds are read
  * from (commands/, ui/, …): src/, unless a test plants files elsewhere.
  */

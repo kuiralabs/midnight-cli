@@ -27,14 +27,14 @@ const PACKAGES = ['core', 'chain', 'wallet', 'contract', 'connect', 'dev', 'gran
 // under src/ wins. A file that matches nothing fails the check.
 const HOMES = [
   ['shell', /^wallet\.ts$/],
-  // help plays the shell's intro, and manual builds the full manual; both render the installed registry (Y24, 2D).
+  // help plays the shell's intro, and manual builds the full manual; both render the installed registry.
   ['shell', /^commands\/(help|manual)(\.definition)?\.ts$/],
   ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host|installed-commands|command-dispatch|agent-manual)\.ts$/],
   ['shell', /^ui\/(animate|art)\.ts$/],
   ['mcp', /^mcp-server\.ts$/],
   ['mcp', /^lib\/mcp\//],
 
-  // A package's agent guidance (<package>.guidance.ts) sits beside its commands (2G).
+  // A package's agent guidance (<package>.guidance.ts) sits beside its commands.
   ...PACKAGES.map((pkg) => [pkg, new RegExp(`^commands/${pkg}\\.guidance\\.ts$`)]),
 
   // A command's definition (<name>.definition.ts) lives in its command's package.
@@ -116,9 +116,9 @@ export function homeOf(file) {
 const isGuidance = (rel) => /\.guidance\.ts$/.test(rel);
 
 /**
- * Agent guidance is plain text for the shell and the MCP server to assemble
- * (2G): a guidance file imports only core (the guidance type) and its own
- * package, and no other package imports it. Paths are relative to src/.
+ * Agent guidance is plain text for the shell and the MCP server to assemble:
+ * a guidance file imports only core (the guidance type) and its own package,
+ * and no other package imports it. Paths are relative to src/.
  * Returns the rule the import breaks, or undefined.
  */
 export function guidanceRule(fromRel, toRel) {

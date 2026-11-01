@@ -1,4 +1,4 @@
-// The `contract` command, described once (plan 2B, spec §4.1).
+// The `contract` command, described once.
 
 import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget } from '../lib/command-definition.ts';
 
@@ -160,7 +160,7 @@ export const contractDefinition: CommandDefinition = {
         name: 'midnight_contract_inspect',
         description: 'Inspect a compiled Compact contract: name, circuits (with arg/return types), witnesses, compiler/language/runtime versions. Reads managed/<name>/compiler/contract-info.json under the dapp dir. Returns a `siblings` array listing other contracts in the same project — call again with `name` to inspect a sibling.',
         annotations: { readOnlyHint: true, idempotentHint: true },
-        // As this tool showed them before 2E.
+        // As this tool showed them before tool schemas came from the flags.
         params: [
           { flag: 'path', schema: { type: 'string', description: 'Path to dApp directory (defaults to cwd)' } },
           { flag: 'managed', schema: { type: 'string', description: 'Direct path to a managed/<name>/ directory (overrides path)' } },
@@ -181,7 +181,7 @@ export const contractDefinition: CommandDefinition = {
           { flag: 'wallet' },
           { flag: 'network' },
           {
-            // As this tool showed it before 2E.
+            // As this tool showed it before tool schemas came from the flags.
             flag: 'path',
             schema: { type: 'string', description: 'dApp directory (defaults to cwd; needed to find the compiled artifact for state decoding)' },
           },
@@ -199,7 +199,7 @@ export const contractDefinition: CommandDefinition = {
         params: [
           { flag: 'wallet' },
           { flag: 'network' },
-          // As this tool showed it before 2E.
+          // As this tool showed it before tool schemas came from the flags.
           { flag: 'args', schema: { type: 'string', description: 'JSON-encoded array or object of constructor arguments' } },
           { flag: 'path' },
           { flag: 'managed' },

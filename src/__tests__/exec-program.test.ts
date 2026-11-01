@@ -1,4 +1,4 @@
-// The runner localnet's Docker commands go through (2F, S7): asynchronous,
+// The runner localnet's Docker commands go through: asynchronous,
 // and it kills the program when the call is cancelled. Checked on real
 // processes (this Node, running a short script), never on Docker.
 

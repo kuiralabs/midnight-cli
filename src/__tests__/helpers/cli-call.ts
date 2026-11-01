@@ -1,4 +1,4 @@
-// A handler called as the CLI calls it (2F): with a context built as the
+// A handler called as the CLI calls it: with a context built as the
 // shell builds one, its result written at once to stdout as one JSON line.
 // Tests that read a command's output from the process's streams call it so.
 

@@ -1,5 +1,5 @@
-// What the chain package (the error codes its chain checks raise) tells agents
-// (plan 2G, D19): its pieces of `help --agent` and of the two skills, each
+// What the chain package (the error codes its chain checks raise) tells agents:
+// its pieces of `help --agent` and of the two skills, each
 // naming its section and its place there.
 
 import type { PackageGuidance } from '../lib/agent-guidance.ts';

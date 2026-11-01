@@ -243,7 +243,7 @@ describe('captureCommand', () => {
     });
   });
 
-  // Regression (2F, S2): the capture target was one module global. Two calls
+  // Regression: the capture target was one module global. Two calls
   // in one server that overlapped shared it: the first to finish cleared it,
   // and the other's result fell through to stdout, the MCP protocol channel,
   // while its call returned {}.
@@ -267,7 +267,7 @@ describe('captureCommand', () => {
       expect(io.stdout()).toBe('');
     });
 
-    // Regression (2F, S3): the progress target and the active spinner were
+    // Regression: the progress target and the active spinner were
     // module globals. The second call to start took the target, so what the
     // first call's spinners said went to the second call's client, and the
     // first call's went nowhere once the second ended.

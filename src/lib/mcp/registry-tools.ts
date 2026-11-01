@@ -1,4 +1,4 @@
-// The MCP server's tools, from the command registry (plan 2E): each command's
+// The MCP server's tools, from the command registry: each command's
 // definition gives its tools' names, descriptions, annotations, schemas, argv
 // mapping and confirmation; the server runs the command's own handler. The
 // server's one tool of its own, midnight_confirm_operation, redeems the tokens

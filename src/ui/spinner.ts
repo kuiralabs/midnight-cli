@@ -19,7 +19,7 @@ export interface Spinner {
 
 /**
  * Where what a call's spinners say goes besides the terminal: for a call the
- * MCP server runs, its progress notifications. Each call has its own (2F); a
+ * MCP server runs, its progress notifications. Each call has its own; a
  * spinner made without one reports nowhere.
  */
 export type ProgressReport = (message: string) => void;

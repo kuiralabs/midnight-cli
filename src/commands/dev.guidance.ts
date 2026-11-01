@@ -1,4 +1,4 @@
-// What the dev package (localnet, test and dev) tells agents (plan 2G, D19):
+// What the dev package (localnet, test and dev) tells agents:
 // its pieces of `help --agent` and of the two skills, each naming its section
 // and its place there, and its tools' rows in the manual's tools table.
 

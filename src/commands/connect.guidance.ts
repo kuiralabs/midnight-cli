@@ -1,6 +1,6 @@
-// What the connect package (serve, the DApp connector) tells agents (plan 2G,
-// D19): its pieces of `help --agent` and of the two skills, each naming its
-// section and its place there.
+// What the connect package (serve, the DApp connector) tells agents:
+// its pieces of `help --agent` and of the two skills, each naming its section
+// and its place there.
 
 import type { PackageGuidance } from '../lib/agent-guidance.ts';
 

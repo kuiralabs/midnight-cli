@@ -1,5 +1,5 @@
 // The reads balance, inspect-cost and localnet's readiness waits make take
-// the call's signal (2F, S7): cancelled, each stops at once with
+// the call's signal: cancelled, each stops at once with
 // CancelledError (code CANCELLED), instead of waiting out its own time limit.
 // The endpoints are servers run by the test that take each request and never
 // answer.

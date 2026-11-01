@@ -12,7 +12,7 @@
 //     RPC-CORE lines on console.warn and console.error (one per failed
 //     submit), are kept off the terminal.
 //
-// Which call a warning belongs to (2F, S5): each call runs inside its own
+// Which call a warning belongs to: each call runs inside its own
 // AsyncLocalStorage store, the one ambient per-call storage the process-safety
 // check allows, so a warning raised while it runs carries its identity, and
 // the host's router hands it to that call alone (lib/sdk-warnings.ts).

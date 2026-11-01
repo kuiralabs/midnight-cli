@@ -48,7 +48,7 @@ export function resolveNetworkName(ctx: NetworkResolutionContext): NetworkName {
   return 'undeployed';
 }
 
-// The Blockfrost variables' names are settings.ts's (spec §5.4), re-exported for the callers that name them.
+// The Blockfrost variables' names are settings.ts's, re-exported for the callers that name them.
 export { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV };
 
 /**

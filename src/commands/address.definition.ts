@@ -1,4 +1,4 @@
-// The `address` command, described once (plan 2B, spec §4.1).
+// The `address` command, described once.
 
 import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition.ts';
 

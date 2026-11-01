@@ -1,9 +1,9 @@
 // The packages this mn has, with their commands and agent guidance, collected
-// into one registry (plan 2B, 2G). The shell assembles it: a definition and a
-// package's guidance sit beside its commands, and the base can't import a
-// package's commands. Reading it loads no handler, so no SDK. The shell's
-// dispatch and flag checks read it (2C), and so do help, the manual and the
-// intro (2D), the MCP server's tools (2E), and the agent manual and skills (2G).
+// into one registry. The shell assembles it: a definition and a package's
+// guidance sit beside its commands, and the base can't import a package's
+// commands. Reading it loads no handler, so no SDK. The shell's dispatch and
+// flag checks read it, and so do help, the manual and the intro, the MCP
+// server's tools, and the agent manual and skills.
 
 import { createPackageRegistry, type FlagDefinition, type GlobalFlagHelp } from './command-definition.ts';
 import { walletDefinition } from '../commands/wallet.definition.ts';

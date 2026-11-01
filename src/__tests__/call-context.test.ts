@@ -1,4 +1,4 @@
-// A call's context (src/lib/call-context.ts, plan 2F): what each call's
+// A call's context (src/lib/call-context.ts): what each call's
 // handler is given. Its output takes one result and passes each piece on as it
 // comes; its diagnostics show lines only when the call is verbose; a call
 // already cancelled never starts.

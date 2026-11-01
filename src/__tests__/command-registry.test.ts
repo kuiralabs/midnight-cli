@@ -1,7 +1,7 @@
-// The command registry (plan 2B): every command defined once, beside it.
-// Since 2C the CLI's dispatch, its SDK commands and its accepted flags come
-// from it, since 2D help, the manual and the intro, and since 2E the MCP
-// server's tools. The lists they replaced are gone (Y13); what each output
+// The command registry: every command defined once, beside it. The CLI's
+// dispatch, its SDK commands and its accepted flags come from it, and so do
+// help, the manual, the intro and the MCP server's tools. The lists they
+// replaced are gone; what each output
 // says is pinned by the behaviour snapshot, and the tests here check what the
 // registry must hold on its own.
 
@@ -38,13 +38,13 @@ import type { WalletProtector } from '../lib/wallet-protector.ts';
 const SRC = join(import.meta.dirname, '..');
 const registry = installedCommands;
 
-describe('the dispatch (src/lib/command-dispatch.ts, from the registry since 2C)', () => {
-  // What the switch in src/wallet.ts gave each command before 2C, as it was
+describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => {
+  // What the switch in src/wallet.ts gave each command before the registry, as it was
   // read from that switch at b5dc946: the registry's dispatch must give the same.
   const GENERATE_NOTICE = '\n  Note: "midnight generate" is deprecated.\n  Use "midnight wallet generate <name>" instead.\n\n';
   const STATUS_REFUSAL = 'The "status" command is currently being reworked. Check back soon.';
-  // Since 2F every handler gets its call's signal, so the definitions no longer say which do (decision 2).
-  const SWITCH_BEFORE_2C: Record<string, { payer?: true; protectors?: true; notice?: string; unavailable?: string }> = {
+  // Every handler gets its call's signal, so the definitions don't say which do.
+  const SWITCH_BEFORE_REGISTRY: Record<string, { payer?: true; protectors?: true; notice?: string; unavailable?: string }> = {
     'address': {}, 'airdrop': {}, 'balance': {}, 'cache': {}, 'config': {},
     'contract': { payer: true }, 'dev': { payer: true }, 'dust': {},
     'generate': { notice: GENERATE_NOTICE }, 'genesis-address': {}, 'grant': { payer: true },
@@ -55,7 +55,7 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry since 2C)
 
   it('gives every command what the switch gave it, the signal now to every one', () => {
     const given = Object.fromEntries(registry.commands.map((c) => [c.name, { ...c.shell }]));
-    expect(given).toStrictEqual(SWITCH_BEFORE_2C);
+    expect(given).toStrictEqual(SWITCH_BEFORE_REGISTRY);
   });
 
   it('loads each handler from its own command\'s module', async () => {
@@ -183,13 +183,13 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry since 2C)
 });
 
 describe('the commands that need the wallet SDK (heap re-exec and forced exit)', () => {
-  // FACADE_COMMANDS in src/wallet.ts before 2C.
-  const FACADE_COMMANDS_BEFORE_2C = ['airdrop', 'transfer', 'dust', 'balance', 'serve', 'test', 'contract', 'dev', 'grant'];
+  // FACADE_COMMANDS in src/wallet.ts before the registry.
+  const FACADE_COMMANDS_BEFORE_REGISTRY = ['airdrop', 'transfer', 'dust', 'balance', 'serve', 'test', 'contract', 'dev', 'grant'];
 
   it('are the ones FACADE_COMMANDS listed', () => {
     const rebuilt = registry.commands.filter((c) => commandNeedsWalletSdk(registry, c.name)).map((c) => c.name);
-    expect(new Set(rebuilt)).toStrictEqual(new Set(FACADE_COMMANDS_BEFORE_2C));
-    expect(rebuilt).toHaveLength(FACADE_COMMANDS_BEFORE_2C.length);
+    expect(new Set(rebuilt)).toStrictEqual(new Set(FACADE_COMMANDS_BEFORE_REGISTRY));
+    expect(rebuilt).toHaveLength(FACADE_COMMANDS_BEFORE_REGISTRY.length);
   });
 
   it('do not include a command that is not installed', () => {
@@ -274,7 +274,7 @@ describe('the MCP tools, generated from the registry', () => {
     expect(NETWORK_PARAM.enum).toStrictEqual(getValidNetworkNames());
   });
 
-  // Confirmed since 2E (Y29): it was marked destructive yet ran at once.
+  // Confirmed since tools came from the registry: it was marked destructive yet ran at once.
   const NEWLY_CONFIRMED = 'midnight_wallet_remove';
 
   it('needs confirmation for wallet remove, and every confirmed tool checks the call before a token is given', () => {
@@ -287,7 +287,7 @@ describe('the MCP tools, generated from the registry', () => {
     expect(confirmationText(remove, { name: 'bob' })).toBe('Remove wallet bob: its file, and the seed in it, is deleted from this machine');
   });
 
-  it('lets a tool pass on its command\'s flags beyond its schema only when its argv passes the rest on (2C\'s rule, superseded by the schema)', () => {
+  it('lets a tool pass on its command\'s flags beyond its schema only when its argv passes the rest on (the old pass-through rule, superseded by the schema)', () => {
     expect(toolPassThroughFlags(registry, 'midnight_transfer')).toStrictEqual([
       ...registry.find('transfer')!.flags.map((f) => f.name), 'help', 'h', 'json', 'version', 'v',
     ]);
@@ -308,12 +308,12 @@ describe('the MCP tools, generated from the registry', () => {
     }
   });
 
-  // The argv each tool's own handler built before 2E (src/lib/mcp/tools.ts at
+  // The argv each tool's own handler built before the registry (src/lib/mcp/tools.ts at
   // 03b55c4), for a call with these parameters. The generic mapping must
   // build the same.
   const args = (command: string, subcommand: string | undefined, positionals: string[], flags: Record<string, string | true>): ParsedArgs =>
     ({ command, subcommand, positionals, flags: { json: true, ...flags } });
-  const ARGV_BEFORE_2E: [tool: string, params: Record<string, unknown>, argv: ParsedArgs][] = [
+  const ARGV_BEFORE_REGISTRY: [tool: string, params: Record<string, unknown>, argv: ParsedArgs][] = [
     ['midnight_wallet_generate', { name: 'alice', network: 'preprod', seed: 'ab', force: 'true' }, args('wallet', 'generate', ['alice'], { network: 'preprod', seed: 'ab', force: true })],
     ['midnight_wallet_generate', { name: 'alice', mnemonic: 'w o r d s', force: true }, args('wallet', 'generate', ['alice'], { mnemonic: 'w o r d s', force: true })],
     ['midnight_wallet_list', {}, args('wallet', 'list', [], {})],
@@ -364,12 +364,12 @@ describe('the MCP tools, generated from the registry', () => {
   ];
 
   it('builds the argv each tool\'s own handler built', () => {
-    for (const [name, params, expected] of ARGV_BEFORE_2E) {
+    for (const [name, params, expected] of ARGV_BEFORE_REGISTRY) {
       const tool = registry.tools.find((t) => t.name === name)!;
       expect(toolArgv(tool, params), `${name} ${JSON.stringify(params)}`).toStrictEqual(expected);
     }
     // Every tool is covered.
-    expect(new Set(ARGV_BEFORE_2E.map(([name]) => name))).toStrictEqual(new Set(registry.tools.map((t) => t.name)));
+    expect(new Set(ARGV_BEFORE_REGISTRY.map(([name]) => name))).toStrictEqual(new Set(registry.tools.map((t) => t.name)));
   });
 });
 

@@ -1,4 +1,4 @@
-// The `grant` command, described once (plan 2B, spec §4.1).
+// The `grant` command, described once.
 
 import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, confirmationTarget } from '../lib/command-definition.ts';
 
@@ -162,7 +162,7 @@ export const grantDefinition: CommandDefinition = {
       blockHeight: 'The block it landed in (deposit)',
     },
   },
-  // Y29: the intro had no line for grant until 2D; it sits beside the contract commands.
+  // The intro's line for grant sits beside the contract commands.
   intro: { brief: 'Grants that let agents spend', order: 12 },
   needsWalletSdk: true,
   shell: { payer: true },

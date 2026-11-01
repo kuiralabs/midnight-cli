@@ -1,5 +1,5 @@
 // A shell concern: what the CLI and the MCP server, as hosts, give the
-// libraries at start (spec §3.1, §5.4, §7). Libraries never set these
+// libraries at start. Libraries never set these
 // themselves; a consumer sets its own.
 //   - the filters for the SDK's noise, acting while a call listens, and the
 //     calls it runs, whose SDK warnings go to the call that raised them;

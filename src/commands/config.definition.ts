@@ -1,4 +1,4 @@
-// The `config` command, described once (plan 2B, spec §4.1).
+// The `config` command, described once.
 
 import type { CommandDefinition } from '../lib/command-definition.ts';
 import { INDEXER_GRAPHQL_WS_PATH } from '../lib/constants.ts';

@@ -28,7 +28,7 @@ describe('the terminal prompter', () => {
   });
 });
 
-// One terminal, one question at a time (2F, S6). The busy flag was a module
+// One terminal, one question at a time. The busy flag was a module
 // global in approval.ts; it is the prompter's own now.
 describe('the terminal prompter asks one question at a time', () => {
   const terminal = () => {

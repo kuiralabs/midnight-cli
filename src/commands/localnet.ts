@@ -93,7 +93,7 @@ async function handleUp(jsonMode: boolean, ctx: CallContext, docker: DockerCall)
       }
     }
   } catch (err) {
-    // Cancelled: the containers already started stay in place, and the error says which (decision 4).
+    // Cancelled: the containers already started stay in place, and the error says which.
     if (err instanceof CancelledError) {
       spinner.fail('Cancelled: containers already started stay in place');
       throw err;

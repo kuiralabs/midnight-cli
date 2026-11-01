@@ -1,4 +1,4 @@
-// localnet honours its call's cancellation (2F, S7). Regression: it ran Docker
+// localnet honours its call's cancellation. Regression: it ran Docker
 // with execSync, so a `localnet up` froze the MCP server, and a cancelled call
 // ran to the end. Docker now runs through a runner the call passes its signal
 // to, which kills the Docker client on cancel. No real Docker runs here: the
@@ -110,7 +110,7 @@ describe('localnet commands, cancelled while Docker runs', () => {
   });
 
   it('clean: cancelled during its compose down, it stops there and removes no container', async () => {
-    // Before 2F's S7 the clean swallowed any failure of its compose down, a cancellation included, and went on removing.
+    // Before the cancellation fix, the clean swallowed any failure of its compose down, a cancellation included, and went on removing.
     const call = new AbortController();
     const docker = standInDocker(
       (args) => {
@@ -135,7 +135,7 @@ describe('localnet commands, cancelled while Docker runs', () => {
   });
 });
 
-describe('localnet up, cancelled (decision 4: started containers stay, and it says which)', () => {
+describe('localnet up, cancelled (started containers stay, and it says which)', () => {
   const dockerCall = (exec: ExecRunner, signal: AbortSignal): DockerCall => ({ signal, exec, onStderr: () => {} });
 
   it('during docker compose up: the client is killed, and the error names the containers left in place', async () => {

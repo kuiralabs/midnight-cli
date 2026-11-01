@@ -1,4 +1,4 @@
-// The `wallet` command, described once (plan 2B, spec §4.1).
+// The `wallet` command, described once.
 
 import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition.ts';
 
@@ -156,7 +156,7 @@ export const walletDefinition: CommandDefinition = {
         order: 4,
       },
       {
-        // Destructive, so confirmed like the other destructive tools (Y29).
+        // Destructive, so confirmed like the other destructive tools.
         name: 'midnight_wallet_remove',
         description: 'Remove wallet.',
         annotations: { destructiveHint: true },

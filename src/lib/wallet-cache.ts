@@ -22,7 +22,7 @@ interface CacheFile {
    * Genesis block hash of the chain this cache was built against.
    * Used to detect remote-testnet resets: a mismatch means the cache
    * refers to a now-defunct chain and must be wiped. Optional for
-   * back-compat with pre-S1 cache files.
+   * back-compat with cache files written before it existed.
    */
   chainId?: string;
   timestamp: string;
@@ -172,7 +172,7 @@ export function validateWalletCacheChainId(
     const path = join(dir, file);
     try {
       const parsed: CacheFile = JSON.parse(readFileSync(path, 'utf-8'));
-      // Legacy caches (pre-S1) have no chainId — leave alone for back-compat;
+      // Legacy caches have no chainId — leave alone for back-compat;
       // the next save writes the field.
       if (!parsed.chainId) continue;
       if (parsed.chainId !== currentChainId) {

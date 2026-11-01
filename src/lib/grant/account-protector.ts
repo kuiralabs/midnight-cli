@@ -1,4 +1,4 @@
-// Grant's protector for `wallet protect` (decision 24): seals every
+// Grant's protector for `wallet protect`: seals every
 // plain-text account an earlier mn made, under the same passphrase as the
 // wallets. The caller passes it to the wallet command. The sealing code (and
 // the account chain it loads) is loaded only when the protector runs.

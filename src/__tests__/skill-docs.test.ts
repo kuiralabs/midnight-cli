@@ -1,5 +1,5 @@
 // docs/SKILL-CORE.md and docs/SKILL.md are generated copies of the skills the
-// MCP server assembles from the installed packages (plan 2G, decision 2): they
+// MCP server assembles from the installed packages: they
 // stay in the repository for the README's links and the npm package. When one
 // differs from the assembly, run `npm run skill-docs`. The server itself is run
 // as a real process with a temporary home, to show it serves the assembly.

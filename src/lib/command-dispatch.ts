@@ -1,4 +1,4 @@
-// The CLI's dispatch, from the command registry (plan 2C): which command runs,
+// The CLI's dispatch, from the command registry: which command runs,
 // what the shell gives its handler, and whether it needs the wallet SDK. The
 // shell (src/wallet.ts) owns the process: it passes in what a handler may be
 // given and where a notice goes, and decides the heap and the exit.

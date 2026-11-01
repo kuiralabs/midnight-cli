@@ -1,4 +1,4 @@
-// The two skills the MCP server serves (plan 2G, D19): skill/core (intent
+// The two skills the MCP server serves: skill/core (intent
 // routing and the safety rules) and skill/full (flows, error recovery, concept
 // primers). Each is the server's skeleton of sections and its own text (the
 // concepts, networks, safety rules and its own setup), with each installed

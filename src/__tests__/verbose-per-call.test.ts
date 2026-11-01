@@ -1,4 +1,4 @@
-// Verbose is a call's own (2F, S4). Regression: --verbose switched on one
+// Verbose is a call's own. Regression: --verbose switched on one
 // module global, which stayed on, so once one call in a server asked for
 // verbose lines, every later call wrote them too, and so did every library
 // that any call reached.

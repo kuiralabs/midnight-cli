@@ -1,10 +1,10 @@
 // What the environment says, as settings libraries read. The environment
-// variables are the shell's public contract (spec §5.4): the shell gives the
+// variables are the shell's public contract: the shell gives the
 // libraries a source of settings, read from them as each is needed, and a
 // consumer gives its own. A library never reads the environment itself; with
 // no source, every setting is unset.
 
-/** The environment variables of spec §5.4 that become settings: their names, in one place. */
+/** The environment variables that become settings: their names, in one place. */
 export const PASSPHRASE_ENV = 'MN_PASSPHRASE';
 export const SEED_ENV = 'MN_SEED';
 export const NO_LOCAL_DETECT_ENV = 'MN_NO_LOCAL_DETECT';
@@ -33,7 +33,7 @@ export interface Settings {
   sharedBlockfrostProjectId: string | undefined;
 }
 
-/** The settings the variables of §5.4 in `env` give. */
+/** The settings the environment variables in `env` give. */
 export function settingsFromEnvironment(env: Record<string, string | undefined>): Settings {
   return {
     passphrase: env[PASSPHRASE_ENV],

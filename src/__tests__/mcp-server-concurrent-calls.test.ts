@@ -1,4 +1,4 @@
-// The gate test of 2F (S9): two calls at once in one real MCP server, one of
+// Two calls at once in one real MCP server, one of
 // them cancelled. Run through this checkout's MCP server as a process of its
 // own, over stdio, with a temporary home. Each call reads an address's balance
 // from its own stand-in indexer (a WebSocket run by this test, answering
