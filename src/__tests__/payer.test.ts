@@ -13,7 +13,8 @@ import { NoPayerError, resolvePayingTarget } from '../lib/payer.ts';
 import { NoAccountError } from '../lib/grant/prepare.ts';
 import { servePayerAt } from '../lib/serve-payer.ts';
 import { probeServeNetwork } from '../lib/serve-manager.ts';
-import { setProgressTarget, silentSpinner } from '../ui/spinner.ts';
+import { silentSpinner } from '../ui/spinner.ts';
+import { createSdkWarningRouter } from '../lib/sdk-warnings.ts';
 import contractCommand from '../commands/contract.ts';
 import grantCommand from '../commands/grant.ts';
 import { cliCall } from './helpers/cli-call.ts';
@@ -95,16 +96,14 @@ describe('the serve payer', () => {
   it('serves the wallet through a running mn serve, and leaves it running when stopped', async () => {
     const serve = await runningServe();
     const said: string[] = [];
-    setProgressTarget((message) => said.push(message));
     try {
       const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy');
-      const served = await servePayerAt(serve.port).serve(target, undefined, silentSpinner());
+      const served = await servePayerAt(serve.port).serve(target, undefined, silentSpinner((message) => said.push(message)), createSdkWarningRouter().openCall().warnings);
       expect(served.port).toBe(serve.port);
       expect(said).toEqual([`Reusing existing mn serve on port ${serve.port}`, `mn serve ready (port ${serve.port})`]);
       await served.stop();
       expect(await probeServeNetwork(serve.port)).toBe('undeployed');
     } finally {
-      setProgressTarget(null);
       await serve.close();
     }
   });

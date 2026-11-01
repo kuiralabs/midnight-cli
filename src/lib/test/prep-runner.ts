@@ -18,7 +18,6 @@ import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallb
 import { startServeOrReuse } from '../serve-manager.ts';
 import { OWN_COMMAND_DUST_WAIT_MS } from '../dust-wait.ts';
 import { startBuild } from './build-manager.ts';
-import { onSdkWarning } from '../sdk-warnings.ts';
 
 /**
  * Run all prep steps defined in the config, in order.
@@ -70,10 +69,10 @@ async function runStep(
   }
   if (step.startsWith('balance:')) {
     const amount = parseInt(step.split(':')[1], 10);
-    return stepBalance(amount, config, callbacks);
+    return stepBalance(amount, config, ctx, callbacks);
   }
   if (step === 'dust' || step === 'dust-register' || step === 'dust-wait') {
-    return stepDust(config, callbacks);
+    return stepDust(config, ctx, callbacks);
   }
   if (step === 'mn-serve') {
     return stepMnServe(config, ctx, callbacks);
@@ -105,7 +104,7 @@ async function stepLocalnetUp(config: DappTestConfig, callbacks: PrepCallbacks):
   callbacks.onMessage(`Using the ledger-9 stack at ${networkConfig.node} (indexer ${networkConfig.indexer})`);
 }
 
-async function stepBalance(amount: number, config: DappTestConfig, callbacks: PrepCallbacks): Promise<void> {
+async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepContext, callbacks: PrepCallbacks): Promise<void> {
   const network = config.network ?? 'undeployed';
   const { config: networkConfig } = resolveNetwork({
     args: { command: 'test', subcommand: undefined, positionals: [], flags: { network } },
@@ -121,7 +120,7 @@ async function stepBalance(amount: number, config: DappTestConfig, callbacks: Pr
   callbacks.onMessage('Checking balance...');
   bindCachesToIndexer(network, networkConfig.indexerWS);
   const cache = loadWalletCache(address, network);
-  const stopListening = onSdkWarning((_tag, msg) => {
+  const stopListening = ctx.sdkWarnings.listen((_tag, msg) => {
     callbacks.onMessage(`SDK: ${msg}`);
   });
   const bundle = await buildFacade(seedBuffer, networkConfig, cache).catch((err: unknown) => { stopListening(); throw err; });
@@ -173,6 +172,7 @@ async function stepBalance(amount: number, config: DappTestConfig, callbacks: Pr
     onProving() { callbacks.onMessage('Generating ZK proof...'); },
     onSubmitting() { callbacks.onMessage('Submitting airdrop transaction...'); },
     onSyncWarning(_tag, msg) { callbacks.onMessage(`Syncing genesis... (${msg})`); },
+    sdkWarnings: ctx.sdkWarnings,
   });
 
   callbacks.onMessage(`Airdropped ${amount} NIGHT`);
@@ -180,7 +180,7 @@ async function stepBalance(amount: number, config: DappTestConfig, callbacks: Pr
 
 const DUST_WAIT_TIMEOUT_MS = 90_000; // 90s for dust to become available after registration
 
-async function stepDust(config: DappTestConfig, callbacks: PrepCallbacks): Promise<void> {
+async function stepDust(config: DappTestConfig, ctx: PrepContext, callbacks: PrepCallbacks): Promise<void> {
   const network = config.network ?? 'undeployed';
   const { config: networkConfig } = resolveNetwork({
     args: { command: 'test', subcommand: undefined, positionals: [], flags: { network } },
@@ -194,7 +194,7 @@ async function stepDust(config: DappTestConfig, callbacks: PrepCallbacks): Promi
   // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
   bindCachesToIndexer(network, networkConfig.indexerWS);
   const cache = loadWalletCache(address, network);
-  const stopListening = onSdkWarning(undefined);
+  const stopListening = ctx.sdkWarnings.listen(undefined);
   const bundle = await buildFacade(seedBuffer, networkConfig, cache).catch((err: unknown) => { stopListening(); throw err; });
 
   try {
@@ -251,6 +251,7 @@ async function stepMnServe(config: DappTestConfig, ctx: PrepContext, callbacks: 
     network: config.network,
     onMessage: (msg) => callbacks.onMessage(`[serve] ${msg}`),
     dustWaitMs: OWN_COMMAND_DUST_WAIT_MS,
+    sdkWarnings: ctx.sdkWarnings,
   });
 
   ctx.serveHandle = handle;

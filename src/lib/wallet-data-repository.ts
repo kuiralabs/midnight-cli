@@ -54,7 +54,7 @@ import { checkBalance, type BalanceSummary } from './balance-subscription.ts';
 import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { bindCachesToIndexer, describeIndexerChange } from './cache-indexer.ts';
 import { nativeDustSyncAvailable, runDustSyncNative } from './dust-sync-native.ts';
-import { verbose } from './verbose.ts';
+import type { VerboseLog } from './verbose.ts';
 import { callNodeRpc } from './node-rpc.ts';
 import { deriveDustSeed } from './derivation.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
@@ -128,6 +128,8 @@ export interface ReadOptions {
    * have a spinner usually use this to render a percentage.
    */
   onProgress?: (current: number, highest: number) => void;
+  /** The call's verbose lines. */
+  log?: VerboseLog;
 }
 
 export interface FacadeOptions extends ReadOptions {
@@ -181,6 +183,8 @@ export interface RepoDeps {
       onCheckpoint?: (state: ledger.DustLocalState, lastAppliedEventId: number, retention: DustRetention) => void;
       /** The cache folder the repository keeps; the native sidecar keeps its checkpoint there. */
       cacheDir?: string;
+      /** The call's verbose lines. */
+      log?: VerboseLog;
     },
   ) => Promise<DustDirectResult>;
   /** Chain genesis-hash fetcher (cache chain-reset guard). Default: `getChainGenesisHash`. */
@@ -274,17 +278,18 @@ export class WalletDataRepository {
   /**
    * The saved state a wallet restores from: its own, else a new wallet's on
    * the Dust checkpoint (see freshWalletOnDustCheckpoint). Null builds it from
-   * its keys. Every facade mn starts for writing starts from this.
+   * its keys. Every facade mn starts for writing starts from this. Building
+   * that new wallet's diagnostics go to `log`.
    */
-  async walletStateToRestore(seed: Buffer, network: NetworkConfig, networkName: NetworkName): Promise<WalletCacheData | null> {
+  async walletStateToRestore(seed: Buffer, network: NetworkConfig, networkName: NetworkName, log?: VerboseLog): Promise<WalletCacheData | null> {
     return loadWalletCache(deriveUnshieldedAddress(seed, networkName), networkName, this.cacheDir)
-      ?? await this.freshWalletOnDustCheckpoint(seed, network, networkName);
+      ?? await this.freshWalletOnDustCheckpoint(seed, network, networkName, log);
   }
 
-  private async freshWalletOnDustCheckpoint(seed: Buffer, network: NetworkConfig, networkName: NetworkName): Promise<WalletCacheData | null> {
+  private async freshWalletOnDustCheckpoint(seed: Buffer, network: NetworkConfig, networkName: NetworkName, log?: VerboseLog): Promise<WalletCacheData | null> {
     const checkpoint = loadDustCache(networkName, dustPublicKeyHexFromSeed(seed), this.cacheDir);
     if (!checkpoint || checkpoint.lastAppliedEventId < 0) return null;
-    const fresh = await buildFacade(seed, network, null);
+    const fresh = await buildFacade(seed, network, null, log);
     try {
       const { shielded, unshielded, dust } = fresh.facade as unknown as Record<'shielded' | 'unshielded' | 'dust', { serializeState(): Promise<string> }>;
       const [shieldedState, unshieldedState, dustState] = await Promise.all([shielded.serializeState(), unshielded.serializeState(), dust.serializeState()]);
@@ -351,6 +356,7 @@ export class WalletDataRepository {
         initialState: cached?.state,
         initialRetention: cached?.retention,
         signal: opts.signal,
+        log: opts.log,
         onProgress: (applied, max) => {
           const target = Math.max(1, max + 1 - startFromId);
           opts.onStatus?.(`Reading dust events… ${applied}/${target}`);
@@ -399,7 +405,7 @@ export class WalletDataRepository {
       partial: result.partial,
       fetchedAt: this.now(),
     };
-    await this.memoize(this.dustMemo, memoKey, view, network, opts.signal);
+    await this.memoize(this.dustMemo, memoKey, view, network, opts.signal, opts.log);
     return view;
   }
 
@@ -421,7 +427,7 @@ export class WalletDataRepository {
 
     const summary = await this.fetchUnshielded(address, network, opts.onProgress);
     const view: UnshieldedView = { ...summary, fromCache: false, fetchedAt: this.now() };
-    await this.memoize(this.unshieldedMemo, memoKey, view, network, opts.signal);
+    await this.memoize(this.unshieldedMemo, memoKey, view, network, opts.signal, opts.log);
     return view;
   }
 
@@ -482,7 +488,7 @@ export class WalletDataRepository {
     // near-tip. Read-only borrowers skip it.
     if (writeMode && !opts.noPrime && !opts.forceFresh) {
       try {
-        await this.dust(seed, network, { signal: opts.signal, onStatus: opts.onStatus });
+        await this.dust(seed, network, { signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
       } catch (err) {
         // Pre-prime is best-effort — the actual sync below will re-attempt
         // anyway. Surface the error only via onSyncWarning if anyone cares.
@@ -505,8 +511,8 @@ export class WalletDataRepository {
         if (opts.signal?.aborted) throw new Error(CANCELLED_MESSAGE);
         const cacheBeforeBuild = opts.forceFresh
           ? null
-          : await this.walletStateToRestore(seed, network, networkName);
-        bundle = await buildFacade(seed, network, cacheBeforeBuild);
+          : await this.walletStateToRestore(seed, network, networkName, opts.log);
+        bundle = await buildFacade(seed, network, cacheBeforeBuild, opts.log);
         try {
           syncedState = await startAndSyncFacade(bundle, {
             onProgress: opts.onSyncProgress,
@@ -514,6 +520,7 @@ export class WalletDataRepository {
             timeoutMs: syncTimeoutMs,
             syncMode,
             requireStrictSync,
+            log: opts.log,
           });
           break;
         } catch (err: any) {
@@ -528,7 +535,7 @@ export class WalletDataRepository {
             // Re-prime the dust cache so the next attempt restores from a
             // current checkpoint instead of a full SDK resync.
             try {
-              await this.dust(seed, network, { signal: opts.signal, onStatus: opts.onStatus });
+              await this.dust(seed, network, { signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
             } catch { /* best-effort */ }
             continue;
           }
@@ -573,13 +580,14 @@ export class WalletDataRepository {
           await new Promise((r) => setTimeout(r, COLD_START_DELAY_MS));
           if (opts.signal?.aborted) throw new Error(CANCELLED_MESSAGE);
           const retryCache = loadWalletCache(address, networkName, this.cacheDir);
-          bundle = await buildFacade(seed, network, retryCache);
+          bundle = await buildFacade(seed, network, retryCache, opts.log);
           syncedState = await startAndSyncFacade(bundle, {
             onProgress: opts.onSyncProgress,
             onSyncDetail: opts.onSyncDetail,
             timeoutMs: syncTimeoutMs,
             syncMode,
             requireStrictSync,
+            log: opts.log,
           });
         }
       }
@@ -665,6 +673,7 @@ export class WalletDataRepository {
     value: T,
     network: NetworkConfig,
     signal?: AbortSignal,
+    log?: VerboseLog,
   ): Promise<void> {
     try {
       const tip = await this.getTip(network, signal);
@@ -672,7 +681,7 @@ export class WalletDataRepository {
     } catch {
       // Also swallows an abort landing on this final tip probe — fine: the sync
       // already completed and was persisted, so there is no work left to cancel.
-      verbose('repo', `tip unavailable; skipping memo for ${key}`);
+      log?.('repo', `tip unavailable; skipping memo for ${key}`);
     }
   }
 
@@ -716,6 +725,7 @@ function defaultDustFetcher(
     onProgress?: (applied: number, max: number) => void;
     onCheckpoint?: (state: ledger.DustLocalState, lastAppliedEventId: number, retention: DustRetention) => void;
     cacheDir?: string;
+    log?: VerboseLog;
   },
 ): Promise<DustDirectResult> {
   const dustSeed = deriveDustSeed(seed);
@@ -737,7 +747,7 @@ async function nativeOrWasmDustFetcher(
     try {
       return await runDustSyncNative(seed, network, opts);
     } catch (err) {
-      verbose('dust', `native sidecar failed, using WASM: ${(err as Error).message}`);
+      opts.log?.('dust', `native sidecar failed, using WASM: ${(err as Error).message}`);
     }
   }
   return defaultDustFetcher(seed, network, opts);

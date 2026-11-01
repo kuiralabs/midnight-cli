@@ -27,7 +27,7 @@ import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from '.
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
-import { installCliHost } from './lib/cli-host.ts';
+import { installCliHost, type CliHost } from './lib/cli-host.ts';
 import { installedCommands } from './lib/installed-commands.ts';
 
 // Skill resources — teach MCP clients how to use this CLI conversationally.
@@ -44,6 +44,9 @@ const SKILL_CORE_PATH = fileURLToPath(new URL('../docs/SKILL-CORE.md', import.me
 const SKILL_FULL_PATH = fileURLToPath(new URL('../docs/SKILL.md', import.meta.url));
 
 const confirmationStore = createConfirmationStore();
+
+// What the host gives the tools' runs, once main() has installed it.
+let host: CliHost | null = null;
 
 // ── Server setup ────────────────────────────────────────────
 
@@ -151,12 +154,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
  * the one before is not sent again.
  */
 function toolCall(progressToken: ProgressToken | undefined, extra: RequestHandlerExtra<ServerRequest, ServerNotification>): CommandRun {
-  if (progressToken === undefined) return { signal: extra.signal, payer: servePayer };
+  if (host === null) throw new Error('The MCP server took a call before its host was installed');
+  const { sdkWarnings } = host;
+  if (progressToken === undefined) return { signal: extra.signal, payer: servePayer, sdkWarnings };
   let progress = 0;
   let last: string | undefined;
   return {
     signal: extra.signal,
     payer: servePayer,
+    sdkWarnings,
     onProgress: (message) => {
       if (message === last) return;
       last = message;
@@ -209,7 +215,7 @@ async function main() {
   // Endpoint URLs can carry a Blockfrost project id: no response or log shows it.
   hideProjectIdsInOutput();
   // What the tools' libraries get from their host, as the CLI gives them (no prompter: no terminal here).
-  installCliHost();
+  host = installCliHost();
   // The server runs facades on demand (balance/transfer/etc.). A cold shielded
   // sync would overflow Node's default heap, so re-exec once at startup with
   // more headroom. No-op when launched via `mn --mcp` (already bumped) or when

@@ -6,7 +6,7 @@ import { UsageError } from '../lib/errors.ts';
 import type { CallContext } from '../lib/call-context.ts';
 import { header, keyValue } from '../ui/format.ts';
 import { bold, dim, teal, yellow, green } from '../ui/colors.ts';
-import { silentSpinner, start as startSpinner } from '../ui/spinner.ts';
+
 import { type Payer, payerFor, resolvePayingTarget } from '../lib/payer.ts';
 import { deployContract } from '../lib/contract/deploy.ts';
 import { callContract } from '../lib/contract/call.ts';
@@ -133,7 +133,8 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
     target,
     wallet: getFlag(args, 'wallet'),
     payer,
-    progress: (message) => jsonMode ? silentSpinner() : startSpinner(message),
+    progress: (message) => jsonMode ? ctx.progress.silent() : ctx.progress.start(message),
+    sdkWarnings: ctx.sdkWarnings,
     signal: ctx.signal,
   });
 
@@ -202,7 +203,8 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
     target,
     wallet: getFlag(args, 'wallet'),
     payer,
-    progress: (message) => jsonMode ? silentSpinner() : startSpinner(message),
+    progress: (message) => jsonMode ? ctx.progress.silent() : ctx.progress.start(message),
+    sdkWarnings: ctx.sdkWarnings,
     signal: ctx.signal,
   });
 
@@ -241,7 +243,7 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
   }
 
   // Try parsed ledger state via runner (needs compiled contract in dApp)
-  const spinner = jsonMode ? silentSpinner() : startSpinner('Querying contract state...');
+  const spinner = jsonMode ? ctx.progress.silent() : ctx.progress.start('Querying contract state...');
 
   try {
     const { info } = findContractInfo(scanDir, contractName);

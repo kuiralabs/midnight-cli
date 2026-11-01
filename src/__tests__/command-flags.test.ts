@@ -74,6 +74,8 @@ describe('the accepted flags match the code', () => {
     'resolveSeedSource(': ['seed', 'wallet'],
     'resolveSeed(': ['seed', 'wallet'],
     'isVerbose(': ['verbose'],
+    // The call's diagnostics are verbose when its --verbose is given (2F): a command that writes them, or hands them to a library, reads it.
+    'ctx.diagnostics.': ['verbose'],
     'rejectNoCacheForWrites(': ['no-cache'],
     'resolveTransferRequest(': ['shielded', 'force-shielded', 'wallet', 'network'],
     'resolveScanDir(': ['managed', 'path'],

@@ -3,13 +3,13 @@
 // progress, its diagnostics, where the SDK's warnings go, its configuration,
 // and the payer and protectors its caller gives. Nothing about a call lives in
 // a module global, so two calls in one process cannot mix. The context reaches
-// libraries as explicit parameters, never as ambient per-call storage.
+// libraries as explicit parameters, never as ambient per-call storage; the one
+// exception is the shell's, which tags the SDK's noise with the call that
+// raised it (lib/sdk-noise.ts).
 //
 // The CLI builds one from the process's streams, its signal and --verbose
 // (lib/command-dispatch.ts); the MCP server builds one per request
-// (lib/run-command.ts). Since 2F's S1 the shape is final; progress and the SDK
-// warnings still reach today's module-level targets until S3 and S5 make them
-// the call's own.
+// (lib/run-command.ts).
 
 import { isVerbose, type ParsedArgs } from './argv.ts';
 import { CancelledError } from './errors.ts';
@@ -18,8 +18,8 @@ import { settings, type Settings } from './settings.ts';
 import { hostPaths, type HostPaths } from './state-root.ts';
 import { notice } from './notices.ts';
 import { verboseLine } from './verbose.ts';
-import { onSdkWarning } from './sdk-warnings.ts';
-import { getActiveSpinner, silentSpinner, start as startSpinner, type Spinner } from '../ui/spinner.ts';
+import { createSdkWarningRouter, type CallSdkWarnings } from './sdk-warnings.ts';
+import { createProgress, type Progress, type ProgressReport } from '../ui/spinner.ts';
 
 /** Where a call's output goes. */
 export interface CallOutput {
@@ -41,15 +41,8 @@ export interface OutputSink {
   stderr(text: string): void;
 }
 
-/** A call's progress: the spinners of its steps, and what they say to the caller. */
-export interface CallProgress {
-  /** Starts a spinner for a step. */
-  start(message: string): Spinner;
-  /** A spinner that shows nothing (`--json`); what it would say still reaches the caller. */
-  silent(): Spinner;
-  /** The call's spinner that is running now, if any. */
-  active(): Spinner | null;
-}
+/** A call's progress: the spinners of its steps, what they say to the caller, and which one runs now. Its own per call. */
+export type CallProgress = Progress;
 
 /** A call's diagnostics: whether it is verbose, and where its lines go. */
 export interface CallDiagnostics {
@@ -59,13 +52,7 @@ export interface CallDiagnostics {
   line(phase: string, message: string): void;
 }
 
-type SdkWarningListener = (tag: string, message: string) => void;
-
-/** Where the SDK's transient warnings go while the call runs the SDK. */
-export interface CallSdkWarnings {
-  /** Sends them to `listener` until the returned function is called; with none, they are only kept off the terminal. */
-  listen(listener: SdkWarningListener | undefined): () => void;
-}
+export type { CallSdkWarnings } from './sdk-warnings.ts';
 
 /** A call's configuration, read when the call starts (decision 1: host-set until phase 3). */
 export interface CallConfig {
@@ -142,6 +129,10 @@ export interface CallParts<Protector = unknown> {
   readonly args: ParsedArgs;
   readonly signal: AbortSignal;
   readonly output: OutputSink;
+  /** Where what the call's spinners say goes besides the terminal (the MCP server's progress notifications); none for the CLI. */
+  readonly onProgress?: ProgressReport;
+  /** Where the call's SDK warnings go, from the router of the host that runs it; none: a call of its own, which no host's filters report to. */
+  readonly sdkWarnings?: CallSdkWarnings;
   readonly payer?: Payer;
   readonly protectors?: readonly Protector[];
 }
@@ -151,11 +142,9 @@ export function createCallContext<Protector = unknown>(parts: CallParts<Protecto
   return {
     signal: parts.signal,
     output: callOutput(parts.output),
-    // Today's progress target and active spinner, until S3 makes them the call's.
-    progress: { start: startSpinner, silent: silentSpinner, active: getActiveSpinner },
+    progress: createProgress(parts.onProgress),
     diagnostics: callDiagnostics(isVerbose(parts.args), notice),
-    // Today's listener stack, until S5 routes the warnings per call.
-    sdkWarnings: { listen: onSdkWarning },
+    sdkWarnings: parts.sdkWarnings ?? createSdkWarningRouter().openCall().warnings,
     config: hostCallConfig(),
     ...(parts.payer === undefined ? {} : { payer: parts.payer }),
     ...(parts.protectors === undefined ? {} : { protectors: parts.protectors }),

@@ -11,7 +11,8 @@ import { resolveContractDeployRequest } from '../lib/contract/request.ts';
 import { deployContract } from '../lib/contract/deploy.ts';
 import { resolvePayingTarget } from '../lib/payer.ts';
 import { servePayerAt } from '../lib/serve-payer.ts';
-import { setProgressTarget, silentSpinner } from '../ui/spinner.ts';
+import { silentSpinner } from '../ui/spinner.ts';
+import { createSdkWarningRouter } from '../lib/sdk-warnings.ts';
 
 const ENDPOINTS = ['--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
 
@@ -40,19 +41,15 @@ describe('deployContract', () => {
   it('stops at the funds check when the paying wallet is not there, before anything is served', async () => {
     const args = parseArgs(['contract', 'deploy', '--path', path.join(home, 'dapp'), '--wallet', 'nobody', ...ENDPOINTS]);
     const said: string[] = [];
-    setProgressTarget((message) => said.push(message));
-    try {
-      await expect(deployContract({
-        request: resolveContractDeployRequest(args),
-        target: resolvePayingTarget(args, 'contract', 'deploy'),
-        wallet: 'nobody',
-        // Never reached: serving would be the step after the funds check.
-        payer: servePayerAt(1),
-        progress: (message) => { said.push(message); return silentSpinner(); },
-      })).rejects.toThrow(path.join(home, '.midnight', 'wallets', 'nobody.json'));
-    } finally {
-      setProgressTarget(null);
-    }
+    await expect(deployContract({
+      request: resolveContractDeployRequest(args),
+      target: resolvePayingTarget(args, 'contract', 'deploy'),
+      wallet: 'nobody',
+      // Never reached: serving would be the step after the funds check.
+      payer: servePayerAt(1),
+      progress: (message) => { said.push(message); return silentSpinner((later) => said.push(later)); },
+      sdkWarnings: createSdkWarningRouter().openCall().warnings,
+    })).rejects.toThrow(path.join(home, '.midnight', 'wallets', 'nobody.json'));
     expect(said).toEqual(['Checking wallet...']);
   });
 
@@ -71,6 +68,7 @@ describe('deployContract', () => {
       wallet: 'external',
       payer: ownPayer,
       progress: () => silentSpinner(),
+      sdkWarnings: createSdkWarningRouter().openCall().warnings,
     })).rejects.toThrow('served by the program');
     expect(asked).toEqual(['assertCanPay external', 'serve']);
     expect(fs.existsSync(path.join(home, '.midnight', 'wallets'))).toBe(false);

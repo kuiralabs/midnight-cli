@@ -1,11 +1,12 @@
 // The CLI's prompter: asks at a terminal on stderr, so stdout stays the
 // command's result. A secret is typed with the terminal in raw mode, so
-// nothing is echoed; Ctrl-C refuses.
+// nothing is echoed; Ctrl-C refuses. One terminal answers one question at a
+// time: a question asked while another is open is refused (PromptBusyError).
 
 import { createInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
 import { UsageError } from '../lib/errors.ts';
-import type { Prompter } from '../lib/prompter.ts';
+import { PromptBusyError, type Prompter } from '../lib/prompter.ts';
 
 export interface TerminalIo {
   input?: Readable & { setRawMode?: (mode: boolean) => unknown; isTTY?: boolean };
@@ -48,19 +49,30 @@ export function createTerminalPrompter(io: TerminalIo = {}): Prompter {
   // start, and only a command that prompts may touch stdin.
   const input = () => io.input ?? process.stdin;
   const output = () => io.output ?? process.stderr;
+  // Whether a question is open now: this terminal's, so two prompters never block each other.
+  let asking = false;
+  const oneAtATime = async (question: () => Promise<string | null>): Promise<string | null> => {
+    if (asking) throw new PromptBusyError();
+    asking = true;
+    try {
+      return await question();
+    } finally {
+      asking = false;
+    }
+  };
   return {
     isInteractive: () => io.isTTY ?? input().isTTY === true,
-    ask: (question) => new Promise((resolve) => {
+    ask: (question) => oneAtATime(() => new Promise((resolve) => {
       const rl = createInterface({ input: input(), output: output() });
       let answered = false;
       rl.on('close', () => { if (!answered) resolve(null); });
       rl.question(question, (answer) => { answered = true; rl.close(); resolve(answer); });
-    }),
-    askSecret: async (question) => {
+    })),
+    askSecret: (question) => oneAtATime(async () => {
       output().write(question);
       const line = await hiddenLine(input());
       output().write('\n');
       return line;
-    },
+    }),
   };
 }

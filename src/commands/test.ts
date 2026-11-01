@@ -6,10 +6,10 @@ import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { type ParsedArgs, getFlag, hasFlag } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
-import type { CallContext, CommandOutcome } from '../lib/call-context.ts';
+import type { CallContext, CallProgress, CommandOutcome } from '../lib/call-context.ts';
 import { header, keyValue, divider } from '../ui/format.ts';
 import { bold, dim, green, red, teal, yellow } from '../ui/colors.ts';
-import { start as startSpinner } from '../ui/spinner.ts';
+import type { Spinner } from '../ui/spinner.ts';
 
 import { discoverDappConfig, discoverTestSuites, loadAssertions, loadActions, loadPrompt } from '../lib/test/discovery.ts';
 import { createPrepContext, type TestRunResult, type PrepStepResult } from '../lib/test/types.ts';
@@ -168,7 +168,7 @@ async function handleCreate(args: ParsedArgs, jsonMode: boolean, ctx: CallContex
   // The spinner lives one level down, around just the claude subprocess
   // call inside aiCliScaffold / aiUiScaffold.
   const scaffold = aiOptIn
-    ? await tryAiScaffold({ strategy, info, dappDir, browser, network, suiteName, goalFlag, screenFlag, interactive, jsonMode, ai, promptCircuit, promptScreen, promptGoal, promptSuiteName, discoverScreens })
+    ? await tryAiScaffold({ strategy, info, dappDir, browser, network, suiteName, goalFlag, screenFlag, interactive, jsonMode, ai, promptCircuit, promptScreen, promptGoal, promptSuiteName, discoverScreens, progress: ctx.progress })
       ?? buildScaffold(info.circuits, { contractName: info.name, suiteName, strategy, browser, network })
     : buildScaffold(info.circuits, { contractName: info.name, suiteName, strategy, browser, network });
 
@@ -254,6 +254,8 @@ type AiScaffoldDeps = {
   promptGoal: typeof import('../ui/test-create-prompt.ts').promptGoal;
   promptSuiteName: typeof import('../ui/test-create-prompt.ts').promptSuiteName;
   discoverScreens: typeof import('../lib/test/discover-screens.ts').discoverScreens;
+  /** The call's progress, for the spinner while Claude scaffolds. */
+  progress: CallProgress;
 };
 
 async function tryAiScaffold(deps: AiScaffoldDeps): Promise<import('../lib/test/create.ts').ScaffoldOutput | null> {
@@ -283,12 +285,13 @@ async function tryAiScaffold(deps: AiScaffoldDeps): Promise<import('../lib/test/
  * thrown error won't leave a stale ⠋ glyph in the terminal.
  */
 async function runWithSpinner<T>(
+  progress: CallProgress,
   message: string,
   task: () => Promise<T>,
   show: boolean,
 ): Promise<T> {
   if (!show) return task();
-  const spinner = startSpinner(message);
+  const spinner = progress.start(message);
   try {
     const result = await task();
     spinner.stop();
@@ -335,6 +338,7 @@ async function aiCliScaffold(deps: AiScaffoldDeps, goal: string | undefined): Pr
   }
 
   return runWithSpinner(
+    deps.progress,
     'Asking Claude to scaffold the test suite (30–60s)...',
     () => deps.ai.generateCliScaffoldWithAI({
       contract: deps.info,
@@ -369,6 +373,7 @@ async function aiUiScaffold(deps: AiScaffoldDeps, goal: string | undefined): Pro
   if (!screen && !goal) return null;
 
   return runWithSpinner(
+    deps.progress,
     'Asking Claude to scaffold the test suite (30–60s)...',
     () => deps.ai.generateUiScaffoldWithAI({
       contract: deps.info,
@@ -429,7 +434,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
   }
 
   // Prep context for resource tracking + teardown
-  const prep = createPrepContext();
+  const prep = createPrepContext(ctx.sdkWarnings);
   const prepResults: PrepStepResult[] = [];
 
   // Register teardown on abort
@@ -443,11 +448,11 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
     if (!jsonMode) process.stderr.write(bold('  Prep\n'));
 
     // One spinner per step: it ends on the step's own mark, pass or fail.
-    let spinner: ReturnType<typeof startSpinner> | null = null;
+    let spinner: Spinner | null = null;
 
     const results = await runPrepSteps(config, dappDir, prep, {
       onStepStart(step) {
-        spinner = startSpinner(`[prep] ${step}...`);
+        spinner = ctx.progress.start(`[prep] ${step}...`);
       },
       onStepComplete(step, status, duration, error) {
         if (status === 'pass') {
@@ -547,7 +552,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
           onActionStart: (action) => {
             currentAction = action;
             if (!jsonMode) {
-              const spinner = startSpinner(`[${action.id}] ${action.type}${action.circuit ? ` ${action.circuit}` : ''}...`);
+              const spinner = ctx.progress.start(`[${action.id}] ${action.type}${action.circuit ? ` ${action.circuit}` : ''}...`);
               (action as any)._spinner = spinner;
             }
           },

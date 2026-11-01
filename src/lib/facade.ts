@@ -30,7 +30,7 @@ import {
   SYNC_TIMEOUT_MS,
   PRE_SEND_SYNC_TIMEOUT_MS,
 } from './constants.ts';
-import { verbose } from './verbose.ts';
+import type { VerboseLog } from './verbose.ts';
 import { assertNetworkAnswers } from './endpoint-check.ts';
 import { isStreamEmpty } from './event-tip.ts';
 
@@ -71,20 +71,23 @@ export interface FacadeBundle {
  * When `cache` is provided, wallets are restored from serialized state
  * instead of starting fresh — the SDK then only syncs new transactions
  * since the last checkpoint.
+ *
+ * Its diagnostics go to `log`, the call's verbose lines.
  */
 export async function buildFacade(
   seedBuffer: Buffer,
   networkConfig: NetworkConfig,
   cache?: WalletCacheData | null,
+  log?: VerboseLog,
 ): Promise<FacadeBundle> {
   const networkId = getNetworkId(networkConfig.networkId);
 
   await assertNetworkAnswers(networkConfig);
 
-  verbose('facade', `Building facade for network ${networkConfig.networkId}`);
-  verbose('facade', `Node: ${networkConfig.node}`);
-  verbose('facade', `Indexer: ${networkConfig.indexerWS}`);
-  verbose('facade', `Proof server: ${networkConfig.proofServer}`);
+  log?.('facade', `Building facade for network ${networkConfig.networkId}`);
+  log?.('facade', `Node: ${networkConfig.node}`);
+  log?.('facade', `Indexer: ${networkConfig.indexerWS}`);
+  log?.('facade', `Proof server: ${networkConfig.proofServer}`);
 
   const seeds: WalletSeeds = {
     shielded: deriveShieldedSeed(seedBuffer),
@@ -132,14 +135,14 @@ export async function buildFacade(
   // register) benefit from the indexer-direct reader's checkpoint without
   // re-implementing the whole transaction flow.
   const dustPublicKey = ledger.DustSecretKey.fromSeed(seeds.dust).publicKey;
-  const effectiveCache = cache ? maybeBridgeDustCache(cache, networkConfig, dustPublicKey) : null;
+  const effectiveCache = cache ? maybeBridgeDustCache(cache, networkConfig, dustPublicKey, log) : null;
 
   // Attempt cache restore — fall back to fresh build on any deserialization error.
   let restoredFromCache = false;
   let facade: WalletFacade;
 
   if (effectiveCache) {
-    verbose('facade', 'Restoring from cache...');
+    log?.('facade', 'Restoring from cache...');
     try {
       facade = await WalletFacade.init({
         configuration,
@@ -148,14 +151,14 @@ export async function buildFacade(
         dust: (cfg) => (dust = DustWallet(cfg).restore(effectiveCache.dust)),
       });
       restoredFromCache = true;
-      verbose('facade', 'Cache restore successful');
+      log?.('facade', 'Cache restore successful');
     } catch (err) {
-      verbose('facade', `Cache restore failed: ${(err as Error).message}`);
+      log?.('facade', `Cache restore failed: ${(err as Error).message}`);
       notice(`  Cache restore failed, building from scratch: ${(err as Error).message}`);
       facade = await initFresh();
     }
   } else {
-    verbose('facade', 'No cache, building fresh');
+    log?.('facade', 'No cache, building fresh');
     facade = await initFresh();
   }
 
@@ -253,6 +256,7 @@ function maybeBridgeDustCache(
   cache: WalletCacheData,
   networkConfig: NetworkConfig,
   dustPublicKey: ledger.DustPublicKey,
+  log?: VerboseLog,
 ): WalletCacheData {
   try {
     const networkName = networkConfig.networkId.toLowerCase();
@@ -266,13 +270,13 @@ function maybeBridgeDustCache(
     const snapshot: FacadeDustSnapshot = JSON.parse(cache.dust);
     const facadeOffset = snapshot.offset !== undefined ? Number(snapshot.offset) : -1;
     if (facadeOffset >= direct.lastAppliedEventId) {
-      verbose('facade', `Facade dust offset=${facadeOffset} >= dust-direct offset=${direct.lastAppliedEventId}; skipping bridge`);
+      log?.('facade', `Facade dust offset=${facadeOffset} >= dust-direct offset=${direct.lastAppliedEventId}; skipping bridge`);
       return cache;
     }
-    verbose('facade', `Bridged dust-direct cache (facade offset ${facadeOffset} → dust-direct offset ${direct.lastAppliedEventId})`);
+    log?.('facade', `Bridged dust-direct cache (facade offset ${facadeOffset} → dust-direct offset ${direct.lastAppliedEventId})`);
     return { ...cache, dust: overlayDustDirectSnapshot(cache.dust, direct) };
   } catch (err) {
-    verbose('facade', `Dust-direct bridge skipped: ${(err as Error).message}`);
+    log?.('facade', `Dust-direct bridge skipped: ${(err as Error).message}`);
     return cache;
   }
 }
@@ -386,25 +390,27 @@ export interface SyncOptions {
    * operations (balance, dust status) can leave this off for the speedup.
    */
   requireStrictSync?: boolean;
+  /** The call's verbose lines. */
+  log?: VerboseLog;
 }
 
 export async function startAndSyncFacade(
   bundle: FacadeBundle,
   options: SyncOptions = {},
 ): Promise<FacadeState> {
-  const { onProgress, onSyncDetail, timeoutMs, syncMode = 'full', requireStrictSync = false } = options;
+  const { onProgress, onSyncDetail, timeoutMs, syncMode = 'full', requireStrictSync = false, log } = options;
   const { facade } = bundle;
 
-  verbose('sync', 'Starting facade (connecting to node and indexer)...');
+  log?.('sync', 'Starting facade (connecting to node and indexer)...');
   const [, emptyStreams] = await Promise.all([startFacade(bundle), readEmptyStreams(bundle.indexerWsUrl, syncMode)]);
   bundle.emptyStreams = emptyStreams;
   if (emptyStreams.zswap || emptyStreams.dust) {
-    verbose('sync', `The chain has no events in: ${[emptyStreams.zswap && 'zswap', emptyStreams.dust && 'dust'].filter(Boolean).join(', ')}`);
+    log?.('sync', `The chain has no events in: ${[emptyStreams.zswap && 'zswap', emptyStreams.dust && 'dust'].filter(Boolean).join(', ')}`);
   }
-  verbose('sync', 'Facade started, subscribing to state...');
+  log?.('sync', 'Facade started, subscribing to state...');
 
   const effectiveTimeout = timeoutMs ?? SYNC_TIMEOUT_MS;
-  verbose('sync', `Sync timeout: ${effectiveTimeout / 1000}s, mode: ${syncMode}`);
+  log?.('sync', `Sync timeout: ${effectiveTimeout / 1000}s, mode: ${syncMode}`);
 
   // Cached-restore grace: if the facade was restored from cache and we're a
   // READ operation, accept dust as "good enough" once non-dust wallets are
@@ -425,16 +431,16 @@ export async function startAndSyncFacade(
 
     const timeout = setTimeout(() => {
       if (!resolved) {
-        verbose('sync', `Sync timed out after ${effectiveTimeout / 1000}s (${emissionCount} emissions)`);
+        log?.('sync', `Sync timed out after ${effectiveTimeout / 1000}s (${emissionCount} emissions)`);
         if (lastState) {
           try {
             const up = lastState.unshielded.progress;
-            verbose('sync', `  unshielded: applied=${up.appliedId} highest=${up.highestTransactionId} complete=${up.isStrictlyComplete()}`);
+            log?.('sync', `  unshielded: applied=${up.appliedId} highest=${up.highestTransactionId} complete=${up.isStrictlyComplete()}`);
             const dp = lastState.dust.progress;
-            verbose('sync', `  dust: applied=${dp.appliedIndex} highest=${dp.highestRelevantWalletIndex} complete=${dp.isStrictlyComplete()} connected=${dp.isConnected}`);
+            log?.('sync', `  dust: applied=${dp.appliedIndex} highest=${dp.highestRelevantWalletIndex} complete=${dp.isStrictlyComplete()} connected=${dp.isConnected}`);
             if (syncMode === 'full') {
               const sp = lastState.shielded.progress;
-              verbose('sync', `  shielded: complete=${sp.isStrictlyComplete()}`);
+              log?.('sync', `  shielded: complete=${sp.isStrictlyComplete()}`);
             }
           } catch { /* best-effort */ }
         }
@@ -459,7 +465,7 @@ export async function startAndSyncFacade(
           if (staleReason) {
             resolved = true;
             clearTimeout(timeout);
-            verbose('sync', `Stale cache detected: ${staleReason}`);
+            log?.('sync', `Stale cache detected: ${staleReason}`);
             reject(new StaleCacheError(staleReason));
             return;
           }
@@ -486,7 +492,7 @@ export async function startAndSyncFacade(
           onSyncDetail?.(pending.join(', '));
           const pendingKey = pending.join(',');
           if (emissionCount === 1 || pendingKey !== lastPendingKey || emissionCount % 100 === 0) {
-            verbose('sync', `Waiting on: ${pending.join(', ')} (emission #${emissionCount})`);
+            log?.('sync', `Waiting on: ${pending.join(', ')} (emission #${emissionCount})`);
             lastPendingKey = pendingKey;
           }
         }
@@ -496,7 +502,7 @@ export async function startAndSyncFacade(
         if (isFacadeSynced(state, syncMode, emptyStreams)) {
           resolved = true;
           clearTimeout(timeout);
-          verbose('sync', `Sync complete after ${emissionCount} emissions`);
+          log?.('sync', `Sync complete after ${emissionCount} emissions`);
           resolve(state);
           return;
         }
@@ -509,14 +515,14 @@ export async function startAndSyncFacade(
           if (elapsed >= CACHED_RESTORE_DUST_GRACE_MS && isFacadeSynced(state, 'no-dust', emptyStreams)) {
             resolved = true;
             clearTimeout(timeout);
-            verbose('sync', `Sync resolved via cached-restore grace (${elapsed}ms, ${emissionCount} emissions)`);
+            log?.('sync', `Sync resolved via cached-restore grace (${elapsed}ms, ${emissionCount} emissions)`);
             resolve(state);
           }
         }
       },
       error: (err) => {
         if (!resolved) {
-          verbose('sync', `Sync error: ${(err as Error).message}`);
+          log?.('sync', `Sync error: ${(err as Error).message}`);
           clearTimeout(timeout);
           reject(err);
         }

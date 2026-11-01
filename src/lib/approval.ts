@@ -2,7 +2,7 @@
 // Asks through the prompter the host sets (the CLI's uses readline, per project constraints — no inquirer)
 
 import { notice } from './notices.ts';
-import { currentPrompter } from './prompter.ts';
+import { currentPrompter, PromptBusyError } from './prompter.ts';
 import { box } from '../ui/format.ts';
 import { bold, teal, dim, yellow, green, red } from '../ui/colors.ts';
 import type { FeeLimits } from './fee-limits.ts';
@@ -108,10 +108,6 @@ export function isPrepMethod(method: string): boolean {
   return PREP_METHODS.has(method);
 }
 
-// ── Concurrent prompt guard ──
-
-let promptActive = false;
-
 // ── Rendering ──
 
 export function renderApprovalBox(request: ApprovalRequest): string {
@@ -162,7 +158,8 @@ function nonInteractiveHint(request: ApprovalRequest, options: ApprovalOptions):
  * If options.autoApproveReads is true and the method is read-only, auto-approves.
  *
  * Rejects if stdin is not a TTY (non-interactive environment).
- * Only one prompt can be active at a time — concurrent calls are rejected.
+ * Only one prompt can be active at a time: the prompter refuses a second
+ * question while one is open, and the request is rejected.
  */
 export async function promptApproval(
   request: ApprovalRequest,
@@ -194,14 +191,7 @@ export async function promptApproval(
     return 'reject';
   }
 
-  // Prevent concurrent prompts from overlapping on stdin
-  if (promptActive) {
-    notice(red('  Rejected: another approval prompt is active'));
-    return 'reject';
-  }
-
   // The request is part of the question, so whoever answers sees what they approve.
-  promptActive = true;
   try {
     const answer = await prompter.ask('\n' + renderApprovalBox(request) + '\n\n' + yellow('  Approve? [A/r] '));
     // Input ended before an answer (e.g. piped input ends): reject.
@@ -209,10 +199,9 @@ export async function promptApproval(
     const normalized = answer.trim().toLowerCase();
     // Default to approve (empty input, 'a', 'approve', 'y', 'yes')
     return normalized === 'r' || normalized === 'reject' ? 'reject' : 'approve';
-  } catch {
-    notice(red('  Cannot create readline interface'));
+  } catch (err) {
+    // The terminal is answering another question: prompts never overlap on stdin.
+    notice(red(err instanceof PromptBusyError ? '  Rejected: another approval prompt is active' : '  Cannot create readline interface'));
     return 'reject';
-  } finally {
-    promptActive = false;
   }
 }

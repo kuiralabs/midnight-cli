@@ -4,6 +4,7 @@
 
 import type { Payer, PayingTarget } from '../payer.ts';
 import type { Spinner } from '../../ui/spinner.ts';
+import type { CallSdkWarnings } from '../sdk-warnings.ts';
 
 export interface ServedWalletParams {
   target: PayingTarget;
@@ -12,6 +13,8 @@ export interface ServedWalletParams {
   payer: Payer;
   /** Starts the progress line for each step, given its first message. */
   progress: (message: string) => Spinner;
+  /** The paying call's SDK warnings, which a wallet served in this process keeps to. */
+  sdkWarnings: CallSdkWarnings;
 }
 
 /** What the progress line says while the script runs, when it succeeds, and when it fails. */
@@ -22,13 +25,13 @@ export interface ServedRunLabels {
 }
 
 export async function withServedWallet<T>(
-  { target, wallet, payer, progress }: ServedWalletParams,
+  { target, wallet, payer, progress, sdkWarnings }: ServedWalletParams,
   labels: ServedRunLabels,
   run: (servePort: number, spinner: Spinner) => Promise<T>,
 ): Promise<T> {
   // Before anything is served: the payer's wallet has NIGHT and Dust to pay with.
   await payer.assertCanPay(target, wallet, progress('Checking wallet...'));
-  const serve = await payer.serve(target, wallet, progress('Starting mn serve...'));
+  const serve = await payer.serve(target, wallet, progress('Starting mn serve...'), sdkWarnings);
   const spinner = progress(labels.running);
   try {
     const result = await run(serve.port, spinner);

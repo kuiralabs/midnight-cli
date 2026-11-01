@@ -4,7 +4,7 @@
 import { type ParsedArgs, MINIMAL_FLAG } from './argv.ts';
 import type { Payer } from './payer.ts';
 import { createCallContext, runHandler, type CommandHandler, type OutputSink } from './call-context.ts';
-import { setProgressTarget } from '../ui/spinner.ts';
+import { createSdkWarningRouter, sdkWarningCallsOn, type SdkWarningCalls } from './sdk-warnings.ts';
 
 export interface CommandRun {
   /** Cancels the command; a call already cancelled never starts. None: it runs to the end. */
@@ -13,6 +13,8 @@ export interface CommandRun {
   onProgress?: (message: string) => void;
   /** What a command that submits a transaction pays with. */
   payer?: Payer;
+  /** The host's calls, which the command runs in, with its own SDK warnings. None: a call of its own, which no host's filters report to. */
+  sdkWarnings?: SdkWarningCalls;
 }
 
 /** The server's stderr: where a call's text for the person goes (decision 3), never the protocol channel on stdout. */
@@ -36,7 +38,9 @@ const serverStderr = (text: string): void => { process.stderr.write(text); };
  * that as "agent explicitly wants the full shape" and emit the human
  * shape instead.
  *
- * What the command's spinners say goes to `onProgress` while it runs.
+ * What the command's spinners say goes to `onProgress` while it runs, and
+ * nothing once it is over: each call has its own progress (2F), so two calls
+ * at once never report each other's.
  *
  * Returns the result as a JSON object ({} when the command wrote none).
  * Throws the original error if the handler throws.
@@ -44,7 +48,7 @@ const serverStderr = (text: string): void => { process.stderr.write(text); };
 export async function captureCommand(
   handler: CommandHandler,
   args: ParsedArgs,
-  { signal, onProgress, payer }: CommandRun = {},
+  { signal, onProgress, payer, sdkWarnings = sdkWarningCallsOn(createSdkWarningRouter()) }: CommandRun = {},
 ): Promise<Record<string, unknown>> {
   let result: Record<string, unknown> = {};
   const output: OutputSink = {
@@ -57,13 +61,20 @@ export async function captureCommand(
   if (!(MINIMAL_FLAG in args.flags)) {
     args.flags[MINIMAL_FLAG] = true;
   }
-  const ctx = createCallContext({ args, signal: signal ?? new AbortController().signal, output, ...(payer === undefined ? {} : { payer }) });
-  setProgressTarget(onProgress ?? null);
-
+  // The call's own progress, closed when it ends: a spinner it left running says nothing after.
+  let running = true;
+  const report = onProgress === undefined ? undefined : (message: string): void => { if (running) onProgress(message); };
   try {
-    await runHandler(handler, args, ctx);
+    await sdkWarnings.run((warnings) => runHandler(handler, args, createCallContext({
+      args,
+      signal: signal ?? new AbortController().signal,
+      output,
+      sdkWarnings: warnings,
+      ...(report === undefined ? {} : { onProgress: report }),
+      ...(payer === undefined ? {} : { payer }),
+    })));
     return result;
   } finally {
-    setProgressTarget(null);
+    running = false;
   }
 }

@@ -2,8 +2,7 @@
 // Usage: midnight serve [--port 9932] [--wallet path] [--network name]
 //                       [--approve-all | --approve-fees] [--no-auto-approve-reads] [--json]
 
-import { type ParsedArgs, getFlag, hasFlag, isVerbose, rejectNoCacheForWrites } from '../lib/argv.ts';
-import { enableVerbose } from '../lib/verbose.ts';
+import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '../lib/argv.ts';
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides } from '../lib/network.ts';
@@ -19,10 +18,9 @@ import { header, keyValue, divider, formatAddress, toDust } from '../ui/format.t
 import { parseFeeLimits } from '../lib/fee-limits.ts';
 import { describeApprovalPolicy } from '../lib/approval.ts';
 import { bold, dim, teal, green, red } from '../ui/colors.ts';
-import { start as startSpinner, getActiveSpinner } from '../ui/spinner.ts';
+import type { Spinner } from '../ui/spinner.ts';
 import type { CallContext } from '../lib/call-context.ts';
 import { UsageError, CANCELLED_MESSAGE } from '../lib/errors.ts';
-import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
 export default async function serveCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
@@ -87,13 +85,11 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
 
   // ── Suppress SDK noise ──
 
-  const stopListening = onSdkWarning((_tag, msg) => {
-    const s = getActiveSpinner();
+  const stopListening = ctx.sdkWarnings.listen((_tag, msg) => {
+    const s = ctx.progress.active();
     if (s) { s.log(dim(`  SDK: ${msg}`)); }
     else { process.stderr.write(dim(`  SDK: ${msg}`) + '\n'); }
   });
-
-  if (isVerbose(args)) enableVerbose();
 
   // ── Build & sync facade via repo.withFacade ──
   // The repo owns: validateNetworkCaches → primeDustCache → buildFacade →
@@ -101,7 +97,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
   // serve has nuanced save logic (skip on pending txs to avoid persisting
   // dust=0 corruption — see `connector.hasPendingTxs()` check below).
 
-  const spinner = startSpinner('Syncing wallet...');
+  const spinner = ctx.progress.start('Syncing wallet...');
   // Skip the (slow) shielded sync where shielded is unusable (no faucet on
   // preview/preprod). dApps there can only do unshielded + dust anyway.
   const syncMode = shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded')) ? 'full' : 'lite';
@@ -111,7 +107,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
 
     // Wait for dust coins to actually be available before accepting write requests.
     // On preprod this can take 10-30s after sync completes.
-    const dustSpinner = startSpinner('Waiting for dust...');
+    const dustSpinner = ctx.progress.start('Waiting for dust...');
     const dustState = await waitForDustAvailable(bundle);
     const hasDust = hasDustAvailable(dustState);
     dustSpinner.stop(hasDust ? 'Dust ready' : 'Dust not yet available (writes may fail)');
@@ -136,7 +132,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
     };
 
     // Track per-connection spinners for write operations
-    let activeSpinner: ReturnType<typeof startSpinner> | undefined;
+    let activeSpinner: Spinner | undefined;
 
     const phaseCallbacks: DAppConnectorCallbacks = {
       onPhaseStart: (_connId, _method, phase) => {
@@ -146,7 +142,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
         if (activeSpinner) {
           activeSpinner.update(label);
         } else {
-          activeSpinner = startSpinner(label);
+          activeSpinner = ctx.progress.start(label);
         }
       },
       onPhaseComplete: (_connId, _method, phase, durationMs) => {
@@ -290,6 +286,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
     // Save logic is conditional (skip if pending txs) — done manually above.
     skipAutoSave: true,
     signal: ctx.signal,
+    log: ctx.diagnostics.line,
     onStatus: (s) => spinner.update(s),
     onSyncProgress: (applied, highest) => {
       if (highest > 0) {

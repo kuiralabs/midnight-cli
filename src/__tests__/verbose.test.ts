@@ -1,56 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
+import { verboseLine } from '../lib/verbose.ts';
 
-// Reset module state between tests by re-importing. Verbose lines go out as
-// notices; the CLI's sink writes them to stderr.
-let verbose: typeof import('../lib/verbose.ts');
-let lines: string[];
-
-beforeEach(async () => {
-  // Fresh import to reset `enabled` state
-  vi.resetModules();
-  verbose = await import('../lib/verbose.ts');
-  lines = [];
-  (await import('../lib/notices.ts')).setNoticeSink((line) => lines.push(line));
-});
-
-afterEach(async () => {
-  (await import('../lib/notices.ts')).setNoticeSink(null);
-});
-
-describe('verbose', () => {
-  it('is a no-op when not enabled', () => {
-    verbose.verbose('test', 'hello');
-    expect(lines).toEqual([]);
-  });
-
-  it('sends a notice when enabled', () => {
-    verbose.enableVerbose();
-    verbose.verbose('sync', 'Starting facade...');
-
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain('sync');
-    expect(lines[0]).toContain('Starting facade...');
-  });
-
+// The verbose line's format. Whether a call shows it is the call's own
+// (verbose-per-call.test.ts, call-context.test.ts).
+describe('verboseLine', () => {
   it('includes timestamp in HH:mm:ss.SSS format', () => {
-    verbose.enableVerbose();
-    verbose.verbose('phase', 'msg');
-
-    // Timestamp pattern: [HH:mm:ss.SSS]
-    expect(lines[0]).toMatch(/\[\d{2}:\d{2}:\d{2}\.\d{3}\]/);
+    expect(verboseLine('phase', 'msg')).toMatch(/\[\d{2}:\d{2}:\d{2}\.\d{3}\]/);
   });
 
-  it('includes phase and message in output', () => {
-    verbose.enableVerbose();
-    verbose.verbose('facade', 'Node: wss://example.com');
-
-    expect(lines[0]).toContain('facade: Node: wss://example.com');
+  it('includes phase and message', () => {
+    const line = verboseLine('facade', 'Node: wss://example.com');
+    expect(line).toContain('facade: Node: wss://example.com');
   });
 
-  it('sends one line per message, which the sink ends', () => {
-    verbose.enableVerbose();
-    verbose.verbose('test', 'msg');
+  it('names the phase it is given', () => {
+    const line = verboseLine('sync', 'Starting facade...');
+    expect(line).toContain('sync');
+    expect(line).toContain('Starting facade...');
+  });
 
-    expect(lines[0]).not.toContain('\n');
+  it('is one line, which the sink ends', () => {
+    expect(verboseLine('test', 'msg')).not.toContain('\n');
   });
 });

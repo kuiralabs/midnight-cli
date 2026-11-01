@@ -21,6 +21,7 @@ import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
 import { buildFacade, stopFacade, overlayDustDirectSnapshot } from './facade.ts';
 import { type NetworkConfig } from './network.ts';
 import { defaultRepository, type WalletDataRepository } from './wallet-data-repository.ts';
+import type { VerboseLog } from './verbose.ts';
 
 export interface DustExportResult {
   network: string;
@@ -56,12 +57,14 @@ export interface DustExportOptions {
    * The default touches the node relay (building a facade opens its API-WS), so
    * tests stub this to stay offline.
    */
-  buildBaseDust?: (seed: Buffer, networkConfig: NetworkConfig) => Promise<string>;
+  buildBaseDust?: (seed: Buffer, networkConfig: NetworkConfig, log?: VerboseLog) => Promise<string>;
+  /** The call's verbose lines. */
+  log?: VerboseLog;
 }
 
 /** Build a fresh facade from keys and read its base (empty) dust snapshot. */
-async function defaultBuildBaseDust(seedBuffer: Buffer, networkConfig: NetworkConfig): Promise<string> {
-  const bundle = await buildFacade(seedBuffer, networkConfig, null);
+async function defaultBuildBaseDust(seedBuffer: Buffer, networkConfig: NetworkConfig, log?: VerboseLog): Promise<string> {
+  const bundle = await buildFacade(seedBuffer, networkConfig, null, log);
   try {
     return await (bundle.facade as unknown as {
       dust: { serializeState(): Promise<string> };
@@ -94,9 +97,10 @@ export async function exportDustSnapshot(
   const view = await repo.dust(seedBuffer, networkConfig, {
     signal: options.signal,
     onProgress: options.onProgress,
+    log: options.log,
   });
 
-  const baseDust = await (options.buildBaseDust ?? defaultBuildBaseDust)(seedBuffer, networkConfig);
+  const baseDust = await (options.buildBaseDust ?? defaultBuildBaseDust)(seedBuffer, networkConfig, options.log);
 
   // Overlay whenever at least one event has been folded in. For a wallet with no
   // dust events yet (lastAppliedEventId -1) the fresh base snapshot is already the

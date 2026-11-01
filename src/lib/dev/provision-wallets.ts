@@ -12,6 +12,7 @@ import { checkBalance } from '../balance-subscription.ts';
 import { registerDust } from '../dust-register.ts';
 import { resolveNetwork } from '../resolve-network.ts';
 import type { NetworkConfig } from '../network.ts';
+import type { CallSdkWarnings } from '../sdk-warnings.ts';
 
 /** Default dev wallet names — one per common test persona. */
 export const DEFAULT_DEV_WALLET_NAMES = ['dev-alice', 'dev-bob', 'dev-carol'] as const;
@@ -35,20 +36,22 @@ export interface ProvisionSteps {
   needsDust: (name: string, signal?: AbortSignal) => Promise<boolean>;
 }
 
-export interface ProvisionOptions {
+interface ProvisionRun {
   names: readonly string[];
   amountNight: number;
   onProgress?: (wallet: string, phase: 'creating' | 'funding' | 'dust' | 'done', state: WalletProvisionState) => void;
   signal?: AbortSignal;
-  steps?: ProvisionSteps;
 }
 
+/** The steps to run; without them, the wallet functions, whose SDK runs keep their warnings to the provisioning call's `sdkWarnings`. */
+export type ProvisionOptions = ProvisionRun & ({ steps: ProvisionSteps } | { sdkWarnings: CallSdkWarnings });
+
 /** The steps through the wallet functions, on `network` (resolved once, for every wallet). */
-function walletSteps(network: NetworkConfig): ProvisionSteps {
+function walletSteps(network: NetworkConfig, sdkWarnings: CallSdkWarnings): ProvisionSteps {
   return {
     generate: generateWallet,
-    airdrop: (name, amountNight, signal) => airdropToWallet(network, name, amountNight, signal),
-    registerDust: (name, signal) => registerWalletDust(network, name, signal),
+    airdrop: (name, amountNight, signal) => airdropToWallet(network, name, amountNight, signal, sdkWarnings),
+    registerDust: (name, signal) => registerWalletDust(network, name, signal, sdkWarnings),
     needsDust: (name, signal) => walletNeedsDust(network, name, signal),
   };
 }
@@ -64,7 +67,7 @@ function walletSteps(network: NetworkConfig): ProvisionSteps {
  * while the earlier ones register instead of one after another.
  */
 export async function provisionDevWallets(opts: ProvisionOptions): Promise<ProvisionedWallet[]> {
-  const steps = opts.steps ?? walletSteps(undeployedNetwork());
+  const steps = 'steps' in opts ? opts.steps : walletSteps(undeployedNetwork(), opts.sdkWarnings);
   const results: ProvisionedWallet[] = [];
   const created: string[] = [];
 
@@ -144,9 +147,9 @@ async function generateWallet(name: string): Promise<void> {
   createWallet(name, walletSecretFrom(), await passphraseForNewSecret());
 }
 
-async function airdropToWallet(network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined): Promise<void> {
+async function airdropToWallet(network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
   const recipientAddress = loadWalletConfig(resolveWalletPath(name)).addresses.undeployed;
-  await airdropNight({ networkConfig: network, recipientAddress, amountNight, signal });
+  await airdropNight({ networkConfig: network, recipientAddress, amountNight, signal, sdkWarnings });
 }
 
 async function walletNeedsDust(network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<boolean> {
@@ -156,7 +159,7 @@ async function walletNeedsDust(network: NetworkConfig, name: string, signal: Abo
   return registeredUtxos === 0 && unregisteredUtxos > 0;
 }
 
-async function registerWalletDust(network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<void> {
+async function registerWalletDust(network: NetworkConfig, name: string, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
   const { seed } = await unlockWallet(resolveWalletPath(name));
-  await registerDust(Buffer.from(seed, 'hex'), network, { signal });
+  await registerDust(Buffer.from(seed, 'hex'), network, { signal, sdkWarnings });
 }
