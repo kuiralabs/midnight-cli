@@ -20,12 +20,12 @@ export default async function genesisAddressCommand(args: ParsedArgs, ctx: CallC
   }
 
   // Bare address to stdout (pipeable)
-  process.stdout.write(address + '\n');
+  ctx.output.stdout(address + '\n');
 
   // Details to stderr
-  process.stderr.write('\n');
-  process.stderr.write(keyValue('Network', networkName) + '\n');
-  process.stderr.write(keyValue('Address', formatAddress(address)) + '\n');
-  process.stderr.write(keyValue('Seed', dim('0x01 (genesis)')) + '\n');
-  process.stderr.write(divider() + '\n\n');
+  ctx.output.stderr('\n');
+  ctx.output.stderr(keyValue('Network', networkName) + '\n');
+  ctx.output.stderr(keyValue('Address', formatAddress(address)) + '\n');
+  ctx.output.stderr(keyValue('Seed', dim('0x01 (genesis)')) + '\n');
+  ctx.output.stderr(divider() + '\n\n');
 }

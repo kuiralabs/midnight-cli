@@ -5,6 +5,9 @@
 // polls the proof-server's `/` status endpoint until it returns a 2xx with
 // `{"status":"ok",...}` before `mn localnet up` claims readiness.
 
+import { throwIfCancelled } from './errors.ts';
+import { sleep } from './sleep.ts';
+
 export interface WaitForProofServerOptions {
   /** Overall deadline for the wait. Default 30s. */
   timeoutMs?: number;
@@ -12,11 +15,14 @@ export interface WaitForProofServerOptions {
   pollIntervalMs?: number;
   /** Per-request timeout. Default 2s. */
   requestTimeoutMs?: number;
+  /** The call's cancellation: the wait stops with CancelledError. */
+  signal?: AbortSignal;
 }
 
 /**
  * Poll the proof server at `GET <url>/` until it responds with 2xx. Resolves
- * as soon as the probe succeeds; rejects on timeout.
+ * as soon as the probe succeeds; rejects on timeout, or with CancelledError
+ * when the call is cancelled.
  *
  * The proof-server returns a JSON body like `{"status":"ok","timestamp":"..."}`
  * on its root endpoint. We don't validate the body shape — any 2xx is enough
@@ -38,15 +44,17 @@ export async function waitForProofServerReady(
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
       try {
-        const res = await fetch(probeUrl, { method: 'GET', signal: controller.signal });
+        const signal = opts.signal === undefined ? controller.signal : AbortSignal.any([controller.signal, opts.signal]);
+        const res = await fetch(probeUrl, { method: 'GET', signal });
         if (res.ok) return;
       } finally {
         clearTimeout(timer);
       }
     } catch {
+      throwIfCancelled(opts.signal);
       // Connection refused / aborted — proof server not up yet, retry.
     }
-    await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, pollIntervalMs));
+    await sleep(pollIntervalMs, opts.signal);
   }
 
   throw new Error(`Proof server at ${probeUrl} did not respond within ${timeoutMs / 1000}s`);

@@ -6,4 +6,5 @@ export function findViolations(
   files?: string[],
   allowed?: Record<string, string[]>,
   allowedState?: Record<string, Record<string, string>>,
+  src?: string,
 ): { file: string; line: number; rule: string; name?: string }[];

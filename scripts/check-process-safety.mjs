@@ -3,7 +3,10 @@
 // 20): no writing to the terminal, exiting, installing process handlers,
 // patching console, changing directory, opening a prompt, reading the
 // environment, or computing a path from the home directory (spec §7). Commands, ui/, the shell and the MCP server may; so may the
-// modules marked below as shell concerns. String and template-literal
+// modules marked below as shell concerns. Commands may not write to the
+// terminal either (2F, S8): their text goes through their call's output
+// (ctx.output.stdout / stderr), which the CLI writes to the process's streams
+// and the MCP server to its stderr. String and template-literal
 // contents and comments are skipped, so the contract runner's generated
 // scripts (which run as their own process) don't count.
 //
@@ -46,15 +49,18 @@ const RULES = [
 
 const RAW_RULES = new Set(['opens a prompt', 'hands a child the terminal']);
 
+// What a command may not do: its text for the person goes through its call's output.
+const COMMAND_RULES = RULES.filter(([rule]) => rule === 'writes to the terminal');
+
 // The 2F rules, each with the code it applies to.
 const MODULE_STATE = 'keeps module state';
 const STALE_STATE = 'allowlists module state it no longer keeps';
 const AMBIENT = 'keeps ambient per-call storage';
-const notNoiseFilter = (file) => relative(SRC, file) !== 'lib/sdk-noise.ts';
+const notNoiseFilter = (rel) => rel !== 'lib/sdk-noise.ts';
 // [rule, pattern, the files it applies to, whether it reads the raw source (an import's specifier)].
 const CALL_RULES = [
   // Only the shell turns a handler's exit code into the process's.
-  ['sets the process exit code', /\bprocess\.exitCode\s*(=[^=]|\?\?=|\|\|=)/, (file) => homeOf(file) !== 'shell', false],
+  ['sets the process exit code', /\bprocess\.exitCode\s*(=[^=]|\?\?=|\|\|=)/, (_rel, file) => homeOf(file) !== 'shell', false],
   // Ambient per-call storage is module state in disguise: only the shell's noise filter may attribute the SDK's noise that way.
   [AMBIENT, /\bAsyncLocalStorage\b/, notNoiseFilter, false],
   [AMBIENT, /\bfrom\s+['"](node:)?async_hooks['"]|\brequire\(\s*['"](node:)?async_hooks['"]\s*\)/, notNoiseFilter, true],
@@ -230,28 +236,31 @@ function isMutableInitializer(rest) {
   return false;
 }
 
-/** Library, ui and command code: where module state is a call's state waiting to mix. */
-function keepsCallsApart(file) {
-  const rel = relative(SRC, file);
+/** Library, ui and command code: where module state is a call's state waiting to mix. `rel` is the file's path under src/. */
+function keepsCallsApart(rel, file) {
   if (rel.startsWith('__tests__/')) return false;
   return !['shell', 'mcp'].includes(homeOf(file));
 }
 
-function isLibrary(file) {
-  const rel = relative(SRC, file);
+function isLibrary(rel, file) {
   if (rel.startsWith('commands/') || rel.startsWith('ui/') || rel.startsWith('__tests__/')) return false;
   if (['shell', 'mcp'].includes(homeOf(file))) return false;
   return !SHELL_CONCERNS.has(rel);
 }
 
+/** A command's module, its definition included (help and manual among them, though the shell's). */
+const isCommand = (rel) => rel.startsWith('commands/');
+
 /**
- * Every §3.1 break in library code, and every 2F break, that the allowlists
- * don't name: { file, line, rule }, and the name for module state.
+ * Every §3.1 break in library code, every terminal write in a command, and
+ * every 2F break, that the allowlists don't name: { file, line, rule }, and
+ * the name for module state. `src` is the folder the files' kinds are read
+ * from (commands/, ui/, …): src/, unless a test plants files elsewhere.
  */
-export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowedState = ALLOWED_STATE) {
+export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowedState = ALLOWED_STATE, src = SRC) {
   const found = [];
   for (const file of files) {
-    const rel = relative(SRC, file);
+    const rel = relative(src, file);
     const source = readFileSync(file, 'utf8');
     const code = codeOnly(source);
     const lines = code.split('\n');
@@ -265,10 +274,13 @@ export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowed
         if (pattern.test(text) && !(isRaw && /^\s*(\/\/|\*)/.test(text))) found.push({ file: rel, line: at + 1, rule });
       });
     };
-    if (isLibrary(file)) {
+    if (isLibrary(rel, file)) {
       for (const [rule, pattern] of RULES) scanRule(rule, pattern, RAW_RULES.has(rule));
     }
-    if (keepsCallsApart(file)) {
+    if (isCommand(rel)) {
+      for (const [rule, pattern] of COMMAND_RULES) scanRule(rule, pattern, false);
+    }
+    if (keepsCallsApart(rel, file)) {
       const declared = moduleStateDeclarations(code);
       for (const { line, name } of declared) {
         if (!Object.hasOwn(allowedState[rel] ?? {}, name)) found.push({ file: rel, line, rule: MODULE_STATE, name });
@@ -279,7 +291,7 @@ export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowed
       }
     }
     for (const [rule, pattern, appliesTo, isRaw] of CALL_RULES) {
-      if (appliesTo(file) && !rel.startsWith('__tests__/')) scanRule(rule, pattern, isRaw);
+      if (appliesTo(rel, file) && !rel.startsWith('__tests__/')) scanRule(rule, pattern, isRaw);
     }
   }
   // One finding per line and rule, however many of its patterns match there.
@@ -291,6 +303,6 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   for (const v of found) process.stdout.write(`src/${v.file}:${v.line}  ${v.rule}${v.name === undefined ? '' : ` (${v.name})`}\n`);
   const allowedCount = Object.keys(ALLOWED).length;
   const stateCount = Object.values(ALLOWED_STATE).reduce((n, names) => n + Object.keys(names).length, 0);
-  process.stdout.write(`\n${found.length === 0 ? 'Libraries leave the process alone, and no call keeps its state in a module' : `${found.length} place(s) where code touches the process or keeps a call's state`} (${allowedCount} file(s) and ${stateCount} module state(s) allowed, with their reasons).\n`);
+  process.stdout.write(`\n${found.length === 0 ? 'Libraries leave the process alone, commands write through their call, and no call keeps its state in a module' : `${found.length} place(s) where code touches the process or keeps a call's state`} (${allowedCount} file(s) and ${stateCount} module state(s) allowed, with their reasons).\n`);
   process.exit(found.length === 0 ? 0 : 1);
 }

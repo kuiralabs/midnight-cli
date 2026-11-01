@@ -68,27 +68,27 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
 
   // ── Header ──
 
-  process.stderr.write('\n' + header('DApp Connector Server') + '\n\n');
-  process.stderr.write(keyValue('Network', networkName) + '\n');
-  process.stderr.write(keyValue('Address', formatAddress(address, true)) + '\n');
-  process.stderr.write(keyValue('Port', String(port)) + '\n');
+  ctx.output.stderr('\n' + header('DApp Connector Server') + '\n\n');
+  ctx.output.stderr(keyValue('Network', networkName) + '\n');
+  ctx.output.stderr(keyValue('Address', formatAddress(address, true)) + '\n');
+  ctx.output.stderr(keyValue('Port', String(port)) + '\n');
   const policy = describeApprovalPolicy({ approveAll, approveFees, autoApproveReads }, feeLimits);
-  process.stderr.write(keyValue('Auto-approve balancing', { auto: 'yes', 'fee-only': 'fee-only (Dust fee only)', prompt: 'no' }[policy.balancing]) + '\n');
+  ctx.output.stderr(keyValue('Auto-approve balancing', { auto: 'yes', 'fee-only': 'fee-only (Dust fee only)', prompt: 'no' }[policy.balancing]) + '\n');
   if (noAutoApproveReadsGiven) {
-    process.stderr.write(dim('  --no-auto-approve-reads has no effect: read methods never prompt, and balancing prompts unless --approve-all or --approve-fees') + '\n');
+    ctx.output.stderr(dim('  --no-auto-approve-reads has no effect: read methods never prompt, and balancing prompts unless --approve-all or --approve-fees') + '\n');
   }
-  process.stderr.write(keyValue('Auto-approve writes', { auto: 'yes', 'fee-only': 'fee-only (submit of a fee-only balance)', prompt: 'no' }[policy.writes]) + '\n');
+  ctx.output.stderr(keyValue('Auto-approve writes', { auto: 'yes', 'fee-only': 'fee-only (submit of a fee-only balance)', prompt: 'no' }[policy.writes]) + '\n');
   if (policy.feeLimits) {
-    process.stderr.write(keyValue('Fee limits', `max ${toDust(feeLimits.maxFeeSpecks)} DUST per tx, ${feeLimits.maxPending} unsubmitted at once`) + '\n');
+    ctx.output.stderr(keyValue('Fee limits', `max ${toDust(feeLimits.maxFeeSpecks)} DUST per tx, ${feeLimits.maxPending} unsubmitted at once`) + '\n');
   }
-  process.stderr.write('\n');
+  ctx.output.stderr('\n');
 
   // ── Suppress SDK noise ──
 
   const stopListening = ctx.sdkWarnings.listen((_tag, msg) => {
     const s = ctx.progress.active();
     if (s) { s.log(dim(`  SDK: ${msg}`)); }
-    else { process.stderr.write(dim(`  SDK: ${msg}`) + '\n'); }
+    else { ctx.output.stderr(dim(`  SDK: ${msg}`) + '\n'); }
   });
 
   // ── Build & sync facade via repo.withFacade ──
@@ -174,15 +174,15 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
       port,
       handlers: connector.handlers,
       onConnect: (conn) => {
-        process.stderr.write(dim(`  [${timestamp()}] `) + green('connected') + dim(` ${conn.id}`) + '\n');
+        ctx.output.stderr(dim(`  [${timestamp()}] `) + green('connected') + dim(` ${conn.id}`) + '\n');
       },
       onDisconnect: (conn) => {
-        process.stderr.write(dim(`  [${timestamp()}] `) + red('disconnected') + dim(` ${conn.id}`) + '\n');
+        ctx.output.stderr(dim(`  [${timestamp()}] `) + red('disconnected') + dim(` ${conn.id}`) + '\n');
         // Revert any unsubmitted transactions to release pending coins (dust)
         connector?.revertPendingTxs(conn.id).catch(() => { /* best-effort */ });
       },
       onRequest: (conn, req) => {
-        process.stderr.write(dim(`  [${timestamp()}] ${conn.id} #${conn.requestCount} → ${req.method}`) + '\n');
+        ctx.output.stderr(dim(`  [${timestamp()}] ${conn.id} #${conn.requestCount} → ${req.method}`) + '\n');
       },
       onResponse: (conn, req, durationMs, result, error, metadata) => {
         // Clean up any lingering spinner from an error path
@@ -197,10 +197,10 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
           const label = error.code === 'Rejected' && error.message === OPERATOR_REJECTED_MESSAGE
             ? 'rejected by operator'
             : error.message;
-          process.stderr.write(`  ${red('✗')} ${dim(`${conn.id} ← ${req.method} (${duration})`)} ${red(label)}` + '\n');
+          ctx.output.stderr(`  ${red('✗')} ${dim(`${conn.id} ← ${req.method} (${duration})`)} ${red(label)}` + '\n');
           // Always show the full error message for non-rejection failures
           if (error.code !== 'Rejected' && error.message) {
-            process.stderr.write(`  ${dim('  error:')} ${error.message}` + '\n');
+            ctx.output.stderr(`  ${dim('  error:')} ${error.message}` + '\n');
           }
         } else {
           // Build timing breakdown from phase metadata
@@ -208,11 +208,11 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
           const timingStr = phases && phases.length > 0
             ? ': ' + phases.map(p => `${p.phase} ${formatDuration(p.durationMs)}`).join(', ')
             : '';
-          process.stderr.write(`  ${green('✓')} ${dim(`${conn.id} ← ${req.method} (${duration}${timingStr})`)}` + '\n');
+          ctx.output.stderr(`  ${green('✓')} ${dim(`${conn.id} ← ${req.method} (${duration}${timingStr})`)}` + '\n');
           // Log tx hash after successful submit
           const txHash = (result as any)?.txHash;
           if (req.method === 'submitTransaction' && txHash) {
-            process.stderr.write(`  ${dim('  tx:')} ${teal(String(txHash))}` + '\n');
+            ctx.output.stderr(`  ${dim('  tx:')} ${teal(String(txHash))}` + '\n');
           }
         }
       },
@@ -233,9 +233,9 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
       );
     }
 
-    process.stderr.write('\n' + divider() + '\n');
-    process.stderr.write('  ' + bold(teal(`Server ready — listening on ws://localhost:${port}`)) + '\n');
-    process.stderr.write(dim('  Press Ctrl+C to stop') + '\n\n');
+    ctx.output.stderr('\n' + divider() + '\n');
+    ctx.output.stderr('  ' + bold(teal(`Server ready — listening on ws://localhost:${port}`)) + '\n');
+    ctx.output.stderr(dim('  Press Ctrl+C to stop') + '\n\n');
 
     if (jsonMode) {
       ctx.output.result({
@@ -261,7 +261,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
 
       // ── Shutdown ──
 
-      process.stderr.write('\n' + dim('  Shutting down...') + '\n');
+      ctx.output.stderr('\n' + dim('  Shutting down...') + '\n');
       // Save cache on graceful shutdown — but NOT if transactions are pending.
       // The SDK drops pendingDustTokens on serialization, so saving while coins
       // are locked in pending would persist a corrupted state (dust=0).
@@ -272,7 +272,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
       connector.dispose();
       connector = undefined;
       server = undefined;
-      process.stderr.write(dim('  Server stopped.') + '\n\n');
+      ctx.output.stderr(dim('  Server stopped.') + '\n\n');
     } catch (err) {
       spinner.fail('Failed');
       if (server) { try { await server.close(); } catch { /* best-effort */ } }

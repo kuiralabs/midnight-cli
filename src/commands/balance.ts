@@ -14,7 +14,7 @@ import { getNetworkId } from '../lib/network-id.ts';
 import { isNativeToken } from '../lib/balance-subscription.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { readShieldedBalanceCached } from '../lib/shielded-direct-cache.ts';
-import { assertLedgerSupported } from '../lib/ledger-guard.ts';
+import { assertLedgerSupported, fetchProtocolVersion } from '../lib/ledger-guard.ts';
 import { deriveShieldedAddress, deriveUnshieldedAddress } from '../lib/derive-address.ts';
 import { getChainGenesisHash } from '../lib/chain-id.ts';
 import { createEtaEstimator, formatSyncStatus } from '../lib/sync-eta.ts';
@@ -105,6 +105,7 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
   try {
     const result = await defaultRepository().unshielded(address, networkConfig, {
       forceFresh: hasFlag(args, 'no-cache'),
+      signal: ctx.signal,
       log: ctx.diagnostics.line,
       onProgress: (current, highest) => {
         if (highest > 0) {
@@ -138,34 +139,34 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
     }
 
     if (result.balances.size === 0) {
-      process.stdout.write('0\n');
+      ctx.output.stdout('0\n');
     } else {
       for (const [tokenType, amount] of result.balances) {
-        process.stdout.write(`${isNativeToken(tokenType) ? 'NIGHT' : tokenType}=${amount}\n`);
+        ctx.output.stdout(`${isNativeToken(tokenType) ? 'NIGHT' : tokenType}=${amount}\n`);
       }
     }
 
-    process.stderr.write('\n' + header('Balance') + '\n\n');
-    process.stderr.write(keyValue('Address', formatAddress(address)) + '\n');
-    process.stderr.write(keyValue('Network', networkName) + '\n');
-    process.stderr.write(keyValue('UTXOs', result.utxoCount.toString()) + '\n');
-    process.stderr.write(keyValue('Transactions', result.txCount.toString()) + '\n');
-    process.stderr.write('\n');
+    ctx.output.stderr('\n' + header('Balance') + '\n\n');
+    ctx.output.stderr(keyValue('Address', formatAddress(address)) + '\n');
+    ctx.output.stderr(keyValue('Network', networkName) + '\n');
+    ctx.output.stderr(keyValue('UTXOs', result.utxoCount.toString()) + '\n');
+    ctx.output.stderr(keyValue('Transactions', result.txCount.toString()) + '\n');
+    ctx.output.stderr('\n');
 
     if (result.balances.size === 0) {
-      process.stderr.write(`  ${dim('No balance found')}\n`);
+      ctx.output.stderr(`  ${dim('No balance found')}\n`);
     } else {
       for (const [tokenType, amount] of result.balances) {
         if (isNativeToken(tokenType)) {
-          process.stderr.write(keyValue('NIGHT', bold(formatNight(amount))) + '\n');
+          ctx.output.stderr(keyValue('NIGHT', bold(formatNight(amount))) + '\n');
         } else {
           const shortType = tokenType.slice(0, 8) + '…' + tokenType.slice(-8);
-          process.stderr.write(keyValue(`Token ${shortType}`, bold(amount.toString())) + '\n');
+          ctx.output.stderr(keyValue(`Token ${shortType}`, bold(amount.toString())) + '\n');
         }
       }
     }
 
-    process.stderr.write('\n' + divider() + '\n\n');
+    ctx.output.stderr('\n' + divider() + '\n\n');
   } catch (err) {
     spinner.fail('Failed');
     throw err;
@@ -203,13 +204,13 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
 
     // Header + address chrome (we already have everything except live balances).
     if (!isJson) {
-      process.stderr.write('\n' + header('Balance') + '\n\n');
-      process.stderr.write(keyValue('Address', formatAddress(address)) + '\n');
+      ctx.output.stderr('\n' + header('Balance') + '\n\n');
+      ctx.output.stderr(keyValue('Address', formatAddress(address)) + '\n');
       if (shieldedAddrStr) {
-        process.stderr.write(keyValue('Shielded', formatAddress(shieldedAddrStr)) + '\n');
+        ctx.output.stderr(keyValue('Shielded', formatAddress(shieldedAddrStr)) + '\n');
       }
-      process.stderr.write(keyValue('Network', networkName) + '\n');
-      process.stderr.write('\n  ' + bold('Unshielded') + '\n');
+      ctx.output.stderr(keyValue('Network', networkName) + '\n');
+      ctx.output.stderr('\n  ' + bold('Unshielded') + '\n');
     }
 
     // ── Phase 1: fast unshielded via GraphQL (no facade, no proof server) ──
@@ -217,6 +218,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
     ctx.diagnostics.line('balance', `phase=unshielded forceFresh=${noCache}`);
     const unshieldedResult = await defaultRepository().unshielded(address, networkConfig, {
       forceFresh: noCache,
+      signal: ctx.signal,
       log: ctx.diagnostics.line,
       // Quiet by design — this finishes in <1s on most networks.
     });
@@ -228,18 +230,18 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
       activeSpinner.stop('Unshielded ready');
       activeSpinner = null;
       if (unshieldedBalance > 0n) {
-        process.stderr.write(keyValue('  NIGHT', bold(formatNight(unshieldedBalance))) + '\n');
-        process.stderr.write(keyValue('  UTXOs', unshieldedUtxos.toString()) + '\n');
+        ctx.output.stderr(keyValue('  NIGHT', bold(formatNight(unshieldedBalance))) + '\n');
+        ctx.output.stderr(keyValue('  UTXOs', unshieldedUtxos.toString()) + '\n');
       } else {
-        process.stderr.write(`    ${dim('No unshielded balance')}\n`);
+        ctx.output.stderr(`    ${dim('No unshielded balance')}\n`);
       }
     }
 
     // Pipeable stdout for unshielded — emit immediately so consumers don't
     // have to wait for the shielded sync to read the unshielded value.
     if (!isJson) {
-      process.stdout.write(`NIGHT=${unshieldedBalance}\n`);
-      process.stderr.write('\n  ' + bold('Shielded') + '\n');
+      ctx.output.stdout(`NIGHT=${unshieldedBalance}\n`);
+      ctx.output.stderr('\n  ' + bold('Shielded') + '\n');
     }
 
     // ── Phase 2: shielded via facade sync (slower — needs ZK keys + WASM state) ──
@@ -267,8 +269,9 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
       // receives AND spends), replacing the facade's cold sync — ~50-70s first
       // time on hosted nets, incremental after, memory-bounded. chainId
       // invalidates the cache on chain reset.
-      await assertLedgerSupported(networkName, networkConfig);
-      const chainId = (await getChainGenesisHash(networkConfig.node).catch(() => null)) ?? undefined;
+      await assertLedgerSupported(networkName, networkConfig, fetchProtocolVersion, ctx.signal);
+      // Null when the node can't say (the cache check is then skipped); a cancelled call stops here.
+      const chainId = (await getChainGenesisHash(networkConfig.node, ctx.signal)) ?? undefined;
       const shieldedResult = await readShieldedBalanceCached(
         seedBuffer,
         networkName,
@@ -276,6 +279,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
         {
           forceFresh: noCache,
           chainId,
+          signal: ctx.signal,
           onProgress: (applied, highest) => {
             if (!activeSpinner) return;
             const snap = eta.sample({ applied, highest, t: Date.now() });
@@ -291,14 +295,14 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
         activeSpinner.stop('Shielded ready');
         activeSpinner = null;
         if (shieldedBalance > 0n) {
-          process.stderr.write(keyValue('  NIGHT', bold(formatNight(shieldedBalance))) + '\n');
-          process.stderr.write(keyValue('  Coins', `${shieldedCoins} available, ${pendingCoins} pending`) + '\n');
+          ctx.output.stderr(keyValue('  NIGHT', bold(formatNight(shieldedBalance))) + '\n');
+          ctx.output.stderr(keyValue('  Coins', `${shieldedCoins} available, ${pendingCoins} pending`) + '\n');
         } else {
-          process.stderr.write(`    ${dim('No shielded balance')}\n`);
+          ctx.output.stderr(`    ${dim('No shielded balance')}\n`);
         }
       }
     } else if (!isJson) {
-      process.stderr.write(`    ${dim('Skipped — ' + shieldedDisabledReason(networkName))}\n`);
+      ctx.output.stderr(`    ${dim('Skipped — ' + shieldedDisabledReason(networkName))}\n`);
     }
 
     if (isJson) {
@@ -328,8 +332,8 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
 
     // When shielded was skipped, say so on stdout too — `=0` would read as a
     // confirmed zero to a script parsing the pipeable output.
-    process.stdout.write(`SHIELDED_NIGHT=${shieldedEnabled ? shieldedBalance : 'skipped'}\n`);
-    process.stderr.write('\n' + divider() + '\n\n');
+    ctx.output.stdout(`SHIELDED_NIGHT=${shieldedEnabled ? shieldedBalance : 'skipped'}\n`);
+    ctx.output.stderr('\n' + divider() + '\n\n');
   } catch (err) {
     activeSpinner?.fail('Failed');
     throw err;

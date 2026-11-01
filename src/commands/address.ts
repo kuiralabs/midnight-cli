@@ -35,13 +35,13 @@ export default async function addressCommand(args: ParsedArgs, ctx: CallContext)
   }
 
   // Bare address to stdout (pipeable)
-  process.stdout.write(address + '\n');
+  ctx.output.stdout(address + '\n');
 
   // Formatted details to stderr
-  process.stderr.write('\n');
-  process.stderr.write(keyValue('Network', networkName) + '\n');
-  process.stderr.write(keyValue('Index', keyIndex.toString()) + '\n');
-  process.stderr.write(keyValue('Address', formatAddress(address)) + '\n');
-  process.stderr.write(keyValue('Path', dim(derivationPath)) + '\n');
-  process.stderr.write(divider() + '\n\n');
+  ctx.output.stderr('\n');
+  ctx.output.stderr(keyValue('Network', networkName) + '\n');
+  ctx.output.stderr(keyValue('Index', keyIndex.toString()) + '\n');
+  ctx.output.stderr(keyValue('Address', formatAddress(address)) + '\n');
+  ctx.output.stderr(keyValue('Path', dim(derivationPath)) + '\n');
+  ctx.output.stderr(divider() + '\n\n');
 }

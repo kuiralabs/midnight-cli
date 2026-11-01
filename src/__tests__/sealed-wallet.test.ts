@@ -121,7 +121,7 @@ describe('protecting every wallet', () => {
     const bob = writePlainAt('bob', OTHER_SEED);
     const carol = writePlainAt('carol', SEED);
     writeSealedWallet(file, PUBLIC, { seed: SEED }, PASSPHRASE);
-    const report = protectAllWallets(stateRootIn(home), PASSPHRASE);
+    const report = await protectAllWallets(stateRootIn(home), PASSPHRASE);
     expect(report).toEqual([
       { name: 'alice', file, sealedNow: false },
       { name: 'bob', file: bob, sealedNow: true },
@@ -131,8 +131,8 @@ describe('protecting every wallet', () => {
     expect((await unlockWallet(bob, withPassphrase(PASSPHRASE))).seed).toBe(OTHER_SEED);
   });
 
-  it('protects nothing, and says so, where there is no wallet', () => {
-    expect(protectAllWallets(stateRootIn(home), PASSPHRASE)).toEqual([]);
+  it('protects nothing, and says so, where there is no wallet', async () => {
+    expect(await protectAllWallets(stateRootIn(home), PASSPHRASE)).toEqual([]);
   });
 });
 

@@ -11,10 +11,10 @@ export interface ChainLedgerParameters {
   params: ledger.LedgerParameters;
 }
 
-/** The latest block's ledger parameters. Throws IndexerQueryError when the indexer can't answer. */
-export async function fetchLedgerParameters(indexerHttpUrl: string): Promise<ChainLedgerParameters> {
+/** The latest block's ledger parameters. Throws IndexerQueryError when the indexer can't answer, CancelledError when `signal` cancels the read. */
+export async function fetchLedgerParameters(indexerHttpUrl: string, signal?: AbortSignal): Promise<ChainLedgerParameters> {
   const data = await queryIndexer<{ block?: { height?: number; ledgerParameters?: string } }>(
-    indexerHttpUrl, '{ block { height ledgerParameters } }', undefined, 10_000);
+    indexerHttpUrl, '{ block { height ledgerParameters } }', undefined, 10_000, signal);
   const hex = data.block?.ledgerParameters;
   if (typeof hex !== 'string' || typeof data.block?.height !== 'number') {
     throw new Error('The indexer returned no ledger parameters for its latest block');

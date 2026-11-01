@@ -2,7 +2,7 @@
 // cache clear [--network <name>] [--wallet <name|file>]
 
 import { type ParsedArgs, getFlag, hasFlag } from '../lib/argv.ts';
-import { UsageError } from '../lib/errors.ts';
+import { UsageError, throwIfCancelled } from '../lib/errors.ts';
 import { clearWalletCache } from '../lib/wallet-cache.ts';
 import { clearDustDirectCache, dustPublicKeyHexFromSeed } from '../lib/dust-direct-cache.ts';
 import { clearShieldedDirectCache, shieldedCoinPublicKeyHexFromSeed } from '../lib/shielded-direct-cache.ts';
@@ -30,6 +30,8 @@ export default async function cacheCommand(args: ParsedArgs, ctx: CallContext): 
     // Clear cache for a specific wallet
     const walletPath = resolveWalletPath(walletFlag);
     const config = await unlockWallet(walletPath);
+    // Cancelled while the wallet was unlocked: no cache is cleared.
+    throwIfCancelled(ctx.signal);
     const networkName = resolveNetworkName({ args });
     const address = config.addresses[networkName];
     clearWalletCache(address, networkName);
@@ -44,7 +46,7 @@ export default async function cacheCommand(args: ParsedArgs, ctx: CallContext): 
       ctx.output.result({ action: 'clear', scope: 'wallet', wallet: walletFlag, network: networkName });
       return;
     }
-    process.stderr.write(green('✓') + ` Cache cleared for wallet "${walletFlag}" on ${networkName}\n`);
+    ctx.output.stderr(green('✓') + ` Cache cleared for wallet "${walletFlag}" on ${networkName}\n`);
   } else if (networkFlag) {
     // Clear cache for a specific network
     clearChainCaches(networkFlag);
@@ -52,7 +54,7 @@ export default async function cacheCommand(args: ParsedArgs, ctx: CallContext): 
       ctx.output.result({ action: 'clear', scope: 'network', network: networkFlag });
       return;
     }
-    process.stderr.write(green('✓') + ` Cache cleared for network "${networkFlag}"\n`);
+    ctx.output.stderr(green('✓') + ` Cache cleared for network "${networkFlag}"\n`);
   } else {
     // Clear all cache
     clearChainCaches(undefined);
@@ -60,6 +62,6 @@ export default async function cacheCommand(args: ParsedArgs, ctx: CallContext): 
       ctx.output.result({ action: 'clear', scope: 'all' });
       return;
     }
-    process.stderr.write(green('✓') + ' Cache cleared\n');
+    ctx.output.stderr(green('✓') + ' Cache cleared\n');
   }
 }

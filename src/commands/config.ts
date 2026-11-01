@@ -40,7 +40,7 @@ export default async function configCommand(args: ParsedArgs, ctx: CallContext):
       ctx.output.result({ action: 'get', key, value });
       return;
     }
-    process.stdout.write(value + '\n');
+    ctx.output.stdout(value + '\n');
   } else if (action === 'unset') {
     unsetConfigValue(key, undefined, scope);
     const displayValue = key === 'network' ? '(default)' : '(removed)';
@@ -48,7 +48,7 @@ export default async function configCommand(args: ParsedArgs, ctx: CallContext):
       ctx.output.result({ action: 'unset', key, value: displayValue });
       return;
     }
-    process.stderr.write(green('✓') + ` ${key} ${displayValue}\n`);
+    ctx.output.stderr(green('✓') + ` ${key} ${displayValue}\n`);
   } else {
     const value = args.positionals[1];
     if (value === undefined) {
@@ -61,6 +61,6 @@ export default async function configCommand(args: ParsedArgs, ctx: CallContext):
       ctx.output.result({ action: 'set', key, value: shown });
       return;
     }
-    process.stderr.write(green('✓') + ` ${key} = ${shown}\n`);
+    ctx.output.stderr(green('✓') + ` ${key} = ${shown}\n`);
   }
 }

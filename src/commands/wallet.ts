@@ -3,7 +3,7 @@
 
 import * as fs from 'fs';
 import { type ParsedArgs, getFlag, hasFlag, isMinimalMode } from '../lib/argv.ts';
-import { UsageError } from '../lib/errors.ts';
+import { UsageError, throwIfCancelled } from '../lib/errors.ts';
 import { mnemonicToEntropy } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
@@ -82,8 +82,11 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
 
   const secret = walletSecretFrom(seedHex !== undefined ? { seed: parseSeedHex(seedHex, '--seed') } : { mnemonic: mnemonicStr });
 
+  const passphrase = await passphraseForNewSecret();
+  // Cancelled while the passphrase was asked for: no wallet is written.
+  throwIfCancelled(ctx.signal);
   // Checked above: an existing wallet is replaced only with --force.
-  const created = createWallet(name, secret, await passphraseForNewSecret(), { overwrite: hasFlag(args, 'force') });
+  const created = createWallet(name, secret, passphrase, { overwrite: hasFlag(args, 'force') });
   const { addresses, shieldedAddresses, mnemonic, file: savedPath } = created;
   const seedBuffer = created.seed;
   const activeAddress = addresses[networkName];
@@ -107,32 +110,32 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
   }
 
   // Active address to stdout (pipeable)
-  process.stdout.write(activeAddress + '\n');
+  ctx.output.stdout(activeAddress + '\n');
 
   // Details to stderr
-  process.stderr.write('\n' + header('Wallet Generated') + '\n\n');
-  process.stderr.write(keyValue('Name', name) + '\n');
-  process.stderr.write(keyValue('Network', networkName) + '\n');
-  process.stderr.write(keyValue('Address', formatAddress(activeAddress)) + '\n');
+  ctx.output.stderr('\n' + header('Wallet Generated') + '\n\n');
+  ctx.output.stderr(keyValue('Name', name) + '\n');
+  ctx.output.stderr(keyValue('Network', networkName) + '\n');
+  ctx.output.stderr(keyValue('Address', formatAddress(activeAddress)) + '\n');
   const activeShielded = shieldedAddresses[networkName];
   if (activeShielded) {
-    process.stderr.write(keyValue('Shielded', formatAddress(activeShielded)) + '\n');
+    ctx.output.stderr(keyValue('Shielded', formatAddress(activeShielded)) + '\n');
   }
-  process.stderr.write(keyValue('File', savedPath) + '\n');
-  process.stderr.write(keyValue('Active', 'yes') + '\n');
-  process.stderr.write('\n');
+  ctx.output.stderr(keyValue('File', savedPath) + '\n');
+  ctx.output.stderr(keyValue('Active', 'yes') + '\n');
+  ctx.output.stderr('\n');
 
   if (mnemonic) {
-    process.stderr.write(yellow(bold('  MNEMONIC (save securely!):')) + '\n');
-    process.stderr.write(`  ${mnemonic}\n\n`);
+    ctx.output.stderr(yellow(bold('  MNEMONIC (save securely!):')) + '\n');
+    ctx.output.stderr(`  ${mnemonic}\n\n`);
   }
 
-  process.stderr.write(yellow(bold('  SEED (hex):')) + '\n');
-  process.stderr.write(`  ${seedBuffer.toString('hex')}\n\n`);
+  ctx.output.stderr(yellow(bold('  SEED (hex):')) + '\n');
+  ctx.output.stderr(`  ${seedBuffer.toString('hex')}\n\n`);
 
-  process.stderr.write(divider() + '\n');
-  process.stderr.write(dim('  Next: midnight wallet list | midnight balance') + '\n\n');
-  process.stderr.write(green('✓') + ' Wallet saved\n');
+  ctx.output.stderr(divider() + '\n');
+  ctx.output.stderr(dim('  Next: midnight wallet list | midnight balance') + '\n\n');
+  ctx.output.stderr(green('✓') + ' Wallet saved\n');
 }
 
 async function walletList(args: ParsedArgs, ctx: CallContext): Promise<void> {
@@ -172,12 +175,12 @@ async function walletList(args: ParsedArgs, ctx: CallContext): Promise<void> {
   }
 
   if (wallets.length === 0) {
-    process.stderr.write('\n  No wallets found.\n');
-    process.stderr.write(dim('  Create one: midnight wallet generate <name> --network <name>') + '\n\n');
+    ctx.output.stderr('\n  No wallets found.\n');
+    ctx.output.stderr(dim('  Create one: midnight wallet generate <name> --network <name>') + '\n\n');
     return;
   }
 
-  process.stderr.write('\n' + header('Wallets') + '\n\n');
+  ctx.output.stderr('\n' + header('Wallets') + '\n\n');
 
   // Compact one-line layout — name + truncated unshielded + truncated shielded.
   // Columns padded to the widest entry so addresses align. Full per-network
@@ -188,7 +191,7 @@ async function walletList(args: ParsedArgs, ctx: CallContext): Promise<void> {
 
   // Header row
   const namePad = ' '.repeat(nameWidth - 'name'.length);
-  process.stderr.write(
+  ctx.output.stderr(
     `    ${dim('name')}${namePad}  ${dim('unshielded'.padEnd(ADDR_WIDTH))}  ${dim('shielded')}\n`,
   );
 
@@ -199,13 +202,13 @@ async function walletList(args: ParsedArgs, ctx: CallContext): Promise<void> {
     const unshielded = w.addresses[networkName] ?? '(unknown)';
     const shielded = w.shieldedAddresses?.[networkName];
     const shieldedCell = shielded ? formatAddress(shielded, true) : dim('—'.padEnd(SHIELDED_WIDTH));
-    process.stderr.write(
+    ctx.output.stderr(
       `  ${marker} ${nameStr}${padding}  ${formatAddress(unshielded, true)}  ${shieldedCell}\n`,
     );
   }
 
-  process.stderr.write('\n' + divider() + '\n');
-  process.stderr.write(dim(`  ● = active wallet · network: ${networkName} · details: midnight wallet info <name>`) + '\n\n');
+  ctx.output.stderr('\n' + divider() + '\n');
+  ctx.output.stderr(dim(`  ● = active wallet · network: ${networkName} · details: midnight wallet info <name>`) + '\n\n');
 }
 
 async function walletUse(args: ParsedArgs, ctx: CallContext): Promise<void> {
@@ -223,7 +226,7 @@ async function walletUse(args: ParsedArgs, ctx: CallContext): Promise<void> {
     return;
   }
 
-  process.stderr.write(green('✓') + ` Active wallet set to "${name}"\n`);
+  ctx.output.stderr(green('✓') + ` Active wallet set to "${name}"\n`);
 }
 
 async function walletInfo(args: ParsedArgs, ctx: CallContext): Promise<void> {
@@ -265,10 +268,10 @@ async function walletInfo(args: ParsedArgs, ctx: CallContext): Promise<void> {
   }
 
   // Bare active address to stdout (pipeable)
-  process.stdout.write(activeAddress + '\n');
+  ctx.output.stdout(activeAddress + '\n');
 
   // Header with wallet name inline
-  process.stderr.write('\n' + header(`Wallet: ${name}`) + '\n\n');
+  ctx.output.stderr('\n' + header(`Wallet: ${name}`) + '\n\n');
 
   // Per-network grouping — unshielded + shielded together
   const networks = Object.keys(config.addresses) as Array<keyof typeof config.addresses>;
@@ -279,21 +282,21 @@ async function walletInfo(args: ParsedArgs, ctx: CallContext): Promise<void> {
     const shielded = config.shieldedAddresses?.[network as keyof typeof config.addresses];
 
     const label = isActiveNet ? bold(teal(network)) + dim('  (active)') : network;
-    process.stderr.write(`  ${label}\n`);
-    process.stderr.write(`    ${dim('unshielded')}  ${formatAddress(unshielded as string)}\n`);
+    ctx.output.stderr(`  ${label}\n`);
+    ctx.output.stderr(`    ${dim('unshielded')}  ${formatAddress(unshielded as string)}\n`);
     if (shielded) {
-      process.stderr.write(`    ${dim('shielded  ')}  ${formatAddress(shielded)}\n`);
+      ctx.output.stderr(`    ${dim('shielded  ')}  ${formatAddress(shielded)}\n`);
     } else {
-      process.stderr.write(`    ${dim('shielded  ')}  ${dim('(unavailable)')}\n`);
+      ctx.output.stderr(`    ${dim('shielded  ')}  ${dim('(unavailable)')}\n`);
     }
-    if (i < networks.length - 1) process.stderr.write('\n');
+    if (i < networks.length - 1) ctx.output.stderr('\n');
   }
 
   // Footer
-  process.stderr.write('\n' + divider() + '\n\n');
-  process.stderr.write(`  ${dim('created')}  ${config.createdAt}\n`);
-  process.stderr.write(`  ${dim('file   ')}  ${walletPath}\n`);
-  process.stderr.write(`  ${dim('active ')}  ${isActive ? green('yes') : 'no'}\n\n`);
+  ctx.output.stderr('\n' + divider() + '\n\n');
+  ctx.output.stderr(`  ${dim('created')}  ${config.createdAt}\n`);
+  ctx.output.stderr(`  ${dim('file   ')}  ${walletPath}\n`);
+  ctx.output.stderr(`  ${dim('active ')}  ${isActive ? green('yes') : 'no'}\n\n`);
 }
 
 async function walletRemove(args: ParsedArgs, ctx: CallContext): Promise<void> {
@@ -311,7 +314,7 @@ async function walletRemove(args: ParsedArgs, ctx: CallContext): Promise<void> {
     return;
   }
 
-  process.stderr.write(green('✓') + ` Wallet "${name}" removed\n`);
+  ctx.output.stderr(green('✓') + ` Wallet "${name}" removed\n`);
 }
 
 async function walletSeed(args: ParsedArgs, ctx: CallContext): Promise<void> {
@@ -347,66 +350,68 @@ async function walletSeed(args: ParsedArgs, ctx: CallContext): Promise<void> {
   }
 
   // Warning + confirmation
-  process.stderr.write('\n');
-  process.stderr.write(yellow(bold('  ⚠ WARNING: This will display your wallet seed and mnemonic.')) + '\n');
-  process.stderr.write(yellow('  Anyone with this seed can access your funds.') + '\n');
-  process.stderr.write(yellow('  Never share it. Never paste it into a website.') + '\n');
-  process.stderr.write('\n');
+  ctx.output.stderr('\n');
+  ctx.output.stderr(yellow(bold('  ⚠ WARNING: This will display your wallet seed and mnemonic.')) + '\n');
+  ctx.output.stderr(yellow('  Anyone with this seed can access your funds.') + '\n');
+  ctx.output.stderr(yellow('  Never share it. Never paste it into a website.') + '\n');
+  ctx.output.stderr('\n');
 
   const confirmed = await confirm('  Show seed? (y/N) ');
   if (!confirmed) {
-    process.stderr.write(dim('  Cancelled.') + '\n\n');
+    ctx.output.stderr(dim('  Cancelled.') + '\n\n');
     return;
   }
 
   // Seed to stdout (pipeable)
-  process.stdout.write(raw.seed + '\n');
+  ctx.output.stdout(raw.seed + '\n');
 
   // Details to stderr
-  process.stderr.write('\n');
-  process.stderr.write(keyValue('Name', name) + '\n');
-  process.stderr.write(keyValue('Seed (64-byte PBKDF2)', raw.seed) + '\n');
+  ctx.output.stderr('\n');
+  ctx.output.stderr(keyValue('Name', name) + '\n');
+  ctx.output.stderr(keyValue('Seed (64-byte PBKDF2)', raw.seed) + '\n');
   if (entropyHex) {
-    process.stderr.write(keyValue('Entropy (32-byte BIP-39)', entropyHex) + '\n');
+    ctx.output.stderr(keyValue('Entropy (32-byte BIP-39)', entropyHex) + '\n');
   }
   if (raw.mnemonic) {
-    process.stderr.write(keyValue('Mnemonic', raw.mnemonic) + '\n');
+    ctx.output.stderr(keyValue('Mnemonic', raw.mnemonic) + '\n');
   }
-  process.stderr.write(keyValue('File', walletPath) + '\n');
+  ctx.output.stderr(keyValue('File', walletPath) + '\n');
   if (entropyHex) {
-    process.stderr.write('\n');
-    process.stderr.write(dim('  Note: seed and entropy derive DIFFERENT Midnight wallets from the') + '\n');
-    process.stderr.write(dim('  same mnemonic. Use the value your target project accepts.') + '\n');
+    ctx.output.stderr('\n');
+    ctx.output.stderr(dim('  Note: seed and entropy derive DIFFERENT Midnight wallets from the') + '\n');
+    ctx.output.stderr(dim('  same mnemonic. Use the value your target project accepts.') + '\n');
   }
-  process.stderr.write('\n');
+  ctx.output.stderr('\n');
 }
 
 /** Sets mn's passphrase where none is set, and seals every plain-text wallet under it. */
 async function walletProtect(args: ParsedArgs, ctx: WalletCommandContext): Promise<void> {
   const root = stateRoot();
   const passphrase = await passphraseForNewSecret(root);
-  const report = protectAllWallets(root, passphrase);
+  // Cancelled, it stops between wallets and before a protector, never in the middle of a file.
+  const report = await protectAllWallets(root, passphrase, ctx.signal);
   const sealed = report.filter((w) => w.sealedNow).map((w) => w.name);
   const alreadySealed = report.filter((w) => !w.sealedNow).map((w) => w.name);
   // What other domains keep for a wallet, sealed by the protectors the caller gave; each is told how to get a wallet's coin key.
   const results: Array<{ name: string; result: ProtectorResult }> = [];
   for (const protector of ctx.protectors ?? []) {
+    throwIfCancelled(ctx.signal);
     results.push({ name: protector.name, result: await protector.protect(root, passphrase, coinKeyOfWallet) });
   }
   if (hasFlag(args, 'json')) {
     ctx.output.result({ sealed, alreadySealed, ...Object.fromEntries(results.map(({ name, result }) => [name, result.report])) });
     return;
   }
-  process.stderr.write('\n');
-  for (const name of sealed) process.stderr.write(green(`  ✓ ${name}: encrypted`) + '\n');
-  for (const name of alreadySealed) process.stderr.write(dim(`  ${name}: already encrypted`) + '\n');
-  if (report.length === 0) process.stderr.write(dim('  No wallets yet: each new wallet is encrypted under this passphrase.') + '\n');
+  ctx.output.stderr('\n');
+  for (const name of sealed) ctx.output.stderr(green(`  ✓ ${name}: encrypted`) + '\n');
+  for (const name of alreadySealed) ctx.output.stderr(dim(`  ${name}: already encrypted`) + '\n');
+  if (report.length === 0) ctx.output.stderr(dim('  No wallets yet: each new wallet is encrypted under this passphrase.') + '\n');
   for (const item of results.flatMap(({ result }) => result.items)) {
-    if ('error' in item) process.stderr.write(yellow(`  ✗ ${item.subject}: not encrypted: ${item.error}`) + '\n');
-    else if (item.outcome === 'sealed-now') process.stderr.write(green(`  ✓ ${item.subject}: ${item.sealedNote}`) + '\n');
-    else process.stderr.write(dim(`  ${item.subject}: already encrypted`) + '\n');
+    if ('error' in item) ctx.output.stderr(yellow(`  ✗ ${item.subject}: not encrypted: ${item.error}`) + '\n');
+    else if (item.outcome === 'sealed-now') ctx.output.stderr(green(`  ✓ ${item.subject}: ${item.sealedNote}`) + '\n');
+    else ctx.output.stderr(dim(`  ${item.subject}: already encrypted`) + '\n');
   }
-  process.stderr.write('\n' + dim('  Keep the passphrase safe: without it, mn cannot open these wallets.') + '\n\n');
+  ctx.output.stderr('\n' + dim('  Keep the passphrase safe: without it, mn cannot open these wallets.') + '\n\n');
 }
 
 function confirm(prompt: string): Promise<boolean> {

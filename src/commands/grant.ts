@@ -58,11 +58,11 @@ export default async function grantCommand(args: ParsedArgs, ctx: CallContext): 
   const spinnerFor = (label: string): Spinner => (jsonMode ? ctx.progress.silent() : ctx.progress.start(label));
 
   if (!jsonMode) {
-    process.stderr.write('\n' + header(`Grant: ${request.subcommand}`) + '\n\n');
-    process.stderr.write(keyValue('Network', target.network) + '\n');
-    process.stderr.write(keyValue('Wallet', walletName) + '\n');
-    if (account !== null) process.stderr.write(keyValue('Account', account.address) + '\n');
-    process.stderr.write('\n');
+    ctx.output.stderr('\n' + header(`Grant: ${request.subcommand}`) + '\n\n');
+    ctx.output.stderr(keyValue('Network', target.network) + '\n');
+    ctx.output.stderr(keyValue('Wallet', walletName) + '\n');
+    if (account !== null) ctx.output.stderr(keyValue('Account', account.address) + '\n');
+    ctx.output.stderr('\n');
   }
 
   const throwIfCancelled = (): void => {
@@ -105,11 +105,11 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
     if (jsonMode) {
       ctx.output.result({ subcommand: 'device', action: 'new', network: target.network, wallet: walletName, ownerKey: 'sealed', code });
     } else {
-      process.stderr.write('\n' + dim('  On a machine already an owner of the account, run:') + '\n');
-      process.stderr.write(dim(`  midnight grant device add ${code} --backup <file>`) + '\n');
-      process.stderr.write(dim('  then bring that file here: midnight grant import <file>') + '\n');
-      process.stderr.write(dim('  The code is signed afresh each time it is shown; any of them adds this device.') + '\n\n');
-      process.stdout.write(code + '\n');
+      ctx.output.stderr('\n' + dim('  On a machine already an owner of the account, run:') + '\n');
+      ctx.output.stderr(dim(`  midnight grant device add ${code} --backup <file>`) + '\n');
+      ctx.output.stderr(dim('  then bring that file here: midnight grant import <file>') + '\n');
+      ctx.output.stderr(dim('  The code is signed afresh each time it is shown; any of them adds this device.') + '\n\n');
+      ctx.output.stdout(code + '\n');
     }
     return;
   }
@@ -122,7 +122,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
       const { contractAddress } = await importAccount(recordsDir, target.network, passphrase, request.file);
       spinner.stop('Imported');
       if (jsonMode) ctx.output.result({ subcommand: request.subcommand, network: target.network, wallet: walletName, ownerKey: 'sealed', address: contractAddress });
-      else process.stderr.write('\n' + keyValue('Account', contractAddress) + '\n' + dim('  Use it from one machine at a time: this machine now acts as the same owner device.') + '\n\n');
+      else ctx.output.stderr('\n' + keyValue('Account', contractAddress) + '\n' + dim('  Use it from one machine at a time: this machine now acts as the same owner device.') + '\n\n');
     } catch (err) {
       spinner.fail('import failed');
       throw err;
@@ -158,8 +158,8 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
     if (jsonMode) {
       ctx.output.result({ ...common, ...output.result });
     } else {
-      process.stderr.write('\n');
-      process.stdout.write(output.lines.join('\n') + '\n\n');
+      ctx.output.stderr('\n');
+      ctx.output.stdout(output.lines.join('\n') + '\n\n');
     }
   };
 
@@ -177,12 +177,12 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         if (jsonMode) {
           ctx.output.result({ ...common, ...outcome });
         } else {
-          process.stderr.write('\n' + keyValue('Account', outcome.address) + '\n');
-          if (outcome.resumed) process.stderr.write(dim('  An account already on record was completed; no new one was deployed.') + '\n');
-          if (outcome.setAside) process.stderr.write(dim(`  The record of an earlier deploy that never reached the chain was kept at ${outcome.setAside}`) + '\n');
-          if (owned.protection === 'sealed') process.stderr.write('\n' + dim('  Its owner key was made on this machine and is kept encrypted under mn\'s passphrase.') + '\n');
-          process.stderr.write(dim('  Next: midnight grant status') + '\n\n');
-          process.stdout.write(outcome.address + '\n');
+          ctx.output.stderr('\n' + keyValue('Account', outcome.address) + '\n');
+          if (outcome.resumed) ctx.output.stderr(dim('  An account already on record was completed; no new one was deployed.') + '\n');
+          if (outcome.setAside) ctx.output.stderr(dim(`  The record of an earlier deploy that never reached the chain was kept at ${outcome.setAside}`) + '\n');
+          if (owned.protection === 'sealed') ctx.output.stderr('\n' + dim('  Its owner key was made on this machine and is kept encrypted under mn\'s passphrase.') + '\n');
+          ctx.output.stderr(dim('  Next: midnight grant status') + '\n\n');
+          ctx.output.stdout(outcome.address + '\n');
         }
         return;
       }
@@ -200,11 +200,11 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         if (jsonMode) {
           ctx.output.result({ ...common, amount: request.amount, ...outcome });
         } else {
-          process.stderr.write('\n' + keyValue('Deposited', `${request.amount} NIGHT (${outcome.value} in the smallest unit, as status and --cap count)`) + '\n');
-          process.stderr.write(keyValue('Block', String(outcome.blockHeight)) + '\n');
-          process.stderr.write(keyValue('Transaction', outcome.txHash) + '\n');
-          process.stderr.write('\n' + dim('  Next: midnight grant status') + '\n\n');
-          process.stdout.write(outcome.txHash + '\n');
+          ctx.output.stderr('\n' + keyValue('Deposited', `${request.amount} NIGHT (${outcome.value} in the smallest unit, as status and --cap count)`) + '\n');
+          ctx.output.stderr(keyValue('Block', String(outcome.blockHeight)) + '\n');
+          ctx.output.stderr(keyValue('Transaction', outcome.txHash) + '\n');
+          ctx.output.stderr('\n' + dim('  Next: midnight grant status') + '\n\n');
+          ctx.output.stdout(outcome.txHash + '\n');
         }
         return;
       }
@@ -244,7 +244,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         if (request.action === 'list') {
           spinner.stop('Done');
           if (jsonMode) ctx.output.result({ ...common, action: 'list', devices: known.map((code) => ({ code, thisMachine: code === own })) });
-          else process.stdout.write(known.map((code) => `${code}${code === own ? '  (this machine)' : ''}`).join('\n') + '\n\n');
+          else ctx.output.stdout(known.map((code) => `${code}${code === own ? '  (this machine)' : ''}`).join('\n') + '\n\n');
           return;
         }
         const named = parseDeviceCode(request.code);
@@ -265,10 +265,10 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
           if (jsonMode) {
             ctx.output.result({ ...common, action: 'add', code: added, ...(written === undefined ? {} : { backup: written.file }) });
           } else {
-            process.stderr.write('\n' + keyValue('Added', added) + '\n' + (written === undefined ? '' : keyValue('Backup', written.file) + '\n'));
-            process.stderr.write(dim('  The account was sealed to the new device on chain: its secret, the devices\' read keys and every live grant.') + '\n');
-            if (written !== undefined) process.stderr.write(dim('  For another mn: midnight grant import <that file>. It opens with mn\'s passphrase.') + '\n');
-            process.stderr.write('\n');
+            ctx.output.stderr('\n' + keyValue('Added', added) + '\n' + (written === undefined ? '' : keyValue('Backup', written.file) + '\n'));
+            ctx.output.stderr(dim('  The account was sealed to the new device on chain: its secret, the devices\' read keys and every live grant.') + '\n');
+            if (written !== undefined) ctx.output.stderr(dim('  For another mn: midnight grant import <that file>. It opens with mn\'s passphrase.') + '\n');
+            ctx.output.stderr('\n');
           }
           return;
         }
@@ -279,7 +279,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         devices.write(known.filter((code) => identityCodeOf(code) !== removing));
         spinner.stop(removed ? 'Device removed' : 'Already removed');
         if (jsonMode) ctx.output.result({ ...common, action: 'remove', code: request.code, removed });
-        else process.stderr.write('\n' + keyValue(removed ? 'Removed' : 'Already removed', request.code) + '\n' + dim('  The account\'s encryption key was rotated after, away from the removed device.') + '\n\n');
+        else ctx.output.stderr('\n' + keyValue(removed ? 'Removed' : 'Already removed', request.code) + '\n' + dim('  The account\'s encryption key was rotated after, away from the removed device.') + '\n\n');
         return;
       }
       case 'export': {
@@ -290,8 +290,8 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         if (jsonMode) {
           ctx.output.result({ ...common, address: outcome.contractAddress, file: outcome.file });
         } else {
-          process.stderr.write('\n' + keyValue('Backup', outcome.file) + '\n');
-          process.stderr.write(dim('  It opens only with mn\'s passphrase. Keep it, and the passphrase, apart from this machine.') + '\n\n');
+          ctx.output.stderr('\n' + keyValue('Backup', outcome.file) + '\n');
+          ctx.output.stderr(dim('  It opens only with mn\'s passphrase. Keep it, and the passphrase, apart from this machine.') + '\n\n');
         }
         return;
       }

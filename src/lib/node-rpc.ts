@@ -5,10 +5,13 @@
 
 import WebSocket from 'ws';
 import { assertEndpointUsable, endpointRefusalFromWsError } from './blockfrost.ts';
+import { CancelledError } from './errors.ts';
 
 export interface RpcOptions {
   url: string;
   timeoutMs?: number;
+  /** The call's cancellation: the connection closes and the call fails with CancelledError. */
+  signal?: AbortSignal;
 }
 
 /** Default per-call timeout — short; both readiness and fingerprint are cheap. */
@@ -25,11 +28,26 @@ export async function callNodeRpc<T = unknown>(
   params: unknown[] = [],
 ): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const { signal } = opts;
   return new Promise<T>((resolvePromise, rejectPromise) => {
+    if (signal?.aborted === true) { rejectPromise(new CancelledError()); return; }
     assertEndpointUsable(opts.url);
     const ws = new WebSocket(opts.url);
     let settled = false;
-    const settle = (fn: () => void) => { if (!settled) { settled = true; fn(); } };
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      settle(() => {
+        try { ws.close(); } catch { /* ignore */ }
+        rejectPromise(new CancelledError());
+      });
+    };
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener('abort', onAbort);
+      fn();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
 
     const timer = setTimeout(() => {
       settle(() => {

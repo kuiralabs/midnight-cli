@@ -1,0 +1,327 @@
+// Every command honours its call's cancellation (2F, S7). The 13 that ignored
+// it: quick ones never start once cancelled (the runners refuse the call);
+// the ones that write check before each whole write; balance, status and
+// inspect-cost pass the signal into their reads; localnet is in
+// localnet-cancellation.test.ts. Each case asserts CANCELLED, and that nothing
+// was written or reported. Nothing here reaches a chain: the reads go to
+// stand-ins run by the test, or to a stubbed fetch (status, whose endpoints
+// are hosted ones).
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
+import { Buffer } from 'node:buffer';
+import { parseArgs } from '../lib/argv.ts';
+import { installedCommands } from '../lib/installed-commands.ts';
+import { setPrompter, type Prompter } from '../lib/prompter.ts';
+import { establishPassphrase } from '../lib/passphrase.ts';
+import { deriveUnshieldedAddress } from '../lib/derive-address.ts';
+import { getCachePath } from '../lib/wallet-cache.ts';
+import { loadWalletConfig, protectAllWallets } from '../lib/wallet-config.ts';
+import { createWallet, walletSecretFrom } from '../lib/wallet-create.ts';
+import type { WalletProtector } from '../lib/wallet-protector.ts';
+import type { CommandHandler } from '../lib/call-context.ts';
+import balanceCommand from '../commands/balance.ts';
+import inspectCostCommand from '../commands/inspect-cost.ts';
+import statusCommand from '../commands/status.ts';
+import generateCommand from '../commands/generate.ts';
+import walletCommand from '../commands/wallet.ts';
+import cacheCommand from '../commands/cache.ts';
+import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { cliCall } from './helpers/cli-call.ts';
+import { saveWalletConfig } from './helpers/plain-wallet.ts';
+import { stateRootIn } from './helpers/state-root-in.ts';
+import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from './helpers/stand-in-indexer.ts';
+
+const PASSPHRASE = 'correct horse battery staple';
+
+let home: string;
+let io: CapturedOutput;
+const originalHome = process.env.HOME;
+const originalPassphrase = process.env.MN_PASSPHRASE;
+
+beforeEach(() => {
+  home = fs.realpathSync(fs.mkdtempSync(path.join(tmpdir(), 'mn-command-cancel-')));
+  process.env.HOME = home;
+  delete process.env.MN_PASSPHRASE;
+  io = captureOutput();
+});
+
+afterEach(() => {
+  io.restore();
+  setPrompter(null);
+  process.env.HOME = originalHome;
+  if (originalPassphrase === undefined) delete process.env.MN_PASSPHRASE;
+  else process.env.MN_PASSPHRASE = originalPassphrase;
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+/** A prompter that answers every passphrase question, and cancels the call as it is first asked. */
+function cancellingPrompter(call: AbortController): Prompter & { asked: number } {
+  const prompter = {
+    asked: 0,
+    isInteractive: () => true,
+    ask: async () => null,
+    askSecret: async () => {
+      prompter.asked += 1;
+      call.abort();
+      return PASSPHRASE;
+    },
+  };
+  return prompter;
+}
+
+const cancelled = (): AbortSignal => {
+  const call = new AbortController();
+  call.abort();
+  return call.signal;
+};
+
+describe('quick commands: a cancelled call never starts', () => {
+  const quick: ReadonlyArray<readonly string[]> = [
+    ['info', '--json'],
+    ['address', '--seed', 'aa'.repeat(32), '--json'],
+    ['genesis-address', '--json'],
+    ['config', 'set', 'network', 'preview', '--json'],
+    ['help', '--json'],
+    ['manual', '--json'],
+    ['wallet', 'list', '--json'],
+    ['wallet', 'use', 'alice', '--json'],
+    ['cache', 'clear', '--json'],
+  ];
+
+  it.each(quick)('%s: CANCELLED, with no result and nothing written', async (...argv) => {
+    const definition = installedCommands.find(argv[0]!)!;
+    const { default: handler } = await definition.load();
+    await expect(cliCall(handler as CommandHandler, parseArgs([...argv]), { signal: cancelled() })).rejects.toMatchObject({ code: 'CANCELLED' });
+    expect(io.stdout()).toBe('');
+    // Nothing under the state root: no config, no wallet, nothing cleared or created.
+    expect(fs.existsSync(stateRootIn(home))).toBe(false);
+  });
+});
+
+describe('balance passes the signal into its reads', () => {
+  let indexer: StandInIndexer;
+  let refusing: { port: number; close(): Promise<void> };
+
+  beforeEach(async () => {
+    // Four transactions, 200ms apart: the call is cancelled after the first.
+    indexer = await startStandInIndexer([1_000_000n, 2_000_000n, 3_000_000n, 4_000_000n], 200);
+    refusing = await startRefusingEndpoint();
+  });
+
+  afterEach(async () => {
+    await indexer.close();
+    await refusing.close();
+  });
+
+  const endpoints = (): string[] => ['--indexer-ws', indexer.url, '--node', `ws://127.0.0.1:${refusing.port}`, '--proof-server', `http://127.0.0.1:${refusing.port}`];
+
+  it('an address\'s balance: the subscription closes at once and the call answers CANCELLED with no result', async () => {
+    const address = deriveUnshieldedAddress(Buffer.from('aa'.repeat(32), 'hex'), 'undeployed');
+    const call = new AbortController();
+    void indexer.sentAtLeast(1).then(() => call.abort());
+
+    await expect(cliCall(balanceCommand, parseArgs(['balance', address, '--json', ...endpoints()]), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+
+    expect(io.stdout()).toBe('');
+    expect(indexer.subscriptions).toHaveLength(1);
+    await expect.poll(() => indexer.subscriptions[0]!.closedEarly).toBe(true);
+    expect(indexer.subscriptions[0]!.done).toBe(false);
+  });
+
+  it('a wallet\'s balance: its unshielded read stops at once, and the call answers CANCELLED with no result', async () => {
+    const call = new AbortController();
+    void indexer.sentAtLeast(1).then(() => call.abort());
+
+    await expect(cliCall(balanceCommand, parseArgs(['balance', '--seed', 'bb'.repeat(32), '--network', 'undeployed', '--json', ...endpoints()]), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+
+    expect(io.stdout()).toBe('');
+    await expect.poll(() => indexer.subscriptions[0]?.closedEarly).toBe(true);
+    expect(indexer.subscriptions[0]!.done).toBe(false);
+  });
+});
+
+describe('inspect-cost passes the signal into its reads', () => {
+  let server: Server;
+  let pending: number;
+
+  beforeEach(async () => {
+    // An indexer that takes every query and never answers.
+    pending = 0;
+    server = createServer(() => { pending += 1; });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  });
+
+  afterEach(async () => {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it('cancelled while the indexer has not answered: CANCELLED at once, with no result', async () => {
+    const { port } = server.address() as AddressInfo;
+    const call = new AbortController();
+    let cancelledAt = 0;
+    server.once('request', () => { cancelledAt = Date.now(); call.abort(); });
+
+    await expect(cliCall(inspectCostCommand, parseArgs(['inspect-cost', '--network', 'undeployed', '--indexer-ws', `ws://127.0.0.1:${port}/api/v4/graphql/ws`, '--json']), { signal: call.signal }))
+      .rejects.toMatchObject({ code: 'CANCELLED' });
+
+    // Before 2F's S7 it waited out the probe's own 5s time limit, then went on to read the parameters.
+    expect(cancelledAt).toBeGreaterThan(0);
+    expect(Date.now() - cancelledAt).toBeLessThan(2_000);
+    expect(pending).toBe(1);
+    expect(io.stdout()).toBe('');
+  });
+});
+
+describe('status passes the signal into its probes', () => {
+  // status reads hosted endpoints (the dashboard, the network's indexer and node): fetch, the platform's, stands in for them.
+  const originalFetch = globalThis.fetch;
+  afterEach(() => { globalThis.fetch = originalFetch; });
+
+  /** A fetch that never answers until its request is aborted, keeping each request's signal; `onFetch` sees how many have started. */
+  function hangingFetch(onFetch: (started: number) => void): { signals: AbortSignal[] } {
+    const signals: AbortSignal[] = [];
+    globalThis.fetch = ((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const signal = init!.signal!;
+      signals.push(signal);
+      if (signal.aborted) { reject(signal.reason); return; }
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      onFetch(signals.length);
+    })) as typeof fetch;
+    return { signals };
+  }
+
+  it('cancelled while its probes run: every request is aborted, and it answers CANCELLED with no result', async () => {
+    const call = new AbortController();
+    // Cancelled once all four requests are out.
+    const fetches = hangingFetch((started) => { if (started === 4) call.abort(); });
+
+    await expect(cliCall(statusCommand, parseArgs(['status', '--network', 'preprod', '--json']), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+
+    // The dashboard's two, and the network's faucet and explorer (its indexer and node need a Blockfrost project id, which the test gives none).
+    expect(fetches.signals).toHaveLength(4);
+    expect(fetches.signals.every((signal) => signal.aborted)).toBe(true);
+    expect(io.stdout()).toBe('');
+  });
+
+  it('--watch ends when the call is cancelled, as Ctrl+C always ended it: exit 0', async () => {
+    // Regression: the watch waited for SIGINT on the process, and a cancelled call never ended.
+    const answer = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    globalThis.fetch = (async (url: string) => {
+      if (url.endsWith('/api/status')) return answer({ lastUpdated: null, networks: {} });
+      if (url.endsWith('/api/issues')) return answer({ lastUpdated: '2026-10-31T00:00:00.000Z', issues: [] });
+      return answer({});
+    }) as typeof fetch;
+    const call = new AbortController();
+    // Cancelled once the first view is drawn, its last line the dashboard's link: the watch has begun.
+    const drawn = setInterval(() => { if (io.stderr().includes('Dashboard:')) { clearInterval(drawn); call.abort(); } }, 10);
+
+    await expect(cliCall(statusCommand, parseArgs(['status', '--network', 'preprod', '--watch']), { signal: call.signal })).resolves.toEqual({ exitCode: 0 });
+    clearInterval(drawn);
+  });
+});
+
+describe('commands that write check the call before each whole write', () => {
+  it('generate: cancelled while the passphrase is asked for, it writes no wallet', async () => {
+    const call = new AbortController();
+    const prompter = cancellingPrompter(call);
+    setPrompter(prompter);
+    const target = path.join(home, 'legacy-wallet.json');
+
+    await expect(cliCall(generateCommand, parseArgs(['generate', '--output', target, '--json']), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+
+    expect(prompter.asked).toBeGreaterThan(0);
+    expect(fs.existsSync(target)).toBe(false);
+    expect(io.stdout()).toBe('');
+  });
+
+  it('wallet generate: cancelled while the passphrase is asked for, it writes no wallet', async () => {
+    const call = new AbortController();
+    const prompter = cancellingPrompter(call);
+    setPrompter(prompter);
+
+    await expect(cliCall(walletCommand, parseArgs(['wallet', 'generate', 'alice', '--json']), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+
+    expect(prompter.asked).toBeGreaterThan(0);
+    expect(fs.existsSync(path.join(stateRootIn(home), 'wallets', 'alice.json'))).toBe(false);
+    expect(io.stdout()).toBe('');
+  });
+
+  describe('wallet protect', () => {
+    const plainWallet = (name: string, seedByte: string): string => {
+      const seed = seedByte.repeat(32);
+      return saveWalletConfig({
+        seed,
+        addresses: { undeployed: deriveUnshieldedAddress(Buffer.from(seed, 'hex'), 'undeployed') } as never,
+        createdAt: '2026-10-31T00:00:00.000Z',
+      }, path.join(stateRootIn(home), 'wallets', `${name}.json`));
+    };
+    const isSealed = (file: string): boolean => loadWalletConfig(file).isSealed === true;
+
+    it('cancelled while the passphrase is asked for: no wallet is sealed', async () => {
+      const files = [plainWallet('alice', 'a1'), plainWallet('bob', 'b2')];
+      const call = new AbortController();
+      setPrompter(cancellingPrompter(call));
+
+      await expect(cliCall(walletCommand, parseArgs(['wallet', 'protect', '--json']), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+
+      expect(files.map(isSealed)).toEqual([false, false]);
+      expect(io.stdout()).toBe('');
+    });
+
+    it('cancelled while one wallet is sealed: that one is sealed whole, and the next is not touched', async () => {
+      const files = [plainWallet('alice', 'a1'), plainWallet('bob', 'b2'), plainWallet('carol', 'c3')];
+      const call = new AbortController();
+
+      const protecting = protectAllWallets(stateRootIn(home), PASSPHRASE, call.signal);
+      // Lands while the first wallet is being sealed: after the first turn of the event loop, before the second.
+      setImmediate(() => call.abort());
+
+      await expect(protecting).rejects.toMatchObject({ code: 'CANCELLED' });
+      expect(files.map(isSealed)).toEqual([true, false, false]);
+    });
+
+    it('cancelled by a protector: the protectors after it do not run', async () => {
+      plainWallet('alice', 'a1');
+      process.env.MN_PASSPHRASE = PASSPHRASE;
+      const call = new AbortController();
+      const ran: string[] = [];
+      const protector = (name: string, then: () => void = () => {}): WalletProtector => ({
+        name,
+        protect: async () => {
+          ran.push(name);
+          then();
+          return { items: [], report: {} };
+        },
+      });
+
+      await expect(cliCall(walletCommand, parseArgs(['wallet', 'protect', '--json']), {
+        signal: call.signal,
+        protectors: [protector('grant', () => call.abort()), protector('later')],
+      })).rejects.toMatchObject({ code: 'CANCELLED' });
+
+      expect(ran).toEqual(['grant']);
+      expect(io.stdout()).toBe('');
+    });
+  });
+
+  it('cache clear --wallet: cancelled while the wallet is unlocked, it clears no cache', async () => {
+    establishPassphrase(stateRootIn(home), PASSPHRASE);
+    const created = createWallet('alice', walletSecretFrom(), PASSPHRASE);
+    const cache = getCachePath(created.addresses.undeployed, 'undeployed');
+    fs.mkdirSync(path.dirname(cache), { recursive: true });
+    fs.writeFileSync(cache, '{}');
+    const call = new AbortController();
+    setPrompter(cancellingPrompter(call));
+
+    await expect(cliCall(cacheCommand, parseArgs(['cache', 'clear', '--wallet', 'alice', '--network', 'undeployed', '--json']), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+
+    expect(fs.existsSync(cache)).toBe(true);
+    expect(io.stdout()).toBe('');
+  });
+});

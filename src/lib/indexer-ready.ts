@@ -6,17 +6,22 @@
 // on localnet), confirming state has been ingested end-to-end.
 
 import { checkBalance } from './balance-subscription.ts';
+import { throwIfCancelled } from './errors.ts';
+import { sleep } from './sleep.ts';
 
 export interface WaitForIndexerOptions {
   /** Overall deadline for the wait. Default 30s. */
   timeoutMs?: number;
   /** How often to re-poll while waiting. Default 1s. */
   pollIntervalMs?: number;
+  /** The call's cancellation: the wait stops with CancelledError. */
+  signal?: AbortSignal;
 }
 
 /**
  * Poll the indexer for the given address until utxoCount > 0. Resolves
- * silently as soon as funds are visible; rejects on timeout. Suitable for
+ * silently as soon as funds are visible; rejects on timeout, or with
+ * CancelledError when the call is cancelled. Suitable for
  * "wait until localnet is usable" checks against the genesis address.
  */
 export async function waitForAddressFunded(
@@ -30,12 +35,13 @@ export async function waitForAddressFunded(
 
   while (Date.now() < deadline) {
     try {
-      const result = await checkBalance(address, indexerWS);
+      const result = await checkBalance(address, indexerWS, undefined, opts.signal);
       if (result.utxoCount > 0) return;
     } catch {
+      throwIfCancelled(opts.signal);
       // Indexer not yet accepting subscriptions — retry.
     }
-    await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, pollIntervalMs));
+    await sleep(pollIntervalMs, opts.signal);
   }
 
   throw new Error(`Indexer did not report funds for ${address.slice(0, 20)}… within ${timeoutMs / 1000}s`);

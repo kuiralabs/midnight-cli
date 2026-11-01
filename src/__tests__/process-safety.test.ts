@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { findViolations } from '../../scripts/check-process-safety.mjs';
@@ -69,6 +69,24 @@ describe('the process-safety check', () => {
       "const text = 'process.env.HOME';",
     ].join('\n'));
     expect(findViolations([quiet], {})).toEqual([]);
+  });
+
+  it('finds a command writing to the terminal itself, not through its call (2F, S8), and lets ui/ write', () => {
+    // Planted under a folder of their own, read as src/ is.
+    for (const sub of ['commands', 'ui']) mkdirSync(join(dir, sub));
+    const command = join(dir, 'commands', 'planted.ts');
+    writeFileSync(command, [
+      "process.stdout.write('result');",
+      "ctx.output.stderr('through the call');",
+      "console.log('also the terminal');",
+      'const v = process.env.HOME;',
+    ].join('\n'));
+    const spinner = join(dir, 'ui', 'planted.ts');
+    writeFileSync(spinner, "process.stderr.write('frame');");
+    expect(findViolations([command, spinner], {}, {}, dir).map((v) => `${v.file}:${v.line} ${v.rule}`)).toEqual([
+      'commands/planted.ts:1 writes to the terminal',
+      'commands/planted.ts:3 writes to the terminal',
+    ]);
   });
 
   it('finds nothing in src/ beyond its allowlist', () => {

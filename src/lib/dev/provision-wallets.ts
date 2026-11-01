@@ -13,6 +13,7 @@ import { registerDust } from '../dust-register.ts';
 import { resolveNetwork } from '../resolve-network.ts';
 import type { NetworkConfig } from '../network.ts';
 import type { CallSdkWarnings } from '../sdk-warnings.ts';
+import { throwIfCancelled } from '../errors.ts';
 
 /** Default dev wallet names — one per common test persona. */
 export const DEFAULT_DEV_WALLET_NAMES = ['dev-alice', 'dev-bob', 'dev-carol'] as const;
@@ -77,7 +78,7 @@ export async function provisionDevWallets(opts: ProvisionOptions): Promise<Provi
 
   try {
     for (const name of opts.names) {
-      opts.signal?.throwIfAborted();
+      throwIfCancelled(opts.signal);
 
       if (walletExists(name)) {
         // Funded but never registered (setup stopped between funding and
@@ -100,7 +101,7 @@ export async function provisionDevWallets(opts: ProvisionOptions): Promise<Provi
     }
 
     for (const name of created) {
-      opts.signal?.throwIfAborted();
+      throwIfCancelled(opts.signal);
       opts.onProgress?.(name, 'dust', 'created');
       await steps.registerDust(name, opts.signal);
 
@@ -143,8 +144,11 @@ function undeployedNetwork(): NetworkConfig {
   }).config;
 }
 
-async function generateWallet(name: string): Promise<void> {
-  createWallet(name, walletSecretFrom(), await passphraseForNewSecret());
+async function generateWallet(name: string, signal?: AbortSignal): Promise<void> {
+  const passphrase = await passphraseForNewSecret();
+  // Cancelled while the passphrase was asked for: no wallet is written.
+  throwIfCancelled(signal);
+  createWallet(name, walletSecretFrom(), passphrase);
 }
 
 async function airdropToWallet(network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
@@ -154,8 +158,7 @@ async function airdropToWallet(network: NetworkConfig, name: string, amountNight
 
 async function walletNeedsDust(network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<boolean> {
   const address = loadWalletConfig(resolveWalletPath(name)).addresses.undeployed;
-  const { registeredUtxos, unregisteredUtxos } = await checkBalance(address, network.indexerWS);
-  signal?.throwIfAborted();
+  const { registeredUtxos, unregisteredUtxos } = await checkBalance(address, network.indexerWS, undefined, signal);
   return registeredUtxos === 0 && unregisteredUtxos > 0;
 }
 

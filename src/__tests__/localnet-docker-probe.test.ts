@@ -13,6 +13,7 @@ import { pathToFileURL } from 'node:url';
 // has no docker in it.
 
 const localnet = pathToFileURL(resolve(import.meta.dirname, '../lib/localnet.ts')).href;
+const execProgram = pathToFileURL(resolve(import.meta.dirname, '../lib/exec-program.ts')).href;
 const tsxLoader = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
 
 describe('checkDockerAvailable on a machine without Docker', () => {
@@ -22,7 +23,8 @@ describe('checkDockerAvailable on a machine without Docker', () => {
       const run = spawnSync(
         process.execPath,
         ['--import', tsxLoader, '--input-type=module', '-e',
-          `const { checkDockerAvailable } = await import(${JSON.stringify(localnet)}); try { checkDockerAvailable(); } catch (error) { console.log(error.message); }`],
+          `const { checkDockerAvailable } = await import(${JSON.stringify(localnet)}); const { execProgram } = await import(${JSON.stringify(execProgram)}); ` +
+          `try { await checkDockerAvailable({ signal: new AbortController().signal, exec: execProgram, onStderr: (text) => process.stderr.write(text) }); } catch (error) { console.log(error.message); }`],
         { env: { ...process.env, PATH: emptyPath }, encoding: 'utf-8', timeout: 30_000 },
       );
       expect(run.stdout.trim()).toBe('Docker is required but was not found.\nInstall Docker from https://docs.docker.com/get-docker/');

@@ -1,11 +1,15 @@
 // Localnet management — Docker Compose helpers for midnight-local-network
-// Manages a compose.yml at ~/.midnight/localnet/ and shells out to docker compose
+// Manages a compose.yml at ~/.midnight/localnet/ and runs docker compose:
+// asynchronously, as a step of the call that asked, and killed when that call
+// is cancelled (2F).
 
-import { execSync, type ExecSyncOptionsWithStringEncoding } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { LOCALNET_DIR_NAME, DIR_MODE } from './constants.ts';
 import { stateRoot } from './state-root.ts';
+import { CancelledError, CANCELLED_MESSAGE, throwIfCancelled } from './errors.ts';
+import type { ExecRunner } from './exec-program.ts';
+import { sleep } from './sleep.ts';
 
 // Version tag — bump when compose content changes so stale files get overwritten
 export const COMPOSE_VERSION = '3.0.6';
@@ -91,38 +95,44 @@ export const COMPOSE_YAML = `services:
       CFG_PRESET: "dev"
 `;
 
-const EXEC_OPTIONS: ExecSyncOptionsWithStringEncoding = {
-  encoding: 'utf-8',
-  timeout: 30_000,
-};
+/** How long one Docker command may run before it is killed. */
+const DOCKER_TIMEOUT_MS = 30_000;
+
+/** How the localnet's Docker commands run for one call. */
+export interface DockerCall {
+  /** The call's cancellation: the Docker client running then is killed, and the step fails with CancelledError. */
+  readonly signal: AbortSignal;
+  /** Runs a program (lib/exec-program.ts's execProgram spawns it). */
+  readonly exec: ExecRunner;
+  /** Docker's own stderr as it comes, where the call's text goes (the CLI shows it on the terminal). */
+  readonly onStderr: (text: string) => void;
+}
 
 /**
  * Check that `docker compose version` succeeds.
  * Returns the version string on success, or throws a descriptive error.
  */
-export function checkDockerAvailable(): string {
-  // The probes' own stderr is kept: without Docker it is the shell's "docker: not found", said better below.
-  const quiet = { ...EXEC_OPTIONS, stdio: ['ignore', 'pipe', 'pipe'] as ['ignore', 'pipe', 'pipe'] };
+export async function checkDockerAvailable({ signal, exec }: DockerCall): Promise<string> {
+  // The probes' own stderr is kept: without Docker it is the system's "docker: not found", said better below.
   try {
-    const output = execSync('docker compose version', { ...quiet, timeout: 10_000 });
+    const output = await exec('docker', ['compose', 'version'], { signal, timeoutMs: 10_000 });
     return output.trim();
   } catch {
+    throwIfCancelled(signal);
     // Try plain docker first to distinguish "no docker" from "no compose v2"
     try {
-      execSync('docker --version', { ...quiet, timeout: 5_000 });
-      throw new Error(
-        'Docker Compose v2 is required.\n' +
-        'Install it from https://docs.docker.com/compose/install/'
-      );
-    } catch (innerErr) {
-      if (innerErr instanceof Error && innerErr.message.includes('Docker Compose v2')) {
-        throw innerErr;
-      }
+      await exec('docker', ['--version'], { signal, timeoutMs: 5_000 });
+    } catch {
+      throwIfCancelled(signal);
       throw new Error(
         'Docker is required but was not found.\n' +
         'Install Docker from https://docs.docker.com/get-docker/'
       );
     }
+    throw new Error(
+      'Docker Compose v2 is required.\n' +
+      'Install it from https://docs.docker.com/compose/install/'
+    );
   }
 }
 
@@ -175,14 +185,12 @@ export function ensureComposeFile(): boolean {
 }
 
 /**
- * Run `docker compose -f <path> <args>` and return stdout.
- * Throws on non-zero exit with stderr as the error message.
+ * Run `docker compose -f <path> <args>` and return stdout; Docker's stderr
+ * goes to the call as it comes. Throws on non-zero exit with stderr in the
+ * error message, and CancelledError when the call is cancelled.
  */
-export function dockerCompose(args: string): string {
-  return execSync(
-    `docker compose -f "${composePath()}" ${args}`,
-    EXEC_OPTIONS,
-  );
+export function dockerCompose({ signal, exec, onStderr }: DockerCall, args: readonly string[]): Promise<string> {
+  return exec('docker', ['compose', '-f', composePath(), ...args], { signal, timeoutMs: DOCKER_TIMEOUT_MS, onStderr });
 }
 
 export interface ServiceStatus {
@@ -228,28 +236,24 @@ export function parseServiceStatus(output: string): ServiceStatus[] {
  * The localnet's services and their state, stopped ones included (`ps -a`): a
  * stopped localnet is not the same as none. Empty when there are no containers.
  */
-export function getServiceStatus(): ServiceStatus[] {
+export async function getServiceStatus(docker: DockerCall): Promise<ServiceStatus[]> {
   try {
-    return parseServiceStatus(dockerCompose('ps -a --format json'));
+    return parseServiceStatus(await dockerCompose(docker, ['ps', '-a', '--format', 'json']));
   } catch {
+    throwIfCancelled(docker.signal);
     return [];
   }
 }
 
-/** Block for `ms` without the shell's `sleep`, which Windows doesn't have. */
-function sleepSync(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
 /**
  * Poll service health until all services are healthy or timeout expires.
- * Returns true if all healthy, false on timeout.
+ * Returns true if all healthy, false on timeout; CancelledError when the call is cancelled.
  */
-export function waitForHealthy(timeoutMs: number = 120_000, intervalMs: number = 3_000): boolean {
+export async function waitForHealthy(docker: DockerCall, timeoutMs: number = 120_000, intervalMs: number = 3_000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
-    const services = getServiceStatus();
+    const services = await getServiceStatus(docker);
     const allRunning = services.length === 3 &&
       services.every(s => s.state === 'running');
 
@@ -261,10 +265,43 @@ export function waitForHealthy(timeoutMs: number = 120_000, intervalMs: number =
       if (healthyOrNoCheck) return true;
     }
 
-    sleepSync(intervalMs);
+    await sleep(intervalMs, docker.signal);
   }
 
   return false;
+}
+
+/**
+ * Starts the localnet's containers (`docker compose up -d`) and waits for
+ * them to be healthy: true when they are, false when the wait timed out.
+ * The command calls it after ensureComposeFile, where this build refuses.
+ * Cancelled, it fails with what localnetUpCancelled says.
+ */
+export async function startLocalnet(docker: DockerCall, onStatus: (status: string) => void, healthTimeoutMs: number = 120_000): Promise<boolean> {
+  try {
+    await dockerCompose(docker, ['up', '-d']);
+    onStatus('Waiting for services to be healthy...');
+    return await waitForHealthy(docker, healthTimeoutMs);
+  } catch (err) {
+    if (docker.signal.aborted) throw await localnetUpCancelled(docker);
+    throw err;
+  }
+}
+
+/**
+ * What a cancelled `localnet up` fails with (decision 4): the containers it
+ * started stay in place, and the error says which, as Docker lists them now.
+ * Listing them is not cancelled with the call (it has been already); it is
+ * bounded by its own time limit.
+ */
+export async function localnetUpCancelled({ exec, onStderr }: Omit<DockerCall, 'signal'>): Promise<CancelledError> {
+  const left = await getServiceStatus({ signal: new AbortController().signal, exec, onStderr });
+  if (left.length === 0) return new CancelledError(`${CANCELLED_MESSAGE}: localnet up was stopped before it started any container.`);
+  const listed = left.map((s) => `${s.name} (${s.state})`).join(', ');
+  return new CancelledError(
+    `${CANCELLED_MESSAGE}: localnet up was stopped; the containers it started stay in place: ${listed}.\n` +
+    'Run "midnight localnet down" to remove them, or "midnight localnet up" to finish starting the network.',
+  );
 }
 
 /** Return the compose file path (for display purposes). */
@@ -297,18 +334,20 @@ export function partitionLocalnetContainers(found: readonly NamedContainer[]): {
  * project created (also from an older mn). A container with one of those
  * generic names from anything else is left alone and returned in `kept`.
  */
-export function removeConflictingContainers(): { removed: string[]; kept: NamedContainer[] } {
+export async function removeConflictingContainers({ signal, exec, onStderr }: DockerCall): Promise<{ removed: string[]; kept: NamedContainer[] }> {
   const found: NamedContainer[] = [];
   for (const name of CONTAINER_NAMES) {
     // `docker ps` lists containers only (an image named "node" is not one) and
     // prints nothing when no container has the name.
     let listed: string;
     try {
-      listed = execSync(
-        `docker ps -a --filter "name=^/${name}$" --format '{{.Names}}|{{.Label "com.docker.compose.project"}}'`,
-        { ...EXEC_OPTIONS, timeout: 10_000 },
-      ).toString();
+      listed = await exec(
+        'docker',
+        ['ps', '-a', '--filter', `name=^/${name}$`, '--format', '{{.Names}}|{{.Label "com.docker.compose.project"}}'],
+        { signal, timeoutMs: 10_000, onStderr },
+      );
     } catch {
+      throwIfCancelled(signal);
       // Docker couldn't say: report the name as left alone rather than guess.
       found.push({ name, project: '(unknown: docker ps failed)' });
       continue;
@@ -320,9 +359,10 @@ export function removeConflictingContainers(): { removed: string[]; kept: NamedC
   const removed: string[] = [];
   for (const name of remove) {
     try {
-      execSync(`docker rm -f "${name}"`, { ...EXEC_OPTIONS, timeout: 10_000 });
+      await exec('docker', ['rm', '-f', name], { signal, timeoutMs: 10_000, onStderr });
       removed.push(name);
     } catch {
+      throwIfCancelled(signal);
       // Already gone — fine
     }
   }

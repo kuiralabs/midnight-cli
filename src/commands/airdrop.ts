@@ -174,12 +174,12 @@ async function unshieldedAirdrop(
 ): Promise<void> {
   const recipientAddress = destination.address;
 
-  process.stderr.write('\n' + header('Airdrop') + '\n\n');
-  process.stderr.write(keyValue('Network', networkName) + '\n');
-  process.stderr.write(keyValue('From', dim('genesis (seed 0x01)')) + '\n');
-  process.stderr.write(keyValue('To', formatAddress(recipientAddress, true)) + '\n');
-  process.stderr.write(keyValue('Amount', bold(amountNight + ' NIGHT')) + '\n');
-  process.stderr.write('\n');
+  ctx.output.stderr('\n' + header('Airdrop') + '\n\n');
+  ctx.output.stderr(keyValue('Network', networkName) + '\n');
+  ctx.output.stderr(keyValue('From', dim('genesis (seed 0x01)')) + '\n');
+  ctx.output.stderr(keyValue('To', formatAddress(recipientAddress, true)) + '\n');
+  ctx.output.stderr(keyValue('Amount', bold(amountNight + ' NIGHT')) + '\n');
+  ctx.output.stderr('\n');
 
   const spinner = ctx.progress.start('Starting genesis wallet...');
 
@@ -229,16 +229,16 @@ async function unshieldedAirdrop(
       return;
     }
 
-    process.stdout.write(result.txHash + '\n');
+    ctx.output.stdout(result.txHash + '\n');
 
-    process.stderr.write('\n' + successMessage(
+    ctx.output.stderr('\n' + successMessage(
       `Airdropped ${amountNight} NIGHT to your wallet`,
       result.txHash,
     ) + '\n');
-    process.stderr.write('\n' + divider() + '\n');
-    process.stderr.write(dim('  Verify:         midnight balance') + '\n');
-    process.stderr.write(dim('  Register dust:  midnight dust register') + '\n');
-    process.stderr.write(dim('  Note: registering pays its fee from Dust this NIGHT generates, so it waits longer the less NIGHT')
+    ctx.output.stderr('\n' + divider() + '\n');
+    ctx.output.stderr(dim('  Verify:         midnight balance') + '\n');
+    ctx.output.stderr(dim('  Register dust:  midnight dust register') + '\n');
+    ctx.output.stderr(dim('  Note: registering pays its fee from Dust this NIGHT generates, so it waits longer the less NIGHT')
       + '\n' + dim('        there is (about a minute for 1000 NIGHT). dust register says how long.') + '\n\n');
   } catch (err) {
     spinner.fail('Failed');
@@ -270,12 +270,12 @@ async function shieldedAirdrop(
     saveShieldedAddress(destination.walletPath, networkName as NetworkName, userShieldedAddrStr);
   }
 
-  process.stderr.write('\n' + header('Shielded Airdrop') + '\n\n');
-  process.stderr.write(keyValue('Network', networkName) + '\n');
-  process.stderr.write(keyValue('From', dim('genesis shielded (seed 0x01)')) + '\n');
-  process.stderr.write(keyValue('To', formatAddress(userShieldedAddrStr, true)) + '\n');
-  process.stderr.write(keyValue('Amount', bold(amountNight + ' NIGHT (shielded)')) + '\n');
-  process.stderr.write('\n');
+  ctx.output.stderr('\n' + header('Shielded Airdrop') + '\n\n');
+  ctx.output.stderr(keyValue('Network', networkName) + '\n');
+  ctx.output.stderr(keyValue('From', dim('genesis shielded (seed 0x01)')) + '\n');
+  ctx.output.stderr(keyValue('To', formatAddress(userShieldedAddrStr, true)) + '\n');
+  ctx.output.stderr(keyValue('Amount', bold(amountNight + ' NIGHT (shielded)')) + '\n');
+  ctx.output.stderr('\n');
 
   // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
   const stopListening = ctx.sdkWarnings.listen(undefined);
@@ -350,10 +350,10 @@ async function shieldedAirdrop(
       ctx.output.result({ txHash, amount: amountNight, shieldedAddress: userShieldedAddrStr, network: networkName, type: 'shielded' });
       return;
     }
-    process.stdout.write(txHash + '\n');
-    process.stderr.write('\n' + successMessage(`Airdropped ${amountNight} shielded NIGHT to your wallet`, txHash) + '\n');
-    process.stderr.write('\n' + divider() + '\n');
-    process.stderr.write(dim('  Verify: midnight balance --shielded') + '\n\n');
+    ctx.output.stdout(txHash + '\n');
+    ctx.output.stderr('\n' + successMessage(`Airdropped ${amountNight} shielded NIGHT to your wallet`, txHash) + '\n');
+    ctx.output.stderr('\n' + divider() + '\n');
+    ctx.output.stderr(dim('  Verify: midnight balance --shielded') + '\n\n');
   } catch (err) {
     spinner.fail('Failed');
     throw err;

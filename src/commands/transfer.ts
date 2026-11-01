@@ -43,12 +43,12 @@ async function unshieldedTransfer(
     indexerWS: getFlag(args, 'indexer-ws'),
   }, networkName);
 
-  process.stderr.write('\n' + header('Transfer') + '\n\n');
-  process.stderr.write(keyValue('Network', networkName) + '\n');
-  process.stderr.write(keyValue('From', formatAddress(address, true)) + '\n');
-  process.stderr.write(keyValue('To', formatAddress(recipientAddress, true)) + '\n');
-  process.stderr.write(keyValue('Amount', bold(amountNight + ' NIGHT')) + '\n');
-  process.stderr.write('\n');
+  ctx.output.stderr('\n' + header('Transfer') + '\n\n');
+  ctx.output.stderr(keyValue('Network', networkName) + '\n');
+  ctx.output.stderr(keyValue('From', formatAddress(address, true)) + '\n');
+  ctx.output.stderr(keyValue('To', formatAddress(recipientAddress, true)) + '\n');
+  ctx.output.stderr(keyValue('Amount', bold(amountNight + ' NIGHT')) + '\n');
+  ctx.output.stderr('\n');
 
   const spinner = ctx.progress.start('Starting wallet...');
 
@@ -102,14 +102,14 @@ async function unshieldedTransfer(
       return;
     }
 
-    process.stdout.write(result.txHash + '\n');
+    ctx.output.stdout(result.txHash + '\n');
 
-    process.stderr.write('\n' + successMessage(
+    ctx.output.stderr('\n' + successMessage(
       `Transferred ${amountNight} NIGHT`,
       result.txHash,
     ) + '\n');
-    process.stderr.write('\n' + divider() + '\n');
-    process.stderr.write(dim('  Verify: midnight balance') + '\n\n');
+    ctx.output.stderr('\n' + divider() + '\n');
+    ctx.output.stderr(dim('  Verify: midnight balance') + '\n\n');
   } catch (err) {
     spinner.fail('Failed');
     throw err;
@@ -138,11 +138,11 @@ async function shieldedTransfer(
 
   const decodedRecipient = decodeShieldedRecipient(recipientAddress, networkName);
 
-  process.stderr.write('\n' + header('Shielded Transfer') + '\n\n');
-  process.stderr.write(keyValue('Network', networkName) + '\n');
-  process.stderr.write(keyValue('To', formatAddress(recipientAddress, true)) + '\n');
-  process.stderr.write(keyValue('Amount', bold(amountNight + ' NIGHT (shielded)')) + '\n');
-  process.stderr.write('\n');
+  ctx.output.stderr('\n' + header('Shielded Transfer') + '\n\n');
+  ctx.output.stderr(keyValue('Network', networkName) + '\n');
+  ctx.output.stderr(keyValue('To', formatAddress(recipientAddress, true)) + '\n');
+  ctx.output.stderr(keyValue('Amount', bold(amountNight + ' NIGHT (shielded)')) + '\n');
+  ctx.output.stderr('\n');
 
 
   // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
@@ -225,10 +225,10 @@ async function shieldedTransfer(
       ctx.output.result({ txHash, amount: amountNight, recipient: recipientAddress, network: networkName, type: 'shielded' });
       return;
     }
-    process.stdout.write(txHash + '\n');
-    process.stderr.write('\n' + successMessage(`Transferred ${amountNight} shielded NIGHT`, txHash) + '\n');
-    process.stderr.write('\n' + divider() + '\n');
-    process.stderr.write(dim('  Verify: midnight balance --shielded') + '\n\n');
+    ctx.output.stdout(txHash + '\n');
+    ctx.output.stderr('\n' + successMessage(`Transferred ${amountNight} shielded NIGHT`, txHash) + '\n');
+    ctx.output.stderr('\n' + divider() + '\n');
+    ctx.output.stderr(dim('  Verify: midnight balance --shielded') + '\n\n');
   } catch (err) {
     spinner.fail('Failed');
     throw err;

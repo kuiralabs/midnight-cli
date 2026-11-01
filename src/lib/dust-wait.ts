@@ -4,7 +4,7 @@
 // and a ledger-9 transfer costs ~0.85, a gap 1000 NIGHT closes in ~20 seconds.
 
 import { formatWait } from './duration.ts';
-import { CANCELLED_MESSAGE } from './errors.ts';
+import { sleep } from './sleep.ts';
 import { DUST_RETRY_DELAY_MS } from './constants.ts';
 import { dustShortfallOf } from './sdk-errors.ts';
 import { roughDust, toDust } from '../ui/format.ts';
@@ -123,12 +123,5 @@ export async function payWhenDustCovers<T>(
   }
 }
 
-/** Wait `ms`; reject with "Operation cancelled" if `signal` aborts first (or already has). */
-export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) return Promise.reject(new Error(CANCELLED_MESSAGE));
-  return new Promise<void>((resolve, reject) => {
-    const onAbort = () => { clearTimeout(timer); reject(new Error(CANCELLED_MESSAGE)); };
-    const timer = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
-}
+// The wait the Dust loops use, cut short by the call's cancellation; it lives in sleep.ts, which other waits share.
+export { sleep };

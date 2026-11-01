@@ -31,13 +31,18 @@ export function isUsageError(err: unknown): err is UsageError {
 /** What a cancelled operation fails with; exit-codes' classifyError reads it as CANCELLED. */
 export const CANCELLED_MESSAGE = 'Operation cancelled';
 
-/** A call cancelled before it started (2F): the cancellation error, typed with its code. */
+/** A cancelled call (2F): the cancellation error, typed with its code. */
 export class CancelledError extends Error {
   readonly code = 'CANCELLED';
 
-  constructor() {
-    super(CANCELLED_MESSAGE);
+  constructor(message: string = CANCELLED_MESSAGE) {
+    super(message);
     this.name = 'CancelledError';
     Object.setPrototypeOf(this, CancelledError.prototype);
   }
+}
+
+/** Throws CancelledError when the call's signal has aborted, so the call stops before its next step. */
+export function throwIfCancelled(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) throw new CancelledError();
 }

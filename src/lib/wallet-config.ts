@@ -10,6 +10,7 @@ import { isSealedSecret, openSecret, sealSecret } from './keystore.ts';
 import { FileExistsError, writeJsonDurably } from './durable-file.ts';
 import { type PassphraseSource, unlockPassphrase } from './passphrase.ts';
 import { stateRoot } from './state-root.ts';
+import { throwIfCancelled } from './errors.ts';
 
 /** What anyone may read of a wallet: its addresses, and whether its secrets are sealed. No secret. */
 export interface WalletConfig {
@@ -484,15 +485,26 @@ export interface ProtectedWallet {
   sealedNow: boolean;
 }
 
-/** Seals every wallet under the state root `root` that is still in plain text, under `passphrase`, in name order. */
-export function protectAllWallets(root: string, passphrase: string): ProtectedWallet[] {
+/**
+ * Seals every wallet under the state root `root` that is still in plain text,
+ * under `passphrase`, in name order. Cancelled (`signal`), it stops between
+ * wallets, never in the middle of one: the wallets sealed by then stay sealed.
+ */
+export async function protectAllWallets(root: string, passphrase: string, signal?: AbortSignal): Promise<ProtectedWallet[]> {
   const walletsDir = path.join(root, WALLETS_DIR_NAME);
   const files = fs.existsSync(walletsDir) ? fs.readdirSync(walletsDir).filter((f) => f.endsWith('.json')).sort() : [];
   // A wallet from before named wallets, if it was never moved into wallets/.
   const legacy = path.join(root, DEFAULT_WALLET_FILENAME);
   const entries = files.map((f) => ({ name: f.replace(/\.json$/, ''), file: path.join(walletsDir, f) }));
   if (fs.existsSync(legacy)) entries.push({ name: DEFAULT_WALLET_FILENAME.replace(/\.json$/, ''), file: legacy });
-  return entries.map(({ name, file }) => ({ name, file, sealedNow: sealWalletInPlace(file, passphrase) }));
+  const report: ProtectedWallet[] = [];
+  for (const { name, file } of entries) {
+    // Sealing runs synchronously; a cancellation that came meanwhile lands here, before the next wallet.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    throwIfCancelled(signal);
+    report.push({ name, file, sealedNow: sealWalletInPlace(file, passphrase) });
+  }
+  return report;
 }
 
 /** How a wallet is unlocked: the state root holding mn's passphrase check (the host's, unless given), where the passphrase comes from, and where a warning goes. */

@@ -47,7 +47,14 @@ describe('assertLedgerSupported', () => {
   it('probes the network\'s indexer HTTP endpoint and refuses a ledger-8 answer', async () => {
     const fetchVersion = vi.fn().mockResolvedValue(PREVIEW);
     await expect(assertLedgerSupported('preview', network, fetchVersion)).rejects.toBeInstanceOf(UnsupportedLedgerError);
-    expect(fetchVersion).toHaveBeenCalledWith('http://indexer.example/api/v4/graphql');
+    expect(fetchVersion).toHaveBeenCalledWith('http://indexer.example/api/v4/graphql', undefined);
+  });
+
+  it('passes the call\'s signal into the probe', async () => {
+    const fetchVersion = vi.fn().mockResolvedValue(LEDGER9_LOCALNET);
+    const signal = new AbortController().signal;
+    await assertLedgerSupported('undeployed', network, fetchVersion, signal);
+    expect(fetchVersion).toHaveBeenCalledWith('http://indexer.example/api/v4/graphql', signal);
   });
 
   it('resolves for a ledger-9 answer', async () => {

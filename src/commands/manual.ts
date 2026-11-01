@@ -6,7 +6,7 @@
 
 import { spawn } from 'node:child_process';
 import { type ParsedArgs, hasFlag, getFlag } from '../lib/argv.ts';
-import type { CallContext } from '../lib/call-context.ts';
+import type { CallContext, CallOutput } from '../lib/call-context.ts';
 import { bold, dim, teal, yellow, white } from '../ui/colors.ts';
 import { helpSpecs, type CommandSpec } from './help.ts';
 import { PKG_NAME, PKG_VERSION, PKG_REPOSITORY_URL } from '../lib/pkg.ts';
@@ -263,16 +263,16 @@ function green(s: string): string { return `\x1b[32m${s}\x1b[0m`; }
 function yellowText(s: string): string { return `\x1b[33m${s}\x1b[0m`; }
 
 /** Pipe `text` through a pager when stdout is a TTY. Honors $PAGER. */
-async function pageOrPrint(text: string, usePager: boolean): Promise<void> {
+async function pageOrPrint(output: CallOutput, text: string, usePager: boolean): Promise<void> {
   if (!usePager || !process.stdout.isTTY) {
-    process.stdout.write(text);
+    output.stdout(text);
     return;
   }
 
   const pagerEnv = process.env.PAGER ?? 'less -R';
   const [pagerCmd, ...pagerArgs] = pagerEnv.split(/\s+/);
   if (!pagerCmd) {
-    process.stdout.write(text);
+    output.stdout(text);
     return;
   }
 
@@ -282,7 +282,7 @@ async function pageOrPrint(text: string, usePager: boolean): Promise<void> {
     child.on('close', () => resolve());
     child.on('error', () => {
       // Pager not available; fall back to plain print.
-      process.stdout.write(text);
+      output.stdout(text);
       resolve();
     });
     child.stdin.write(text);
@@ -305,9 +305,9 @@ export default async function manualCommand(args: ParsedArgs, ctx: CallContext):
 
   // --raw: skip ANSI, useful for piping to a file.
   if (hasFlag(args, 'raw')) {
-    process.stdout.write(buildManual().replace(/\x1b\[[0-9;]*m/g, ''));
+    ctx.output.stdout(buildManual().replace(/\x1b\[[0-9;]*m/g, ''));
     return;
   }
 
-  await pageOrPrint(buildManual(), usePager);
+  await pageOrPrint(ctx.output, buildManual(), usePager);
 }
