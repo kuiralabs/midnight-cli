@@ -108,8 +108,11 @@ try {
   // A shielded address is longer than bech32's 90 characters; the address
   // library must still read the one the installed mn derives.
   const home = join(work, 'home');
+  // The installed mn in a home of its own, run without a terminal: it seals
+  // the wallet under a passphrase, so it gets one, as any unattended run does.
+  const env = { ...process.env, HOME: home, MN_PASSPHRASE: 'fresh install check' };
   const wallet = JSON.parse(execFileSync(mn, ['wallet', 'generate', 'check', '--json'], {
-    cwd: work, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], env: { ...process.env, HOME: home },
+    cwd: work, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], env,
   }));
   const address = wallet.shieldedAddresses.undeployed;
   const parsed = run(process.execPath, ['--input-type=module', '-e', `
@@ -130,7 +133,7 @@ try {
   let grant = '';
   try {
     execFileSync(mn, ['grant', 'status', '--wallet', 'check', '--network', 'undeployed', '--node', 'ws://127.0.0.1:9', '--indexer-ws', 'ws://127.0.0.1:9/api/v4/graphql/ws', '--proof-server', 'http://127.0.0.1:9'], {
-      cwd: work, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, HOME: home },
+      cwd: work, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], env,
     });
     grant = 'answered without an error';
   } catch (error) {
@@ -142,7 +145,7 @@ try {
   check('one copy of @kuiralabs/midnight-account-chain', chains.length === 1, chains.join(', '));
 
   // The MCP server reads its skill documents from the installed package.
-  const { tools, resources } = await askMcpServer(join(work, 'node_modules', '.bin', 'midnight-wallet-mcp'), { ...process.env, HOME: home });
+  const { tools, resources } = await askMcpServer(join(work, 'node_modules', '.bin', 'midnight-wallet-mcp'), env);
   check('the MCP server lists its skill resources', resources.length >= 2, `${resources.length}`);
   for (const { uri, text, error } of resources) {
     check(`the MCP server serves ${uri}`, error === undefined && text.length > 0, error ? error.replace(work, '<install>') : `${text.length} characters`);
