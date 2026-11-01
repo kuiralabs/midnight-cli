@@ -19,7 +19,7 @@ export const helpDefinition: CommandDefinition = {
       commands: 'Array of command specs with jsonFields',
     },
   },
-  intro: { brief: 'Show command usage', order: 17 },
+  intro: { brief: 'Show command usage', order: 18 },
   needsWalletSdk: false,
   shell: {},
   load: () => import('./help.ts'),

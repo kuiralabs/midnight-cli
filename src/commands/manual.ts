@@ -7,7 +7,7 @@
 import { spawn } from 'node:child_process';
 import { type ParsedArgs, hasFlag, getFlag } from '../lib/argv.ts';
 import { bold, dim, teal, yellow, white } from '../ui/colors.ts';
-import { COMMAND_SPECS, type CommandSpec } from './help.ts';
+import { helpSpecs, type CommandSpec } from './help.ts';
 import { PKG_NAME, PKG_VERSION, PKG_REPOSITORY_URL } from '../lib/pkg.ts';
 
 const SECTION_BAR = '═'.repeat(63);
@@ -21,7 +21,7 @@ function subhead(title: string): string {
   return `\n${dim(RULE)}\n  ${bold(white(title))}\n${dim(RULE)}\n`;
 }
 
-/** Render a single command's section using the data already in COMMAND_SPECS. */
+/** Render a single command's section from its help in the registry. */
 function renderCommandSection(spec: CommandSpec): string {
   const lines: string[] = [];
   lines.push(`${teal(bold('▸ ' + spec.name))}${' '.repeat(Math.max(2, 22 - spec.name.length))}${spec.description}`);
@@ -114,7 +114,7 @@ export function buildManual(): string {
 
   // ── Commands ──────────────────────────────────────────────
   out.push(subhead('COMMANDS'));
-  for (const spec of COMMAND_SPECS) {
+  for (const spec of helpSpecs()) {
     out.push(renderCommandSection(spec));
     out.push('');
   }

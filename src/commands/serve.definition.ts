@@ -106,7 +106,7 @@ export const serveDefinition: CommandDefinition = {
       status: 'Server status (listening)',
     },
   },
-  intro: { brief: 'DApp Connector server', order: 15 },
+  intro: { brief: 'DApp Connector server', order: 16 },
   needsWalletSdk: true,
   shell: { signal: true },
   load: () => import('./serve.ts'),

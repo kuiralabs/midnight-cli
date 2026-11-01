@@ -53,7 +53,10 @@ export function getWordmarkMaterializeFrame(progress: number): string[] {
   );
 }
 
-// Short descriptions for the compact horizontal help layout (≤30 chars each)
+// Short descriptions for the compact horizontal help layout (≤30 chars each).
+// Superseded by the registry (each definition's intro brief); removal waits for
+// Y13. Nothing reads it but the registry's test, which records how the intro
+// differs from it: grant's line, added by Y29.
 export const COMMAND_BRIEFS: [name: string, brief: string][] = [
   ['wallet',          'Manage named wallets'],
   ['info',            'Display wallet metadata'],

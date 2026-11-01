@@ -40,7 +40,7 @@ export const configDefinition: CommandDefinition = {
     ],
     jsonFields: { action: 'get, set, or unset', key: 'Config key name', value: 'Config value' },
   },
-  intro: { brief: 'Manage CLI config', order: 12 },
+  intro: { brief: 'Manage CLI config', order: 13 },
   needsWalletSdk: false,
   shell: {},
   load: () => import('./config.ts'),

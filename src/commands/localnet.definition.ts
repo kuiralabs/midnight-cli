@@ -35,7 +35,7 @@ export const localnetDefinition: CommandDefinition = {
       kept: 'Array of { name, project } containers with those names that are not mn\'s, left alone (clean only)',
     },
   },
-  intro: { brief: 'Manage local network', order: 14 },
+  intro: { brief: 'Manage local network', order: 15 },
   needsWalletSdk: false,
   shell: {},
   load: () => import('./localnet.ts'),

@@ -1,11 +1,12 @@
 // The command registry (plan 2B): every command defined once, beside it.
 // Since 2C the CLI's dispatch, its SDK commands and its accepted flags come
-// from it; their tests pin what the lists they replaced said. Until 2D–2E
-// switch them over, help, the intro and the MCP server keep their own lists;
-// each test here rebuilds one of those lists from the registry and requires it
-// to equal the list as it is, so the switch can't change what a user or an
-// agent sees. Where the lists disagree today, the definitions record what each
-// says (Y29 fixes them later).
+// from it, and since 2D help, the manual and the intro; their tests pin what
+// the lists they replaced said, and those lists stay until Y13 approves their
+// removal. Until 2E switches it over, the MCP server keeps its own list; the
+// tests here rebuild it from the registry and require it to equal the list as
+// it is, so the switch can't change what an agent sees. Where the lists
+// disagree, the definitions record what each says, and Y29 fixes them one by
+// one (2D: the intro gains grant's line).
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -15,7 +16,9 @@ import {
   CommandDefinitionError,
   confirmationText,
   createCommandRegistry,
+  commandHelpSpecs,
   flagsSectionLines,
+  introBriefs,
   toolPassThroughFlags,
   type CommandDefinition,
 } from '../lib/command-definition.ts';
@@ -25,7 +28,7 @@ import { parseArgs, type ParsedArgs } from '../lib/argv.ts';
 import { isUsageError } from '../lib/errors.ts';
 import type { Payer } from '../lib/payer.ts';
 import type { WalletProtector } from '../lib/wallet-protector.ts';
-import { COMMAND_SPECS, type CommandSpec } from '../commands/help.ts';
+import { COMMAND_SPECS } from '../commands/help.ts';
 import { COMMAND_BRIEFS } from '../ui/art.ts';
 import { TOOLS, REQUIRES_CONFIRMATION, describePendingOp, handlerLoaders } from '../lib/mcp/tools.ts';
 
@@ -185,20 +188,9 @@ describe('the accepted flags (COMMAND_FLAGS and GLOBAL_FLAGS, superseded by the 
   });
 });
 
-describe('help\'s command specs (COMMAND_SPECS in src/commands/help.ts)', () => {
-  function rebuildSpec(c: CommandDefinition & { help: NonNullable<CommandDefinition['help']> }): CommandSpec {
-    return {
-      name: c.name,
-      description: c.help.description,
-      usage: c.help.usage,
-      ...(c.help.flags === undefined ? {} : { flags: flagsSectionLines(c) }),
-      ...(c.help.examples === undefined ? {} : { examples: [...c.help.examples] }),
-      ...(c.help.jsonFields === undefined ? {} : { jsonFields: { ...c.help.jsonFields } }),
-    };
-  }
-  const rebuilt = registry.commands
-    .filter((c): c is CommandDefinition & { help: NonNullable<CommandDefinition['help']> } => c.help !== undefined)
-    .map(rebuildSpec);
+describe('help\'s command specs (COMMAND_SPECS in src/commands/help.ts, superseded by the registry; removal waits for Y13)', () => {
+  // What help, help --json and the manual render since 2D.
+  const rebuilt = commandHelpSpecs(registry);
 
   it('is rebuilt exactly, in its order', () => {
     expect(rebuilt).toStrictEqual(COMMAND_SPECS);
@@ -209,13 +201,19 @@ describe('help\'s command specs (COMMAND_SPECS in src/commands/help.ts)', () => 
   });
 });
 
-describe('the intro\'s briefs (COMMAND_BRIEFS in src/ui/art.ts)', () => {
-  it('is rebuilt exactly, in its order', () => {
-    const rebuilt = registry.commands
-      .flatMap((c) => (c.intro === undefined ? [] : [{ order: c.intro.order, entry: [c.name, c.intro.brief] }]))
-      .sort((a, b) => a.order - b.order)
-      .map(({ entry }) => entry);
-    expect(rebuilt).toStrictEqual(COMMAND_BRIEFS);
+describe('the intro\'s briefs (COMMAND_BRIEFS in src/ui/art.ts, superseded by the registry; removal waits for Y13)', () => {
+  it('is rebuilt exactly, in its order, with grant\'s line added after dev (Y29)', () => {
+    const before = [...COMMAND_BRIEFS];
+    const dev = before.findIndex(([name]) => name === 'dev');
+    before.splice(dev + 1, 0, ['grant', 'Grants that let agents spend']);
+    expect(introBriefs(registry)).toStrictEqual(before);
+  });
+
+  it('names every command help lists but generate (wallet generate in the intro), and not status (disabled)', () => {
+    const listed = new Set(introBriefs(registry).map(([name]) => name));
+    const missing = commandHelpSpecs(registry).map((spec) => spec.name).filter((name) => !listed.has(name));
+    expect(missing).toStrictEqual(['generate']);
+    expect(listed.has('status')).toBe(false);
   });
 });
 

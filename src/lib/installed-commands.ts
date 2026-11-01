@@ -1,10 +1,10 @@
 // The commands this mn has, collected into one registry (plan 2B). The shell
 // assembles it: a definition sits beside its command in each package, and the
 // base can't import a package's commands. Reading it loads no handler, so no SDK.
-// Nothing uses it yet but the tests that rebuild today's lists from it; 2C–2E
-// switch dispatch, help and the MCP tools over to it.
+// The shell's dispatch and flag checks read it (2C), and so do help, the manual
+// and the intro (2D); 2E switches the MCP tools over to it.
 
-import { createCommandRegistry, type FlagDefinition } from './command-definition.ts';
+import { createCommandRegistry, type FlagDefinition, type GlobalFlagHelp } from './command-definition.ts';
 import { walletDefinition } from '../commands/wallet.definition.ts';
 import { generateDefinition } from '../commands/generate.definition.ts';
 import { infoDefinition } from '../commands/info.definition.ts';
@@ -36,6 +36,18 @@ const GLOBAL_FLAGS: readonly FlagDefinition[] = [
   { name: 'v', takesValue: false },
 ];
 
+/**
+ * The global flags `help --json` lists. Besides the flags every command
+ * accepts, it names --wallet and --network, which most commands take.
+ */
+const GLOBAL_FLAGS_HELP: readonly GlobalFlagHelp[] = [
+  { name: '--json', description: 'Output structured JSON to stdout (suppresses all stderr)' },
+  { name: '--wallet <name|file>', description: 'Wallet name or path' },
+  { name: '--network <name>', description: 'Override network (preprod, preview, undeployed)' },
+  { name: '--version, -v', description: 'Print CLI version' },
+  { name: '--help, -h', description: 'Show help' },
+];
+
 /** Every command, in help's order (status, which help doesn't list, where its old help entry sat). */
 export const installedCommands = createCommandRegistry([
   walletDefinition,
@@ -59,4 +71,4 @@ export const installedCommands = createCommandRegistry([
   statusDefinition,
   helpDefinition,
   manualDefinition,
-], GLOBAL_FLAGS);
+], GLOBAL_FLAGS, GLOBAL_FLAGS_HELP);
