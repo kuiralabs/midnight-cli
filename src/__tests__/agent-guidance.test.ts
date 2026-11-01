@@ -32,9 +32,7 @@ const SECTIONS: Record<GuidanceText, readonly string[]> = {
 /** The installed packages but one, as the shell would install them without it. */
 function withoutPackage(name: string): CommandRegistry {
   const packages = installedCommands.packages.filter((pkg) => pkg.name !== name);
-  const gone = new Set(installedCommands.packages.find((pkg) => pkg.name === name)!.commands.map((c) => c.name));
-  const order = installedCommands.commands.map((c) => c.name).filter((n) => !gone.has(n));
-  return createPackageRegistry(packages, order, installedCommands.globalFlags, installedCommands.globalFlagsHelp);
+  return createPackageRegistry(packages, installedCommands.globalFlags, installedCommands.globalFlagsHelp);
 }
 
 /** The manual's AVAILABLE MCP TOOLS section, up to the next one. */
@@ -63,8 +61,10 @@ describe('assembleGuidance', () => {
 });
 
 describe('createPackageRegistry', () => {
-  const command = (name: string, tools: string[] = []): CommandDefinition => ({
+  let nextPlace = 0;
+  const command = (name: string, tools: string[] = [], order = ++nextPlace): CommandDefinition => ({
     name,
+    order,
     flags: [],
     needsWalletSdk: false,
     shell: {},
@@ -73,32 +73,32 @@ describe('createPackageRegistry', () => {
   });
   const pkg = (name: string, commands: CommandDefinition[], guidance: CommandPackage['guidance'] = { pieces: [] }): CommandPackage => ({ name, commands, guidance });
 
-  it('lists commands in help\'s order, then the ones it doesn\'t name in their package\'s order, and keeps the packages', () => {
-    const packages = [pkg('p', [command('a'), command('b')]), pkg('plugin', [command('zz'), command('yy')])];
-    const registry = createPackageRegistry(packages, ['b', 'a'], []);
-    expect(registry.commands.map((c) => c.name)).toStrictEqual(['b', 'a', 'zz', 'yy']);
+  it('lists commands in their definitions\' order, a plugin\'s among them, and keeps the packages', () => {
+    const packages = [pkg('p', [command('a', [], 20), command('b', [], 10)]), pkg('plugin', [command('zz', [], 40), command('yy', [], 15)])];
+    const registry = createPackageRegistry(packages, []);
+    expect(registry.commands.map((c) => c.name)).toStrictEqual(['b', 'yy', 'a', 'zz']);
     expect(registry.packages).toBe(packages);
   });
 
-  it('refuses a command in two packages, a package twice, and a help order naming a command no package installs', () => {
-    expect(() => createPackageRegistry([pkg('p', [command('a')]), pkg('q', [command('a')])], [], [])).toThrow(/command "a"/);
-    expect(() => createPackageRegistry([pkg('p', [command('a')]), pkg('p', [command('b')])], [], [])).toThrow(/package "p"/);
-    expect(() => createPackageRegistry([pkg('p', [command('a')])], ['a', 'gone'], [])).toThrow(/"gone"/);
+  it('refuses a command in two packages, a package twice, and two commands in one place', () => {
+    expect(() => createPackageRegistry([pkg('p', [command('a')]), pkg('q', [command('a')])], [])).toThrow(/command "a"/);
+    expect(() => createPackageRegistry([pkg('p', [command('a')]), pkg('p', [command('b')])], [])).toThrow(/package "p"/);
+    expect(() => createPackageRegistry([pkg('p', [command('a', [], 5)]), pkg('plugin', [command('b', [], 5)])], [])).toThrow(/command place "5"/);
   });
 
   it('refuses two packages\' pieces in one place', () => {
     const p = pkg('p', [command('a')], { pieces: [piece('s', 10, 'x')] });
     const q = pkg('q', [command('b')], { pieces: [piece('s', 10, 'y')] });
-    expect(() => createPackageRegistry([p, q], [], [])).toThrow(CommandDefinitionError);
+    expect(() => createPackageRegistry([p, q], [])).toThrow(CommandDefinitionError);
   });
 
   it('refuses a tools table row for another package\'s tool, a tool given two rows, and two rows in one place', () => {
     const row = (tool: string, order = 1) => ({ tool, group: 'g', order, description: ['d'] });
     const tooled = command('a', ['t_a']);
-    expect(() => createPackageRegistry([pkg('p', [tooled]), pkg('q', [command('bb')], { pieces: [], toolsTable: [row('t_a')] })], [], []))
+    expect(() => createPackageRegistry([pkg('p', [tooled]), pkg('q', [command('bb')], { pieces: [], toolsTable: [row('t_a')] })], []))
       .toThrow(/q: its tools table has a row for t_a/);
-    expect(() => createPackageRegistry([pkg('p', [tooled], { pieces: [], toolsTable: [row('t_a', 1), row('t_a', 2)] })], [], [])).toThrow(/t_a/);
-    expect(() => createPackageRegistry([pkg('p', [command('a', ['t_a', 't_b'])], { pieces: [], toolsTable: [row('t_a'), row('t_b')] })], [], []))
+    expect(() => createPackageRegistry([pkg('p', [tooled], { pieces: [], toolsTable: [row('t_a', 1), row('t_a', 2)] })], [])).toThrow(/t_a/);
+    expect(() => createPackageRegistry([pkg('p', [command('a', ['t_a', 't_b'])], { pieces: [], toolsTable: [row('t_a'), row('t_b')] })], []))
       .toThrow(/tools table place/);
   });
 });
@@ -155,7 +155,7 @@ describe('the texts, assembled from the installed packages', () => {
 
   it('shows a tool no package gives a row for under Other, with its own description, so the count stays right', () => {
     const packages = installedCommands.packages.map((pkg) => (pkg.name === 'grant' ? { ...pkg, guidance: { pieces: pkg.guidance.pieces } } : pkg));
-    const registry = createPackageRegistry(packages, installedCommands.commands.map((c) => c.name), installedCommands.globalFlags, installedCommands.globalFlagsHelp);
+    const registry = createPackageRegistry(packages, installedCommands.globalFlags, installedCommands.globalFlagsHelp);
     const section = toolsSection(agentManual(registry));
     expect(section).not.toContain('Grants (experimental)');
     expect(section).toContain('  Other\n  midnight_grant_status        The wallet\'s account: address, owner key, what it holds, number of grants (see skill).');

@@ -13,6 +13,7 @@ async function checkGrant(params: Readonly<Record<string, unknown>>, call: ToolC
 
 export const grantDefinition: CommandDefinition = {
   name: 'grant',
+  order: 170,
   subcommands: [
     'deploy',
     'deposit',

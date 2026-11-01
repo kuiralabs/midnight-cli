@@ -4,6 +4,7 @@ import type { CommandDefinition } from '../lib/command-definition.ts';
 
 export const inspectCostDefinition: CommandDefinition = {
   name: 'inspect-cost',
+  order: 70,
   flags: [
     {
       name: 'network',

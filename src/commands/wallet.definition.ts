@@ -4,6 +4,7 @@ import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition
 
 export const walletDefinition: CommandDefinition = {
   name: 'wallet',
+  order: 10,
   subcommands: ['generate', 'list', 'use', 'info', 'remove', 'seed', 'protect'],
   flags: [
     {

@@ -11,6 +11,7 @@ import { MINIMAL_FLAG, type ParsedArgs } from '../lib/argv.ts';
 const received: ParsedArgs[] = [];
 const command = (tools: ToolDefinition[]): CommandDefinition => ({
   name: 'thing',
+  order: 1,
   subcommands: ['make', 'show'],
   flags: [{ name: 'size', takesValue: true, agent: { type: 'string', description: 'How big' } }, { name: 'go', takesValue: false, subcommands: ['make'], agent: { notForAgents: 'a person\'s' } }],
   needsWalletSdk: false,

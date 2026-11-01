@@ -4,6 +4,7 @@ import type { CommandDefinition } from '../lib/command-definition.ts';
 
 export const devDefinition: CommandDefinition = {
   name: 'dev',
+  order: 150,
   flags: [],
   help: {
     description: 'Iteration loop for Compact contract development (localnet + compile-on-save + one-key deploy)',

@@ -4,6 +4,7 @@ import type { CommandDefinition } from '../lib/command-definition.ts';
 
 export const manualDefinition: CommandDefinition = {
   name: 'manual',
+  order: 210,
   flags: [
     {
       name: 'no-pager',

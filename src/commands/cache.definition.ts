@@ -4,6 +4,7 @@ import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition
 
 export const cacheDefinition: CommandDefinition = {
   name: 'cache',
+  order: 120,
   subcommands: ['clear'],
   flags: [
     {

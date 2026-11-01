@@ -4,6 +4,7 @@ import type { CommandDefinition } from '../lib/command-definition.ts';
 
 export const generateDefinition: CommandDefinition = {
   name: 'generate',
+  order: 20,
   flags: [
     {
       name: 'force',

@@ -4,6 +4,7 @@ import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition
 
 export const genesisAddressDefinition: CommandDefinition = {
   name: 'genesis-address',
+  order: 60,
   flags: [
     {
       name: 'network',

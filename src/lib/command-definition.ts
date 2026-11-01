@@ -183,6 +183,8 @@ export interface ToolDefinition {
 
 export interface CommandDefinition {
   readonly name: string;
+  /** Its place among the installed commands, which help lists in this order; a plugin takes one no other command has. */
+  readonly order: number;
   readonly subcommands?: readonly string[];
   readonly flags: readonly FlagDefinition[];
   /** Absent: help does not list the command. */
@@ -448,26 +450,19 @@ function checkGuidance(packages: readonly CommandPackage[]): void {
 }
 
 /**
- * Collects packages into a registry. `helpOrder` names commands in the order
- * help lists them; a command it doesn't name follows in its package's order
- * (a plugin's, D5). Every command is in one package.
+ * Collects packages into a registry, its commands in their definitions'
+ * order. Every command is in one package.
  */
 export function createPackageRegistry(
   packages: readonly CommandPackage[],
-  helpOrder: readonly string[],
   globalFlags: readonly FlagDefinition[],
   globalFlagsHelp: readonly GlobalFlagHelp[] = [],
 ): CommandRegistry {
   assertUnique(packages.map((pkg) => pkg.name), 'package');
   const all = packages.flatMap((pkg) => pkg.commands);
   assertUnique(all.map((command) => command.name), 'command');
-  assertUnique(helpOrder, 'help place for');
-  const ordered = helpOrder.map((name) => {
-    const command = all.find((c) => c.name === name);
-    if (command === undefined) throw new CommandDefinitionError(`help's order names "${name}", which no package installs`);
-    return command;
-  });
-  const commands = [...ordered, ...all.filter((command) => !helpOrder.includes(command.name))];
+  assertUnique(all.map((command) => String(command.order)), 'command place');
+  const commands = [...all].sort((a, b) => a.order - b.order);
   checkGuidance(packages);
   return { ...createCommandRegistry(commands, globalFlags, globalFlagsHelp), packages };
 }

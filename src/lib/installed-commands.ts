@@ -59,12 +59,6 @@ const GLOBAL_FLAGS_HELP: readonly GlobalFlagHelp[] = [
   { name: '--help, -h', description: 'Show help' },
 ];
 
-/** Every command, by name, in help's order (status, which help doesn't list, where its old help entry sat). */
-const HELP_ORDER = [
-  'wallet', 'generate', 'info', 'balance', 'address', 'genesis-address', 'inspect-cost', 'airdrop', 'transfer', 'dust',
-  'config', 'cache', 'serve', 'test', 'dev', 'contract', 'grant', 'localnet', 'status', 'help', 'manual',
-];
-
 /** Every package, in the layering's order; the shell's own commands last, its guidance being the skeletons. */
 export const installedCommands = createPackageRegistry([
   { name: 'core', commands: [configDefinition], guidance: coreGuidance },
@@ -79,4 +73,4 @@ export const installedCommands = createPackageRegistry([
   { name: 'dev', commands: [testDefinition, devDefinition, localnetDefinition], guidance: devGuidance },
   { name: 'grant', commands: [grantDefinition], guidance: grantGuidance },
   { name: 'shell', commands: [helpDefinition, manualDefinition], guidance: { pieces: [] } },
-], HELP_ORDER, GLOBAL_FLAGS, GLOBAL_FLAGS_HELP);
+], GLOBAL_FLAGS, GLOBAL_FLAGS_HELP);

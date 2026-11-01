@@ -5,6 +5,7 @@ import { INDEXER_GRAPHQL_WS_PATH } from '../lib/constants.ts';
 
 export const configDefinition: CommandDefinition = {
   name: 'config',
+  order: 110,
   subcommands: ['get', 'set', 'unset'],
   flags: [
     {

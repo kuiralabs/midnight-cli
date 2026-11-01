@@ -4,6 +4,7 @@ import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM } from '../lib/c
 
 export const dustDefinition: CommandDefinition = {
   name: 'dust',
+  order: 100,
   subcommands: ['register', 'status', 'export'],
   flags: [
     { name: 'network', takesValue: true, agent: { ...NETWORK_PARAM, description: 'Network (default: the selected one)' } },
