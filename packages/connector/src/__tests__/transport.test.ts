@@ -4,13 +4,15 @@ import { createTransport } from '../transport.ts';
 
 // ── Test helpers ──
 
-function createTestServer(handler: (method: string, params: any, id: number) => any): {
+async function createTestServer(handler: (method: string, params: any, id: number) => any): Promise<{
   wss: WebSocketServer;
   port: number;
   url: string;
   close: () => Promise<void>;
-} {
-  const wss = new WebSocketServer({ port: 0 });
+}> {
+  const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+  // Bound to the address the client dials, so no other test's server can take the same port there.
+  await new Promise<void>((resolve) => wss.once('listening', () => resolve()));
   const port = (wss.address() as any).port as number;
 
   wss.on('connection', (ws) => {
@@ -66,7 +68,7 @@ afterEach(async () => {
 
 describe('createTransport', () => {
   it('sends JSON-RPC request and receives response', async () => {
-    server = createTestServer((method) => {
+    server = await createTestServer((method) => {
       if (method === 'ping') return 'pong';
       return null;
     });
@@ -78,7 +80,7 @@ describe('createTransport', () => {
   });
 
   it('passes params in the request', async () => {
-    server = createTestServer((_method, params) => {
+    server = await createTestServer((_method, params) => {
       return { echo: params };
     });
 
@@ -90,7 +92,7 @@ describe('createTransport', () => {
   });
 
   it('serializes bigint params as strings', async () => {
-    server = createTestServer((_method, params) => {
+    server = await createTestServer((_method, params) => {
       return { received: params.amount };
     });
 
@@ -102,7 +104,7 @@ describe('createTransport', () => {
   });
 
   it('reconstructs APIError from JSON-RPC error response', async () => {
-    server = createTestServer(() => {
+    server = await createTestServer(() => {
       const err = { code: -32000, message: 'User rejected', data: { type: 'DAppConnectorAPIError', code: 'Rejected' } };
       throw err;
     });
@@ -120,7 +122,7 @@ describe('createTransport', () => {
   });
 
   it('times out after configured duration', async () => {
-    server = createTestServer(() => {
+    server = await createTestServer(() => {
       // Never respond
       return new Promise(() => {});
     });
@@ -138,7 +140,7 @@ describe('createTransport', () => {
   });
 
   it('rejects calls after close', async () => {
-    server = createTestServer(() => 'ok');
+    server = await createTestServer(() => 'ok');
 
     const transport = await createTransport({ url: server.url });
     transport.close();
@@ -154,7 +156,7 @@ describe('createTransport', () => {
   });
 
   it('calls onDisconnect when server closes', async () => {
-    server = createTestServer(() => 'ok');
+    server = await createTestServer(() => 'ok');
 
     let disconnected = false;
     const transport = await createTransport({
@@ -184,7 +186,7 @@ describe('createTransport', () => {
   });
 
   it('resolves concurrent calls independently by ID', async () => {
-    server = createTestServer((method) => {
+    server = await createTestServer((method) => {
       // Respond with method name so we can verify correct matching
       if (method === 'slow') {
         return new Promise((resolve) => setTimeout(() => resolve('slow_result'), 50));
@@ -208,7 +210,7 @@ describe('createTransport', () => {
   });
 
   it('rejects in-flight calls when close() is called', async () => {
-    server = createTestServer(() => {
+    server = await createTestServer(() => {
       // Never respond — call stays pending
       return new Promise(() => {});
     });
@@ -228,7 +230,7 @@ describe('createTransport', () => {
   });
 
   it('rejects in-flight calls when server disconnects', async () => {
-    server = createTestServer(() => {
+    server = await createTestServer(() => {
       // Never respond
       return new Promise(() => {});
     });
@@ -251,7 +253,7 @@ describe('createTransport', () => {
   });
 
   it('close() is idempotent — calling twice does not throw', async () => {
-    server = createTestServer(() => 'ok');
+    server = await createTestServer(() => 'ok');
 
     const transport = await createTransport({ url: server.url });
     transport.close();
@@ -259,7 +261,7 @@ describe('createTransport', () => {
   });
 
   it('calls onNotification when server sends a notification (no id)', async () => {
-    server = createTestServer((method) => {
+    server = await createTestServer((method) => {
       if (method === 'trigger') return 'ok';
       return null;
     });
@@ -292,7 +294,7 @@ describe('createTransport', () => {
   });
 
   it('ignores notifications when onNotification is not set', async () => {
-    server = createTestServer((method) => {
+    server = await createTestServer((method) => {
       if (method === 'ping') return 'pong';
       return null;
     });
@@ -316,7 +318,7 @@ describe('createTransport', () => {
 
   it('uses auto-incrementing request IDs', async () => {
     const ids: number[] = [];
-    server = createTestServer((_method, _params, id) => {
+    server = await createTestServer((_method, _params, id) => {
       ids.push(id);
       return 'ok';
     });

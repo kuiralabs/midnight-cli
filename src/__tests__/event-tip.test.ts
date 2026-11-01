@@ -12,7 +12,7 @@ afterEach(() => { for (const s of servers) s.close(); servers = []; });
 /** An indexer stand-in: on subscribe, sends `events` as `next` payloads; records each subscription query. */
 async function indexer(events: unknown[]): Promise<{ url: string; queries: string[] }> {
   const queries: string[] = [];
-  const wss = new WebSocketServer({ port: 0 });
+  const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
   servers.push(wss);
   wss.on('connection', (ws) => {
     ws.on('message', (raw) => {
@@ -26,7 +26,7 @@ async function indexer(events: unknown[]): Promise<{ url: string; queries: strin
   });
   await new Promise<void>((resolve) => wss.on('listening', () => resolve()));
   const addr = wss.address();
-  return { url: `ws://localhost:${typeof addr === 'object' && addr ? addr.port : 0}`, queries };
+  return { url: `ws://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`, queries };
 }
 
 describe('fetchEventTip', () => {
@@ -65,7 +65,7 @@ describe('isStreamEmpty', () => {
   });
 
   it('is false when the indexer closes the socket before sending anything', async () => {
-    const wss = new WebSocketServer({ port: 0 });
+    const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
     servers.push(wss);
     wss.on('connection', (ws) => {
       ws.on('message', (raw) => {
@@ -76,7 +76,7 @@ describe('isStreamEmpty', () => {
     });
     await new Promise<void>((resolve) => wss.on('listening', () => resolve()));
     const addr = wss.address();
-    expect(await isStreamEmpty(`ws://localhost:${typeof addr === 'object' && addr ? addr.port : 0}`, 'zswap')).toBe(false);
+    expect(await isStreamEmpty(`ws://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`, 'zswap')).toBe(false);
   });
 });
 

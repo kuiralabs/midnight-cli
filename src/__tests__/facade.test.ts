@@ -212,7 +212,7 @@ describe('startAndSyncFacade: a wallet that has heard nothing yet', () => {
   afterEach(() => { for (const s of servers) s.close(); servers = []; });
 
   async function indexerWith(events: Record<string, unknown>): Promise<string> {
-    const wss = new WebSocketServer({ port: 0 });
+    const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
     servers.push(wss);
     wss.on('connection', (ws) => {
       ws.on('message', (raw) => {
@@ -226,7 +226,7 @@ describe('startAndSyncFacade: a wallet that has heard nothing yet', () => {
     });
     await new Promise<void>((resolve) => wss.on('listening', () => resolve()));
     const addr = wss.address();
-    return `ws://localhost:${typeof addr === 'object' && addr ? addr.port : 0}`;
+    return `ws://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`;
   }
 
   async function syncWith(indexerWsUrl: string) {
