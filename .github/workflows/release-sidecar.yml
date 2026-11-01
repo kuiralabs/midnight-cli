@@ -109,6 +109,8 @@ jobs:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
       # OIDC trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.x.
       - name: Upgrade npm for OIDC trusted publishing
         run: npm install -g npm@latest
