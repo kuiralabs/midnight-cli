@@ -14,8 +14,9 @@ import {
   LocalnetUnavailableError,
   parseServiceStatus,
 } from '../lib/localnet.ts';
-import helpCommand, { COMMAND_SPECS } from '../commands/help.ts';
-import { COMMAND_BRIEFS } from '../ui/art.ts';
+import helpCommand from '../commands/help.ts';
+import { commandHelpSpecs, introBriefs } from '../lib/command-definition.ts';
+import { installedCommands } from '../lib/installed-commands.ts';
 import { cliCall } from './helpers/cli-call.ts';
 
 let io: CapturedOutput;
@@ -196,8 +197,8 @@ describe('ensureComposeFile', () => {
 });
 
 describe('help integration', () => {
-  it('COMMAND_SPECS includes localnet', () => {
-    const localnetSpec = COMMAND_SPECS.find(s => s.name === 'localnet');
+  it('help lists localnet', () => {
+    const localnetSpec = commandHelpSpecs(installedCommands).find(s => s.name === 'localnet');
     expect(localnetSpec).toBeDefined();
     expect(localnetSpec!.description).toContain('local');
     expect(localnetSpec!.usage).toContain('up|stop|down|status|logs|clean');
@@ -219,8 +220,8 @@ describe('help integration', () => {
     expect(out).toContain('Examples:');
   });
 
-  it('COMMAND_BRIEFS includes localnet', () => {
-    const localnetBrief = COMMAND_BRIEFS.find(([name]) => name === 'localnet');
+  it('the intro lists localnet', () => {
+    const localnetBrief = introBriefs(installedCommands).find(([name]) => name === 'localnet');
     expect(localnetBrief).toBeDefined();
     expect(localnetBrief![1]).toContain('local network');
   });
