@@ -1,6 +1,6 @@
 // The `test` command, described once (plan 2B, spec §4.1).
 
-import type { CommandDefinition } from '../lib/command-definition.ts';
+import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition.ts';
 
 export const testDefinition: CommandDefinition = {
   name: 'test',
@@ -19,12 +19,14 @@ export const testDefinition: CommandDefinition = {
       help: [
         '--browser-mode <m>            Browser strategy: dom (HTML UIs, fast — default), vision (canvas games), script (advanced)',
       ],
+      agent: { type: 'string', enum: ['dom', 'vision', 'script'], description: 'Browser strategy only — how Claude perceives the page. dom (HTML/React UIs, fast, needs chrome-devtools-mcp), vision (canvas games, slow), script (advanced, needs hooks). Default: dom for AI scaffolds.' },
     },
     {
       name: 'build-cmd',
       takesValue: true,
       subcommands: ['create'],
       help: ['--build-cmd <cmd>             Browser strategy: build/serve command'],
+      agent: { type: 'string', description: 'Browser strategy only — shell command that builds + serves the UI (e.g. "npm run dev").' },
     },
     {
       name: 'build-dir',
@@ -33,14 +35,21 @@ export const testDefinition: CommandDefinition = {
       help: [
         '--build-dir <subdir>          Browser strategy: subdirectory the build runs in (monorepo case)',
       ],
+      agent: { type: 'string', description: 'Browser strategy only — subdir the build runs in (monorepo case).' },
     },
     {
       name: 'force',
       takesValue: false,
       subcommands: ['create'],
       help: ['--force                       Overwrite existing scaffold files (create)'],
+      agent: { type: 'boolean', description: 'Overwrite existing files instead of aborting on collision' },
     },
-    { name: 'goal', takesValue: true, subcommands: ['create'] },
+    {
+      name: 'goal',
+      takesValue: true,
+      subcommands: ['create'],
+      agent: { type: 'string', description: 'AI mode: one-line success criterion this suite should verify (e.g. "round goes from 0 to 1 after increment"). Triggers AI scaffolding.' },
+    },
     {
       name: 'name',
       takesValue: true,
@@ -48,17 +57,25 @@ export const testDefinition: CommandDefinition = {
       help: [
         '--name <contract>             Specific contract name in multi-contract projects (create)',
       ],
+      agent: { type: 'string', description: 'Specific contract name when the project has multiple' },
     },
     {
       name: 'network',
       takesValue: true,
       help: ['--network <name>              Network for the generated suite (default: undeployed)'],
+      agent: NETWORK_PARAM,
     },
-    { name: 'no-ai', takesValue: false, subcommands: ['create'] },
+    {
+      name: 'no-ai',
+      takesValue: false,
+      subcommands: ['create'],
+      agent: { type: 'boolean', description: 'Force deterministic scaffolder even when claude CLI is available.' },
+    },
     {
       name: 'path',
       takesValue: true,
       help: ['--path <dir>                  dApp directory (default: cwd)'],
+      agent: { type: 'string', description: 'dApp directory (defaults to cwd)' },
     },
     {
       name: 'port',
@@ -67,9 +84,15 @@ export const testDefinition: CommandDefinition = {
       help: [
         '--port <n>                    Browser strategy: dev server port (create --strategy ui)',
       ],
+      agent: { type: 'string', description: 'Browser strategy only — dev server port (e.g. "4173").' },
     },
-    { name: 'redeploy', takesValue: false },
-    { name: 'screen', takesValue: true, subcommands: ['create'] },
+    { name: 'redeploy', takesValue: false, subcommands: ['run'] },
+    {
+      name: 'screen',
+      takesValue: true,
+      subcommands: ['create'],
+      agent: { type: 'string', description: 'AI mode + browser strategy: name of the screen component to focus on (e.g. "loan-request-form" or "LoanRequestForm"). Auto-discovered from src/components, src/pages, src/screens.' },
+    },
     {
       name: 'strategy',
       takesValue: true,
@@ -77,12 +100,14 @@ export const testDefinition: CommandDefinition = {
       help: [
         '--strategy cli|ui             Scaffold strategy (create — interactive prompt if omitted)',
       ],
+      agent: { type: 'string', enum: ['cli', 'browser'], description: 'cli (default): drive contracts via actions.json. browser: drive a real UI via Claude + Chrome via prompt.md.' },
     },
     {
       name: 'suite',
       takesValue: true,
       subcommands: ['run', 'create'],
       help: ['--suite <name>                Select a specific test suite (run, create)'],
+      agent: { type: 'string', description: 'Suite directory name under tests/suites/ (auto-derived from circuit/screen when AI scaffolds)' },
     },
     {
       name: 'url',
@@ -91,10 +116,12 @@ export const testDefinition: CommandDefinition = {
       help: [
         '--url <url>                   Browser strategy: full URL Claude opens (default http://localhost:<port>/)',
       ],
+      agent: { type: 'string', description: 'Browser strategy only — full URL Claude opens (default http://localhost:<port>/).' },
     },
-    { name: 'node', takesValue: true },
-    { name: 'indexer-ws', takesValue: true },
-    { name: 'proof-server', takesValue: true },
+    // Accepted, but test reads none of them (a run resolves endpoints from dapp.test.json's network).
+    { name: 'node', takesValue: true, agent: { notForAgents: 'test reads no endpoint flag: a run takes its network from dapp.test.json' } },
+    { name: 'indexer-ws', takesValue: true, agent: { notForAgents: 'test reads no endpoint flag: a run takes its network from dapp.test.json' } },
+    { name: 'proof-server', takesValue: true, agent: { notForAgents: 'test reads no endpoint flag: a run takes its network from dapp.test.json' } },
   ],
   help: {
     description: 'Generate and run E2E test suites for Midnight dApps',
@@ -146,57 +173,22 @@ export const testDefinition: CommandDefinition = {
         name: 'midnight_test_create',
         description: 'Generate a test scaffold for the contract. Two paths: (1) AI-assisted — pass `goal` (and optionally `screen` for UI strategy) and the scaffold is generated by Claude reading the contract + screen source, producing a focused suite with realistic args / on-screen labels. (2) Deterministic — pass `no-ai: true` (or omit goal/screen in non-interactive mode) for boilerplate scaffolds that the user reviews. CLI strategy emits dapp.test.json + tests/suites/<name>/{suite,actions,assertions}.json. Browser strategy emits prompt.md instead of actions.json plus the browser fields in dapp.test.json — required: port, build-cmd. Use force:true to overwrite.',
         annotations: { destructiveHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: 'dApp directory (defaults to cwd)' },
-            name: { type: 'string', description: 'Specific contract name when the project has multiple' },
-            suite: {
-              type: 'string',
-              description: 'Suite directory name under tests/suites/ (auto-derived from circuit/screen when AI scaffolds)',
-            },
-            strategy: {
-              type: 'string',
-              enum: ['cli', 'browser'],
-              description: 'cli (default): drive contracts via actions.json. browser: drive a real UI via Claude + Chrome via prompt.md.',
-            },
-            network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
-            goal: {
-              type: 'string',
-              description: 'AI mode: one-line success criterion this suite should verify (e.g. "round goes from 0 to 1 after increment"). Triggers AI scaffolding.',
-            },
-            screen: {
-              type: 'string',
-              description: 'AI mode + browser strategy: name of the screen component to focus on (e.g. "loan-request-form" or "LoanRequestForm"). Auto-discovered from src/components, src/pages, src/screens.',
-            },
-            'no-ai': {
-              type: 'boolean',
-              description: 'Force deterministic scaffolder even when claude CLI is available.',
-            },
-            port: { type: 'string', description: 'Browser strategy only — dev server port (e.g. "4173").' },
-            'build-cmd': {
-              type: 'string',
-              description: 'Browser strategy only — shell command that builds + serves the UI (e.g. "npm run dev").',
-            },
-            'build-dir': {
-              type: 'string',
-              description: 'Browser strategy only — subdir the build runs in (monorepo case).',
-            },
-            url: {
-              type: 'string',
-              description: 'Browser strategy only — full URL Claude opens (default http://localhost:<port>/).',
-            },
-            'browser-mode': {
-              type: 'string',
-              enum: ['dom', 'vision', 'script'],
-              description: 'Browser strategy only — how Claude perceives the page. dom (HTML/React UIs, fast, needs chrome-devtools-mcp), vision (canvas games, slow), script (advanced, needs hooks). Default: dom for AI scaffolds.',
-            },
-            force: {
-              type: 'boolean',
-              description: 'Overwrite existing files instead of aborting on collision',
-            },
-          },
-        },
+        params: [
+          { flag: 'path' },
+          { flag: 'name' },
+          { flag: 'suite' },
+          { flag: 'strategy' },
+          { flag: 'network' },
+          { flag: 'goal' },
+          { flag: 'screen' },
+          { flag: 'no-ai' },
+          { flag: 'port' },
+          { flag: 'build-cmd' },
+          { flag: 'build-dir' },
+          { flag: 'url' },
+          { flag: 'browser-mode' },
+          { flag: 'force' },
+        ],
         argv: { subcommand: 'create', flags: 'rest' },
         order: 36,
       },

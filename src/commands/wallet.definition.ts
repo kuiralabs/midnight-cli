@@ -1,6 +1,6 @@
 // The `wallet` command, described once (plan 2B, spec §4.1).
 
-import type { CommandDefinition } from '../lib/command-definition.ts';
+import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition.ts';
 
 export const walletDefinition: CommandDefinition = {
   name: 'wallet',
@@ -22,18 +22,21 @@ export const walletDefinition: CommandDefinition = {
       takesValue: false,
       subcommands: ['generate'],
       help: ['--force             Overwrite existing wallet file'],
+      agent: { type: 'string' },
     },
     {
       name: 'mnemonic',
       takesValue: true,
       subcommands: ['generate'],
       help: ['--mnemonic "..."    Restore from BIP-39 mnemonic (24 words)'],
+      agent: { type: 'string', description: 'BIP-39 24 words' },
     },
     {
       name: 'network',
       takesValue: true,
       subcommands: ['generate'],
       help: ['--network <name>    Network: preprod, preview, undeployed'],
+      agent: NETWORK_PARAM,
     },
     {
       name: 'seed',
@@ -42,6 +45,7 @@ export const walletDefinition: CommandDefinition = {
       help: [
         '--seed <hex>        Restore from a seed: 64 or 128 hex chars (32-byte raw or 64-byte BIP-39)',
       ],
+      agent: { type: 'string', description: '64 or 128 hex chars (32-byte raw or 64-byte BIP-39)' },
     },
     { name: 'wallet', takesValue: true, subcommands: ['info', 'seed'] },
   ],
@@ -97,17 +101,14 @@ export const walletDefinition: CommandDefinition = {
         name: 'midnight_wallet_generate',
         description: 'Create wallet.',
         annotations: { destructiveHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            name: { type: 'string' },
-            network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
-            seed: { type: 'string', description: '64 or 128 hex chars (32-byte raw or 64-byte BIP-39)' },
-            mnemonic: { type: 'string', description: 'BIP-39 24 words' },
-            force: { type: 'string' },
-          },
-          required: ['name'],
-        },
+        params: [
+          { name: 'name', schema: { type: 'string' } },
+          { flag: 'network' },
+          { flag: 'seed' },
+          { flag: 'mnemonic' },
+          { flag: 'force' },
+        ],
+        required: ['name'],
         argv: { subcommand: 'generate', positionals: ['name'], flags: 'rest', trueStrings: ['force'] },
         order: 1,
       },
@@ -115,15 +116,15 @@ export const walletDefinition: CommandDefinition = {
         name: 'midnight_wallet_list',
         description: 'List wallets. Default: per-wallet { name, active, network, address, shieldedAddress } scoped to the active network. Pass { full: true } for the 3-network addresses + shieldedAddresses maps.',
         annotations: { readOnlyHint: true, idempotentHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            full: {
+        params: [
+          {
+            name: 'full',
+            schema: {
               type: 'boolean',
               description: 'Return full per-network addresses + shieldedAddresses maps (the same shape `mn wallet list --json` emits). Default false (slim).',
             },
           },
-        },
+        ],
         argv: { subcommand: 'list', flags: ['full'] },
         order: 2,
       },
@@ -131,7 +132,8 @@ export const walletDefinition: CommandDefinition = {
         name: 'midnight_wallet_use',
         description: 'Set active wallet.',
         annotations: { idempotentHint: true },
-        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        params: [{ name: 'name', schema: { type: 'string' } }],
+        required: ['name'],
         argv: { subcommand: 'use', positionals: ['name'], flags: [] },
         order: 3,
       },
@@ -139,25 +141,27 @@ export const walletDefinition: CommandDefinition = {
         name: 'midnight_wallet_info',
         description: 'Show wallet details. Default: { name, active, network, address, shieldedAddress } scoped to the active network. Pass { full: true } for the per-network maps + createdAt + file path.',
         annotations: { readOnlyHint: true, idempotentHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            name: { type: 'string' },
-            full: {
+        params: [
+          { name: 'name', schema: { type: 'string' } },
+          {
+            name: 'full',
+            schema: {
               type: 'boolean',
               description: 'Return the full per-network addresses + shieldedAddresses maps and bookkeeping fields (matches `mn wallet info <name> --json`). Default false (slim).',
             },
           },
-        },
+        ],
         argv: { subcommand: 'info', positionals: ['name'], flags: ['full'] },
         order: 4,
       },
       {
-        // Y29: marked destructive, yet runs without confirmation; recorded as it is, fixed in 2E.
+        // Y29: marked destructive, yet runs without confirmation. Y29 approved fixing it; 2E keeps it as
+        // it is, since its confirmation text and check are Norman's to decide.
         name: 'midnight_wallet_remove',
         description: 'Remove wallet.',
         annotations: { destructiveHint: true },
-        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        params: [{ name: 'name', schema: { type: 'string' } }],
+        required: ['name'],
         argv: { subcommand: 'remove', positionals: ['name'], flags: [] },
         order: 5,
       },

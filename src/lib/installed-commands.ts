@@ -2,7 +2,7 @@
 // assembles it: a definition sits beside its command in each package, and the
 // base can't import a package's commands. Reading it loads no handler, so no SDK.
 // The shell's dispatch and flag checks read it (2C), and so do help, the manual
-// and the intro (2D); 2E switches the MCP tools over to it.
+// and the intro (2D), and the MCP server's tools (2E).
 
 import { createCommandRegistry, type FlagDefinition, type GlobalFlagHelp } from './command-definition.ts';
 import { walletDefinition } from '../commands/wallet.definition.ts';
@@ -27,13 +27,16 @@ import { statusDefinition } from '../commands/status.definition.ts';
 import { helpDefinition } from '../commands/help.definition.ts';
 import { manualDefinition } from '../commands/manual.definition.ts';
 
+/** The shell answers these before any command runs: no tool passes them on. */
+const SHELL_ANSWERS = { notForAgents: 'the shell answers it before any command runs' };
+
 /** Accepted on every command. */
 const GLOBAL_FLAGS: readonly FlagDefinition[] = [
-  { name: 'help', takesValue: false },
-  { name: 'h', takesValue: false },
-  { name: 'json', takesValue: false },
-  { name: 'version', takesValue: false },
-  { name: 'v', takesValue: false },
+  { name: 'help', takesValue: false, agent: SHELL_ANSWERS },
+  { name: 'h', takesValue: false, agent: SHELL_ANSWERS },
+  { name: 'json', takesValue: false, agent: { notForAgents: 'the MCP server always sets it' } },
+  { name: 'version', takesValue: false, agent: SHELL_ANSWERS },
+  { name: 'v', takesValue: false, agent: SHELL_ANSWERS },
 ];
 
 /**

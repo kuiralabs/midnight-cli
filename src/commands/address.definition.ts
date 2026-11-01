@@ -1,6 +1,6 @@
 // The `address` command, described once (plan 2B, spec §4.1).
 
-import type { CommandDefinition } from '../lib/command-definition.ts';
+import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition.ts';
 
 export const addressDefinition: CommandDefinition = {
   name: 'address',
@@ -9,11 +9,13 @@ export const addressDefinition: CommandDefinition = {
       name: 'index',
       takesValue: true,
       help: ['--index <n>         Key derivation index (default: 0)'],
+      agent: { type: 'string' },
     },
     {
       name: 'network',
       takesValue: true,
       help: ['--network <name>    Network for address prefix (default: resolved)'],
+      agent: NETWORK_PARAM,
     },
     {
       name: 'seed',
@@ -21,8 +23,13 @@ export const addressDefinition: CommandDefinition = {
       help: [
         '--seed <hex>        Seed to derive from (required): 64 or 128 hex chars (32-byte raw or 64-byte BIP-39)',
       ],
+      agent: { type: 'string', description: '64 or 128 hex chars (32-byte raw or 64-byte BIP-39)' },
     },
-    { name: 'wallet', takesValue: true },
+    {
+      name: 'wallet',
+      takesValue: true,
+      agent: { type: 'string', description: 'A saved wallet to derive from instead of a seed' },
+    },
   ],
   help: {
     description: 'Derive and display an unshielded address from a seed',
@@ -49,15 +56,8 @@ export const addressDefinition: CommandDefinition = {
         name: 'midnight_address',
         description: 'Derive address from seed.',
         annotations: { readOnlyHint: true, idempotentHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            seed: { type: 'string', description: '64 or 128 hex chars (32-byte raw or 64-byte BIP-39)' },
-            network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
-            index: { type: 'string' },
-          },
-          required: ['seed'],
-        },
+        params: [{ flag: 'seed' }, { flag: 'network' }, { flag: 'index' }],
+        required: ['seed'],
         argv: { flags: 'rest' },
         order: 8,
       },

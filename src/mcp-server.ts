@@ -22,13 +22,13 @@ import { classifyError } from './lib/exit-codes.ts';
 import { trimAgentMessage } from './lib/error-trim.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { createConfirmationStore } from './lib/mcp/confirmation.ts';
-import { TOOLS, REQUIRES_CONFIRMATION, describePendingOp, assertKnownParams } from './lib/mcp/tools.ts';
+import { assertKnownParams } from './lib/mcp/tools.ts';
+import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from './lib/mcp/registry-tools.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { installCliHost } from './lib/cli-host.ts';
 import { installedCommands } from './lib/installed-commands.ts';
-import { toolPassThroughFlags } from './lib/command-definition.ts';
 
 // Skill resources — teach MCP clients how to use this CLI conversationally.
 // Split into:
@@ -86,17 +86,8 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   throw new Error(`Unknown resource: ${uri}`);
 });
 
-// List available tools
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: TOOLS.map(t => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: t.inputSchema,
-      ...(t.annotations ? { annotations: t.annotations } : {}),
-    })),
-  };
-});
+// List available tools: the installed commands' tools, from their definitions, then the confirm tool.
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: listedTools(installedCommands) }));
 
 // Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
@@ -104,21 +95,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   const params = (rawParams ?? {}) as Record<string, unknown>;
   const call = toolCall(request.params._meta?.progressToken, extra);
 
-  // A parameter the tool doesn't take (not in its schema, nor a flag its
-  // command accepts when the tool passes parameters on as flags) is refused
-  // before anything runs or a token is given (Y29). An unknown tool is
-  // reported by executeTool.
-  const tool = TOOLS.find((t) => t.name === name);
-  if (tool !== undefined) {
+  // A parameter outside the tool's schema is refused before anything runs or
+  // a token is given (Y29, 2E). An unknown tool is reported by executeTool.
+  const tool = findTool(installedCommands, name);
+  const schema = name === CONFIRM_TOOL.name ? CONFIRM_TOOL : tool;
+  if (schema !== undefined) {
     try {
-      assertKnownParams(tool, params, toolPassThroughFlags(installedCommands, name));
+      assertKnownParams(schema, params);
     } catch (err) {
       return errorResponse(err instanceof Error ? err : new Error(String(err)));
     }
   }
 
   // Step 2 of confirmation: redeem the token and execute the original tool.
-  if (name === 'midnight_confirm_operation') {
+  if (name === CONFIRM_TOOL.name) {
     const token = typeof params.token === 'string' ? params.token : '';
     const pending = confirmationStore.redeem(token);
     if (!pending) {
@@ -128,18 +118,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   }
 
   // Step 1 of confirmation: return a pending token instead of executing.
-  if (REQUIRES_CONFIRMATION.has(name)) {
-    let found: string | void;
+  if (tool?.confirmation !== undefined) {
+    let description: string;
     try {
-      found = await TOOLS.find((t) => t.name === name)?.check?.(params, call);
+      description = await confirmationFor(tool, params, call);
     } catch (err) {
       return errorResponse(err instanceof Error ? err : new Error(String(err)));
     }
-    const pending = confirmationStore.create({
-      tool: name,
-      args: params,
-      description: found ?? describePendingOp(name, params),
-    });
+    const pending = confirmationStore.create({ tool: name, args: params, description });
     return {
       content: [{
         type: 'text' as const,
@@ -192,11 +178,11 @@ function stamp<T extends Record<string, unknown>>(payload: T): T & { _serverVers
 }
 
 async function executeTool(name: string, params: Record<string, unknown>, call: CommandRun) {
-  const tool = TOOLS.find((t) => t.name === name);
+  const tool = findTool(installedCommands, name);
   if (!tool) return errorResponse(new Error(`Unknown tool: ${name}`));
 
   try {
-    const result = await tool.handler(params, call);
+    const result = await runTool(tool, params, call);
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(stamp(result), null, 2) }],
     };
