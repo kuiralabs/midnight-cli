@@ -5,6 +5,7 @@
 import type { Payer, PayingTarget } from '../payer.ts';
 import type { Spinner } from '../../ui/spinner.ts';
 import type { CallSdkWarnings } from '../sdk-warnings.ts';
+import { throwIfCancelled } from '../errors.ts';
 
 export interface ServedWalletParams {
   target: PayingTarget;
@@ -15,6 +16,8 @@ export interface ServedWalletParams {
   progress: (message: string) => Spinner;
   /** The paying call's SDK warnings, which a wallet served in this process keeps to. */
   sdkWarnings: CallSdkWarnings;
+  /** The paying call's cancellation: checking and serving the wallet stop when it aborts. */
+  signal: AbortSignal | undefined;
 }
 
 /** What the progress line says while the script runs, when it succeeds, and when it fails. */
@@ -25,15 +28,17 @@ export interface ServedRunLabels {
 }
 
 export async function withServedWallet<T>(
-  { target, wallet, payer, progress, sdkWarnings }: ServedWalletParams,
+  { target, wallet, payer, progress, sdkWarnings, signal }: ServedWalletParams,
   labels: ServedRunLabels,
   run: (servePort: number, spinner: Spinner) => Promise<T>,
 ): Promise<T> {
   // Before anything is served: the payer's wallet has NIGHT and Dust to pay with.
-  await payer.assertCanPay(target, wallet, progress('Checking wallet...'));
-  const serve = await payer.serve(target, wallet, progress('Starting mn serve...'), sdkWarnings);
+  await payer.assertCanPay(target, wallet, progress('Checking wallet...'), signal);
+  throwIfCancelled(signal);
+  const serve = await payer.serve(target, wallet, progress('Starting mn serve...'), sdkWarnings, signal);
   const spinner = progress(labels.running);
   try {
+    throwIfCancelled(signal);
     const result = await run(serve.port, spinner);
     spinner.stop(labels.done);
     return result;

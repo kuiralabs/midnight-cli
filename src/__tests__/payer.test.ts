@@ -15,6 +15,8 @@ import { servePayerAt } from '../lib/serve-payer.ts';
 import { probeServeNetwork } from '../lib/serve-manager.ts';
 import { silentSpinner } from '../ui/spinner.ts';
 import { createSdkWarningRouter } from '../lib/sdk-warnings.ts';
+import { CancelledError } from '../lib/errors.ts';
+import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
 import contractCommand from '../commands/contract.ts';
 import grantCommand from '../commands/grant.ts';
 import { cliCall } from './helpers/cli-call.ts';
@@ -98,7 +100,7 @@ describe('the serve payer', () => {
     const said: string[] = [];
     try {
       const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy');
-      const served = await servePayerAt(serve.port).serve(target, undefined, silentSpinner((message) => said.push(message)), createSdkWarningRouter().openCall().warnings);
+      const served = await servePayerAt(serve.port).serve(target, undefined, silentSpinner((message) => said.push(message)), createSdkWarningRouter().openCall().warnings, undefined);
       expect(served.port).toBe(serve.port);
       expect(said).toEqual([`Reusing existing mn serve on port ${serve.port}`, `mn serve ready (port ${serve.port})`]);
       await served.stop();
@@ -106,5 +108,27 @@ describe('the serve payer', () => {
     } finally {
       await serve.close();
     }
+  });
+
+  it('serves nothing for a call already cancelled, not even probing the running serve', async () => {
+    const serve = await runningServe();
+    const said: string[] = [];
+    try {
+      const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy');
+      const controller = new AbortController();
+      controller.abort();
+      await expect(servePayerAt(serve.port).serve(target, undefined, silentSpinner((message) => said.push(message)), createSdkWarningRouter().openCall().warnings, controller.signal)).rejects.toBeInstanceOf(CancelledError);
+      expect(said).toEqual([]);
+    } finally {
+      await serve.close();
+    }
+  });
+
+  it('checks no wallet for a call already cancelled', async () => {
+    const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy');
+    const controller = new AbortController();
+    controller.abort();
+    // Not cancelled, this would fail on the missing wallet file.
+    await expect(assertWalletCanPay(target, 'nobody', silentSpinner(), controller.signal)).rejects.toBeInstanceOf(CancelledError);
   });
 });

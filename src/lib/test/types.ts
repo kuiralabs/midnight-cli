@@ -145,16 +145,19 @@ export interface BuildHandle {
 export interface PrepContext {
   /** The SDK warnings of the call that runs the prep: the steps that run the SDK listen to them. */
   sdkWarnings: CallSdkWarnings;
+  /** The run's cancellation: no step starts after it aborts, and the waits inside a step stop. */
+  signal: AbortSignal | undefined;
   serveHandle?: ServeHandle;
   buildHandle?: BuildHandle;
   cleanups: (() => Promise<void>)[];
   addCleanup(fn: () => Promise<void>): void;
 }
 
-export function createPrepContext(sdkWarnings: CallSdkWarnings): PrepContext {
+export function createPrepContext(sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): PrepContext {
   const cleanups: (() => Promise<void>)[] = [];
   return {
     sdkWarnings,
+    signal,
     cleanups,
     addCleanup(fn: () => Promise<void>) {
       cleanups.push(fn);

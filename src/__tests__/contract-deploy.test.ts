@@ -13,6 +13,7 @@ import { resolvePayingTarget } from '../lib/payer.ts';
 import { servePayerAt } from '../lib/serve-payer.ts';
 import { silentSpinner } from '../ui/spinner.ts';
 import { createSdkWarningRouter } from '../lib/sdk-warnings.ts';
+import { CancelledError } from '../lib/errors.ts';
 
 const ENDPOINTS = ['--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
 
@@ -72,5 +73,30 @@ describe('deployContract', () => {
     })).rejects.toThrow('served by the program');
     expect(asked).toEqual(['assertCanPay external', 'serve']);
     expect(fs.existsSync(path.join(home, '.midnight', 'wallets'))).toBe(false);
+  });
+
+  it('hands the payer the call\'s cancellation, and serves nothing once the call is cancelled during the funds check', async () => {
+    const controller = new AbortController();
+    const asked: string[] = [];
+    const ownPayer = {
+      assertCanPay: async (_target: unknown, _wallet: string | undefined, _progress: unknown, signal: AbortSignal | undefined) => {
+        asked.push(`assertCanPay ${signal === controller.signal ? 'with the call\'s signal' : 'without it'}`);
+        controller.abort(); // the user cancels while the wallet is checked
+        return { nightBalance: 1n, dustBalance: 1n };
+      },
+      serve: async () => { asked.push('serve'); throw new Error('must not be served'); },
+      connect: async () => { throw new Error('not used'); },
+    };
+    const args = parseArgs(['contract', 'deploy', '--path', path.join(home, 'dapp'), '--wallet', 'external', ...ENDPOINTS]);
+    await expect(deployContract({
+      request: resolveContractDeployRequest(args),
+      target: resolvePayingTarget(args, 'contract', 'deploy'),
+      wallet: 'external',
+      payer: ownPayer,
+      progress: () => silentSpinner(),
+      sdkWarnings: createSdkWarningRouter().openCall().warnings,
+      signal: controller.signal,
+    })).rejects.toBeInstanceOf(CancelledError);
+    expect(asked).toEqual(['assertCanPay with the call\'s signal']);
   });
 });

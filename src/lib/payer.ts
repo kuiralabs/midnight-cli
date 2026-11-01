@@ -64,17 +64,22 @@ export interface PayingFunds {
   dustBalance: bigint;
 }
 
+/**
+ * How a command pays. Each method takes the paying call's cancellation
+ * signal: once it aborts, the method stops what it started and fails with
+ * CancelledError.
+ */
 export interface Payer {
   /**
    * Refuses, before anything is served, unless the wallet this payer pays from
    * has NIGHT and Dust to pay with; what it holds otherwise. Each payer checks
    * its own wallet.
    */
-  assertCanPay: (target: PayingTarget, wallet: string | undefined, progress: Spinner) => Promise<PayingFunds>;
+  assertCanPay: (target: PayingTarget, wallet: string | undefined, progress: Spinner, signal: AbortSignal | undefined) => Promise<PayingFunds>;
   /** Serves the wallet; one that runs in this process keeps the SDK's warnings to the paying call's `sdkWarnings`. */
-  serve: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings) => Promise<ServedWallet>;
+  serve: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined) => Promise<ServedWallet>;
   /** Opens the wallet in this process, keeping the SDK's warnings to the paying call's `sdkWarnings`. */
-  connect: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings) => Promise<WalletConnection>;
+  connect: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined) => Promise<WalletConnection>;
 }
 
 /** What a command's caller gives it for one call. */

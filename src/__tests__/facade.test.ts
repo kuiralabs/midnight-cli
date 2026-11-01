@@ -256,4 +256,46 @@ describe('startAndSyncFacade: a wallet that has heard nothing yet', () => {
     const url = await indexerWith({ dustLedgerEvents: { id: 0, maxId: 385 } });
     await expect(syncWith(url)).resolves.toBeDefined();
   }, 10_000);
+
+  it('stops waiting with CancelledError when the call is cancelled, long before its timeout', async () => {
+    const url = await indexerWith({ zswapLedgerEvents: { id: 0, maxId: 384 }, dustLedgerEvents: { id: 0, maxId: 385 } });
+    const rx = await import('rxjs');
+    const { startAndSyncFacade } = await import('../lib/facade.ts');
+    const { CancelledError } = await import('../lib/errors.ts');
+    const bundle: any = {
+      facade: { start: async () => {}, state: () => rx.concat(rx.of(state({ shielded: indexed(0n, 0n, false) })), rx.NEVER) },
+      seeds: {}, seedStartable: {}, keystore: {}, restoredFromCache: false, indexerWsUrl: url,
+    };
+    const controller = new AbortController();
+    const started = Date.now();
+    setTimeout(() => controller.abort(), 100);
+    try {
+      await expect(startAndSyncFacade(bundle, { timeoutMs: 60_000, signal: controller.signal })).rejects.toBeInstanceOf(CancelledError);
+    } finally {
+      bundle.keepAlive?.unsubscribe();
+    }
+    expect(Date.now() - started).toBeLessThan(30_000);
+  }, 60_000);
+});
+
+describe('waitForDustAvailable', () => {
+  it('stops waiting with CancelledError when the call is cancelled, long before its timeout', async () => {
+    const rx = await import('rxjs');
+    const { waitForDustAvailable } = await import('../lib/facade.ts');
+    const { CancelledError } = await import('../lib/errors.ts');
+    // A wallet with no Dust, and no later state.
+    const noDust = { ...state(), dust: { progress: SYNCED, availableCoins: [], balance: () => 0n } } as unknown as FacadeState;
+    const bundle: any = { facade: { state: () => rx.concat(rx.of(noDust), rx.NEVER) } };
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 100);
+    await expect(waitForDustAvailable(bundle, 60_000, controller.signal)).rejects.toBeInstanceOf(CancelledError);
+  }, 60_000);
+
+  it('returns the latest state when its timeout passes without Dust, as before', async () => {
+    const rx = await import('rxjs');
+    const { waitForDustAvailable } = await import('../lib/facade.ts');
+    const noDust = { ...state(), dust: { progress: SYNCED, availableCoins: [], balance: () => 0n } } as unknown as FacadeState;
+    const bundle: any = { facade: { state: () => rx.concat(rx.of(noDust), rx.NEVER) } };
+    await expect(waitForDustAvailable(bundle, 50, new AbortController().signal)).resolves.toBe(noDust);
+  });
 });

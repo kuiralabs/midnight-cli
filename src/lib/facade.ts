@@ -33,6 +33,7 @@ import {
 import type { VerboseLog } from './verbose.ts';
 import { assertNetworkAnswers } from './endpoint-check.ts';
 import { isStreamEmpty } from './event-tip.ts';
+import { CancelledError, throwIfCancelled } from './errors.ts';
 
 export type SyncMode = 'full' | 'lite' | 'no-dust';
 // full    = shielded + unshielded + dust
@@ -392,14 +393,18 @@ export interface SyncOptions {
   requireStrictSync?: boolean;
   /** The call's verbose lines. */
   log?: VerboseLog;
+  /** Cancels the wait: the sync fails with CancelledError. The caller stops the facade. */
+  signal?: AbortSignal;
 }
 
 export async function startAndSyncFacade(
   bundle: FacadeBundle,
   options: SyncOptions = {},
 ): Promise<FacadeState> {
-  const { onProgress, onSyncDetail, timeoutMs, syncMode = 'full', requireStrictSync = false, log } = options;
+  const { onProgress, onSyncDetail, timeoutMs, syncMode = 'full', requireStrictSync = false, log, signal } = options;
   const { facade } = bundle;
+
+  throwIfCancelled(signal);
 
   log?.('sync', 'Starting facade (connecting to node and indexer)...');
   const [, emptyStreams] = await Promise.all([startFacade(bundle), readEmptyStreams(bundle.indexerWsUrl, syncMode)]);
@@ -408,6 +413,7 @@ export async function startAndSyncFacade(
     log?.('sync', `The chain has no events in: ${[emptyStreams.zswap && 'zswap', emptyStreams.dust && 'dust'].filter(Boolean).join(', ')}`);
   }
   log?.('sync', 'Facade started, subscribing to state...');
+  throwIfCancelled(signal);
 
   const effectiveTimeout = timeoutMs ?? SYNC_TIMEOUT_MS;
   log?.('sync', `Sync timeout: ${effectiveTimeout / 1000}s, mode: ${syncMode}`);
@@ -422,9 +428,18 @@ export async function startAndSyncFacade(
   const graceEligible = !requireStrictSync && bundle.restoredFromCache;
   const startedAt = Date.now();
 
-  return new Promise<FacadeState>((resolve, reject) => {
+  return new Promise<FacadeState>((resolveSync, rejectSync) => {
     let resolved = false;
     let emissionCount = 0;
+    const onAbort = (): void => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      log?.('sync', `Sync cancelled after ${emissionCount} emissions`);
+      rejectSync(new CancelledError());
+    };
+    const resolve = (state: FacadeState): void => { signal?.removeEventListener('abort', onAbort); resolveSync(state); };
+    const reject = (err: unknown): void => { signal?.removeEventListener('abort', onAbort); rejectSync(err); };
     let lastPendingKey = '';
 
     let lastState: FacadeState | null = null;
@@ -528,6 +543,7 @@ export async function startAndSyncFacade(
         }
       },
     });
+    if (!resolved) signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
 
@@ -630,16 +646,19 @@ export function hasDustAvailable(state: FacadeState): boolean {
   return state.dust.availableCoins.length > 0 || state.dust.balance(new Date()) > 0n;
 }
 
-export async function waitForDustAvailable(bundle: FacadeBundle, timeoutMs = 60_000): Promise<FacadeState> {
-
+export async function waitForDustAvailable(bundle: FacadeBundle, timeoutMs = 60_000, signal?: AbortSignal): Promise<FacadeState> {
+  throwIfCancelled(signal);
+  const cancelled = signal === undefined ? rx.NEVER : rx.fromEvent(signal, 'abort');
   try {
     return await rx.firstValueFrom(
       bundle.facade.state().pipe(
         rx.filter(hasDustAvailable),
         rx.timeout(timeoutMs),
+        rx.takeUntil(cancelled),
       )
     );
   } catch {
+    throwIfCancelled(signal);
     // Timeout — dust may not be available yet (fresh wallet, slow chain).
     // Return latest state; caller should handle gracefully.
     return await rx.firstValueFrom(bundle.facade.state());
