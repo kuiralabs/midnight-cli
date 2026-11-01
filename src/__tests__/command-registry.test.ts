@@ -30,7 +30,11 @@ import { CONFIRM_TOOL, listedTools } from '../lib/mcp/registry-tools.ts';
 import { COMMAND_FLAGS, GLOBAL_FLAGS } from '../lib/command-flags.ts';
 import { commandNeedsWalletSdk, dispatchCommand, type ShellProvisions } from '../lib/command-dispatch.ts';
 import { FULL_FLAG, parseArgs, type ParsedArgs } from '../lib/argv.ts';
-import { isUsageError } from '../lib/errors.ts';
+import { CancelledError, isUsageError } from '../lib/errors.ts';
+import { classifyError, EXIT_CANCELLED } from '../lib/exit-codes.ts';
+import type { CallContext, CommandOutcome } from '../lib/call-context.ts';
+import { hostPaths } from '../lib/state-root.ts';
+import { settings } from '../lib/settings.ts';
 import type { Payer } from '../lib/payer.ts';
 import type { WalletProtector } from '../lib/wallet-protector.ts';
 import { COMMAND_SPECS } from '../commands/help.ts';
@@ -45,16 +49,17 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry since 2C)
   // read from that switch at b5dc946: the registry's dispatch must give the same.
   const GENERATE_NOTICE = '\n  Note: "midnight generate" is deprecated.\n  Use "midnight wallet generate <name>" instead.\n\n';
   const STATUS_REFUSAL = 'The "status" command is currently being reworked. Check back soon.';
-  const SWITCH_BEFORE_2C: Record<string, { signal?: true; payer?: true; protectors?: true; notice?: string; unavailable?: string }> = {
-    'address': {}, 'airdrop': { signal: true }, 'balance': {}, 'cache': {}, 'config': {},
-    'contract': { signal: true, payer: true }, 'dev': { signal: true, payer: true }, 'dust': { signal: true },
-    'generate': { notice: GENERATE_NOTICE }, 'genesis-address': {}, 'grant': { signal: true, payer: true },
-    'help': {}, 'info': {}, 'inspect-cost': {}, 'localnet': {}, 'manual': {}, 'serve': { signal: true },
-    'status': { unavailable: STATUS_REFUSAL }, 'test': { signal: true }, 'transfer': { signal: true },
+  // Since 2F every handler gets its call's signal, so the definitions no longer say which do (decision 2).
+  const SWITCH_BEFORE_2C: Record<string, { payer?: true; protectors?: true; notice?: string; unavailable?: string }> = {
+    'address': {}, 'airdrop': {}, 'balance': {}, 'cache': {}, 'config': {},
+    'contract': { payer: true }, 'dev': { payer: true }, 'dust': {},
+    'generate': { notice: GENERATE_NOTICE }, 'genesis-address': {}, 'grant': { payer: true },
+    'help': {}, 'info': {}, 'inspect-cost': {}, 'localnet': {}, 'manual': {}, 'serve': {},
+    'status': { unavailable: STATUS_REFUSAL }, 'test': {}, 'transfer': {},
     'wallet': { protectors: true },
   };
 
-  it('gives every command what the switch gave it', () => {
+  it('gives every command what the switch gave it, the signal now to every one', () => {
     const given = Object.fromEntries(registry.commands.map((c) => [c.name, { ...c.shell }]));
     expect(given).toStrictEqual(SWITCH_BEFORE_2C);
   });
@@ -66,54 +71,99 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry since 2C)
     }
   }, 120_000);
 
-  // A registry of test commands whose handlers record what they were given.
-  const received: { name: string; args: ParsedArgs; signal: AbortSignal | undefined; context: unknown }[] = [];
+  // A registry of test commands whose handlers record the context they were given.
+  const received: { name: string; args: ParsedArgs; ctx: CallContext }[] = [];
   const notices: string[] = [];
+  const results: unknown[] = [];
   const loaded: string[] = [];
   const payer = { name: 'test payer' } as unknown as Payer;
   const protector = { name: 'test protector' } as unknown as WalletProtector;
-  const testCommand = (name: string, shell: CommandDefinition['shell']): CommandDefinition => ({
+  const testCommand = (name: string, shell: CommandDefinition['shell'], outcome?: CommandOutcome): CommandDefinition => ({
     name, flags: [], needsWalletSdk: false, shell,
     load: async () => {
       loaded.push(name);
-      return { default: async (args, signal, context) => { received.push({ name, args, signal, context }); } };
+      return {
+        default: async (args, ctx) => {
+          received.push({ name, args, ctx });
+          ctx.output.result({ ran: name });
+          return outcome;
+        },
+      };
     },
   });
   const testRegistry = createCommandRegistry([
     testCommand('plain', {}),
-    testCommand('cancellable', { signal: true }),
-    testCommand('paying', { signal: true, payer: true }),
+    testCommand('paying', { payer: true }),
     testCommand('protecting', { protectors: true }),
     testCommand('noticed', { notice: 'deprecated\n' }),
     testCommand('refused', { unavailable: 'not now' }),
+    testCommand('failing', {}, { exitCode: 3 }),
   ], []);
   const controller = new AbortController();
+  const output = {
+    result: (data: Readonly<Record<string, unknown>>) => { results.push(data); },
+    stdout: () => {},
+    stderr: (text: string) => { notices.push(text); },
+  };
   const provisions: ShellProvisions = {
     signal: controller.signal,
+    output,
     loadPayer: async () => payer,
     loadProtectors: async () => [protector],
-    writeNotice: (text) => notices.push(text),
   };
-  const run = async (name: string) => {
-    received.length = 0; notices.length = 0; loaded.length = 0;
+  const run = async (name: string, given: ShellProvisions = provisions) => {
+    received.length = 0; notices.length = 0; loaded.length = 0; results.length = 0;
     const args = parseArgs([name, '--json']);
-    await dispatchCommand(testRegistry, name, args, provisions);
-    return { args, call: received[0]! };
+    const outcome = await dispatchCommand(testRegistry, name, args, given);
+    return { args, call: received[0]!, outcome };
   };
 
-  it('passes the args, and the signal, payer and protectors only when the definition asks', async () => {
+  it('gives every handler its call\'s signal and output, and the payer and protectors only when the definition asks', async () => {
     const plain = await run('plain');
-    expect(plain.call).toStrictEqual({ name: 'plain', args: plain.args, signal: undefined, context: undefined });
-    expect((await run('cancellable')).call).toMatchObject({ signal: controller.signal, context: undefined });
-    expect((await run('paying')).call).toMatchObject({ signal: controller.signal, context: { payer } });
+    expect(plain.call.args).toBe(plain.args);
+    expect(plain.call.ctx.signal).toBe(controller.signal);
+    expect(plain.call.ctx.payer).toBeUndefined();
+    expect(plain.call.ctx.protectors).toBeUndefined();
+    expect(results).toStrictEqual([{ ran: 'plain' }]);
+    const paying = await run('paying');
+    expect(paying.call.ctx.signal).toBe(controller.signal);
+    expect(paying.call.ctx.payer).toBe(payer);
+    expect(paying.call.ctx.protectors).toBeUndefined();
     const protecting = await run('protecting');
-    expect(protecting.call.signal).toBeUndefined();
-    expect(protecting.call.context).toStrictEqual({ protectors: [protector] });
+    expect(protecting.call.ctx.signal).toBe(controller.signal);
+    expect(protecting.call.ctx.payer).toBeUndefined();
+    expect(protecting.call.ctx.protectors).toStrictEqual([protector]);
+  });
+
+  it('gives the handler the configuration the host gives when the call starts, and --verbose', async () => {
+    const { ctx } = (await run('plain')).call;
+    expect(ctx.config.paths).toStrictEqual(hostPaths());
+    expect(ctx.config.settings).toStrictEqual(settings());
+    expect(ctx.diagnostics.isVerbose).toBe(false);
+    received.length = 0;
+    await dispatchCommand(testRegistry, 'plain', parseArgs(['plain', '--verbose']), provisions);
+    expect(received[0]!.ctx.diagnostics.isVerbose).toBe(true);
+  });
+
+  it('returns the exit code the handler gives, for the shell to set', async () => {
+    expect((await run('failing')).outcome).toStrictEqual({ exitCode: 3 });
+    expect((await run('plain')).outcome).toBeUndefined();
+  });
+
+  it('never starts a call already cancelled: CANCELLED, the handler not run', async () => {
+    const cancelled = new AbortController();
+    cancelled.abort();
+    const err = await run('plain', { ...provisions, signal: cancelled.signal }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(CancelledError);
+    expect(classifyError(err as Error)).toStrictEqual({ exitCode: EXIT_CANCELLED, errorCode: 'CANCELLED' });
+    expect(received).toStrictEqual([]);
+    expect(results).toStrictEqual([]);
   });
 
   it('writes a notice before the handler loads', async () => {
     await run('noticed');
     expect(notices).toStrictEqual(['deprecated\n']);
+    expect(results).toStrictEqual([{ ran: 'noticed' }]);
     expect(loaded).toStrictEqual(['noticed']);
   });
 

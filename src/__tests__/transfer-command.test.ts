@@ -8,6 +8,7 @@ import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts'
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { cliCall } from './helpers/cli-call.ts';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-transfer-cmd-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
@@ -37,7 +38,7 @@ describe('transfer command — argument validation', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['transfer', '--wallet', walletFile]);
-    await expect(transferCommand(args)).rejects.toThrow('Missing recipient address');
+    await expect(cliCall(transferCommand, args)).rejects.toThrow('Missing recipient address');
   });
 
   it('throws when no amount is given', async () => {
@@ -51,7 +52,7 @@ describe('transfer command — argument validation', () => {
 
     const recipientAddr = deriveUnshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
     const args = parseArgs(['transfer', recipientAddr, '--wallet', walletFile]);
-    await expect(transferCommand(args)).rejects.toThrow('Missing amount');
+    await expect(cliCall(transferCommand, args)).rejects.toThrow('Missing amount');
   });
 
   it('throws for invalid amount', async () => {
@@ -65,7 +66,7 @@ describe('transfer command — argument validation', () => {
 
     const recipientAddr = deriveUnshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
     const args = parseArgs(['transfer', recipientAddr, 'notanumber', '--wallet', walletFile]);
-    await expect(transferCommand(args)).rejects.toThrow('Invalid amount');
+    await expect(cliCall(transferCommand, args)).rejects.toThrow('Invalid amount');
   });
 
   it('throws for zero amount', async () => {
@@ -79,13 +80,13 @@ describe('transfer command — argument validation', () => {
 
     const recipientAddr = deriveUnshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
     const args = parseArgs(['transfer', recipientAddr, '0', '--wallet', walletFile]);
-    await expect(transferCommand(args)).rejects.toThrow('greater than 0');
+    await expect(cliCall(transferCommand, args)).rejects.toThrow('greater than 0');
   });
 
   it('throws when no wallet file exists', async () => {
     const recipientAddr = deriveUnshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
     const args = parseArgs(['transfer', recipientAddr, '100', '--wallet', path.join(TEST_DIR, 'nonexistent.json')]);
-    await expect(transferCommand(args)).rejects.toThrow('Wallet file not found');
+    await expect(cliCall(transferCommand, args)).rejects.toThrow('Wallet file not found');
   });
 });
 
@@ -100,7 +101,7 @@ describe('transfer command — address validation errors', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['transfer', 'mn_addr_undeployed1invalid', '100', '--wallet', walletFile]);
-    await expect(transferCommand(args)).rejects.toThrow('Invalid recipient address');
+    await expect(cliCall(transferCommand, args)).rejects.toThrow('Invalid recipient address');
   });
 
   it('treats unknown name as wallet lookup', async () => {
@@ -114,7 +115,7 @@ describe('transfer command — address validation errors', () => {
 
     // "not-a-wallet" doesn't start with mn_addr_, so it's treated as a wallet name
     const args = parseArgs(['transfer', 'not-a-wallet', '100', '--wallet', walletFile]);
-    await expect(transferCommand(args)).rejects.toThrow('Wallet file not found');
+    await expect(cliCall(transferCommand, args)).rejects.toThrow('Wallet file not found');
   });
 });
 
@@ -130,7 +131,7 @@ describe('transfer command — wallet name resolution', () => {
 
     // "nonexistent-wallet" is not an address (no mn_addr_ prefix) so it will be treated as a wallet name
     const args = parseArgs(['transfer', 'nonexistent-wallet', '100', '--wallet', walletFile]);
-    await expect(transferCommand(args)).rejects.toThrow('Wallet file not found');
+    await expect(cliCall(transferCommand, args)).rejects.toThrow('Wallet file not found');
   });
 
   it('throws when wallet name used with --shielded but has no shielded address', async () => {
@@ -146,7 +147,7 @@ describe('transfer command — wallet name resolution', () => {
 
     // "some-name" doesn't start with mn_addr_ or mn_shield-addr_, so treated as wallet name
     const args = parseArgs(['transfer', 'some-name', '100', '--shielded', '--wallet', walletFile]);
-    await expect(transferCommand(args)).rejects.toThrow();
+    await expect(cliCall(transferCommand, args)).rejects.toThrow();
   });
 });
 
@@ -161,7 +162,7 @@ describe('transfer command — shielded flag', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['transfer', '--shielded', '--wallet', walletFile]);
-    await expect(transferCommand(args)).rejects.toThrow('Missing recipient address');
+    await expect(cliCall(transferCommand, args)).rejects.toThrow('Missing recipient address');
   });
 
   it('throws when no amount given with --shielded', async () => {
@@ -176,7 +177,7 @@ describe('transfer command — shielded flag', () => {
     // --network undeployed: shielded is enabled there, so we reach address validation
     // (on preview/preprod the shielded-policy guard fires first, tested separately).
     const args = parseArgs(['transfer', 'mn_shield-addr_undeployed1someaddr', '100', '--shielded', '--wallet', walletFile, '--network', 'undeployed']);
-    await expect(transferCommand(args)).rejects.toThrow('Invalid shielded address');
+    await expect(cliCall(transferCommand, args)).rejects.toThrow('Invalid shielded address');
   });
 
   it('blocks a shielded transfer on preprod (no faucet) before syncing', async () => {
@@ -189,6 +190,6 @@ describe('transfer command — shielded flag', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['transfer', 'mn_shield-addr_preprod1someaddr', '100', '--shielded', '--wallet', walletFile, '--network', 'preprod']);
-    await expect(transferCommand(args)).rejects.toThrow(/Shielded is unavailable on preprod/);
+    await expect(cliCall(transferCommand, args)).rejects.toThrow(/Shielded is unavailable on preprod/);
   });
 });

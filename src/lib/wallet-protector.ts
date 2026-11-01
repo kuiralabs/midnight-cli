@@ -2,7 +2,7 @@
 // secrets for a wallet (grant's accounts) provides a protector, and the
 // caller passes it in the call context: wallet never imports that domain.
 
-import type { CommandContext } from './payer.ts';
+import type { CallContext } from './call-context.ts';
 import { resolveWalletPath, unlockWallet } from './wallet-config.ts';
 
 /** What protecting one item did: sealed now, already sealed, or why it could not be. */
@@ -27,10 +27,8 @@ export interface WalletProtector {
   protect(root: string, passphrase: string, coinKeyOf: (wallet: string) => Promise<string>): Promise<ProtectorResult>;
 }
 
-/** The wallet command's call context: a command's, and the protectors `wallet protect` runs. */
-export interface WalletCommandContext extends CommandContext {
-  protectors?: readonly WalletProtector[];
-}
+/** The wallet command's call context: a command's, with the protectors `wallet protect` runs. */
+export type WalletCommandContext = CallContext<WalletProtector>;
 
 /** The shielded coin public key of the wallet `name`, unlocked with mn's passphrase. */
 export async function coinKeyOfWallet(name: string): Promise<string> {

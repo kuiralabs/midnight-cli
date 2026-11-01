@@ -11,12 +11,17 @@ export function enableVerbose(): void {
   enabled = true;
 }
 
+/** A verbose diagnostic line as shown: dimmed, with the time (HH:mm:ss.SSS) and the phase. */
+export function verboseLine(phase: string, message: string): string {
+  const ts = new Date().toISOString().slice(11, 23); // HH:mm:ss.SSS
+  return dim(`  [${ts}] ${phase}: ${message}`);
+}
+
 /**
  * Send a verbose diagnostic line as a notice.
  * No-op when verbose mode is disabled.
  */
 export function verbose(phase: string, message: string): void {
   if (!enabled) return;
-  const ts = new Date().toISOString().slice(11, 23); // HH:mm:ss.SSS
-  notice(dim(`  [${ts}] ${phase}: ${message}`));
+  notice(verboseLine(phase, message));
 }

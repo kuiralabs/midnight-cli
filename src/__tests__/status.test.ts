@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { cliCall } from './helpers/cli-call.ts';
 
 // ── Test helpers ──
 
@@ -111,10 +112,11 @@ describe('status command', () => {
   /** The indexer and node URLs the last run probed. */
   const probed: string[] = [];
 
+  /** Runs status as the CLI would; the exit code it gives, which the shell sets. */
   async function runStatus(flags: Record<string, string | true> = {}) {
     // Dynamic import to get fresh module
     const mod = await import('../commands/status.ts');
-    await mod.default({
+    return cliCall(mod.default, {
       command: 'status',
       subcommand: undefined,
       positionals: [],
@@ -239,17 +241,19 @@ describe('status command', () => {
 
   it('exit code 0 when all services UP', async () => {
     setupMockFetch();
-    await runStatus({ network: 'preview' });
+    const outcome = await runStatus({ network: 'preview' });
 
     // preview has no faucet DOWN in canary, and live probes all succeed
+    expect(outcome).toBeUndefined();
     expect(process.exitCode).toBeUndefined();
   });
 
-  it('exit code 2 when a service is DOWN', async () => {
+  it('exit code 2 when a service is DOWN, returned for the shell to set: the process is left alone', async () => {
     setupMockFetch({ faucetDown: true });
-    await runStatus({ network: 'preprod' });
+    const outcome = await runStatus({ network: 'preprod' });
 
-    expect(process.exitCode).toBe(2);
+    expect(outcome).toEqual({ exitCode: 2 });
+    expect(process.exitCode).toBeUndefined();
   });
 
   it('exit code 3 when dashboard unreachable and no live DOWN', async () => {
@@ -264,10 +268,10 @@ describe('status command', () => {
 
   it('handles indexer DOWN in live probes', async () => {
     setupMockFetch({ indexerDown: true });
-    await runStatus({ network: 'preprod' });
+    const outcome = await runStatus({ network: 'preprod' });
 
     expect(stderr.output).toContain('DOWN');
-    expect(process.exitCode).toBe(2);
+    expect(outcome).toEqual({ exitCode: 2 });
   });
 
   it('probes preprod at Blockfrost with the project id, and never prints it', async () => {

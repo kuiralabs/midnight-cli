@@ -87,7 +87,7 @@ export const transferDefinition: CommandDefinition = {
   },
   intro: { brief: 'Send NIGHT tokens', order: 8 },
   needsWalletSdk: true,
-  shell: { signal: true },
+  shell: {},
   load: () => import('./transfer.ts'),
   mcp: {
     tools: [

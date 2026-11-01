@@ -17,14 +17,14 @@ import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { header, keyValue, divider, formatAddress, successMessage } from '../ui/format.ts';
 import { bold, dim } from '../ui/colors.ts';
 import { start as startSpinner, trackElapsed } from '../ui/spinner.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { DUST_SHORT_WAIT_MS, payWhenDustCovers } from '../lib/dust-wait.ts';
 import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
-export default async function transferCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
+export default async function transferCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
   const request = resolveTransferRequest(args);
-  return request.shielded ? shieldedTransfer(args, request, signal) : unshieldedTransfer(args, request, signal);
+  return request.shielded ? shieldedTransfer(args, request, ctx) : unshieldedTransfer(args, request, ctx);
 }
 
 // ── Unshielded transfer (existing flow) ──
@@ -32,7 +32,7 @@ export default async function transferCommand(args: ParsedArgs, signal?: AbortSi
 async function unshieldedTransfer(
   args: ParsedArgs,
   { walletPath, walletConfig: config, recipientAddress, amountNight }: TransferRequest,
-  signal?: AbortSignal,
+  ctx: CallContext,
 ): Promise<void> {
   const seedBuffer = Buffer.from((await unlockWallet(walletPath)).seed, 'hex');
 
@@ -61,7 +61,7 @@ async function unshieldedTransfer(
       networkConfig,
       recipientAddress,
       amountNight,
-      signal,
+      signal: ctx.signal,
       onSync(applied, highest) {
         if (highest > 0) {
           const pct = Math.min(Math.round((applied / highest) * 100), 100);
@@ -94,7 +94,7 @@ async function unshieldedTransfer(
     spinner.stop('Transaction submitted');
 
     if (hasFlag(args, 'json')) {
-      writeJsonResult({
+      ctx.output.result({
         txHash: result.txHash,
         amount: amountNight,
         recipient: recipientAddress,
@@ -122,7 +122,7 @@ async function unshieldedTransfer(
 async function shieldedTransfer(
   args: ParsedArgs,
   { walletPath, walletConfig: config, recipientAddress, amountNight }: TransferRequest,
-  signal?: AbortSignal,
+  ctx: CallContext,
 ): Promise<void> {
   const amount = nightToMicro(amountNight);
   const seedBuffer = Buffer.from((await unlockWallet(walletPath)).seed, 'hex');
@@ -172,7 +172,7 @@ async function shieldedTransfer(
         spinner.update('Checking dust...');
         await ensureDust(bundle, (status: string) => spinner.update(status));
 
-        if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+        if (ctx.signal.aborted) throw new Error(CANCELLED_MESSAGE);
 
         spinner.update('Building shielded transaction...');
         // Right after another payment the wallet's Dust can be short of this
@@ -186,7 +186,7 @@ async function shieldedTransfer(
             { ttl: new Date(Date.now() + 60 * 60 * 1000) },
           ),
           state.dust,
-          { maxWaitMs: DUST_SHORT_WAIT_MS, onStatus: (status) => spinner.update(status), signal },
+          { maxWaitMs: DUST_SHORT_WAIT_MS, onStatus: (status) => spinner.update(status), signal: ctx.signal },
         );
 
         spinner.update('Signing...');
@@ -208,7 +208,7 @@ async function shieldedTransfer(
       {
         syncMode: 'full',
         requireStrictSync: true,
-        signal,
+        signal: ctx.signal,
         onStatus: (s) => spinner.update(s),
         onSyncProgress: (applied, highest) => {
           if (highest > 0) {
@@ -223,7 +223,7 @@ async function shieldedTransfer(
     spinner.stop('Transaction submitted');
 
     if (hasFlag(args, 'json')) {
-      writeJsonResult({ txHash, amount: amountNight, recipient: recipientAddress, network: networkName, type: 'shielded' });
+      ctx.output.result({ txHash, amount: amountNight, recipient: recipientAddress, network: networkName, type: 'shielded' });
       return;
     }
     process.stdout.write(txHash + '\n');

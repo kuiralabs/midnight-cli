@@ -7,9 +7,9 @@ import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { header, divider } from '../ui/format.ts';
 import { formatAddress } from '../ui/format.ts';
 import { bold, dim, teal } from '../ui/colors.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 
-export default async function infoCommand(args: ParsedArgs): Promise<void> {
+export default async function infoCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const resolvedPath = resolveWalletPath(getFlag(args, 'wallet'));
   const config = loadWalletConfig(resolvedPath);
   const activeNetwork = resolveNetworkName({ args });
@@ -25,7 +25,7 @@ export default async function infoCommand(args: ParsedArgs): Promise<void> {
       file: resolvedPath,
     };
     if (config.shieldedAddresses) result.shieldedAddresses = config.shieldedAddresses;
-    writeJsonResult(result);
+    ctx.output.result(result);
     return;
   }
 

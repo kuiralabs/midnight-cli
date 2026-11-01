@@ -27,7 +27,8 @@ export function setHostPathsSource(next: (() => HostPaths) | null): void {
   source = next;
 }
 
-function hostPaths(): HostPaths {
+/** The paths the host gives now: its state root and the user's home. */
+export function hostPaths(): HostPaths {
   if (source === null) throw new NoStateRootError();
   return source();
 }

@@ -27,10 +27,10 @@ import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { header, keyValue, divider, formatAddress, successMessage } from '../ui/format.ts';
 import { bold, dim } from '../ui/colors.ts';
 import { start as startSpinner, trackElapsed } from '../ui/spinner.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
-export default async function airdropCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
+export default async function airdropCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
   const amountStr = args.subcommand;
   if (!amountStr) {
@@ -70,10 +70,10 @@ export default async function airdropCommand(args: ParsedArgs, signal?: AbortSig
   const destination = resolveDestination(args, networkName, networkConfig, isShielded);
 
   if (isShielded) {
-    return shieldedAirdrop(args, destination as ShieldedDestination, amountNight, networkName, networkConfig, signal);
+    return shieldedAirdrop(args, destination as ShieldedDestination, amountNight, networkName, networkConfig, ctx);
   }
 
-  return unshieldedAirdrop(args, destination as UnshieldedDestination, amountNight, networkName, networkConfig, signal);
+  return unshieldedAirdrop(args, destination as UnshieldedDestination, amountNight, networkName, networkConfig, ctx);
 }
 
 // ── Destination resolution ──
@@ -172,7 +172,7 @@ async function unshieldedAirdrop(
   amountNight: number,
   networkName: string,
   networkConfig: NetworkConfig,
-  signal?: AbortSignal,
+  ctx: CallContext,
 ): Promise<void> {
   if (isVerbose(args)) enableVerbose();
   const recipientAddress = destination.address;
@@ -191,7 +191,7 @@ async function unshieldedAirdrop(
       networkConfig,
       recipientAddress,
       amountNight,
-      signal,
+      signal: ctx.signal,
       onSync(applied, highest) {
         if (highest > 0) {
           const pct = Math.round((applied / highest) * 100);
@@ -221,7 +221,7 @@ async function unshieldedAirdrop(
     spinner.stop('Transaction submitted');
 
     if (hasFlag(args, 'json')) {
-      writeJsonResult({
+      ctx.output.result({
         txHash: result.txHash,
         amount: amountNight,
         recipient: recipientAddress,
@@ -255,7 +255,7 @@ async function shieldedAirdrop(
   amountNight: number,
   networkName: string,
   networkConfig: NetworkConfig,
-  signal?: AbortSignal,
+  ctx: CallContext,
 ): Promise<void> {
   const amount = nightToMicro(amountNight);
   if (isVerbose(args)) enableVerbose();
@@ -299,7 +299,7 @@ async function shieldedAirdrop(
         spinner.update('Checking dust...');
         await ensureDust(bundle, (status: string) => spinner.update(status));
 
-        if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+        if (ctx.signal.aborted) throw new Error(CANCELLED_MESSAGE);
 
         spinner.update('Building shielded transaction...');
         const recipe = await bundle.facade.transferTransaction(
@@ -333,7 +333,7 @@ async function shieldedAirdrop(
       {
         syncMode: 'full',
         requireStrictSync: true,
-        signal,
+        signal: ctx.signal,
         onStatus: (s) => spinner.update(s),
         onSyncProgress: (applied, highest) => {
           if (highest > 0) {
@@ -348,7 +348,7 @@ async function shieldedAirdrop(
     spinner.stop('Transaction submitted');
 
     if (hasFlag(args, 'json')) {
-      writeJsonResult({ txHash, amount: amountNight, shieldedAddress: userShieldedAddrStr, network: networkName, type: 'shielded' });
+      ctx.output.result({ txHash, amount: amountNight, shieldedAddress: userShieldedAddrStr, network: networkName, type: 'shielded' });
       return;
     }
     process.stdout.write(txHash + '\n');

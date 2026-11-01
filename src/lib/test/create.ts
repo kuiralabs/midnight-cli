@@ -139,7 +139,7 @@ const DEFAULT_TIMEOUT_BROWSER = 600;
 const DEFAULT_SERVE_PORT = 9932;
 
 /** CLI-strategy prep: wallet + dust + serve, no UI build. */
-const CLI_PREP: PrepStepId[] = [
+const CLI_PREP: readonly PrepStepId[] = [
   'cache-clear',
   'localnet-up',
   'balance:1000',
@@ -148,7 +148,7 @@ const CLI_PREP: PrepStepId[] = [
 ];
 
 /** Browser-strategy prep: same as CLI plus build-and-serve for the dApp UI. */
-const BROWSER_PREP: PrepStepId[] = [...CLI_PREP, 'build-and-serve'];
+const BROWSER_PREP: readonly PrepStepId[] = [...CLI_PREP, 'build-and-serve'];
 
 export function buildScaffold(circuits: CircuitInfo[], opts: CreateOptions): ScaffoldOutput {
   const strategy: CreateStrategy = opts.strategy ?? 'cli';
@@ -170,7 +170,7 @@ function buildCliScaffold(circuits: CircuitInfo[], opts: CreateOptions): Scaffol
     dappConfig: {
       name: opts.contractName,
       network,
-      prep: CLI_PREP,
+      prep: [...CLI_PREP],
     },
     suite: {
       name: suiteName,
@@ -197,7 +197,7 @@ function buildBrowserScaffold(opts: CreateOptions, browser: BrowserOptions): Sca
     port: browser.port,
     buildCmd: browser.buildCmd,
     url,
-    prep: BROWSER_PREP,
+    prep: [...BROWSER_PREP],
   };
   if (browser.buildDir) dappConfig.buildDir = browser.buildDir;
 

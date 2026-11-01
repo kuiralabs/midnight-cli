@@ -8,6 +8,7 @@ import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts'
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { cliCall } from './helpers/cli-call.ts';
 
 // Live tests against a running ledger-9 indexer: run by `npm run test:live`,
 // never by `npm test`. They read balances only, from undeployed's saved
@@ -72,7 +73,7 @@ describe('balance command — reads address from wallet file', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['balance', '--wallet', walletFile, '--network', 'undeployed']);
-    await balanceCommand(args);
+    await cliCall(balanceCommand, args);
 
     const err = io.stderr();
     expect(err).toContain('Balance');
@@ -87,7 +88,7 @@ describe('balance command — reads address from wallet file', () => {
 describe('balance command — positional address with local indexer', () => {
   it('checks balance for the genesis address on undeployed', async () => {
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed']);
-    await balanceCommand(args);
+    await cliCall(balanceCommand, args);
 
     const err = io.stderr();
     expect(err).toContain('Balance');
@@ -99,7 +100,7 @@ describe('balance command — positional address with local indexer', () => {
 
   it('uses explicit --network flag for address lookup', async () => {
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed']);
-    await balanceCommand(args);
+    await cliCall(balanceCommand, args);
 
     const err = io.stderr();
     expect(err).toContain('undeployed');
@@ -107,7 +108,7 @@ describe('balance command — positional address with local indexer', () => {
 
   it('outputs NIGHT balance to stdout for genesis address', async () => {
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed']);
-    await balanceCommand(args);
+    await cliCall(balanceCommand, args);
 
     const out = io.stdout();
     // Genesis address on local undeployed should have funds — stdout has bare NIGHT=<amount>
@@ -116,7 +117,7 @@ describe('balance command — positional address with local indexer', () => {
 
   it('outputs "0" to stdout for an unfunded address', async () => {
     const args = parseArgs(['balance', EMPTY_ADDRESS, '--network', 'undeployed']);
-    await balanceCommand(args);
+    await cliCall(balanceCommand, args);
 
     const out = io.stdout().trim();
     expect(out).toBe('0');
@@ -129,7 +130,7 @@ describe('balance command — positional address with local indexer', () => {
 describe('balance command — JSON output', () => {
   it('outputs valid JSON with all expected fields', async () => {
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed', '--json']);
-    await balanceCommand(args);
+    await cliCall(balanceCommand, args);
 
     const data = JSON.parse(io.stdout().trim());
     expect(data.address).toBe(GENESIS_UNDEPLOYED_ADDRESS);
@@ -144,7 +145,7 @@ describe('balance command — JSON output', () => {
     // (e.g. midnight-expert's session health check). The nested
     // `.balances.NIGHT` remains canonical; this is an additive mirror.
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed', '--json']);
-    await balanceCommand(args);
+    await cliCall(balanceCommand, args);
 
     const data = JSON.parse(io.stdout().trim());
     if (data.balances?.NIGHT) {
@@ -154,7 +155,7 @@ describe('balance command — JSON output', () => {
 
   it('reports NIGHT balance in NIGHT units (not micro-NIGHT)', async () => {
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed', '--json']);
-    await balanceCommand(args);
+    await cliCall(balanceCommand, args);
 
     const data = JSON.parse(io.stdout().trim());
     const nightBalance = data.balances.NIGHT;
@@ -171,7 +172,7 @@ describe('balance command — JSON output', () => {
     // Note: spinner output still goes to stderr at the command level.
     // Full stderr suppression happens globally in wallet.ts entry point.
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed', '--json']);
-    await balanceCommand(args);
+    await cliCall(balanceCommand, args);
     const err = io.stderr();
     // Should NOT contain formatted output (headers, key-value pairs, dividers)
     expect(err).not.toContain('Balance');
@@ -185,7 +186,7 @@ describe('balance command — JSON output', () => {
 describe('balance command — spinner lifecycle', () => {
   it('shows syncing progress on stderr for successful check', async () => {
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'undeployed']);
-    await balanceCommand(args);
+    await cliCall(balanceCommand, args);
 
     const err = io.stderr();
     // Spinner should show progress and complete with ✓
@@ -196,7 +197,7 @@ describe('balance command — spinner lifecycle', () => {
   it('stops spinner with "Failed" on connection error', async () => {
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--indexer-ws', 'ws://localhost:19999']);
     try {
-      await balanceCommand(args);
+      await cliCall(balanceCommand, args);
     } catch {
       const err = io.stderr();
       expect(err).toContain('Failed');

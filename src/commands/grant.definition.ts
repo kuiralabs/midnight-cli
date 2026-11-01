@@ -164,7 +164,7 @@ export const grantDefinition: CommandDefinition = {
   // Y29: the intro had no line for grant until 2D; it sits beside the contract commands.
   intro: { brief: 'Grants that let agents spend', order: 12 },
   needsWalletSdk: true,
-  shell: { signal: true, payer: true },
+  shell: { payer: true },
   load: () => import('./grant.ts'),
   mcp: {
     tools: [

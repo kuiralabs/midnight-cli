@@ -19,6 +19,7 @@ import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './help
 import { deriveAllAddresses } from '../lib/derive-address.ts';
 import { loadCliConfig } from '../lib/cli-config.ts';
 import { localIndexerFlags } from './helpers/local-indexer.ts';
+import { cliCall } from './helpers/cli-call.ts';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-json-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
@@ -190,7 +191,7 @@ describe('generate --json', () => {
   it('outputs valid JSON with all expected fields', async () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const args = parseArgs(['generate', '--network', 'undeployed', '--output', walletFile, '--json']);
-    await generateCommand(args);
+    await cliCall(generateCommand, args);
     const data = parseJsonOutput();
 
     expect(data.addresses).toBeDefined();
@@ -211,7 +212,7 @@ describe('generate --json', () => {
   it('omits mnemonic in seed mode', async () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const args = parseArgs(['generate', '--network', 'preprod', '--seed', TEST_SEED, '--output', walletFile, '--json']);
-    await generateCommand(args);
+    await cliCall(generateCommand, args);
     const data = parseJsonOutput();
 
     expect(data.mnemonic).toBeUndefined();
@@ -221,7 +222,7 @@ describe('generate --json', () => {
   it('produces no stderr output', async () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const args = parseArgs(['generate', '--network', 'undeployed', '--output', walletFile, '--json']);
-    await generateCommand(args);
+    await cliCall(generateCommand, args);
     expect(io.stderr()).toBe('');
   });
 });
@@ -233,7 +234,7 @@ describe('info --json', () => {
     saveWalletConfig(TEST_CONFIG, walletFile);
 
     const args = parseArgs(['info', '--wallet', walletFile, '--network', 'undeployed', '--json']);
-    await infoCommand(args);
+    await cliCall(infoCommand, args);
     const data = parseJsonOutput();
 
     expect(data.addresses).toBeDefined();
@@ -248,7 +249,7 @@ describe('info --json', () => {
     saveWalletConfig(TEST_CONFIG, walletFile);
 
     const args = parseArgs(['info', '--wallet', walletFile, '--json']);
-    await infoCommand(args);
+    await cliCall(infoCommand, args);
     const raw = io.stdout();
     expect(raw).not.toContain(TEST_CONFIG.seed);
   });
@@ -258,7 +259,7 @@ describe('info --json', () => {
     saveWalletConfig(TEST_CONFIG, walletFile);
 
     const args = parseArgs(['info', '--wallet', walletFile, '--json']);
-    await infoCommand(args);
+    await cliCall(infoCommand, args);
     expect(io.stderr()).toBe('');
   });
 });
@@ -267,7 +268,7 @@ describe('info --json', () => {
 describe('address --json', () => {
   it('outputs valid JSON with address details', async () => {
     const args = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed', '--json']);
-    await addressCommand(args);
+    await cliCall(addressCommand, args);
     const data = parseJsonOutput();
 
     expect((data.address as string).startsWith('mn_addr_undeployed1')).toBe(true);
@@ -278,7 +279,7 @@ describe('address --json', () => {
 
   it('respects --index flag', async () => {
     const args = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed', '--index', '3', '--json']);
-    await addressCommand(args);
+    await cliCall(addressCommand, args);
     const data = parseJsonOutput();
 
     expect(data.index).toBe(3);
@@ -287,7 +288,7 @@ describe('address --json', () => {
 
   it('produces no stderr output', async () => {
     const args = parseArgs(['address', '--seed', TEST_SEED, '--network', 'undeployed', '--json']);
-    await addressCommand(args);
+    await cliCall(addressCommand, args);
     expect(io.stderr()).toBe('');
   });
 });
@@ -296,7 +297,7 @@ describe('address --json', () => {
 describe('genesis-address --json', () => {
   it('outputs valid JSON with genesis address', async () => {
     const args = parseArgs(['genesis-address', '--network', 'undeployed', '--json']);
-    await genesisAddressCommand(args);
+    await cliCall(genesisAddressCommand, args);
     const data = parseJsonOutput();
 
     expect((data.address as string).startsWith('mn_addr_undeployed1')).toBe(true);
@@ -305,7 +306,7 @@ describe('genesis-address --json', () => {
 
   it('produces no stderr output', async () => {
     const args = parseArgs(['genesis-address', '--network', 'undeployed', '--json']);
-    await genesisAddressCommand(args);
+    await cliCall(genesisAddressCommand, args);
     expect(io.stderr()).toBe('');
   });
 });
@@ -315,7 +316,7 @@ describe('inspect-cost --json', () => {
   it('outputs valid JSON with all 5 dimensions', async () => {
     const local = await localIndexerFlags();
     const args = parseArgs(['inspect-cost', '--json', ...local.flags]);
-    await inspectCostCommand(args).finally(local.close);
+    await cliCall(inspectCostCommand, args).finally(local.close);
     const data = parseJsonOutput();
 
     expect(data.readTime).toBeDefined();
@@ -333,7 +334,7 @@ describe('inspect-cost --json', () => {
   it('produces no stderr output', async () => {
     const local = await localIndexerFlags();
     const args = parseArgs(['inspect-cost', '--json', ...local.flags]);
-    await inspectCostCommand(args).finally(local.close);
+    await cliCall(inspectCostCommand, args).finally(local.close);
     expect(io.stderr()).toBe('');
   });
 });
@@ -351,7 +352,7 @@ describe('config --json', () => {
     if (loadCliConfig().network !== originalNetwork) {
       io.restore();
       const restoreIo = captureOutput();
-      await configCommand(parseArgs(['config', 'set', 'network', originalNetwork]));
+      await cliCall(configCommand, parseArgs(['config', 'set', 'network', originalNetwork]));
       restoreIo.restore();
       io = captureOutput();
     }
@@ -359,7 +360,7 @@ describe('config --json', () => {
 
   it('config get outputs JSON', async () => {
     const args = parseArgs(['config', 'get', 'network', '--json']);
-    await configCommand(args);
+    await cliCall(configCommand, args);
     const data = parseJsonOutput();
 
     expect(data.action).toBe('get');
@@ -369,7 +370,7 @@ describe('config --json', () => {
 
   it('config set outputs JSON', async () => {
     const args = parseArgs(['config', 'set', 'network', 'preprod', '--json']);
-    await configCommand(args);
+    await cliCall(configCommand, args);
     const data = parseJsonOutput();
 
     expect(data.action).toBe('set');
@@ -382,7 +383,7 @@ describe('config --json', () => {
 describe('help --json', () => {
   it('outputs valid JSON capability manifest', async () => {
     const args = parseArgs(['help', '--json']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const data = parseJsonOutput();
 
     expect(data.cli).toBeDefined();
@@ -394,7 +395,7 @@ describe('help --json', () => {
 
   it('includes all commands in manifest', async () => {
     const args = parseArgs(['help', '--json']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const data = parseJsonOutput();
 
     const commands = data.commands as Array<Record<string, unknown>>;
@@ -415,7 +416,7 @@ describe('help --json', () => {
 
   it('includes global flags', async () => {
     const args = parseArgs(['help', '--json']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const data = parseJsonOutput();
 
     const globalFlags = data.globalFlags as Array<Record<string, string>>;
@@ -427,7 +428,7 @@ describe('help --json', () => {
 
   it('every command has jsonFields', async () => {
     const args = parseArgs(['help', '--json']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const data = parseJsonOutput();
 
     const commands = data.commands as Array<Record<string, unknown>>;

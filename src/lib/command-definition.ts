@@ -11,6 +11,7 @@
 // lists disagreed, Y29 (the plan's STATUS) fixes them in 2C–2G.
 
 import { FULL_FLAG, type ParsedArgs } from './argv.ts';
+import type { CallContext, CommandOutcome } from './call-context.ts';
 
 /** A parameter as an MCP tool's schema shows it to an agent. */
 export interface ParamSchema {
@@ -66,10 +67,8 @@ export interface CommandHelp {
   readonly jsonFields?: Readonly<Record<string, string>>;
 }
 
-/** What the shell does for a command around its handler. */
+/** What the shell does for a command around its handler. Every handler gets its call's signal (2F). */
 export interface ShellCall {
-  /** The handler gets the shell's cancellation signal. */
-  readonly signal?: true;
   /** The handler gets the shell's payer, the served wallet (D24). */
   readonly payer?: true;
   /** The handler gets the protectors other packages provide (wallet protect, D24). */
@@ -80,9 +79,13 @@ export interface ShellCall {
   readonly unavailable?: string;
 }
 
-/** A command's module. Method syntax: each handler takes its context in its own shape until 2F gives them one. */
+/**
+ * A command's module: its handler takes the call's context (2F) and may return
+ * its exit code. Method syntax, so a handler may narrow the protectors it is
+ * given (wallet protect's are the wallet package's).
+ */
 export interface CommandModule {
-  default(args: ParsedArgs, signal?: AbortSignal, context?: unknown): Promise<void>;
+  default(args: ParsedArgs, ctx: CallContext): Promise<CommandOutcome | void>;
 }
 
 /** The MCP tool annotations the server sends. */

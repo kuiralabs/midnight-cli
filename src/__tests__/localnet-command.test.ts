@@ -16,6 +16,7 @@ import {
 } from '../lib/localnet.ts';
 import helpCommand, { COMMAND_SPECS } from '../commands/help.ts';
 import { COMMAND_BRIEFS } from '../ui/art.ts';
+import { cliCall } from './helpers/cli-call.ts';
 
 let io: CapturedOutput;
 
@@ -32,24 +33,24 @@ afterEach(() => {
 describe('localnet command — argument validation', () => {
   it('throws when no subcommand provided', async () => {
     const args = parseArgs(['localnet']);
-    await expect(localnetCommand(args)).rejects.toThrow('Usage:');
-    await expect(localnetCommand(args)).rejects.toThrow('up|stop|down|status|logs|clean');
+    await expect(cliCall(localnetCommand, args)).rejects.toThrow('Usage:');
+    await expect(cliCall(localnetCommand, args)).rejects.toThrow('up|stop|down|status|logs|clean');
   });
 
   it('throws for invalid subcommand', async () => {
     const args = parseArgs(['localnet', 'restart']);
-    await expect(localnetCommand(args)).rejects.toThrow('Usage:');
+    await expect(cliCall(localnetCommand, args)).rejects.toThrow('Usage:');
   });
 
   it('throws for another invalid subcommand', async () => {
     const args = parseArgs(['localnet', 'start']);
-    await expect(localnetCommand(args)).rejects.toThrow('Usage:');
+    await expect(cliCall(localnetCommand, args)).rejects.toThrow('Usage:');
   });
 
   it('error message includes all valid subcommands', async () => {
     const args = parseArgs(['localnet', 'invalid']);
     try {
-      await localnetCommand(args);
+      await cliCall(localnetCommand, args);
     } catch (err) {
       const msg = (err as Error).message;
       expect(msg).toContain('up');
@@ -205,7 +206,7 @@ describe('help integration', () => {
 
   it('shows usage for localnet via help command', async () => {
     const args = parseArgs(['help', 'localnet']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const out = io.stdout();
     expect(out).toContain('localnet');
     expect(out).toContain('Usage:');
@@ -230,7 +231,7 @@ describe('localnet up on this ledger-9 build', () => {
     const originalPath = process.env.PATH;
     process.env.PATH = '/nonexistent'; // no docker binary to find
     try {
-      const err: any = await localnetCommand(parseArgs(['localnet', 'up'])).catch((e) => e);
+      const err: any = await cliCall(localnetCommand, parseArgs(['localnet', 'up'])).catch((e) => e);
       expect(err.code).toBe('LOCALNET_UNAVAILABLE');
       expect(err.message).not.toContain('Docker Compose v2 is required');
     } finally {

@@ -7,6 +7,7 @@ import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts'
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { cliCall } from './helpers/cli-call.ts';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-info-cmd-test-${process.pid}`);
 
@@ -39,7 +40,7 @@ describe('info command — stdout (pipeable data)', () => {
     saveWalletConfig(TEST_CONFIG, walletFile);
 
     const args = parseArgs(['info', '--wallet', walletFile, '--network', 'undeployed']);
-    await infoCommand(args);
+    await cliCall(infoCommand, args);
     const out = io.stdout().trim();
     expect(out).toBe(TEST_ADDRESSES.undeployed);
   });
@@ -51,7 +52,7 @@ describe('info command — stderr (formatted details)', () => {
     saveWalletConfig(TEST_CONFIG, walletFile);
 
     const args = parseArgs(['info', '--wallet', walletFile]);
-    await infoCommand(args);
+    await cliCall(infoCommand, args);
     const err = io.stderr();
     expect(err).toContain(TEST_ADDRESSES.undeployed);
   });
@@ -61,7 +62,7 @@ describe('info command — stderr (formatted details)', () => {
     saveWalletConfig(TEST_CONFIG, walletFile);
 
     const args = parseArgs(['info', '--wallet', walletFile]);
-    await infoCommand(args);
+    await cliCall(infoCommand, args);
     const err = io.stderr();
     expect(err).toContain('(active)');
     expect(err).toContain('undeployed');
@@ -72,7 +73,7 @@ describe('info command — stderr (formatted details)', () => {
     saveWalletConfig(TEST_CONFIG, walletFile);
 
     const args = parseArgs(['info', '--wallet', walletFile]);
-    await infoCommand(args);
+    await cliCall(infoCommand, args);
     const err = io.stderr();
     expect(err).toContain('2026-01-15T10:30:00.000Z');
   });
@@ -82,7 +83,7 @@ describe('info command — stderr (formatted details)', () => {
     saveWalletConfig(TEST_CONFIG, walletFile);
 
     const args = parseArgs(['info', '--wallet', walletFile]);
-    await infoCommand(args);
+    await cliCall(infoCommand, args);
     const err = io.stderr();
     expect(err).toContain(walletFile);
   });
@@ -92,7 +93,7 @@ describe('info command — stderr (formatted details)', () => {
     saveWalletConfig(TEST_CONFIG, walletFile);
 
     const args = parseArgs(['info', '--wallet', walletFile]);
-    await infoCommand(args);
+    await cliCall(infoCommand, args);
     const err = io.stderr();
     expect(err).toContain('Wallet Info');
   });
@@ -102,7 +103,7 @@ describe('info command — stderr (formatted details)', () => {
     saveWalletConfig(TEST_CONFIG, walletFile);
 
     const args = parseArgs(['info', '--wallet', walletFile]);
-    await infoCommand(args);
+    await cliCall(infoCommand, args);
     const out = io.stdout();
     const err = io.stderr();
     expect(out).not.toContain(TEST_CONFIG.seed);
@@ -113,6 +114,6 @@ describe('info command — stderr (formatted details)', () => {
 describe('info command — error handling', () => {
   it('throws when wallet file does not exist', async () => {
     const args = parseArgs(['info', '--wallet', path.join(TEST_DIR, 'nonexistent.json')]);
-    await expect(infoCommand(args)).rejects.toThrow('Wallet file not found');
+    await expect(cliCall(infoCommand, args)).rejects.toThrow('Wallet file not found');
   });
 });

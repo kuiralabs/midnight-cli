@@ -19,6 +19,7 @@ import { saveWalletConfig } from './helpers/plain-wallet.ts';
 import { accountProtector } from '../lib/grant/account-protector.ts';
 import type { WalletProtector } from '../lib/wallet-protector.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
+import { cliCall } from './helpers/cli-call.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
@@ -33,7 +34,7 @@ const plainWallet = (name: string): string =>
 const protect = async (protectors: WalletProtector[] = [accountProtector]): Promise<Record<string, unknown>> => {
   io.restore();
   io = captureOutput();
-  await walletCommand(parseArgs(['wallet', 'protect', '--json']), undefined, { protectors });
+  await cliCall(walletCommand, parseArgs(['wallet', 'protect', '--json']), { protectors });
   return JSON.parse(io.stdout()) as Record<string, unknown>;
 };
 
@@ -109,7 +110,7 @@ describe('wallet protect', () => {
     fs.writeFileSync(owner, JSON.stringify({ contractAddress: '5e'.repeat(32), bootSalt: '3a'.repeat(32), encryptionSecret: '2b'.repeat(32), deviceArm: 'k1', deviceSk: '4f'.repeat(32) }));
     io.restore();
     io = captureOutput();
-    await walletCommand(parseArgs(['wallet', 'protect']), undefined, { protectors: [accountProtector] });
+    await cliCall(walletCommand, parseArgs(['wallet', 'protect']), { protectors: [accountProtector] });
     expect(io.stderr()).toContain('✓ account of alice on undeployed: owner key, records and private state encrypted');
   });
 

@@ -17,9 +17,9 @@ import { deployShortOfDustNote } from '../lib/grant/deploy-cost.ts';
 import { type OwnerCommandOutput, grantRequestOf, grantsOf, issue, issuePreview, revoke, revokeAll, statusOf } from '../lib/grant/owner-commands.ts';
 import { prepareGrant } from '../lib/grant/prepare.ts';
 import { type GrantRequest, paysAFee } from '../lib/grant/request.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { type PayingWallet, openPayingWallet } from '../lib/grant/fee-wallet.ts';
-import { type CommandContext, payerFor } from '../lib/payer.ts';
+import { payerFor } from '../lib/payer.ts';
 import { dim } from '../ui/colors.ts';
 import { header, keyValue, formatNight } from '../ui/format.ts';
 import { type Spinner, silentSpinner, start as startSpinner } from '../ui/spinner.ts';
@@ -51,7 +51,7 @@ function shortOfShieldedNight(held: bigint, value: bigint): UsageError {
   );
 }
 
-export default async function grantCommand(args: ParsedArgs, signal?: AbortSignal, context?: CommandContext): Promise<void> {
+export default async function grantCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const { request, target, walletName, recordsDir, account } = await prepareGrant(args);
   const jsonMode = hasFlag(args, 'json');
   const walletFlag = getFlag(args, 'wallet');
@@ -66,14 +66,14 @@ export default async function grantCommand(args: ParsedArgs, signal?: AbortSigna
   }
 
   const throwIfCancelled = (): void => {
-    if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+    if (ctx.signal.aborted) throw new Error(CANCELLED_MESSAGE);
   };
   // Reading the account or a request submits nothing: a wallet with no Dust can still do it, and none is opened.
-  const payer = paysAFee(request) ? payerFor(`grant ${request.subcommand}`, context) : undefined;
+  const payer = paysAFee(request) ? payerFor(`grant ${request.subcommand}`, ctx) : undefined;
   const funds = payer ? await payer.assertCanPay(target, walletFlag, spinnerFor('Checking wallet...')) : undefined;
   const paying = payer ? await openPayingWallet(payer, target, walletFlag, spinnerFor('Opening the wallet...')) : undefined;
   try {
-    await runOwned(request, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor, throwIfCancelled });
+    await runOwned(request, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor, throwIfCancelled }, ctx);
   } finally {
     await paying?.stop();
   }
@@ -92,7 +92,7 @@ interface OwnedRun {
 }
 
 /** Runs the command on the account, with the wallet that pays (if it pays) already open. */
-async function runOwned(request: GrantRequest, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor, throwIfCancelled }: OwnedRun): Promise<void> {
+async function runOwned(request: GrantRequest, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor, throwIfCancelled }: OwnedRun, ctx: CallContext): Promise<void> {
   const spinner = spinnerFor(SPINNER_LABEL[request.subcommand]);
   // This machine's device, made where no account is yet: it opens no account first.
   if (request.subcommand === 'device' && request.action === 'new') {
@@ -103,7 +103,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
     const code = ownJoinCode(recordsDir, openAccountKey(recordsDir, passphrase), device);
     spinner.stop('Device ready');
     if (jsonMode) {
-      writeJsonResult({ subcommand: 'device', action: 'new', network: target.network, wallet: walletName, ownerKey: 'sealed', code });
+      ctx.output.result({ subcommand: 'device', action: 'new', network: target.network, wallet: walletName, ownerKey: 'sealed', code });
     } else {
       process.stderr.write('\n' + dim('  On a machine already an owner of the account, run:') + '\n');
       process.stderr.write(dim(`  midnight grant device add ${code} --backup <file>`) + '\n');
@@ -121,7 +121,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
       const passphrase = isPassphraseSet() ? await unlockPassphrase() : await passphraseForNewSecret();
       const { contractAddress } = await importAccount(recordsDir, target.network, passphrase, request.file);
       spinner.stop('Imported');
-      if (jsonMode) writeJsonResult({ subcommand: request.subcommand, network: target.network, wallet: walletName, ownerKey: 'sealed', address: contractAddress });
+      if (jsonMode) ctx.output.result({ subcommand: request.subcommand, network: target.network, wallet: walletName, ownerKey: 'sealed', address: contractAddress });
       else process.stderr.write('\n' + keyValue('Account', contractAddress) + '\n' + dim('  Use it from one machine at a time: this machine now acts as the same owner device.') + '\n\n');
     } catch (err) {
       spinner.fail('import failed');
@@ -156,7 +156,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   const report = (output: OwnerCommandOutput): void => {
     spinner.stop('Done');
     if (jsonMode) {
-      writeJsonResult({ ...common, ...output.result });
+      ctx.output.result({ ...common, ...output.result });
     } else {
       process.stderr.write('\n');
       process.stdout.write(output.lines.join('\n') + '\n\n');
@@ -175,7 +175,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         const outcome = await deployOwnerAccount(owned.context, feeWallet, owned.store, owned.location, device);
         spinner.stop(outcome.resumed ? 'Account ready' : 'Account deployed');
         if (jsonMode) {
-          writeJsonResult({ ...common, ...outcome });
+          ctx.output.result({ ...common, ...outcome });
         } else {
           process.stderr.write('\n' + keyValue('Account', outcome.address) + '\n');
           if (outcome.resumed) process.stderr.write(dim('  An account already on record was completed; no new one was deployed.') + '\n');
@@ -198,7 +198,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         const outcome = { address: account.address, value: request.value, txHash: result.public.txHash, blockHeight: Number(result.public.blockHeight) };
         spinner.stop('Deposited');
         if (jsonMode) {
-          writeJsonResult({ ...common, amount: request.amount, ...outcome });
+          ctx.output.result({ ...common, amount: request.amount, ...outcome });
         } else {
           process.stderr.write('\n' + keyValue('Deposited', `${request.amount} NIGHT (${outcome.value} in the smallest unit, as status and --cap count)`) + '\n');
           process.stderr.write(keyValue('Block', String(outcome.blockHeight)) + '\n');
@@ -243,7 +243,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         const known = devices.read().length > 0 ? devices.read() : [own];
         if (request.action === 'list') {
           spinner.stop('Done');
-          if (jsonMode) writeJsonResult({ ...common, action: 'list', devices: known.map((code) => ({ code, thisMachine: code === own })) });
+          if (jsonMode) ctx.output.result({ ...common, action: 'list', devices: known.map((code) => ({ code, thisMachine: code === own })) });
           else process.stdout.write(known.map((code) => `${code}${code === own ? '  (this machine)' : ''}`).join('\n') + '\n\n');
           return;
         }
@@ -263,7 +263,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
           const written = request.backup === undefined ? undefined : await exportAccount(recordsDir, target.network, passphrase, request.backup, { forDevice: named });
           spinner.stop('Device added');
           if (jsonMode) {
-            writeJsonResult({ ...common, action: 'add', code: added, ...(written === undefined ? {} : { backup: written.file }) });
+            ctx.output.result({ ...common, action: 'add', code: added, ...(written === undefined ? {} : { backup: written.file }) });
           } else {
             process.stderr.write('\n' + keyValue('Added', added) + '\n' + (written === undefined ? '' : keyValue('Backup', written.file) + '\n'));
             process.stderr.write(dim('  The account was sealed to the new device on chain: its secret, the devices\' read keys and every live grant.') + '\n');
@@ -278,7 +278,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         const { removed } = await removeOwnerDevice(await ownerSession(), deviceKeyOf(named), named.readKey);
         devices.write(known.filter((code) => identityCodeOf(code) !== removing));
         spinner.stop(removed ? 'Device removed' : 'Already removed');
-        if (jsonMode) writeJsonResult({ ...common, action: 'remove', code: request.code, removed });
+        if (jsonMode) ctx.output.result({ ...common, action: 'remove', code: request.code, removed });
         else process.stderr.write('\n' + keyValue(removed ? 'Removed' : 'Already removed', request.code) + '\n' + dim('  The account\'s encryption key was rotated after, away from the removed device.') + '\n\n');
         return;
       }
@@ -288,7 +288,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         const outcome = await exportAccount(recordsDir, target.network, await unlockPassphrase(), request.file);
         spinner.stop('Written');
         if (jsonMode) {
-          writeJsonResult({ ...common, address: outcome.contractAddress, file: outcome.file });
+          ctx.output.result({ ...common, address: outcome.contractAddress, file: outcome.file });
         } else {
           process.stderr.write('\n' + keyValue('Backup', outcome.file) + '\n');
           process.stderr.write(dim('  It opens only with mn\'s passphrase. Keep it, and the passphrase, apart from this machine.') + '\n\n');

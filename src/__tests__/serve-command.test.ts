@@ -6,6 +6,7 @@ import { parseArgs } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
 import { findUnknownFlags } from '../lib/command-flags.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
+import { cliCall } from './helpers/cli-call.ts';
 
 describe('serve --approve-fees', () => {
   it('is a flag serve accepts', () => {
@@ -13,7 +14,7 @@ describe('serve --approve-fees', () => {
   });
 
   it('refuses to combine with --approve-all, before loading any wallet', async () => {
-    const err = await serveCommand(parseArgs(['serve', '--approve-all', '--approve-fees', '--wallet', '/nonexistent/wallet.json']))
+    const err = await cliCall(serveCommand, parseArgs(['serve', '--approve-all', '--approve-fees', '--wallet', '/nonexistent/wallet.json']))
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(UsageError);
     expect((err as Error).message).toContain('--approve-all and --approve-fees conflict');
@@ -27,7 +28,7 @@ describe('serve --max-fee / --max-pending', () => {
     [['--approve-fees', '--max-fee', 'lots'], /--max-fee must be a positive DUST amount/],
     [['--approve-fees', '--max-pending', '0'], /--max-pending must be a whole number/],
   ])('rejects %j with a usage error before any wallet loads', async (flags, message) => {
-    const err = await serveCommand(parseArgs(['serve', ...flags])).catch((e) => e);
+    const err = await cliCall(serveCommand, parseArgs(['serve', ...flags])).catch((e) => e);
     expect(err).toBeInstanceOf(UsageError);
     expect(err.message).toMatch(message);
   });

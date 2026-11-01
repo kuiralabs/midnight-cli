@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { findViolations } from '../../scripts/check-process-safety.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..', '..');
@@ -73,6 +73,112 @@ describe('the process-safety check', () => {
 
   it('finds nothing in src/ beyond its allowlist', () => {
     expect(findViolations()).toEqual([]);
+  });
+});
+
+// Nothing about a call lives in module globals (spec §4.4, D21, 2F).
+describe("the process-safety check keeps calls' state out of modules", () => {
+  const plant = (name: string, lines: string[]) => {
+    const file = join(dir, name);
+    writeFileSync(file, lines.join('\n'));
+    return file;
+  };
+  const found = (file: string, allowedState: Record<string, Record<string, string>> = {}) =>
+    findViolations([file], {}, allowedState).map((v) => `${v.line} ${v.rule}${v.name === undefined ? '' : ` ${v.name}`}`);
+
+  it('finds module-level mutable state: a let or var, a Map, Set or array not typed readonly, an empty object to fill', () => {
+    const file = plant('state.ts', [
+      'let target: ((json: string) => void) | null = null;',
+      'export var count = 0;',
+      'const memo = new Map<string, number>();',
+      'const seen = new Set<string>();',
+      'const listeners: Array<() => void> = [];',
+      'const frames = [',
+      "  'a',",
+      '];',
+      'const cache: Record<string, string> = {};',
+    ]);
+    expect(found(file)).toEqual([
+      '1 keeps module state target',
+      '2 keeps module state count',
+      '3 keeps module state memo',
+      '4 keeps module state seen',
+      '5 keeps module state listeners',
+      '6 keeps module state frames',
+      '9 keeps module state cache',
+    ]);
+  });
+
+  it("doesn't count constants typed readonly, a table of constants, or state inside a function or a string", () => {
+    const file = plant('constants.ts', [
+      "const KEYS: ReadonlySet<string> = new Set(['node', 'indexer-ws']);",
+      'const BY_NAME: ReadonlyMap<string, number> = new Map([',
+      "  ['a', 1],",
+      ']);',
+      "const NAMES: readonly string[] = ['a', 'b'];",
+      "const STEPS = ['up', 'down'] as const;",
+      "const MORE: ReadonlyArray<string> = ['c'];",
+      "const TABLE = { node: 'Node RPC URL' };",
+      'const handler = (x: number) => x + 1;',
+      'export function run(): number {',
+      '  let calls = 0;',
+      '  const memo = new Map<string, number>();',
+      '  memo.set("a", calls += 1);',
+      '  return memo.size;',
+      '}',
+      "const script = `let generated = 0;`;",
+      '// let commented = 1;',
+    ]);
+    expect(found(file)).toEqual([]);
+  });
+
+  it('allows module state only by name, and reports an allowlist entry whose state is gone', () => {
+    const file = plant('shared.ts', [
+      'const unlocked = new Map<string, string>();',
+      'let other = 0;',
+    ]);
+    const rel = relative(resolve(ROOT, 'src'), file);
+    expect(found(file, { [rel]: { unlocked: 'shared on purpose', removed: 'removed by S9 (2F)' } })).toEqual([
+      '2 keeps module state other',
+      '0 allowlists module state it no longer keeps removed',
+    ]);
+  });
+
+  it('finds the process exit code set outside the shell, and not a read of it or a returned one', () => {
+    const trips = plant('sets-exit.ts', [
+      'process.exitCode = 1;',
+      'process.exitCode ??= 2;',
+    ]);
+    expect(found(trips)).toEqual(['1 sets the process exit code', '2 sets the process exit code']);
+    const quiet = plant('returns-exit.ts', [
+      'if (process.exitCode === 1) console.log;',
+      'export const outcome = { exitCode: 2 };',
+      "const text = 'process.exitCode = 1';",
+    ]);
+    expect(found(quiet).filter((v) => v.includes('exit code'))).toEqual([]);
+  });
+
+  it('finds ambient per-call storage outside the shell\'s noise filter, and not a mention in a comment or string', () => {
+    const trips = plant('ambient.ts', [
+      "import { AsyncLocalStorage } from 'node:async_hooks';",
+      'const store = new AsyncLocalStorage<string>();',
+      "import { createHook } from 'async_hooks';",
+    ]);
+    expect(found(trips)).toEqual([
+      '1 keeps ambient per-call storage',
+      '2 keeps ambient per-call storage',
+      '3 keeps ambient per-call storage',
+    ]);
+    const quiet = plant('explicit.ts', [
+      '// no AsyncLocalStorage here: the context is passed in',
+      "const why = 'not AsyncLocalStorage';",
+    ]);
+    expect(found(quiet)).toEqual([]);
+  });
+
+  it('lets the shell set the exit code and its noise filter keep ambient storage', () => {
+    const shell = findViolations([join(ROOT, 'src/wallet.ts'), join(ROOT, 'src/lib/sdk-noise.ts')]);
+    expect(shell).toEqual([]);
   });
 });
 

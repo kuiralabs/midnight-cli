@@ -131,9 +131,9 @@ export function loadPrompt(suiteDir: string): string | null {
 
 // ── Validation ──
 
-const VALID_NETWORKS: NetworkName[] = ['undeployed', 'preprod', 'preview'];
+const VALID_NETWORKS: readonly NetworkName[] = ['undeployed', 'preprod', 'preview'];
 const VALID_STRATEGIES = ['browser', 'cli', 'hybrid'] as const;
-const VALID_BROWSER_MODES: BrowserMode[] = ['dom', 'script', 'vision', 'auto'];
+const VALID_BROWSER_MODES: readonly BrowserMode[] = ['dom', 'script', 'vision', 'auto'];
 
 const PREP_STEP_PATTERN = /^(cache-clear|localnet-up|balance:\d+|dust|dust-register|dust-wait|mn-serve|build-and-serve)$/;
 

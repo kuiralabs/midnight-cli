@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import helpCommand from '../commands/help.ts';
 import { parseArgs } from '../lib/argv.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { cliCall } from './helpers/cli-call.ts';
 
 let io: CapturedOutput;
 let savedIsTTY: boolean | undefined;
@@ -22,7 +23,7 @@ afterEach(() => {
 describe('help --agent', () => {
   it('outputs comprehensive agent manual to stdout', async () => {
     const args = parseArgs(['help', '--agent']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const out = io.stdout();
 
     expect(out).toContain('AI Agent & MCP Reference');
@@ -32,7 +33,7 @@ describe('help --agent', () => {
 
   it('lists every error code mn can return', async () => {
     const { ERROR_CODES } = await import('../lib/exit-codes.ts');
-    await helpCommand(parseArgs(['help', '--agent']));
+    await cliCall(helpCommand, parseArgs(['help', '--agent']));
     const table = io.stdout().split('ERROR CODES')[1]!.split('MCP SERVER')[0]!;
     const missing = Object.values(ERROR_CODES).filter((code) => !new RegExp(`^  ${code}\\s+\\d`, 'm').test(table));
     expect(missing).toEqual([]);
@@ -40,7 +41,7 @@ describe('help --agent', () => {
 
   it('documents all commands', async () => {
     const args = parseArgs(['help', '--agent']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const out = io.stdout();
 
     expect(out).toContain('generate');
@@ -58,7 +59,7 @@ describe('help --agent', () => {
 
   it('documents error codes', async () => {
     const args = parseArgs(['help', '--agent']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const out = io.stdout();
 
     expect(out).toContain('ERROR CODES');
@@ -71,7 +72,7 @@ describe('help --agent', () => {
 
   it('documents exit codes in error codes section', async () => {
     const args = parseArgs(['help', '--agent']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const out = io.stdout();
 
     expect(out).toContain('ERROR CODES');
@@ -81,7 +82,7 @@ describe('help --agent', () => {
 
   it('documents MCP server setup', async () => {
     const args = parseArgs(['help', '--agent']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const out = io.stdout();
 
     expect(out).toContain('MCP SERVER');
@@ -91,7 +92,7 @@ describe('help --agent', () => {
 
   it('includes example CLI commands', async () => {
     const args = parseArgs(['help', '--agent']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const out = io.stdout();
 
     expect(out).toContain('EXAMPLE CLI COMMANDS');
@@ -105,7 +106,7 @@ describe('help --agent', () => {
 
   it('documents shielded transactions', async () => {
     const args = parseArgs(['help', '--agent']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const out = io.stdout();
 
     expect(out).toContain('SHIELDED TRANSACTIONS');
@@ -115,7 +116,7 @@ describe('help --agent', () => {
 
   it('documents DApp connector', async () => {
     const args = parseArgs(['help', '--agent']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const out = io.stdout();
 
     expect(out).toContain('DAPP CONNECTOR');
@@ -126,7 +127,7 @@ describe('help --agent', () => {
 
   it('documents smart contracts and testing', async () => {
     const args = parseArgs(['help', '--agent']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const out = io.stdout();
 
     expect(out).toContain('SMART CONTRACTS');
@@ -140,7 +141,7 @@ describe('help --agent', () => {
 
   it('documents wallet name resolution', async () => {
     const args = parseArgs(['help', '--agent']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const out = io.stdout();
 
     expect(out).toContain('WALLET NAME RESOLUTION');
@@ -149,7 +150,7 @@ describe('help --agent', () => {
 
   it('documents capability manifest', async () => {
     const args = parseArgs(['help', '--agent']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const out = io.stdout();
 
     expect(out).toContain('CAPABILITY MANIFEST');
@@ -160,7 +161,7 @@ describe('help --agent', () => {
 describe('help screen — mentions --json and --agent', () => {
   it('TTY help mentions --json flag', async () => {
     const args = parseArgs(['help']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const err = io.stderr();
 
     expect(err).toContain('--json');
@@ -168,7 +169,7 @@ describe('help screen — mentions --json and --agent', () => {
 
   it('TTY help mentions --agent manual', async () => {
     const args = parseArgs(['help']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const err = io.stderr();
 
     expect(err).toContain('--agent');
@@ -177,7 +178,7 @@ describe('help screen — mentions --json and --agent', () => {
   it('non-TTY help mentions --json flag', async () => {
     Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true });
     const args = parseArgs(['help']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const err = io.stderr();
 
     expect(err).toContain('--json');
@@ -186,7 +187,7 @@ describe('help screen — mentions --json and --agent', () => {
   it('non-TTY help mentions --agent manual', async () => {
     Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true });
     const args = parseArgs(['help']);
-    await helpCommand(args);
+    await cliCall(helpCommand, args);
     const err = io.stderr();
 
     expect(err).toContain('--agent');

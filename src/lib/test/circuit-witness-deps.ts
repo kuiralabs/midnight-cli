@@ -190,7 +190,7 @@ function findCallSites(body: string, argNames: Set<string>): Set<string> {
  * Conservative list — false negatives (missing a real helper) are worse
  * than false positives, so anything ambiguous stays out.
  */
-const RESERVED = new Set([
+const RESERVED: ReadonlySet<string> = new Set([
   'if', 'for', 'while', 'switch', 'return', 'new',
   'assert', 'disclose', 'transientHash', 'persistentHash',
   'ownPublicKey', 'publicKey',

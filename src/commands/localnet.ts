@@ -17,7 +17,7 @@ import {
 import { header, divider } from '../ui/format.ts';
 import { bold, green, red, dim, yellow } from '../ui/colors.ts';
 import { start as startSpinner } from '../ui/spinner.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 
 const VALID_SUBCOMMANDS = ['up', 'stop', 'down', 'status', 'logs', 'clean'] as const;
 type Subcommand = typeof VALID_SUBCOMMANDS[number];
@@ -39,7 +39,7 @@ function formatServiceTable(services: ReturnType<typeof getServiceStatus>): stri
   return lines.join('\n');
 }
 
-async function handleUp(jsonMode: boolean): Promise<void> {
+async function handleUp(jsonMode: boolean, ctx: CallContext): Promise<void> {
   const wrote = ensureComposeFile();
   if (wrote) {
     process.stderr.write(dim(`  Wrote compose.yml to ${getComposePath()}`) + '\n');
@@ -114,7 +114,7 @@ async function handleUp(jsonMode: boolean): Promise<void> {
   const services = getServiceStatus();
 
   if (jsonMode) {
-    writeJsonResult({
+    ctx.output.result({
       subcommand: 'up',
       services: services.map(s => ({ name: s.name, state: s.state, port: s.port, health: s.health, image: s.image })),
     });
@@ -133,14 +133,14 @@ async function handleUp(jsonMode: boolean): Promise<void> {
   process.stderr.write('\n' + dim('  Next: ') + bold('midnight wallet generate dev --network undeployed') + '\n');
 }
 
-async function handleStop(jsonMode: boolean): Promise<void> {
+async function handleStop(jsonMode: boolean, ctx: CallContext): Promise<void> {
   const spinner = startSpinner('Stopping local network...');
 
   try {
     dockerCompose('stop');
     spinner.stop('Local network stopped (containers preserved)');
     if (jsonMode) {
-      writeJsonResult({ subcommand: 'stop', status: 'stopped' });
+      ctx.output.result({ subcommand: 'stop', status: 'stopped' });
       return;
     }
   } catch (err) {
@@ -149,7 +149,7 @@ async function handleStop(jsonMode: boolean): Promise<void> {
   }
 }
 
-async function handleDown(jsonMode: boolean): Promise<void> {
+async function handleDown(jsonMode: boolean, ctx: CallContext): Promise<void> {
   const spinner = startSpinner('Tearing down local network...');
 
   try {
@@ -172,7 +172,7 @@ async function handleDown(jsonMode: boolean): Promise<void> {
 
     spinner.stop('Local network removed (containers, networks, volumes, caches)');
     if (jsonMode) {
-      writeJsonResult({ subcommand: 'down', status: 'removed', cachesCleared: true, dappLevelDbWiped: leveldbWiped });
+      ctx.output.result({ subcommand: 'down', status: 'removed', cachesCleared: true, dappLevelDbWiped: leveldbWiped });
       return;
     }
     if (leveldbWiped) {
@@ -184,11 +184,11 @@ async function handleDown(jsonMode: boolean): Promise<void> {
   }
 }
 
-async function handleStatus(jsonMode: boolean): Promise<void> {
+async function handleStatus(jsonMode: boolean, ctx: CallContext): Promise<void> {
   const services = getServiceStatus();
 
   if (jsonMode) {
-    writeJsonResult({
+    ctx.output.result({
       subcommand: 'status',
       services: services.map(s => ({ name: s.name, state: s.state, port: s.port, health: s.health, image: s.image })),
     });
@@ -212,7 +212,7 @@ async function handleStatus(jsonMode: boolean): Promise<void> {
   }
 }
 
-async function handleClean(jsonMode: boolean): Promise<void> {
+async function handleClean(jsonMode: boolean, ctx: CallContext): Promise<void> {
   const spinner = startSpinner('Removing conflicting containers...');
 
   try {
@@ -228,7 +228,7 @@ async function handleClean(jsonMode: boolean): Promise<void> {
       spinner.stop('No conflicting containers found');
     }
     if (jsonMode) {
-      writeJsonResult({ subcommand: 'clean', status: 'cleaned', removed, kept });
+      ctx.output.result({ subcommand: 'clean', status: 'cleaned', removed, kept });
       return;
     }
     for (const c of kept) {
@@ -240,7 +240,7 @@ async function handleClean(jsonMode: boolean): Promise<void> {
   }
 }
 
-async function handleLogs(args: ParsedArgs): Promise<void> {
+async function handleLogs(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const composePath = getComposePath();
   const tail = getFlag(args, 'tail');
   const jsonMode = hasFlag(args, 'json');
@@ -262,7 +262,7 @@ async function handleLogs(args: ParsedArgs): Promise<void> {
           return;
         }
         if (jsonMode) {
-          writeJsonResult({ tail: Number(n), lines: stdout.split('\n').filter(Boolean) });
+          ctx.output.result({ tail: Number(n), lines: stdout.split('\n').filter(Boolean) });
         } else {
           process.stdout.write(stdout);
         }
@@ -291,7 +291,7 @@ async function handleLogs(args: ParsedArgs): Promise<void> {
   });
 }
 
-export default async function localnetCommand(args: ParsedArgs): Promise<void> {
+export default async function localnetCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const subcommand = args.subcommand;
 
   if (!subcommand || !isValidSubcommand(subcommand)) {
@@ -320,16 +320,16 @@ export default async function localnetCommand(args: ParsedArgs): Promise<void> {
 
   switch (subcommand) {
     case 'up':
-      return handleUp(jsonMode);
+      return handleUp(jsonMode, ctx);
     case 'stop':
-      return handleStop(jsonMode);
+      return handleStop(jsonMode, ctx);
     case 'down':
-      return handleDown(jsonMode);
+      return handleDown(jsonMode, ctx);
     case 'status':
-      return handleStatus(jsonMode);
+      return handleStatus(jsonMode, ctx);
     case 'logs':
-      return handleLogs(args);
+      return handleLogs(args, ctx);
     case 'clean':
-      return handleClean(jsonMode);
+      return handleClean(jsonMode, ctx);
   }
 }

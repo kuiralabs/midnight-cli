@@ -94,7 +94,7 @@ export const dustDefinition: CommandDefinition = {
   },
   intro: { brief: 'Manage dust (fee tokens)', order: 9 },
   needsWalletSdk: true,
-  shell: { signal: true },
+  shell: {},
   load: () => import('./dust.ts'),
   mcp: {
     tools: [

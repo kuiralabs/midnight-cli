@@ -8,6 +8,7 @@ import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts'
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { cliCall } from './helpers/cli-call.ts';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-airdrop-cmd-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
@@ -37,7 +38,7 @@ describe('airdrop command — argument validation', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['airdrop', '--wallet', walletFile]);
-    await expect(airdropCommand(args)).rejects.toThrow('Missing amount');
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow('Missing amount');
   });
 
   it('throws for non-numeric amount', async () => {
@@ -50,7 +51,7 @@ describe('airdrop command — argument validation', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['airdrop', 'abc', '--wallet', walletFile]);
-    await expect(airdropCommand(args)).rejects.toThrow('Invalid amount');
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow('Invalid amount');
   });
 
   it('throws for zero amount', async () => {
@@ -63,7 +64,7 @@ describe('airdrop command — argument validation', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['airdrop', '0', '--wallet', walletFile]);
-    await expect(airdropCommand(args)).rejects.toThrow('greater than 0');
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow('greater than 0');
   });
 
   it('refuses a negative amount as an amount, not as a missing one', async () => {
@@ -76,7 +77,7 @@ describe('airdrop command — argument validation', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['airdrop', '-5', '--wallet', walletFile]);
-    await expect(airdropCommand(args)).rejects.toThrow('Invalid amount: "-5" — must be a positive number');
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow('Invalid amount: "-5" — must be a positive number');
   });
 
   it('throws when no wallet file exists', async () => {
@@ -85,7 +86,7 @@ describe('airdrop command — argument validation', () => {
     // config dir; the airdrop entry-point bails out on non-undeployed
     // networks BEFORE attempting to load the wallet file).
     const args = parseArgs(['airdrop', '100', '--wallet', path.join(TEST_DIR, 'nonexistent.json'), '--network', 'undeployed']);
-    await expect(airdropCommand(args)).rejects.toThrow('Wallet file not found');
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow('Wallet file not found');
   });
 });
 
@@ -100,7 +101,7 @@ describe('airdrop command — network restriction', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['airdrop', '100', '--wallet', walletFile, '--network', 'preprod']);
-    await expect(airdropCommand(args)).rejects.toThrow('only available on the "undeployed" network');
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow('only available on the "undeployed" network');
   });
 
   it('rejects airdrop on preview network', async () => {
@@ -113,7 +114,7 @@ describe('airdrop command — network restriction', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['airdrop', '100', '--wallet', walletFile, '--network', 'preview']);
-    await expect(airdropCommand(args)).rejects.toThrow('only available on the "undeployed" network');
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow('only available on the "undeployed" network');
   });
 
   it('includes current network name in rejection message', async () => {
@@ -126,7 +127,7 @@ describe('airdrop command — network restriction', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['airdrop', '100', '--wallet', walletFile, '--network', 'preprod']);
-    await expect(airdropCommand(args)).rejects.toThrow('"preprod"');
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow('"preprod"');
   });
 });
 
@@ -147,7 +148,7 @@ describe('airdrop command — address as destination', () => {
       'mn_shield-addr_undeployed1abcdef',
       '--network', 'undeployed',
     ]);
-    await expect(airdropCommand(args)).rejects.toThrow(/Invalid shielded address/);
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow(/Invalid shielded address/);
   });
 
   it('network check on an inferred-shielded address expects the shielded prefix', async () => {
@@ -158,7 +159,7 @@ describe('airdrop command — address as destination', () => {
       'mn_shield-addr_preprod1abcdef',
       '--network', 'undeployed',
     ]);
-    await expect(airdropCommand(args)).rejects.toThrow(/Expected prefix: mn_shield-addr_undeployed1/);
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow(/Expected prefix: mn_shield-addr_undeployed1/);
   });
 
   it('rejects an unshielded address when --shielded is passed', async () => {
@@ -170,7 +171,7 @@ describe('airdrop command — address as destination', () => {
       'mn_addr_undeployed1abcdef',
       '--network', 'undeployed',
     ]);
-    await expect(airdropCommand(args)).rejects.toThrow(/--shielded was passed but --wallet is an unshielded address/);
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow(/--shielded was passed but --wallet is an unshielded address/);
   });
 
   it('rejects an address whose prefix does not match the resolved network', async () => {
@@ -181,7 +182,7 @@ describe('airdrop command — address as destination', () => {
       'mn_addr_preprod1abcdef',
       '--network', 'undeployed',
     ]);
-    await expect(airdropCommand(args)).rejects.toThrow(/does not match network "undeployed"/);
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow(/does not match network "undeployed"/);
   });
 
   it('rejects an unshielded address when running against preprod', async () => {
@@ -194,7 +195,7 @@ describe('airdrop command — address as destination', () => {
       '--network',
       'preprod',
     ]);
-    await expect(airdropCommand(args)).rejects.toThrow('only available on the "undeployed" network');
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow('only available on the "undeployed" network');
   });
 });
 
@@ -209,7 +210,7 @@ describe('airdrop command — shielded flag', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['airdrop', '100', '--shielded', '--wallet', walletFile, '--network', 'preprod']);
-    await expect(airdropCommand(args)).rejects.toThrow('only available on the "undeployed" network');
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow('only available on the "undeployed" network');
   });
 
   it('throws when no amount given with --shielded', async () => {
@@ -222,6 +223,6 @@ describe('airdrop command — shielded flag', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['airdrop', '--shielded', '--wallet', walletFile]);
-    await expect(airdropCommand(args)).rejects.toThrow('Missing amount');
+    await expect(cliCall(airdropCommand, args)).rejects.toThrow('Missing amount');
   });
 });

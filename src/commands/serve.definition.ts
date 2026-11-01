@@ -108,6 +108,6 @@ export const serveDefinition: CommandDefinition = {
   },
   intro: { brief: 'DApp Connector server', order: 16 },
   needsWalletSdk: true,
-  shell: { signal: true },
+  shell: {},
   load: () => import('./serve.ts'),
 };

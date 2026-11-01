@@ -10,10 +10,10 @@ import { clearNativeDustCheckpoint } from '../lib/dust-sync-native.ts';
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { green } from '../ui/colors.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { clearChainCaches } from '../lib/chain-caches.ts';
 
-export default async function cacheCommand(args: ParsedArgs): Promise<void> {
+export default async function cacheCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const action = args.subcommand;
 
   if (action !== 'clear') {
@@ -41,7 +41,7 @@ export default async function cacheCommand(args: ParsedArgs): Promise<void> {
     const shieldedPubkey = shieldedCoinPublicKeyHexFromSeed(Buffer.from(config.seed, 'hex'));
     clearShieldedDirectCache(networkName, shieldedPubkey);
     if (jsonMode) {
-      writeJsonResult({ action: 'clear', scope: 'wallet', wallet: walletFlag, network: networkName });
+      ctx.output.result({ action: 'clear', scope: 'wallet', wallet: walletFlag, network: networkName });
       return;
     }
     process.stderr.write(green('✓') + ` Cache cleared for wallet "${walletFlag}" on ${networkName}\n`);
@@ -49,7 +49,7 @@ export default async function cacheCommand(args: ParsedArgs): Promise<void> {
     // Clear cache for a specific network
     clearChainCaches(networkFlag);
     if (jsonMode) {
-      writeJsonResult({ action: 'clear', scope: 'network', network: networkFlag });
+      ctx.output.result({ action: 'clear', scope: 'network', network: networkFlag });
       return;
     }
     process.stderr.write(green('✓') + ` Cache cleared for network "${networkFlag}"\n`);
@@ -57,7 +57,7 @@ export default async function cacheCommand(args: ParsedArgs): Promise<void> {
     // Clear all cache
     clearChainCaches(undefined);
     if (jsonMode) {
-      writeJsonResult({ action: 'clear', scope: 'all' });
+      ctx.output.result({ action: 'clear', scope: 'all' });
       return;
     }
     process.stderr.write(green('✓') + ' Cache cleared\n');

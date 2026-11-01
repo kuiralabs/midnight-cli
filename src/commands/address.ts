@@ -7,9 +7,9 @@ import { deriveUnshieldedAddress } from '../lib/derive-address.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { keyValue, divider, formatAddress } from '../ui/format.ts';
 import { dim } from '../ui/colors.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 
-export default async function addressCommand(args: ParsedArgs): Promise<void> {
+export default async function addressCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // `address` is a seed-derivation tool with no active-wallet notion → requireExplicit.
   const seedBuffer = await resolveSeed(args, { requireExplicit: true, label: 'address' });
 
@@ -25,7 +25,7 @@ export default async function addressCommand(args: ParsedArgs): Promise<void> {
 
   // JSON mode
   if (hasFlag(args, 'json')) {
-    writeJsonResult({
+    ctx.output.result({
       address,
       network: networkName,
       index: keyIndex,

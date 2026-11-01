@@ -16,6 +16,7 @@ import { probeServeNetwork } from '../lib/serve-manager.ts';
 import { setProgressTarget, silentSpinner } from '../ui/spinner.ts';
 import contractCommand from '../commands/contract.ts';
 import grantCommand from '../commands/grant.ts';
+import { cliCall } from './helpers/cli-call.ts';
 
 const ENDPOINTS = ['--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
 
@@ -52,24 +53,24 @@ describe('resolvePayingTarget', () => {
 
 describe('a command called without a payer', () => {
   it.each(['deploy', 'call'])('contract %s refuses, naming itself', async (subcommand) => {
-    const refused = contractCommand(parseArgs(['contract', subcommand, ...ENDPOINTS]));
+    const refused = cliCall(contractCommand, parseArgs(['contract', subcommand, ...ENDPOINTS]));
     await expect(refused).rejects.toThrow(NoPayerError);
     await expect(refused).rejects.toThrow(`contract ${subcommand} submits a transaction, but its caller gave it no payer to pay with.`);
   });
 
   it('contract inspect reads local files and asks for no payer', async () => {
-    await expect(contractCommand(parseArgs(['contract', 'inspect', '--path', home]))).rejects.toThrow(`No compiled contract found in ${home}`);
+    await expect(cliCall(contractCommand, parseArgs(['contract', 'inspect', '--path', home]))).rejects.toThrow(`No compiled contract found in ${home}`);
   });
 
   it('grant deploy refuses before it opens the wallet', async () => {
     fs.mkdirSync(path.join(home, '.midnight', 'wallets'), { recursive: true });
     // A wallet file that can't be unlocked: reaching the wallet would fail differently.
     fs.writeFileSync(path.join(home, '.midnight', 'wallets', 'alice.json'), '{}');
-    await expect(grantCommand(parseArgs(['grant', 'deploy', '--wallet', 'alice', '--json', ...ENDPOINTS]))).rejects.toThrow(NoPayerError);
+    await expect(cliCall(grantCommand, parseArgs(['grant', 'deploy', '--wallet', 'alice', '--json', ...ENDPOINTS]))).rejects.toThrow(NoPayerError);
   });
 
   it('grant status pays nothing and asks for no payer', async () => {
-    await expect(grantCommand(parseArgs(['grant', 'status', '--wallet', 'alice', '--json', ...ENDPOINTS]))).rejects.toThrow(NoAccountError);
+    await expect(cliCall(grantCommand, parseArgs(['grant', 'status', '--wallet', 'alice', '--json', ...ENDPOINTS]))).rejects.toThrow(NoAccountError);
   });
 });
 

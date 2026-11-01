@@ -22,17 +22,17 @@ import { createEtaEstimator, formatSyncStatus } from '../lib/sync-eta.ts';
 import { header, keyValue, divider, formatNight, formatAddress, toNight } from '../ui/format.ts';
 import { bold, dim } from '../ui/colors.ts';
 import { start as startSpinner, type Spinner } from '../ui/spinner.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext } from '../lib/call-context.ts';
 import { onSdkWarning } from '../lib/sdk-warnings.ts';
 
-export default async function balanceCommand(args: ParsedArgs): Promise<void> {
+export default async function balanceCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // Positional address → unshielded only (lightweight, no facade)
   if (args.subcommand) {
-    return addressBalance(args);
+    return addressBalance(args, ctx);
   }
 
   // Wallet-based → full sync, show both unshielded + shielded
-  return walletBalance(args);
+  return walletBalance(args, ctx);
 }
 
 /**
@@ -49,7 +49,7 @@ function inferNetworkFromAddress(address: string): NetworkName | null {
 
 // ── Positional address: unshielded only via GraphQL ──
 
-async function addressBalance(args: ParsedArgs): Promise<void> {
+async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void> {
   if (isVerbose(args)) enableVerbose();
   const address = args.subcommand!;
   verbose('balance', `address=${address}`);
@@ -87,7 +87,7 @@ async function addressBalance(args: ParsedArgs): Promise<void> {
         ...args,
         flags: { ...args.flags, wallet: owned.wallet.file, network: owned.network },
       };
-      return walletBalance(delegated);
+      return walletBalance(delegated, ctx);
     }
     throw new Error(
       `Shielded balances are private — they can only be read with the wallet's secret key, ` +
@@ -132,10 +132,10 @@ async function addressBalance(args: ParsedArgs): Promise<void> {
       // Slim drops the (long) address echo and txCount — agents already
       // know what they asked for, and txCount is an internal sync detail.
       if (isMinimalMode(args)) {
-        writeJsonResult({ network: networkName, balances, ...nightAlias, utxoCount: result.utxoCount });
+        ctx.output.result({ network: networkName, balances, ...nightAlias, utxoCount: result.utxoCount });
         return;
       }
-      writeJsonResult({ address, network: networkName, balances, ...nightAlias, utxoCount: result.utxoCount, txCount: result.txCount });
+      ctx.output.result({ address, network: networkName, balances, ...nightAlias, utxoCount: result.utxoCount, txCount: result.txCount });
       return;
     }
 
@@ -176,7 +176,7 @@ async function addressBalance(args: ParsedArgs): Promise<void> {
 
 // ── Wallet-based: full facade sync, both unshielded + shielded ──
 
-async function walletBalance(args: ParsedArgs): Promise<void> {
+async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> {
   if (isVerbose(args)) enableVerbose();
   const { name: networkName, config: networkConfig } = resolveNetwork({ args });
   verbose('balance', `network=${networkName} indexerWS=${networkConfig.indexerWS}`);
@@ -309,7 +309,7 @@ async function walletBalance(args: ParsedArgs): Promise<void> {
       // shieldedSynced=false means shielded was skipped (not a confirmed zero) —
       // consumers shouldn't read shielded.NIGHT as authoritative.
       if (isMinimalMode(args)) {
-        writeJsonResult({
+        ctx.output.result({
           network: networkName,
           unshielded: { NIGHT: toNight(unshieldedBalance), utxoCount: unshieldedUtxos },
           shielded: { NIGHT: toNight(shieldedBalance), availableCoins: shieldedCoins, pendingCoins },
@@ -317,7 +317,7 @@ async function walletBalance(args: ParsedArgs): Promise<void> {
         });
         return;
       }
-      writeJsonResult({
+      ctx.output.result({
         address,
         shieldedAddress: liveShieldedAddrStr,
         network: networkName,

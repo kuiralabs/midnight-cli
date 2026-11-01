@@ -165,7 +165,7 @@ export const testDefinition: CommandDefinition = {
   },
   intro: { brief: 'Run dApp E2E tests', order: 17 },
   needsWalletSdk: true,
-  shell: { signal: true },
+  shell: {},
   load: () => import('./test.ts'),
   mcp: {
     tools: [

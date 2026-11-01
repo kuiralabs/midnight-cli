@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { type ParsedArgs, getFlag, hasFlag } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
-import { writeJsonResult } from '../lib/json-output.ts';
+import type { CallContext, CommandOutcome } from '../lib/call-context.ts';
 import { header, keyValue, divider } from '../ui/format.ts';
 import { bold, dim, green, red, teal, yellow } from '../ui/colors.ts';
 import { start as startSpinner } from '../ui/spinner.ts';
@@ -26,7 +26,7 @@ function isValidSubcommand(s: string): s is Subcommand {
   return (VALID_SUBCOMMANDS as readonly string[]).includes(s);
 }
 
-export default async function testCommand(args: ParsedArgs, signal?: AbortSignal): Promise<void> {
+export default async function testCommand(args: ParsedArgs, ctx: CallContext): Promise<CommandOutcome | void> {
   const subcommand = args.subcommand;
 
   if (!subcommand || !isValidSubcommand(subcommand)) {
@@ -44,13 +44,13 @@ export default async function testCommand(args: ParsedArgs, signal?: AbortSignal
 
   switch (subcommand) {
     case 'create':
-      return handleCreate(args, jsonMode);
+      return handleCreate(args, jsonMode, ctx);
     case 'run':
-      return handleRun(args, jsonMode, signal);
+      return handleRun(args, jsonMode, ctx);
     case 'list':
-      return handleList(jsonMode);
+      return handleList(jsonMode, ctx);
     case 'results':
-      return handleResults(args, jsonMode);
+      return handleResults(args, jsonMode, ctx);
   }
 }
 
@@ -121,13 +121,12 @@ function browserOptionsFromFlags(prefilled: Partial<BrowserOptions>): BrowserOpt
   };
 }
 
-async function handleCreate(args: ParsedArgs, jsonMode: boolean): Promise<void> {
+async function handleCreate(args: ParsedArgs, jsonMode: boolean, ctx: CallContext): Promise<void> {
   const { resolve } = await import('node:path');
   const { findContractInfo } = await import('../lib/contract/inspect.ts');
   const { buildScaffold } = await import('../lib/test/create.ts');
   const { writeScaffold } = await import('../lib/test/create-writer.ts');
   const promptHelpers = await import('../ui/test-create-prompt.ts');
-  const { writeJsonResult } = await import('../lib/json-output.ts');
   const { isInteractive, promptStrategy, promptBrowserOptions, promptCircuit, promptScreen, promptGoal, promptSuiteName } = promptHelpers;
   const ai = await import('../lib/test/ai-scaffold.ts');
   const { discoverScreens } = await import('../lib/test/discover-screens.ts');
@@ -188,7 +187,7 @@ async function handleCreate(args: ParsedArgs, jsonMode: boolean): Promise<void> 
   const result = writeScaffold(scaffold, { dappDir, force });
 
   if (jsonMode) {
-    writeJsonResult({
+    ctx.output.result({
       subcommand: 'create',
       contractName: info.name,
       suiteName: scaffold.suiteName,
@@ -389,7 +388,8 @@ async function aiUiScaffold(deps: AiScaffoldDeps, goal: string | undefined): Pro
 
 // ── run ──
 
-async function handleRun(args: ParsedArgs, jsonMode: boolean, signal?: AbortSignal): Promise<void> {
+async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext): Promise<CommandOutcome | void> {
+  const { signal } = ctx;
   const { config, dappDir } = discoverDappConfig();
   const suites = discoverTestSuites(dappDir);
   const suiteName = getFlag(args, 'suite');
@@ -429,14 +429,14 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, signal?: AbortSign
   }
 
   // Prep context for resource tracking + teardown
-  const ctx = createPrepContext();
+  const prep = createPrepContext();
   const prepResults: PrepStepResult[] = [];
 
   // Register teardown on abort
   const teardownLog = (msg: string) => {
     if (!jsonMode) process.stderr.write(dim(`  [teardown] ${msg}`) + '\n');
   };
-  signal?.addEventListener('abort', () => runTeardown(ctx, teardownLog), { once: true });
+  signal?.addEventListener('abort', () => runTeardown(prep, teardownLog), { once: true });
 
   try {
     // ── Prep phase ──
@@ -445,7 +445,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, signal?: AbortSign
     // One spinner per step: it ends on the step's own mark, pass or fail.
     let spinner: ReturnType<typeof startSpinner> | null = null;
 
-    const results = await runPrepSteps(config, dappDir, ctx, {
+    const results = await runPrepSteps(config, dappDir, prep, {
       onStepStart(step) {
         spinner = startSpinner(`[prep] ${step}...`);
       },
@@ -529,9 +529,9 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, signal?: AbortSign
         });
 
         // mn serve should already be started by the prep step (mn-serve)
-        // Use the serve port from ctx if available, otherwise default
+        // Use the serve port from the prep context if available, otherwise default
         const { DEFAULT_SERVE_PORT } = await import('../lib/constants.ts');
-        const servePort = ctx.serveHandle?.port ?? DEFAULT_SERVE_PORT;
+        const servePort = prep.serveHandle?.port ?? DEFAULT_SERVE_PORT;
 
         const redeployFlag = hasFlag(args, 'redeploy');
 
@@ -598,7 +598,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, signal?: AbortSign
         }
 
         // Store action results for the final result JSON
-        (ctx as any)._actionResults = actionResults;
+        (prep as any)._actionResults = actionResults;
       }
     } else {
       if (!jsonMode) {
@@ -637,7 +637,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, signal?: AbortSign
     const overall = allPrepPassed && allAssertionsPassed && testExitCode === 0 ? 'pass' : 'fail';
 
     // Collect action results if CLI strategy was used
-    const actionResults = (ctx as any)._actionResults as import('../lib/test/actions-runner.ts').ActionResult[] | undefined;
+    const actionResults = (prep as any)._actionResults as import('../lib/test/actions-runner.ts').ActionResult[] | undefined;
 
     const runResult: TestRunResult = {
       id: `${config.name}_${timestamp}`,
@@ -665,30 +665,29 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, signal?: AbortSign
     const resultPath = writeResult(runResult, dappDir);
 
     if (jsonMode) {
-      writeJsonResult(runResult as unknown as Record<string, unknown>);
+      ctx.output.result(runResult as unknown as Record<string, unknown>);
     } else {
       process.stderr.write('\n' + divider() + '\n');
       process.stderr.write(`  ${overall === 'pass' ? green(bold('PASS')) : red(bold('FAIL'))} — ${config.name} (${duration}s)\n`);
       process.stderr.write(dim(`  Results: ${resultPath}`) + '\n\n');
     }
 
-    if (overall === 'fail') {
-      process.exitCode = 1;
-    }
+    // A failed suite ends the call with exit code 1, which the shell sets.
+    if (overall === 'fail') return { exitCode: 1 };
 
   } finally {
-    await runTeardown(ctx, teardownLog);
+    await runTeardown(prep, teardownLog);
   }
 }
 
 // ── list ──
 
-function handleList(jsonMode: boolean): void {
+function handleList(jsonMode: boolean, ctx: CallContext): void {
   const { config, dappDir } = discoverDappConfig();
   const suites = discoverTestSuites(dappDir);
 
   if (jsonMode) {
-    writeJsonResult({
+    ctx.output.result({
       dapp: config.name,
       suites: suites.map(s => ({
         name: s.suite.name,
@@ -718,7 +717,7 @@ function handleList(jsonMode: boolean): void {
 
 // ── results ──
 
-function handleResults(args: ParsedArgs, jsonMode: boolean): void {
+function handleResults(args: ParsedArgs, jsonMode: boolean, ctx: CallContext): void {
   const { config, dappDir } = discoverDappConfig();
   const showAll = hasFlag(args, 'all');
   const suiteName = getFlag(args, 'suite');
@@ -731,7 +730,7 @@ function handleResults(args: ParsedArgs, jsonMode: boolean): void {
       })();
 
   if (jsonMode) {
-    writeJsonResult((showAll ? { dapp: config.name, results } : results[0] ?? {}) as Record<string, unknown>);
+    ctx.output.result((showAll ? { dapp: config.name, results } : results[0] ?? {}) as Record<string, unknown>);
     return;
   }
 

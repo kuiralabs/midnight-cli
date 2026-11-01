@@ -114,7 +114,7 @@ function walkForScreens(dir: string, uiRoot: string, out: Map<string, ScreenCand
  * Subdirectory names that signal "this is layout/infrastructure, not a page."
  * Skipped during recursion to keep the candidate list focused on real screens.
  */
-const LAYOUT_DIRS = new Set(['layout', 'layouts', 'shared', 'common', 'ui', 'icons', 'styles']);
+const LAYOUT_DIRS: ReadonlySet<string> = new Set(['layout', 'layouts', 'shared', 'common', 'ui', 'icons', 'styles']);
 
 /**
  * A file looks like a screen when:
