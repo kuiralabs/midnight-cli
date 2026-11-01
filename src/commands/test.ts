@@ -6,7 +6,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { type ParsedArgs, getFlag, hasFlag } from '../lib/argv.ts';
-import { UsageError } from '../lib/errors.ts';
+import { CancelledError, throwIfCancelled, UsageError } from '../lib/errors.ts';
 import type { CallContext, CallOutput, CallProgress, CommandOutcome } from '../lib/call-context.ts';
 import { header, keyValue, divider } from '../ui/format.ts';
 import { bold, dim, green, red, teal, yellow } from '../ui/colors.ts';
@@ -169,7 +169,7 @@ async function handleCreate(args: ParsedArgs, jsonMode: boolean, ctx: CallContex
   // The spinner lives one level down, around just the claude subprocess
   // call inside aiCliScaffold / aiUiScaffold.
   const scaffold = aiOptIn
-    ? await tryAiScaffold({ strategy, info, dappDir, browser, network, suiteName, goalFlag, screenFlag, interactive, jsonMode, ai, promptCircuit, promptScreen, promptGoal, promptSuiteName, discoverScreens, progress: ctx.progress, output: ctx.output })
+    ? await tryAiScaffold({ strategy, info, dappDir, browser, network, suiteName, goalFlag, screenFlag, interactive, jsonMode, ai, promptCircuit, promptScreen, promptGoal, promptSuiteName, discoverScreens, progress: ctx.progress, output: ctx.output, signal: ctx.signal })
       ?? buildScaffold(info.circuits, { contractName: info.name, suiteName, strategy, browser, network })
     : buildScaffold(info.circuits, { contractName: info.name, suiteName, strategy, browser, network });
 
@@ -185,6 +185,8 @@ async function handleCreate(args: ParsedArgs, jsonMode: boolean, ctx: CallContex
     }
   }
 
+  // Cancelled while it was asked for or scaffolded: nothing is written.
+  throwIfCancelled(ctx.signal);
   const result = writeScaffold(scaffold, { dappDir, force });
 
   if (jsonMode) {
@@ -259,6 +261,8 @@ type AiScaffoldDeps = {
   progress: CallProgress;
   /** Where the call's text for the person goes. */
   output: CallOutput;
+  /** The call's cancellation: Claude is stopped, and nothing is scaffolded. */
+  signal: AbortSignal;
 };
 
 async function tryAiScaffold(deps: AiScaffoldDeps): Promise<import('../lib/test/create.ts').ScaffoldOutput | null> {
@@ -274,6 +278,8 @@ async function tryAiScaffold(deps: AiScaffoldDeps): Promise<import('../lib/test/
     }
     return await aiUiScaffold(deps, goal);
   } catch (err) {
+    // Cancelled is not a failure to fall back from: the call ends, and nothing is written.
+    if (err instanceof CancelledError) throw err;
     deps.output.stderr(`\n  ${dim('AI scaffold failed, falling back to deterministic:')} ${(err as Error).message}\n`);
     return null;
   }
@@ -344,6 +350,7 @@ async function aiCliScaffold(deps: AiScaffoldDeps, goal: string | undefined): Pr
     deps.progress,
     'Asking Claude to scaffold the test suite (30–60s)...',
     () => deps.ai.generateCliScaffoldWithAI({
+      signal: deps.signal,
       contract: deps.info,
       contractSourcePath: sourcePath,
       targetCircuit,
@@ -379,6 +386,7 @@ async function aiUiScaffold(deps: AiScaffoldDeps, goal: string | undefined): Pro
     deps.progress,
     'Asking Claude to scaffold the test suite (30–60s)...',
     () => deps.ai.generateUiScaffoldWithAI({
+      signal: deps.signal,
       contract: deps.info,
       screen,
       url: deps.browser!.url ?? `http://localhost:${deps.browser!.port}/`,

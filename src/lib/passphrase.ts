@@ -9,7 +9,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DIR_MODE, FILE_MODE } from './constants.ts';
-import { UsageError } from './errors.ts';
+import { throwIfCancelled, UsageError } from './errors.ts';
 import { openSecret, sealSecret } from './keystore.ts';
 import { currentPrompter, type Prompter } from './prompter.ts';
 import { PASSPHRASE_ENV, settings } from './settings.ts';
@@ -40,6 +40,8 @@ export interface PassphraseSource {
   prompter?: Prompter | null;
   /** Ask twice and refuse two that differ: for setting the passphrase. */
   confirm?: boolean;
+  /** The call's cancellation: a call cancelled while the passphrase was asked for saves none. */
+  signal?: AbortSignal;
 }
 
 const keystorePath = (root: string): string => path.join(root, KEYSTORE_FILENAME);
@@ -116,6 +118,7 @@ export async function passphraseForNewSecret(root: string = stateRoot(), source:
   if ([...passphrase].length < MIN_PASSPHRASE_LENGTH) {
     throw new UsageError(`mn's passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters.`);
   }
+  throwIfCancelled(source.signal);
   establishPassphrase(root, passphrase);
   unlocked.set(root, passphrase);
   return passphrase;

@@ -7,6 +7,7 @@
 // Code auth — no API key plumbing needed.
 
 import { execFileSync, spawn } from 'node:child_process';
+import { CancelledError } from '../errors.ts';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -48,7 +49,7 @@ export interface AiUiResponse {
  * The orchestrator extracts the JSON fence from that text. Injectable so
  * tests provide a deterministic stub instead of spawning a child process.
  */
-export type ClaudeRunner = (prompt: string) => Promise<string>;
+export type ClaudeRunner = (prompt: string, signal?: AbortSignal) => Promise<string>;
 
 export interface CliScaffoldInputs {
   contract: ContractInfo;
@@ -60,6 +61,8 @@ export interface CliScaffoldInputs {
   network?: NetworkName;
   servePort?: number;
   suiteName?: string;
+  /** The call's cancellation: Claude is stopped and the scaffold fails with CancelledError. */
+  signal?: AbortSignal;
 }
 
 export interface UiScaffoldInputs {
@@ -77,6 +80,8 @@ export interface UiScaffoldInputs {
   suiteName?: string;
   /** Mode for Chrome interaction (dom / vision / script). Sets suite.browserMode. */
   browserMode?: BrowserMode;
+  /** The call's cancellation: Claude is stopped and the scaffold fails with CancelledError. */
+  signal?: AbortSignal;
   /** Extra component sources to feed Claude — small files imported by the screen. */
   relatedSources?: { path: string; source: string }[];
 }
@@ -107,9 +112,17 @@ const CLAUDE_MAX_BUFFER = 4 * 1024 * 1024;
  * Throws if claude isn't on PATH, the process exits non-zero, the response
  * exceeds CLAUDE_MAX_BUFFER, or the timeout fires.
  */
-export const claudeSubprocessRunner: ClaudeRunner = (prompt) => {
+export const claudeSubprocessRunner: ClaudeRunner = (prompt, signal) => {
   return new Promise<string>((resolve, reject) => {
+    if (signal?.aborted === true) { reject(new CancelledError()); return; }
     const child = spawn('claude', ['--print'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    // Cancelled: Claude is stopped, and nothing it printed is used.
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      child.kill('SIGTERM');
+      reject(new CancelledError());
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
 
     let stdout = '';
     let stderr = '';
@@ -136,6 +149,7 @@ export const claudeSubprocessRunner: ClaudeRunner = (prompt) => {
 
     child.on('error', (err) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       // ENOENT from spawn is the "claude not on PATH" case; surface an
       // actionable install hint instead of the raw error.
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -148,14 +162,15 @@ export const claudeSubprocessRunner: ClaudeRunner = (prompt) => {
       reject(err);
     });
 
-    child.on('exit', (code, signal) => {
+    child.on('exit', (code, exitSignal) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       if (bufferOverflowed) {
         reject(new Error(`claude --print response exceeded ${CLAUDE_MAX_BUFFER / 1024 / 1024}MB; aborted.`));
         return;
       }
-      if (signal === 'SIGTERM') {
-        // Already rejected by the timeout handler.
+      if (exitSignal === 'SIGTERM') {
+        // Already rejected by the timeout or the cancellation.
         return;
       }
       if (code !== 0) {
@@ -382,7 +397,7 @@ export async function generateCliScaffoldWithAI(
     goal: inputs.goal,
   });
 
-  const raw = await runner(prompt);
+  const raw = await runner(prompt, inputs.signal);
   const response = extractJsonFence<AiCliResponse>(raw);
   const normalizedActions = normalizeAndValidateCliResponse(response, inputs.contract);
 
@@ -465,7 +480,7 @@ export async function generateUiScaffoldWithAI(
     goal: inputs.goal,
   });
 
-  const raw = await runner(prompt);
+  const raw = await runner(prompt, inputs.signal);
   const response = extractJsonFence<AiUiResponse>(raw);
   validateUiResponse(response);
 

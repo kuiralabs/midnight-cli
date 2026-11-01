@@ -82,8 +82,8 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
 
   const secret = walletSecretFrom(seedHex !== undefined ? { seed: parseSeedHex(seedHex, '--seed') } : { mnemonic: mnemonicStr });
 
-  const passphrase = await passphraseForNewSecret();
-  // Cancelled while the passphrase was asked for: no wallet is written.
+  const passphrase = await passphraseForNewSecret(undefined, { signal: ctx.signal });
+  // Cancelled while the passphrase was asked for: no wallet is written, and no new passphrase saved.
   throwIfCancelled(ctx.signal);
   // Checked above: an existing wallet is replaced only with --force.
   const created = createWallet(name, secret, passphrase, { overwrite: hasFlag(args, 'force') });
@@ -387,7 +387,7 @@ async function walletSeed(args: ParsedArgs, ctx: CallContext): Promise<void> {
 /** Sets mn's passphrase where none is set, and seals every plain-text wallet under it. */
 async function walletProtect(args: ParsedArgs, ctx: WalletCommandContext): Promise<void> {
   const root = stateRoot();
-  const passphrase = await passphraseForNewSecret(root);
+  const passphrase = await passphraseForNewSecret(root, { signal: ctx.signal });
   // Cancelled, it stops between wallets and before a protector, never in the middle of a file.
   const report = await protectAllWallets(root, passphrase, ctx.signal);
   const sealed = report.filter((w) => w.sealedNow).map((w) => w.name);
