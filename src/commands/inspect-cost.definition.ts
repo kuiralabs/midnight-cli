@@ -9,6 +9,7 @@ export const inspectCostDefinition: CommandDefinition = {
       name: 'network',
       takesValue: true,
       help: ['--network <name>              Network to read (default: the selected one)'],
+      agent: { type: 'string', description: 'Network to read (default: the selected one)' },
     },
     { name: 'node', takesValue: true },
     {
@@ -43,12 +44,7 @@ export const inspectCostDefinition: CommandDefinition = {
         name: 'midnight_inspect_cost',
         description: 'The chain\'s current block limits, from its latest block\'s ledger parameters.',
         annotations: { readOnlyHint: true, idempotentHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            network: { type: 'string', description: 'Network to read (default: the selected one)' },
-          },
-        },
+        params: [{ flag: 'network' }],
         argv: { flags: ['network'] },
         order: 10,
       },

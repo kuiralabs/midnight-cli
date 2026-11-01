@@ -1,12 +1,15 @@
 // The `grant` command, described once (plan 2B, spec §4.1).
 
-import { type CommandDefinition, confirmationTarget } from '../lib/command-definition.ts';
+import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, confirmationTarget } from '../lib/command-definition.ts';
 
-/** The parameters every grant tool takes. */
-const GRANT_COMMON_PROPERTIES = {
-  wallet: { type: 'string', description: 'The wallet that owns the account and pays the fees' },
-  network: { type: 'string', enum: ['undeployed'], description: 'Only undeployed (a local ledger-9 stack)' },
-};
+/** A grant request can run: its arguments, the network, the account and the wallet are all in order. */
+async function checkGrant(params: Readonly<Record<string, unknown>>, call: ToolCheckCall) {
+  const { prepareGrant } = await import('../lib/grant/prepare.ts');
+  const prepared = await prepareGrant(call.argv());
+  const { loadWalletConfig, resolveWalletPath } = await import('../lib/wallet-config.ts');
+  loadWalletConfig(resolveWalletPath(params.wallet as string | undefined));
+  return prepared;
+}
 
 export const grantDefinition: CommandDefinition = {
   name: 'grant',
@@ -33,18 +36,21 @@ export const grantDefinition: CommandDefinition = {
         '                              (this and the three below default to mn\'s limits: 500000, 300000,',
         '                              2000000 and a day)',
       ],
+      agent: { type: 'string', description: 'Most the grant may ever pay (smallest unit)' },
     },
     {
       name: 'expires-in',
       takesValue: true,
       subcommands: ['issue'],
       help: ['--expires-in <seconds>        issue: how long the grant lasts'],
+      agent: { type: 'string', description: 'Seconds the grant lasts' },
     },
     {
       name: 'max-coin',
       takesValue: true,
       subcommands: ['issue'],
       help: ['--max-coin <n>                issue: the largest coin the agent may take to pay from'],
+      agent: { type: 'string', description: 'Largest coin the agent may take to pay from' },
     },
     {
       name: 'network',
@@ -52,17 +58,20 @@ export const grantDefinition: CommandDefinition = {
       help: [
         '--network <name>              Network (default: undeployed, the only one the account package reaches)',
       ],
+      agent: { type: 'string', enum: ['undeployed'], description: 'Only undeployed (a local ledger-9 stack)' },
     },
     {
       name: 'per-call',
       takesValue: true,
       subcommands: ['issue'],
       help: ['--per-call <n>                issue: the most one payment may be'],
+      agent: { type: 'string', description: 'Most one payment may be' },
     },
     {
       name: 'wallet',
       takesValue: true,
       help: ['--wallet <name>               The wallet that owns the account and pays the fees'],
+      agent: { type: 'string', description: 'The wallet that owns the account and pays the fees' },
     },
     {
       name: 'yes',
@@ -71,21 +80,26 @@ export const grantDefinition: CommandDefinition = {
       help: [
         '--yes                         issue: issue the grant (without it the grant is only shown)',
       ],
+      // midnight_grant_issue sets it once the user has confirmed; midnight_grant_request must never issue.
+      agent: { notForAgents: 'a person\'s go-ahead: an agent\'s is midnight_confirm_operation' },
     },
     {
       name: 'node',
       takesValue: true,
       help: ['--node <url>                  Node RPC endpoint'],
+      agent: ENDPOINT_PARAMS.node,
     },
     {
       name: 'indexer-ws',
       takesValue: true,
       help: ['--indexer-ws <url>            Indexer WebSocket endpoint'],
+      agent: ENDPOINT_PARAMS['indexer-ws'],
     },
     {
       name: 'proof-server',
       takesValue: true,
       help: ['--proof-server <url>          Proof server endpoint'],
+      agent: ENDPOINT_PARAMS['proof-server'],
     },
   ],
   help: {
@@ -158,12 +172,7 @@ export const grantDefinition: CommandDefinition = {
         name: 'midnight_grant_status',
         description: 'The wallet\'s account: address, owner key, what it holds, number of grants (see skill).',
         annotations: { readOnlyHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            ...GRANT_COMMON_PROPERTIES,
-          },
-        },
+        params: [{ flag: 'wallet' }, { flag: 'network' }],
         argv: { subcommand: 'status', flags: 'rest' },
         order: 28,
       },
@@ -171,12 +180,7 @@ export const grantDefinition: CommandDefinition = {
         name: 'midnight_grant_list',
         description: 'Every grant on the wallet\'s account, with its limits and whether it is live.',
         annotations: { readOnlyHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            ...GRANT_COMMON_PROPERTIES,
-          },
-        },
+        params: [{ flag: 'wallet' }, { flag: 'network' }],
         argv: { subcommand: 'list', flags: 'rest' },
         order: 29,
       },
@@ -184,18 +188,16 @@ export const grantDefinition: CommandDefinition = {
         name: 'midnight_grant_request',
         description: 'What issuing from an agent\'s grant request link would grant: who spends, who they can pay, and the limits (mn\'s defaults for any not given). Issues nothing. Show the user this before midnight_grant_issue.',
         annotations: { readOnlyHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            link: { type: 'string', description: 'The grant request link' },
-            cap: { type: 'string', description: 'Most the grant may ever pay (smallest unit)' },
-            'per-call': { type: 'string', description: 'Most one payment may be' },
-            'max-coin': { type: 'string', description: 'Largest coin the agent may take to pay from' },
-            'expires-in': { type: 'string', description: 'Seconds the grant lasts' },
-            ...GRANT_COMMON_PROPERTIES,
-          },
-          required: ['link'],
-        },
+        params: [
+          { name: 'link', schema: { type: 'string', description: 'The grant request link' } },
+          { flag: 'cap' },
+          { flag: 'per-call' },
+          { flag: 'max-coin' },
+          { flag: 'expires-in' },
+          { flag: 'wallet' },
+          { flag: 'network' },
+        ],
+        required: ['link'],
         argv: { subcommand: 'issue', positionals: ['link'], flags: 'rest' },
         order: 30,
       },
@@ -203,17 +205,15 @@ export const grantDefinition: CommandDefinition = {
         name: 'midnight_grant_deploy',
         description: 'Deploy the wallet\'s account and activate its owner key (returns pending token). Takes about 48 DUST from the wallet (17 at once for the largest of five transactions) and a few minutes. Its owner key is made on this machine and kept encrypted under mn\'s passphrase (MN_PASSPHRASE).',
         annotations: { destructiveHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            ...GRANT_COMMON_PROPERTIES,
-          },
-        },
+        params: [{ flag: 'wallet' }, { flag: 'network' }],
         argv: { subcommand: 'deploy', flags: 'rest' },
         confirmation: {
           describe: (params) => {
             const { network, wallet } = confirmationTarget(params);
             return `Deploy an account for ${wallet} on ${network}; its owner key is made on this machine and kept encrypted under mn's passphrase`;
+          },
+          async check(params, call) {
+            await checkGrant(params, call);
           },
         },
         order: 31,
@@ -222,57 +222,72 @@ export const grantDefinition: CommandDefinition = {
         name: 'midnight_grant_deposit',
         description: 'Move shielded NIGHT from the wallet into its account, where a grant lets an agent spend it (returns pending token). The wallet needs that much shielded NIGHT, plus Dust for the fee. mn has no command to take it back out.',
         annotations: { destructiveHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            amount: { type: 'string', description: 'NIGHT to deposit, e.g. "2" (up to 6 decimals)' },
-            ...GRANT_COMMON_PROPERTIES,
-          },
-          required: ['amount'],
-        },
+        params: [
+          { name: 'amount', schema: { type: 'string', description: 'NIGHT to deposit, e.g. "2" (up to 6 decimals)' } },
+          { flag: 'wallet' },
+          { flag: 'network' },
+        ],
+        required: ['amount'],
         argv: { subcommand: 'deposit', positionals: ['amount'], flags: 'rest' },
-        // The text the user confirms is what the tool's check found (src/lib/mcp/tools.ts).
-        confirmation: {},
+        confirmation: {
+          // The user confirms the deposit as the check found it: both units, and the account.
+          async check(params, call) {
+            const { request, walletName, target, account } = await checkGrant(params, call);
+            if (request.subcommand !== 'deposit' || account === null) throw new Error('A deposit was prepared as something else');
+            return `Deposit ${request.amount} shielded NIGHT (${request.value} in the smallest unit) from wallet ${walletName} into its account ${account.address} on ${target.network}`;
+          },
+        },
         order: 32,
       },
       {
         name: 'midnight_grant_issue',
         description: 'Issue a grant from an agent\'s request link (returns pending token, whose description gives the grant\'s terms as the account package read them). Lets that agent spend from the account within the limits.',
         annotations: { destructiveHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            link: { type: 'string', description: 'The grant request link' },
-            cap: { type: 'string', description: 'Most the grant may ever pay (smallest unit)' },
-            'per-call': { type: 'string', description: 'Most one payment may be' },
-            'max-coin': { type: 'string', description: 'Largest coin the agent may take to pay from' },
-            'expires-in': { type: 'string', description: 'Seconds the grant lasts' },
-            ...GRANT_COMMON_PROPERTIES,
-          },
-          required: ['link'],
-        },
+        params: [
+          { name: 'link', schema: { type: 'string', description: 'The grant request link' } },
+          { flag: 'cap' },
+          { flag: 'per-call' },
+          { flag: 'max-coin' },
+          { flag: 'expires-in' },
+          { flag: 'wallet' },
+          { flag: 'network' },
+        ],
+        required: ['link'],
         argv: { subcommand: 'issue', positionals: ['link'], flags: 'rest', fixedFlags: { yes: true } },
-        // The text the user confirms is what the tool's check found (src/lib/mcp/tools.ts).
-        confirmation: {},
+        confirmation: {
+          // The link is read by the account package before a token is issued: a link
+          // that isn't one is refused here, and the user confirms the grant's terms
+          // as the build reports them, not a link they can't read.
+          async check(params, call) {
+            await checkGrant(params, call);
+            const shownOnly = call.argv();
+            delete shownOnly.flags.yes;
+            const shown = await call.run(shownOnly);
+            const { describeGrantTerms } = await import('../lib/grant/request.ts');
+            return `Issue a grant on ${shown.wallet}'s account on ${shown.network}, letting an agent spend from it within these terms `
+              + `(amounts in the token's smallest unit; limits not given took mn's defaults): ${describeGrantTerms(shown.request)}`;
+          },
+        },
         order: 33,
       },
       {
         name: 'midnight_grant_revoke',
         description: 'Revoke one grant, by its id or slot (returns pending token).',
         annotations: { destructiveHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            grant: { type: 'string', description: 'Grant id (64 hex) or slot number' },
-            ...GRANT_COMMON_PROPERTIES,
-          },
-          required: ['grant'],
-        },
+        params: [
+          { name: 'grant', schema: { type: 'string', description: 'Grant id (64 hex) or slot number' } },
+          { flag: 'wallet' },
+          { flag: 'network' },
+        ],
+        required: ['grant'],
         argv: { subcommand: 'revoke', positionals: ['grant'], flags: 'rest' },
         confirmation: {
           describe: (params) => {
             const { network, wallet } = confirmationTarget(params);
             return `Revoke grant ${params.grant} on ${wallet}'s account on ${network}`;
+          },
+          async check(params, call) {
+            await checkGrant(params, call);
           },
         },
         order: 34,
@@ -281,17 +296,15 @@ export const grantDefinition: CommandDefinition = {
         name: 'midnight_grant_revoke_all',
         description: 'Revoke every grant on the wallet\'s account (returns pending token).',
         annotations: { destructiveHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            ...GRANT_COMMON_PROPERTIES,
-          },
-        },
+        params: [{ flag: 'wallet' }, { flag: 'network' }],
         argv: { subcommand: 'revoke-all', flags: 'rest' },
         confirmation: {
           describe: (params) => {
             const { network, wallet } = confirmationTarget(params);
             return `Revoke every grant on ${wallet}'s account on ${network}`;
+          },
+          async check(params, call) {
+            await checkGrant(params, call);
           },
         },
         order: 35,

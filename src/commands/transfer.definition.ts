@@ -1,6 +1,6 @@
 // The `transfer` command, described once (plan 2B, spec §4.1).
 
-import { type CommandDefinition, confirmationTarget } from '../lib/command-definition.ts';
+import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget } from '../lib/command-definition.ts';
 
 export const transferDefinition: CommandDefinition = {
   name: 'transfer',
@@ -11,30 +11,54 @@ export const transferDefinition: CommandDefinition = {
       help: [
         '--force-shielded    Allow --shielded on preview/preprod (blocked by default — no faucet there)',
       ],
+      agent: { type: 'boolean', description: 'With shielded: allow it on preview/preprod (blocked there by default)' },
     },
-    { name: 'network', takesValue: true },
-    { name: 'no-cache', takesValue: false },
+    {
+      name: 'network',
+      takesValue: true,
+      agent: { ...NETWORK_PARAM, description: 'Network to send on (default: the selected one)' },
+    },
+    {
+      name: 'no-cache',
+      takesValue: false,
+      // The command refuses it: a write always syncs from the cache.
+      agent: { notForAgents: 'refused by transfer: writes always use the cache' },
+    },
     {
       name: 'shielded',
       takesValue: false,
       help: ['--shielded          Send from shielded balance to a shielded address'],
+      agent: { type: 'boolean', description: 'Send from the shielded balance to a shielded address' },
     },
-    { name: 'verbose', takesValue: false },
-    { name: 'wallet', takesValue: true, help: ['--wallet <name|file> Wallet name or path'] },
+    {
+      name: 'verbose',
+      takesValue: false,
+      // Its lines go to the server's stderr, which no agent reads, and it switches verbose on for the whole process (2F).
+      agent: { notForAgents: 'diagnostics for a person at a terminal' },
+    },
+    {
+      name: 'wallet',
+      takesValue: true,
+      help: ['--wallet <name|file> Wallet name or path'],
+      agent: { type: 'string' },
+    },
     {
       name: 'node',
       takesValue: true,
       help: ['--node <url>          Override substrate node RPC URL'],
+      agent: ENDPOINT_PARAMS.node,
     },
     {
       name: 'indexer-ws',
       takesValue: true,
       help: ['--indexer-ws <url>    Override indexer WebSocket URL'],
+      agent: ENDPOINT_PARAMS['indexer-ws'],
     },
     {
       name: 'proof-server',
       takesValue: true,
       help: ['--proof-server <url>  Override proof server URL'],
+      agent: ENDPOINT_PARAMS['proof-server'],
     },
   ],
   help: {
@@ -71,20 +95,21 @@ export const transferDefinition: CommandDefinition = {
         name: 'midnight_transfer',
         description: 'Send NIGHT (returns pending token; see skill).',
         annotations: { destructiveHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            to: { type: 'string', description: 'bech32m' },
-            amount: { type: 'string', description: 'NIGHT' },
-            wallet: { type: 'string' },
-          },
-          required: ['to', 'amount'],
-        },
+        params: [
+          { name: 'to', schema: { type: 'string', description: 'bech32m' } },
+          { name: 'amount', schema: { type: 'string', description: 'NIGHT' } },
+          { flag: 'wallet' },
+        ],
+        required: ['to', 'amount'],
         argv: { subcommand: { param: 'to' }, positionals: ['amount'], flags: 'rest' },
         confirmation: {
           describe: (params) => {
             const { network, wallet } = confirmationTarget(params);
             return `Send ${params.amount} NIGHT from ${wallet} to ${params.to} on ${network}`;
+          },
+          async check(_params, call) {
+            const { resolveTransferRequest } = await import('../lib/transfer-request.ts');
+            resolveTransferRequest(call.argv());
           },
         },
         order: 12,

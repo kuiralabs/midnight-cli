@@ -1,6 +1,15 @@
 // The `contract` command, described once (plan 2B, spec §4.1).
 
-import { type CommandDefinition, confirmationTarget } from '../lib/command-definition.ts';
+import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget } from '../lib/command-definition.ts';
+
+/** The subcommands that reach a chain: inspect reads only the compiled contract (--path, --managed, --name). */
+const ON_CHAIN = ['deploy', 'call', 'state'];
+
+/** The wallet a deploy or call pays from exists and can be read. */
+async function checkSendingWallet(params: Readonly<Record<string, unknown>>): Promise<void> {
+  const { loadWalletConfig, resolveWalletPath } = await import('../lib/wallet-config.ts');
+  loadWalletConfig(resolveWalletPath(params.wallet as string | undefined));
+}
 
 export const contractDefinition: CommandDefinition = {
   name: 'contract',
@@ -11,6 +20,7 @@ export const contractDefinition: CommandDefinition = {
       takesValue: true,
       subcommands: ['call', 'state'],
       help: ['--address <addr>              Contract address (call, state)'],
+      agent: { type: 'string', description: 'Contract address (hex)' },
     },
     {
       name: 'args',
@@ -19,12 +29,14 @@ export const contractDefinition: CommandDefinition = {
       help: [
         '--args \'<json>\'               JSON arguments — constructor args (deploy) or circuit args (call). Numbers auto-coerce to BigInt; "123n" strings parse as BigInt; arrays of 0–255 ints become Uint8Array',
       ],
+      agent: { type: 'string', description: 'JSON-encoded array or object of circuit arguments' },
     },
     {
       name: 'circuit',
       takesValue: true,
       subcommands: ['call'],
       help: ['--circuit <name>              Circuit to call (call)'],
+      agent: { type: 'string', description: 'Circuit name to invoke' },
     },
     {
       name: 'managed',
@@ -32,6 +44,7 @@ export const contractDefinition: CommandDefinition = {
       help: [
         '--managed <dir>               Direct path to managed/<name>/ directory (all subcommands)',
       ],
+      agent: { type: 'string', description: 'Direct path to a managed/<name>/ directory (overrides path-based contract scan)' },
     },
     {
       name: 'name',
@@ -39,16 +52,20 @@ export const contractDefinition: CommandDefinition = {
       help: [
         '--name <contract>             Specific contract when the project ships multiple (all subcommands)',
       ],
+      agent: { type: 'string', description: 'Specific contract name when the project has multiple' },
     },
     {
       name: 'network',
       takesValue: true,
+      subcommands: ON_CHAIN,
       help: ['--network <name>              Override network (default: undeployed)'],
+      agent: NETWORK_PARAM,
     },
     {
       name: 'path',
       takesValue: true,
       help: ['--path <dir>                  dApp directory (all subcommands; default: cwd)'],
+      agent: { type: 'string', description: 'dApp directory (defaults to cwd)' },
     },
     {
       name: 'secret-key',
@@ -57,16 +74,23 @@ export const contractDefinition: CommandDefinition = {
       help: [
         '--secret-key <64-hex>         Seed a caller-chosen initial private-state secret (deploy). For contracts whose constructor derives its owner from public_key(secret_key()); passed to the deploy subprocess via env, never written to disk',
       ],
+      agent: {
+        type: 'string',
+        description: 'A chosen initial private-state secret, 64 hex chars, for a contract whose constructor derives its owner from public_key(secret_key()); passed to the deploy via env, never written to disk',
+      },
     },
     {
       name: 'wallet',
       takesValue: true,
       subcommands: ['deploy', 'call', 'state'],
       help: ['--wallet <name>               Wallet to use for the operation (deploy, call, state)'],
+      agent: { type: 'string' },
     },
     {
       name: 'node',
       takesValue: true,
+      subcommands: ON_CHAIN,
+      agent: ENDPOINT_PARAMS.node,
       help: [
         '--node <url>                  Node RPC endpoint (overrides the network default and local auto-detection)',
       ],
@@ -74,12 +98,16 @@ export const contractDefinition: CommandDefinition = {
     {
       name: 'indexer-ws',
       takesValue: true,
+      subcommands: ON_CHAIN,
       help: ['--indexer-ws <url>            Indexer WebSocket endpoint'],
+      agent: ENDPOINT_PARAMS['indexer-ws'],
     },
     {
       name: 'proof-server',
       takesValue: true,
+      subcommands: ON_CHAIN,
       help: ['--proof-server <url>          Proof server endpoint'],
+      agent: ENDPOINT_PARAMS['proof-server'],
     },
   ],
   help: {
@@ -131,20 +159,15 @@ export const contractDefinition: CommandDefinition = {
         name: 'midnight_contract_inspect',
         description: 'Inspect a compiled Compact contract: name, circuits (with arg/return types), witnesses, compiler/language/runtime versions. Reads managed/<name>/compiler/contract-info.json under the dapp dir. Returns a `siblings` array listing other contracts in the same project — call again with `name` to inspect a sibling.',
         annotations: { readOnlyHint: true, idempotentHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: 'Path to dApp directory (defaults to cwd)' },
-            managed: {
-              type: 'string',
-              description: 'Direct path to a managed/<name>/ directory (overrides path)',
-            },
-            name: {
-              type: 'string',
-              description: 'Specific contract name to inspect when the project has multiple (see siblings field)',
-            },
+        // As this tool showed them before 2E.
+        params: [
+          { flag: 'path', schema: { type: 'string', description: 'Path to dApp directory (defaults to cwd)' } },
+          { flag: 'managed', schema: { type: 'string', description: 'Direct path to a managed/<name>/ directory (overrides path)' } },
+          {
+            flag: 'name',
+            schema: { type: 'string', description: 'Specific contract name to inspect when the project has multiple (see siblings field)' },
           },
-        },
+        ],
         argv: { subcommand: 'inspect', flags: 'rest' },
         order: 24,
       },
@@ -152,24 +175,19 @@ export const contractDefinition: CommandDefinition = {
         name: 'midnight_contract_state',
         description: 'Read the current ledger state of a deployed contract. Returns the ledger fields as a JSON object.',
         annotations: { readOnlyHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            address: { type: 'string', description: 'Contract address (hex)' },
-            wallet: { type: 'string' },
-            network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
-            path: {
-              type: 'string',
-              description: 'dApp directory (defaults to cwd; needed to find the compiled artifact for state decoding)',
-            },
-            managed: {
-              type: 'string',
-              description: 'Direct path to a managed/<name>/ directory (overrides path-based contract scan)',
-            },
-            name: { type: 'string', description: 'Specific contract name when the project has multiple' },
+        params: [
+          { flag: 'address' },
+          { flag: 'wallet' },
+          { flag: 'network' },
+          {
+            // As this tool showed it before 2E.
+            flag: 'path',
+            schema: { type: 'string', description: 'dApp directory (defaults to cwd; needed to find the compiled artifact for state decoding)' },
           },
-          required: ['address'],
-        },
+          { flag: 'managed' },
+          { flag: 'name' },
+        ],
+        required: ['address'],
         argv: { subcommand: 'state', flags: 'rest' },
         order: 25,
       },
@@ -177,26 +195,26 @@ export const contractDefinition: CommandDefinition = {
         name: 'midnight_contract_deploy',
         description: 'Deploy a compiled Compact contract (returns pending token; agent must show the description and redeem via midnight_confirm_operation).',
         annotations: { destructiveHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            wallet: { type: 'string' },
-            network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
-            args: { type: 'string', description: 'JSON-encoded array or object of constructor arguments' },
-            path: { type: 'string', description: 'dApp directory (defaults to cwd)' },
-            managed: {
-              type: 'string',
-              description: 'Direct path to a managed/<name>/ directory (overrides path-based contract scan)',
-            },
-            name: { type: 'string', description: 'Specific contract name when the project has multiple' },
-          },
-        },
+        params: [
+          { flag: 'wallet' },
+          { flag: 'network' },
+          // As this tool showed it before 2E.
+          { flag: 'args', schema: { type: 'string', description: 'JSON-encoded array or object of constructor arguments' } },
+          { flag: 'path' },
+          { flag: 'managed' },
+          { flag: 'name' },
+        ],
         argv: { subcommand: 'deploy', flags: 'rest' },
         confirmation: {
           describe: (params) => {
             const { network, wallet } = confirmationTarget(params);
             const argsHint = params.args ? ` with args ${params.args}` : '';
             return `Deploy contract from ${params.path ?? 'current directory'} as ${wallet} on ${network}${argsHint}`;
+          },
+          async check(params, call) {
+            const { resolveContractDeployRequest } = await import('../lib/contract/request.ts');
+            resolveContractDeployRequest(call.argv());
+            await checkSendingWallet(params);
           },
         },
         order: 26,
@@ -205,29 +223,28 @@ export const contractDefinition: CommandDefinition = {
         name: 'midnight_contract_call',
         description: 'Call a circuit on a deployed contract (returns pending token; agent must show the description and redeem via midnight_confirm_operation).',
         annotations: { destructiveHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            address: { type: 'string', description: 'Contract address (hex)' },
-            circuit: { type: 'string', description: 'Circuit name to invoke' },
-            wallet: { type: 'string' },
-            network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
-            args: { type: 'string', description: 'JSON-encoded array or object of circuit arguments' },
-            path: { type: 'string', description: 'dApp directory (defaults to cwd)' },
-            managed: {
-              type: 'string',
-              description: 'Direct path to a managed/<name>/ directory (overrides path-based contract scan)',
-            },
-            name: { type: 'string', description: 'Specific contract name when the project has multiple' },
-          },
-          required: ['address', 'circuit'],
-        },
+        params: [
+          { flag: 'address' },
+          { flag: 'circuit' },
+          { flag: 'wallet' },
+          { flag: 'network' },
+          { flag: 'args' },
+          { flag: 'path' },
+          { flag: 'managed' },
+          { flag: 'name' },
+        ],
+        required: ['address', 'circuit'],
         argv: { subcommand: 'call', flags: 'rest' },
         confirmation: {
           describe: (params) => {
             const { network, wallet } = confirmationTarget(params);
             const argsHint = params.args ? ` with args ${params.args}` : '';
             return `Call circuit ${params.circuit} on contract ${params.address} as ${wallet} on ${network}${argsHint}`;
+          },
+          async check(params, call) {
+            const { resolveContractCallRequest } = await import('../lib/contract/request.ts');
+            resolveContractCallRequest(call.argv());
+            await checkSendingWallet(params);
           },
         },
         order: 27,

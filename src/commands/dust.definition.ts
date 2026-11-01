@@ -1,17 +1,18 @@
 // The `dust` command, described once (plan 2B, spec §4.1).
 
-import type { CommandDefinition } from '../lib/command-definition.ts';
+import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM } from '../lib/command-definition.ts';
 
 export const dustDefinition: CommandDefinition = {
   name: 'dust',
   subcommands: ['register', 'status', 'export'],
   flags: [
-    { name: 'network', takesValue: true },
+    { name: 'network', takesValue: true, agent: { ...NETWORK_PARAM, description: 'Network (default: the selected one)' } },
     {
       name: 'no-cache',
       takesValue: false,
       subcommands: ['status'],
       help: ['--no-cache            Bypass wallet state cache (status only)'],
+      agent: { type: 'boolean', description: 'Bypass the wallet state cache (a fresh sync)' },
     },
     {
       name: 'seed',
@@ -21,24 +22,37 @@ export const dustDefinition: CommandDefinition = {
         '--seed <hex>          64 or 128 hex chars, 32-byte raw or 64-byte BIP-39 (export only; or set MN_SEED env to keep it off argv)',
       ],
     },
-    { name: 'verbose', takesValue: false },
-    { name: 'wallet', takesValue: true, help: ['--wallet <name|file> Wallet name or path'] },
     {
+      name: 'verbose',
+      takesValue: false,
+      // Its lines go to the server's stderr, which no agent reads, and it switches verbose on for the whole process (2F).
+      agent: { notForAgents: 'diagnostics for a person at a terminal' },
+    },
+    {
+      name: 'wallet',
+      takesValue: true,
+      help: ['--wallet <name|file> Wallet name or path'],
+      agent: { type: 'string' },
+    },
+    {
+      // Help says register only, but every subcommand resolves its network with it (src/commands/dust.ts).
       name: 'node',
       takesValue: true,
-      subcommands: ['register'],
       help: ['--node <url>          Override substrate node RPC URL (register only)'],
+      agent: ENDPOINT_PARAMS.node,
     },
     {
       name: 'indexer-ws',
       takesValue: true,
       help: ['--indexer-ws <url>    Override indexer WebSocket URL'],
+      agent: ENDPOINT_PARAMS['indexer-ws'],
     },
     {
+      // Help says register only, but every subcommand resolves its network with it (src/commands/dust.ts).
       name: 'proof-server',
       takesValue: true,
-      subcommands: ['register'],
       help: ['--proof-server <url>  Override proof server URL (register only)'],
+      agent: ENDPOINT_PARAMS['proof-server'],
     },
   ],
   help: {
@@ -88,7 +102,7 @@ export const dustDefinition: CommandDefinition = {
         name: 'midnight_dust_register',
         description: 'Register for dust.',
         annotations: { destructiveHint: true, openWorldHint: true },
-        inputSchema: { type: 'object', properties: { wallet: { type: 'string' } } },
+        params: [{ flag: 'wallet' }],
         argv: { subcommand: 'register', flags: 'rest' },
         order: 13,
       },
@@ -96,20 +110,21 @@ export const dustDefinition: CommandDefinition = {
         name: 'midnight_dust_status',
         description: 'Dust status. Default: { network, registered, registeredUtxos, unregisteredUtxos, dustBalance, dustAvailable }. Pass { full: true } for sync internals (eventsApplied, ownedUtxos, cached).',
         annotations: { readOnlyHint: true, openWorldHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            wallet: { type: 'string' },
-            'proof-server': { type: 'string' },
-            node: { type: 'string' },
-            'indexer-ws': { type: 'string' },
-            'no-cache': { type: 'string' },
-            full: {
+        // As this tool showed them before 2E.
+        params: [
+          { flag: 'wallet' },
+          { flag: 'proof-server', schema: { type: 'string' } },
+          { flag: 'node', schema: { type: 'string' } },
+          { flag: 'indexer-ws', schema: { type: 'string' } },
+          { flag: 'no-cache', schema: { type: 'string' } },
+          {
+            name: 'full',
+            schema: {
               type: 'boolean',
               description: 'Include sync internals (eventsApplied, ownedUtxos, cached) in the response (matches `mn dust status --json`). Default false (slim).',
             },
           },
-        },
+        ],
         argv: { subcommand: 'status', flags: 'rest' },
         order: 14,
       },

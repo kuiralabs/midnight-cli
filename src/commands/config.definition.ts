@@ -6,7 +6,16 @@ import { INDEXER_GRAPHQL_WS_PATH } from '../lib/constants.ts';
 export const configDefinition: CommandDefinition = {
   name: 'config',
   subcommands: ['get', 'set', 'unset'],
-  flags: [{ name: 'network', takesValue: true }],
+  flags: [
+    {
+      name: 'network',
+      takesValue: true,
+      agent: {
+        type: 'string',
+        description: 'For node / indexer-ws / proof-server: the network to read or write them for (default: the selected network)',
+      },
+    },
+  ],
   help: {
     description: 'Manage persistent config (default network, endpoints, etc.)',
     usage: 'midnight config <get|set|unset> <key> [value] [--network <name>]',
@@ -50,17 +59,8 @@ export const configDefinition: CommandDefinition = {
         name: 'midnight_config_get',
         description: 'Read config.',
         annotations: { readOnlyHint: true, idempotentHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            key: { type: 'string' },
-            network: {
-              type: 'string',
-              description: 'For node / indexer-ws / proof-server: the network to read or write them for (default: the selected network)',
-            },
-          },
-          required: ['key'],
-        },
+        params: [{ name: 'key', schema: { type: 'string' } }, { flag: 'network' }],
+        required: ['key'],
         argv: { subcommand: 'get', positionals: ['key'], flags: ['network'] },
         order: 15,
       },
@@ -68,18 +68,8 @@ export const configDefinition: CommandDefinition = {
         name: 'midnight_config_set',
         description: 'Write config.',
         annotations: { idempotentHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            key: { type: 'string' },
-            network: {
-              type: 'string',
-              description: 'For node / indexer-ws / proof-server: the network to read or write them for (default: the selected network)',
-            },
-            value: { type: 'string' },
-          },
-          required: ['key', 'value'],
-        },
+        params: [{ name: 'key', schema: { type: 'string' } }, { flag: 'network' }, { name: 'value', schema: { type: 'string' } }],
+        required: ['key', 'value'],
         argv: { subcommand: 'set', positionals: ['key', 'value'], flags: ['network'] },
         order: 16,
       },
@@ -87,17 +77,8 @@ export const configDefinition: CommandDefinition = {
         name: 'midnight_config_unset',
         description: 'Reset config.',
         annotations: { idempotentHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            key: { type: 'string' },
-            network: {
-              type: 'string',
-              description: 'For node / indexer-ws / proof-server: the network to read or write them for (default: the selected network)',
-            },
-          },
-          required: ['key'],
-        },
+        params: [{ name: 'key', schema: { type: 'string' } }, { flag: 'network' }],
+        required: ['key'],
         argv: { subcommand: 'unset', positionals: ['key'], flags: ['network'] },
         order: 18,
       },

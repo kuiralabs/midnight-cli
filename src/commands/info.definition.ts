@@ -1,12 +1,21 @@
 // The `info` command, described once (plan 2B, spec §4.1).
 
-import type { CommandDefinition } from '../lib/command-definition.ts';
+import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition.ts';
 
 export const infoDefinition: CommandDefinition = {
   name: 'info',
   flags: [
-    { name: 'network', takesValue: true },
-    { name: 'wallet', takesValue: true, help: ['--wallet <name|file> Wallet name or path'] },
+    {
+      name: 'network',
+      takesValue: true,
+      agent: { ...NETWORK_PARAM, description: 'Network whose address is shown as active (default: the selected one)' },
+    },
+    {
+      name: 'wallet',
+      takesValue: true,
+      help: ['--wallet <name|file> Wallet name or path'],
+      agent: { type: 'string' },
+    },
   ],
   help: {
     description: 'Display wallet address, network, creation date (no secrets shown)',
@@ -32,7 +41,7 @@ export const infoDefinition: CommandDefinition = {
         name: 'midnight_info',
         description: 'Wallet metadata.',
         annotations: { readOnlyHint: true, idempotentHint: true },
-        inputSchema: { type: 'object', properties: { wallet: { type: 'string' } } },
+        params: [{ flag: 'wallet' }],
         argv: { flags: 'rest' },
         order: 6,
       },

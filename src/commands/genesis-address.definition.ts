@@ -1,6 +1,6 @@
 // The `genesis-address` command, described once (plan 2B, spec §4.1).
 
-import type { CommandDefinition } from '../lib/command-definition.ts';
+import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition.ts';
 
 export const genesisAddressDefinition: CommandDefinition = {
   name: 'genesis-address',
@@ -9,6 +9,7 @@ export const genesisAddressDefinition: CommandDefinition = {
       name: 'network',
       takesValue: true,
       help: ['--network <name>    Network for address prefix (default: resolved)'],
+      agent: NETWORK_PARAM,
     },
   ],
   help: {
@@ -31,10 +32,7 @@ export const genesisAddressDefinition: CommandDefinition = {
         name: 'midnight_genesis_address',
         description: 'Genesis address.',
         annotations: { readOnlyHint: true, idempotentHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: { network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] } },
-        },
+        params: [{ flag: 'network' }],
         argv: { flags: 'rest' },
         order: 9,
       },

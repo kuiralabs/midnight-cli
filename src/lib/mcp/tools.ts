@@ -1,7 +1,11 @@
-// The MCP server's tools: what each is, how its parameters become the
-// command's argv, and which need the user's confirmation. Apart from the
-// server (src/mcp-server.ts) so the tool list can be read without starting
-// one, by the test that checks the command registry rebuilds it (plan 2B).
+// The MCP server's one check on a call's parameters (assertKnownParams), and
+// the tool list as it was before 2E.
+//
+// Superseded by the registry; removal waits for Y13: TOOLS, handlerLoaders,
+// REQUIRES_CONFIRMATION, describePendingOp and the ToolDef/ToolAnnotations
+// types. Since 2E the server takes its tools from the command definitions
+// (src/lib/mcp/registry-tools.ts) and reads none of these; the registry's
+// tests compare what it generates with them.
 
 import { type CommandRun, captureCommand } from '../run-command.ts';
 import { FULL_FLAG, type ParsedArgs } from '../argv.ts';
@@ -81,30 +85,31 @@ function transferArgs(params: Record<string, unknown>): ParsedArgs {
   return args;
 }
 
-/**
- * The parameters a call gives that the tool doesn't take, in the order given:
- * neither one of its schema's properties nor one of `passThroughFlags`, the
- * flags its command accepts when the tool passes other parameters on as flags.
- */
-export function findUnknownParams(tool: Pick<ToolDef, 'inputSchema'>, params: Record<string, unknown>, passThroughFlags: readonly string[]): string[] {
-  return Object.keys(params).filter((key) => !Object.hasOwn(tool.inputSchema.properties, key) && !passThroughFlags.includes(key));
+/** A tool's name and the schema of the parameters it takes. */
+interface ToolSchema {
+  readonly name: string;
+  readonly inputSchema: { readonly properties: Readonly<Record<string, unknown>> };
+}
+
+/** The parameters a call gives that are not in the tool's schema, in the order given. */
+export function findUnknownParams(tool: ToolSchema, params: Record<string, unknown>): string[] {
+  return Object.keys(params).filter((key) => !Object.hasOwn(tool.inputSchema.properties, key));
 }
 
 /**
- * Throw a UsageError (INVALID_ARGS) naming every parameter the tool doesn't
- * take (Y29). Each parameter used to become a flag unchecked, so a misspelt
+ * Throw a UsageError (INVALID_ARGS) naming every parameter outside the tool's
+ * schema (Y29). Each parameter used to become a flag unchecked, so a misspelt
  * one was dropped and the command ran on its defaults; the CLI refuses an
- * unknown flag the same way.
+ * unknown flag the same way. Since 2E the schema lists every parameter a tool
+ * takes, its command's flags among them, so it is the one check (2C also let
+ * through any flag of the command).
  */
-export function assertKnownParams(tool: Pick<ToolDef, 'name' | 'inputSchema'>, params: Record<string, unknown>, passThroughFlags: readonly string[]): void {
-  const unknown = findUnknownParams(tool, params, passThroughFlags);
+export function assertKnownParams(tool: ToolSchema, params: Record<string, unknown>): void {
+  const unknown = findUnknownParams(tool, params);
   if (unknown.length === 0) return;
   const accepted = Object.keys(tool.inputSchema.properties);
   const takes = accepted.length === 0 ? 'It takes no parameters' : `Its parameters: ${accepted.join(', ')}`;
-  throw new UsageError(
-    `Unknown parameter${unknown.length > 1 ? 's' : ''} for ${tool.name}: ${unknown.join(', ')}\n` +
-    takes + (passThroughFlags.length === 0 ? '' : `, and its command's flags: ${passThroughFlags.join(', ')}`),
-  );
+  throw new UsageError(`Unknown parameter${unknown.length > 1 ? 's' : ''} for ${tool.name}: ${unknown.join(', ')}\n${takes}`);
 }
 
 const GRANT_COMMON_PROPERTIES = {

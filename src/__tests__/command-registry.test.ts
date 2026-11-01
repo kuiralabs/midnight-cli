@@ -2,11 +2,11 @@
 // Since 2C the CLI's dispatch, its SDK commands and its accepted flags come
 // from it, and since 2D help, the manual and the intro; their tests pin what
 // the lists they replaced said, and those lists stay until Y13 approves their
-// removal. Until 2E switches it over, the MCP server keeps its own list; the
-// tests here rebuild it from the registry and require it to equal the list as
-// it is, so the switch can't change what an agent sees. Where the lists
+// removal. Since 2E the MCP server's tools come from it too: the tests here
+// compare what it generates with the list the server kept until then (TOOLS),
+// which differs only in the parameters the schemas gain (Y29). Where the lists
 // disagree, the definitions record what each says, and Y29 fixes them one by
-// one (2D: the intro gains grant's line).
+// one (2D: the intro gains grant's line; 2E: the schemas).
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -19,12 +19,17 @@ import {
   commandHelpSpecs,
   flagsSectionLines,
   introBriefs,
+  toolArgv,
   toolPassThroughFlags,
+  NETWORK_PARAM,
   type CommandDefinition,
+  type ToolDefinition,
 } from '../lib/command-definition.ts';
+import { getValidNetworkNames } from '../lib/network.ts';
+import { CONFIRM_TOOL, listedTools } from '../lib/mcp/registry-tools.ts';
 import { COMMAND_FLAGS, GLOBAL_FLAGS } from '../lib/command-flags.ts';
 import { commandNeedsWalletSdk, dispatchCommand, type ShellProvisions } from '../lib/command-dispatch.ts';
-import { parseArgs, type ParsedArgs } from '../lib/argv.ts';
+import { FULL_FLAG, parseArgs, type ParsedArgs } from '../lib/argv.ts';
 import { isUsageError } from '../lib/errors.ts';
 import type { Payer } from '../lib/payer.ts';
 import type { WalletProtector } from '../lib/wallet-protector.ts';
@@ -230,27 +235,92 @@ describe('the MCP server\'s handler loaders (handlerLoaders in src/lib/mcp/tools
   }, 120_000);
 });
 
-describe('the MCP tools (TOOLS in src/lib/mcp/tools.ts)', () => {
-  // What tools/list sends for a tool, built as the server builds it.
-  const listed = (t: { name: string; description: string; inputSchema: unknown; annotations?: unknown }) => ({
-    name: t.name,
-    description: t.description,
-    inputSchema: t.inputSchema,
-    ...(t.annotations ? { annotations: t.annotations } : {}),
+describe('the MCP tools, generated from the registry (TOOLS in src/lib/mcp/tools.ts, superseded by the registry; removal waits for Y13)', () => {
+  const tools = listedTools(registry);
+  const before = (name: string) => TOOLS.find((t) => t.name === name)!;
+
+  // The parameters each tool's schema gains in 2E (Y29): flags of its command
+  // that agents could pass but not see. Nothing else of tools/list changes.
+  const ADDED_IN_2E: Record<string, string[]> = {
+    midnight_info: ['network'],
+    midnight_balance: ['force-shielded', 'no-cache', 'seed', 'shielded', 'node', 'proof-server'],
+    midnight_address: ['wallet'],
+    midnight_airdrop: ['network', 'node', 'indexer-ws', 'proof-server'],
+    midnight_transfer: ['force-shielded', 'network', 'shielded', 'node', 'indexer-ws', 'proof-server'],
+    midnight_dust_register: ['network', 'node', 'indexer-ws', 'proof-server'],
+    midnight_dust_status: ['network'],
+    midnight_contract_state: ['node', 'indexer-ws', 'proof-server'],
+    midnight_contract_deploy: ['secret-key', 'node', 'indexer-ws', 'proof-server'],
+    midnight_contract_call: ['node', 'indexer-ws', 'proof-server'],
+    ...Object.fromEntries(['status', 'list', 'request', 'deploy', 'deposit', 'issue', 'revoke', 'revoke_all']
+      .map((sub) => [`midnight_grant_${sub}`, ['node', 'indexer-ws', 'proof-server']])),
+  };
+
+  it('lists the same tools in the same order, the server\'s confirm tool last, as it was', () => {
+    expect(tools.map((t) => t.name)).toStrictEqual(TOOLS.map((t) => t.name));
+    expect(tools.at(-1)).toStrictEqual(CONFIRM_TOOL);
+    expect(JSON.stringify(CONFIRM_TOOL.inputSchema)).toBe(JSON.stringify(before('midnight_confirm_operation').inputSchema));
   });
 
-  it('is rebuilt byte for byte as tools/list sends it, in its order, before the server\'s own confirm tool', () => {
-    // midnight_confirm_operation belongs to no command: the server redeems tokens with it.
-    expect(TOOLS.at(-1)!.name).toBe('midnight_confirm_operation');
-    const today = TOOLS.slice(0, -1).map(listed);
-    const rebuilt = registry.tools.map(listed);
-    expect(JSON.stringify(rebuilt, null, 2)).toBe(JSON.stringify(today, null, 2));
-    expect(rebuilt).toStrictEqual(today);
+  it('keeps every name, description, annotation and required list byte for byte', () => {
+    for (const tool of tools) {
+      const old = before(tool.name);
+      expect(JSON.stringify([tool.name, tool.description, tool.annotations, tool.inputSchema.required]), tool.name)
+        .toBe(JSON.stringify([old.name, old.description, old.annotations, old.inputSchema.required]));
+      expect(Object.keys(tool.inputSchema), tool.name).toStrictEqual(Object.keys(old.inputSchema));
+    }
+  });
+
+  it('keeps every property each schema had, in its place and as it read, and adds only the flags agents could already pass', () => {
+    for (const tool of tools) {
+      const old = before(tool.name).inputSchema.properties;
+      const keys = Object.keys(tool.inputSchema.properties);
+      const kept = Object.fromEntries(keys.slice(0, Object.keys(old).length).map((k) => [k, tool.inputSchema.properties[k]]));
+      expect(JSON.stringify(kept), tool.name).toBe(JSON.stringify(old));
+      expect(keys.slice(Object.keys(old).length), tool.name).toStrictEqual(ADDED_IN_2E[tool.name] ?? []);
+    }
+  });
+
+  it('adds only parameters 2C already let through, so no call that ran before is refused', () => {
+    for (const tool of registry.tools) {
+      for (const name of ADDED_IN_2E[tool.name] ?? []) expect(toolPassThroughFlags(registry, tool.name), `${tool.name}: ${name}`).toContain(name);
+    }
+  });
+
+  it('has, in each schema, exactly the tool\'s own params and the flags of its command that agents may pass and that apply to its subcommand', () => {
+    for (const tool of registry.tools) {
+      const sub = tool.argv.subcommand;
+      const own = tool.params.flatMap((p) => ('name' in p ? [p.name] : []));
+      const placed = tool.params.flatMap((p) => ('flag' in p ? [p.flag] : []));
+      const visible = [...tool.command.flags, ...registry.globalFlags]
+        .filter((f) => f.agent !== undefined && !('notForAgents' in f.agent))
+        .filter((f) => f.subcommands === undefined || (typeof sub === 'string' && f.subcommands.includes(sub)))
+        .map((f) => f.name);
+      const expected = tool.argv.flags === 'rest' ? [...own, ...placed, ...visible.filter((f) => !placed.includes(f))] : [...own, ...placed];
+      expect(new Set(Object.keys(tool.inputSchema.properties)), tool.name).toStrictEqual(new Set(expected));
+      for (const name of placed) expect(visible, `${tool.name} places --${name}`).toContain(name);
+      for (const name of own) expect(tool.command.flags.map((f) => f.name), `${tool.name}: ${name}`).not.toContain(name);
+    }
+  });
+
+  it('shows no flag agents never pass: --verbose, --json, the shell\'s, grant\'s --yes, transfer\'s and airdrop\'s refused --no-cache', () => {
+    for (const tool of registry.tools) {
+      for (const name of ['verbose', 'json', 'help', 'h', 'version', 'v', 'yes']) expect(Object.keys(tool.inputSchema.properties), tool.name).not.toContain(name);
+    }
+    for (const name of ['midnight_transfer', 'midnight_airdrop']) {
+      expect(Object.keys(tools.find((t) => t.name === name)!.inputSchema.properties)).not.toContain('no-cache');
+    }
+  });
+
+  it('shows a network as one of the networks mn knows', () => {
+    expect(NETWORK_PARAM.enum).toStrictEqual(getValidNetworkNames());
   });
 
   it('needs confirmation for the same tools', () => {
     const rebuilt = new Set(registry.tools.filter((t) => t.confirmation !== undefined).map((t) => t.name));
     expect(rebuilt).toStrictEqual(REQUIRES_CONFIRMATION);
+    // Every one checks the call before a token is given, as each had a check.
+    for (const tool of registry.tools.filter((t) => t.confirmation !== undefined)) expect(tool.confirmation!.check, tool.name).toBeTypeOf('function');
   });
 
   it('gives each confirmation the same text', () => {
@@ -269,14 +339,11 @@ describe('the MCP tools (TOOLS in src/lib/mcp/tools.ts)', () => {
     }
   });
 
-  it('lets a tool pass on its command\'s flags beyond its schema only when its argv passes the rest on', () => {
-    // midnight_transfer passes the rest on as flags: transfer's flags and the global ones.
+  it('lets a tool pass on its command\'s flags beyond its schema only when its argv passes the rest on (2C\'s rule, superseded by the schema)', () => {
     expect(toolPassThroughFlags(registry, 'midnight_transfer')).toStrictEqual([
       ...registry.find('transfer')!.flags.map((f) => f.name), 'help', 'h', 'json', 'version', 'v',
     ]);
-    // midnight_config_get maps only its own parameters.
     expect(toolPassThroughFlags(registry, 'midnight_config_get')).toStrictEqual([]);
-    // The server's own confirm tool belongs to no command.
     expect(toolPassThroughFlags(registry, 'midnight_confirm_operation')).toStrictEqual([]);
   });
 
@@ -291,6 +358,70 @@ describe('the MCP tools (TOOLS in src/lib/mcp/tools.ts)', () => {
       ];
       for (const name of named) expect(params, `${tool.name}: ${name}`).toContain(name);
     }
+  });
+
+  // The argv each tool's own handler built before 2E (src/lib/mcp/tools.ts at
+  // 03b55c4), for a call with these parameters. The generic mapping must
+  // build the same.
+  const args = (command: string, subcommand: string | undefined, positionals: string[], flags: Record<string, string | true>): ParsedArgs =>
+    ({ command, subcommand, positionals, flags: { json: true, ...flags } });
+  const ARGV_BEFORE_2E: [tool: string, params: Record<string, unknown>, argv: ParsedArgs][] = [
+    ['midnight_wallet_generate', { name: 'alice', network: 'preprod', seed: 'ab', force: 'true' }, args('wallet', 'generate', ['alice'], { network: 'preprod', seed: 'ab', force: true })],
+    ['midnight_wallet_generate', { name: 'alice', mnemonic: 'w o r d s', force: true }, args('wallet', 'generate', ['alice'], { mnemonic: 'w o r d s', force: true })],
+    ['midnight_wallet_list', {}, args('wallet', 'list', [], {})],
+    ['midnight_wallet_list', { full: true }, args('wallet', 'list', [], { [FULL_FLAG]: true })],
+    ['midnight_wallet_list', { full: false }, args('wallet', 'list', [], {})],
+    ['midnight_wallet_use', { name: 'bob' }, args('wallet', 'use', ['bob'], {})],
+    ['midnight_wallet_info', {}, args('wallet', 'info', [], {})],
+    ['midnight_wallet_info', { name: '', full: true }, args('wallet', 'info', [], { [FULL_FLAG]: true })],
+    ['midnight_wallet_info', { name: 'bob' }, args('wallet', 'info', ['bob'], {})],
+    ['midnight_wallet_remove', { name: 'bob' }, args('wallet', 'remove', ['bob'], {})],
+    ['midnight_info', { wallet: 'alice' }, args('info', undefined, [], { wallet: 'alice' })],
+    ['midnight_balance', { address: 'mn_addr_x', network: 'preview', 'indexer-ws': 'ws://i', full: true }, args('balance', 'mn_addr_x', [], { network: 'preview', 'indexer-ws': 'ws://i', [FULL_FLAG]: true })],
+    ['midnight_balance', { wallet: 'alice' }, args('balance', undefined, [], { wallet: 'alice' })],
+    ['midnight_address', { seed: 'ab', index: '2', network: 'undeployed' }, args('address', undefined, [], { seed: 'ab', index: '2', network: 'undeployed' })],
+    ['midnight_genesis_address', { network: 'undeployed' }, args('genesis-address', undefined, [], { network: 'undeployed' })],
+    ['midnight_inspect_cost', {}, args('inspect-cost', undefined, [], {})],
+    ['midnight_inspect_cost', { network: 'preprod' }, args('inspect-cost', undefined, [], { network: 'preprod' })],
+    ['midnight_airdrop', { amount: '10', wallet: 'bob', shielded: 'true' }, args('airdrop', '10', [], { wallet: 'bob', shielded: 'true' })],
+    ['midnight_transfer', { to: 'bob', amount: '1', wallet: 'alice', network: 'undeployed' }, args('transfer', 'bob', ['1'], { wallet: 'alice', network: 'undeployed' })],
+    ['midnight_transfer', { to: 'bob' }, args('transfer', 'bob', [], {})],
+    ['midnight_dust_register', { wallet: 'alice' }, args('dust', 'register', [], { wallet: 'alice' })],
+    ['midnight_dust_status', { 'no-cache': 'true', node: 'ws://n', full: true }, args('dust', 'status', [], { 'no-cache': 'true', node: 'ws://n', [FULL_FLAG]: true })],
+    ['midnight_config_get', { key: 'node', network: 'preview' }, args('config', 'get', ['node'], { network: 'preview' })],
+    ['midnight_config_get', { key: 'network', network: '' }, args('config', 'get', ['network'], {})],
+    ['midnight_config_set', { key: 'node', value: 'ws://n', network: 'preview' }, args('config', 'set', ['node', 'ws://n'], { network: 'preview' })],
+    ['midnight_config_unset', { key: 'node' }, args('config', 'unset', ['node'], {})],
+    ['midnight_cache_clear', { network: 'preprod', wallet: 'alice' }, args('cache', 'clear', [], { network: 'preprod', wallet: 'alice' })],
+    ['midnight_localnet_up', {}, args('localnet', 'up', [], {})],
+    ['midnight_localnet_stop', {}, args('localnet', 'stop', [], {})],
+    ['midnight_localnet_down', {}, args('localnet', 'down', [], {})],
+    ['midnight_localnet_status', {}, args('localnet', 'status', [], {})],
+    ['midnight_localnet_clean', {}, args('localnet', 'clean', [], {})],
+    ['midnight_localnet_logs', {}, args('localnet', 'logs', [], { tail: '200' })],
+    ['midnight_localnet_logs', { tail: '50' }, args('localnet', 'logs', [], { tail: '50' })],
+    ['midnight_contract_inspect', { path: './d', name: 'c' }, args('contract', 'inspect', [], { path: './d', name: 'c' })],
+    ['midnight_contract_state', { address: 'ab', network: 'undeployed' }, args('contract', 'state', [], { address: 'ab', network: 'undeployed' })],
+    ['midnight_contract_deploy', { wallet: 'alice', args: '[1]', path: './d' }, args('contract', 'deploy', [], { wallet: 'alice', args: '[1]', path: './d' })],
+    ['midnight_contract_call', { address: 'ab', circuit: 'inc', args: '[]' }, args('contract', 'call', [], { address: 'ab', circuit: 'inc', args: '[]' })],
+    ['midnight_grant_status', { wallet: 'alice', network: 'undeployed' }, args('grant', 'status', [], { wallet: 'alice', network: 'undeployed' })],
+    ['midnight_grant_list', {}, args('grant', 'list', [], {})],
+    ['midnight_grant_request', { link: 'L', cap: '5' }, args('grant', 'issue', ['L'], { cap: '5' })],
+    ['midnight_grant_deploy', { network: 'undeployed' }, args('grant', 'deploy', [], { network: 'undeployed' })],
+    ['midnight_grant_deposit', { amount: '1.5', wallet: 'alice' }, args('grant', 'deposit', ['1.5'], { wallet: 'alice' })],
+    ['midnight_grant_issue', { link: 'L', 'per-call': '2' }, args('grant', 'issue', ['L'], { 'per-call': '2', yes: true })],
+    ['midnight_grant_revoke', { grant: '3' }, args('grant', 'revoke', ['3'], {})],
+    ['midnight_grant_revoke_all', {}, args('grant', 'revoke-all', [], {})],
+    ['midnight_test_create', { path: './d', 'no-ai': true, force: false, port: '4173' }, args('test', 'create', [], { path: './d', 'no-ai': true, port: '4173' })],
+  ];
+
+  it('builds the argv each tool\'s own handler built', () => {
+    for (const [name, params, expected] of ARGV_BEFORE_2E) {
+      const tool = registry.tools.find((t) => t.name === name)!;
+      expect(toolArgv(tool, params), `${name} ${JSON.stringify(params)}`).toStrictEqual(expected);
+    }
+    // Every tool is covered.
+    expect(new Set(ARGV_BEFORE_2E.map(([name]) => name))).toStrictEqual(new Set(registry.tools.map((t) => t.name)));
   });
 });
 
@@ -321,9 +452,59 @@ describe('createCommandRegistry', () => {
     expect(() => createCommandRegistry([{ ...base, flags: [{ name: 'a', takesValue: false, subcommands: ['nope'] }], help: undefined }], [])).toThrow(/"nope"/);
   });
 
+  const tool: ToolDefinition = { name: 't', description: 'T', params: [], argv: { flags: [] }, order: 1 };
+  const withTools = (flags: CommandDefinition['flags'], ...tools: ToolDefinition[]): CommandDefinition =>
+    ({ ...base, subcommands: ['s', 'r'], flags, help: undefined, mcp: { tools } });
+
   it('refuses two tools with one name or one place', () => {
-    const tool = { name: 't', description: 'T', inputSchema: { type: 'object' as const, properties: {} }, argv: { flags: 'rest' as const }, order: 1 };
     expect(() => createCommandRegistry([{ ...base, mcp: { tools: [tool, tool] } }], [])).toThrow(/MCP tool "t"/);
     expect(() => createCommandRegistry([{ ...base, mcp: { tools: [tool, { ...tool, name: 'u' }] } }], [])).toThrow(/place "1"/);
+  });
+
+  it('generates a tool\'s schema: its params in order, then the flags it passes on that agents may pass and apply to its subcommand', () => {
+    const registry = createCommandRegistry([withTools([
+      { name: 'z', takesValue: true, agent: { type: 'string', description: 'Z' } },
+      { name: 'only-r', takesValue: true, subcommands: ['r'], agent: { type: 'string' } },
+      { name: 'loud', takesValue: false, agent: { notForAgents: 'a terminal\'s' } },
+      { name: 'a', takesValue: true, subcommands: ['s'], agent: { type: 'string', enum: ['x'] } },
+    ], {
+      ...tool,
+      params: [{ name: 'id', schema: { type: 'string' } }, { flag: 'a', schema: { type: 'string', description: 'as shown before' } }],
+      required: ['id'],
+      argv: { subcommand: 's', positionals: ['id'], flags: 'rest' },
+    })], [{ name: 'json', takesValue: false, agent: { notForAgents: 'set by the server' } }]);
+    expect(JSON.stringify(registry.tools[0]!.inputSchema)).toBe(JSON.stringify({
+      type: 'object',
+      properties: { id: { type: 'string' }, a: { type: 'string', description: 'as shown before' }, z: { type: 'string', description: 'Z' } },
+      required: ['id'],
+    }));
+  });
+
+  it('refuses a tool that places a flag its command lacks, one hidden from agents, or one not of its subcommand', () => {
+    const flags = [
+      { name: 'hidden', takesValue: false, agent: { notForAgents: 'why' } },
+      { name: 'only-r', takesValue: true, subcommands: ['r'], agent: { type: 'string' as const } },
+    ];
+    const placing = (flag: string) => withTools(flags, { ...tool, params: [{ flag }], argv: { subcommand: 's', flags: [flag] } });
+    expect(() => createCommandRegistry([placing('nope')], [])).toThrow(/--nope, which x doesn't accept/);
+    expect(() => createCommandRegistry([placing('hidden')], [])).toThrow(/--hidden, which says no schema/);
+    expect(() => createCommandRegistry([placing('only-r')], [])).toThrow(/--only-r, which doesn't apply/);
+  });
+
+  it('refuses a tool passing the rest on when a flag of its subcommand says neither how agents see it nor why not', () => {
+    const rest = { ...tool, argv: { subcommand: 's', flags: 'rest' as const } };
+    expect(() => createCommandRegistry([withTools([{ name: 'quiet', takesValue: false }], rest)], [])).toThrow(/--quiet on, which says neither/);
+    // A flag of another subcommand needs nothing.
+    expect(() => createCommandRegistry([withTools([{ name: 'quiet', takesValue: false, subcommands: ['r'] }], rest)], [])).not.toThrow();
+    // Nor does a global flag, which the tool passes on too.
+    expect(() => createCommandRegistry([withTools([], rest)], [{ name: 'json', takesValue: false }])).toThrow(/--json on, which says neither/);
+  });
+
+  it('refuses an own parameter named like a flag, a mapping to a parameter it lacks, and a required one its schema lacks', () => {
+    const flags = [{ name: 'a', takesValue: true, agent: { type: 'string' as const } }];
+    expect(() => createCommandRegistry([withTools(flags, { ...tool, params: [{ name: 'a', schema: { type: 'string' } }] })], [])).toThrow(/"a" is also a flag/);
+    expect(() => createCommandRegistry([withTools(flags, { ...tool, argv: { positionals: ['id'], flags: [] } })], [])).toThrow(/"id" fills/);
+    expect(() => createCommandRegistry([withTools(flags, { ...tool, argv: { flags: ['a'] } })], [])).toThrow(/passes "a"/);
+    expect(() => createCommandRegistry([withTools(flags, { ...tool, required: ['b'] })], [])).toThrow(/requires "b"/);
   });
 });

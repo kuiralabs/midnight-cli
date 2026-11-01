@@ -1,6 +1,6 @@
 // The `cache` command, described once (plan 2B, spec §4.1).
 
-import type { CommandDefinition } from '../lib/command-definition.ts';
+import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition.ts';
 
 export const cacheDefinition: CommandDefinition = {
   name: 'cache',
@@ -10,11 +10,13 @@ export const cacheDefinition: CommandDefinition = {
       name: 'network',
       takesValue: true,
       help: ['--network <name>    Only clear cache for this network'],
+      agent: NETWORK_PARAM,
     },
     {
       name: 'wallet',
       takesValue: true,
       help: ['--wallet <name|file> Only clear cache for this wallet'],
+      agent: { type: 'string' },
     },
   ],
   help: {
@@ -47,13 +49,7 @@ export const cacheDefinition: CommandDefinition = {
         name: 'midnight_cache_clear',
         description: 'Clear sync cache.',
         annotations: { destructiveHint: true, idempotentHint: true },
-        inputSchema: {
-          type: 'object',
-          properties: {
-            network: { type: 'string', enum: ['preprod', 'preview', 'undeployed'] },
-            wallet: { type: 'string' },
-          },
-        },
+        params: [{ flag: 'network' }, { flag: 'wallet' }],
         argv: { subcommand: 'clear', flags: 'rest' },
         order: 17,
       },
