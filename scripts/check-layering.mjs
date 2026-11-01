@@ -8,12 +8,10 @@
 // commands: a command is an adapter over library functions, and only the shell
 // and the MCP server dispatch to one.
 //
-// Usage: node scripts/check-layering.mjs [--all]
-// Imported, it exports sourceFiles and homeOf: which package each file of src/ is in,
-// and guidanceRule: the rule an import breaks around a package's agent guidance.
-// Exits 1 when a file has no package, or an import breaks a rule. The shell and
-// the MCP server are reported but do not fail the check until the command
-// registry rewires them; --all makes them fail too.
+// Usage: node scripts/check-layering.mjs
+// Imported, it exports sourceFiles and homeOf: which package each file of src/ is in;
+// importRule and guidanceRule: the rule an import breaks; and findLayeringProblems,
+// which the suite runs. Exits 1 when a file has no package, or an import breaks a rule.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -78,10 +76,17 @@ const MAY_IMPORT = {
   connect: ['core', 'chain', 'wallet', 'connect'],
   dev: ['core', 'chain', 'wallet', 'contract', 'connect', 'dev'],
   grant: ['core', 'chain', 'wallet', 'contract', 'connect', 'dev', 'grant'],
+  // The shell installs every package's commands and guidance, picks the payer
+  // and the protectors, and starts the MCP server.
+  shell: [...PACKAGES, 'mcp', 'shell'],
+  // The MCP server runs the registry the shell installs, through the shell's
+  // host and runner, and pays through connect's serve payer. It reaches no
+  // other package: every tool comes from the registry.
+  mcp: ['core', 'connect', 'shell', 'mcp'],
 };
 
-// Rewired by the command registry, so reported but not failed until then.
-const DEFERRED = new Set(['shell', 'mcp']);
+// They dispatch to commands and assemble every package's guidance.
+const DISPATCHERS = new Set(['shell', 'mcp']);
 
 const MIDNIGHT_SDK = /^@midnight(-ntwrk|ntwrk)\//;
 const ACCOUNT_CHAIN = /^@kuiralabs\/midnight-account/;
@@ -121,7 +126,24 @@ export function guidanceRule(fromRel, toRel) {
   const targetHome = homeOf(join(SRC, toRel));
   if (home === undefined || targetHome === undefined || targetHome === home) return undefined;
   if (isGuidance(fromRel) && targetHome !== 'core') return `${home} guidance → ${targetHome}`;
-  if (isGuidance(toRel) && !DEFERRED.has(home)) return `${home} → ${targetHome} guidance`;
+  if (isGuidance(toRel) && !DISPATCHERS.has(home)) return `${home} → ${targetHome} guidance`;
+  return undefined;
+}
+
+/**
+ * The rule an import from one file of src/ to another breaks, or undefined.
+ * Paths are relative to src/; a target with no package is not judged here.
+ */
+export function importRule(fromRel, toRel) {
+  const home = homeOf(join(SRC, fromRel));
+  const targetHome = homeOf(join(SRC, toRel));
+  if (home === undefined || targetHome === undefined) return undefined;
+  const guidance = guidanceRule(fromRel, toRel);
+  if (guidance !== undefined) return guidance;
+  const isCommand = (path) => path.startsWith('commands/');
+  const callsCommand = isCommand(toRel) && (!isCommand(fromRel) || targetHome !== home);
+  if (callsCommand && !DISPATCHERS.has(home)) return `${isCommand(fromRel) ? 'command' : 'library'} → ${targetHome} command`;
+  if (!MAY_IMPORT[home].includes(targetHome)) return `${home} → ${targetHome}`;
   return undefined;
 }
 
@@ -135,7 +157,8 @@ function importsOf(file) {
   return found;
 }
 
-function check() {
+/** Files with no package, and imports that break a rule. */
+export function findLayeringProblems() {
   const unhomed = [];
   const violations = [];
   for (const file of sourceFiles(SRC)) {
@@ -148,26 +171,8 @@ function check() {
     for (const { specifier, line } of importsOf(file)) {
       const where = `src/${rel}:${line}`;
       if (specifier.startsWith('.')) {
-        const target = resolve(dirname(file), specifier);
-        const targetHome = homeOf(target);
-        if (targetHome === undefined) continue;
-        const guidance = guidanceRule(rel, relative(SRC, target));
-        if (guidance !== undefined) {
-          violations.push({ home, rule: guidance, where, specifier });
-          continue;
-        }
-        const isCommand = (path) => path.startsWith('commands/');
-        const callsCommand = isCommand(relative(SRC, target)) && (!isCommand(rel) || targetHome !== home);
-        if (callsCommand && !DEFERRED.has(home)) {
-          violations.push({ home, rule: `${isCommand(rel) ? 'command' : 'library'} → ${targetHome} command`, where, specifier });
-          continue;
-        }
-        if (targetHome === home) continue;
-        if (DEFERRED.has(home)) {
-          violations.push({ home, rule: `${home} → ${targetHome}`, where, specifier });
-        } else if (!MAY_IMPORT[home].includes(targetHome)) {
-          violations.push({ home, rule: `${home} → ${targetHome}`, where, specifier });
-        }
+        const rule = importRule(rel, relative(SRC, resolve(dirname(file), specifier)));
+        if (rule !== undefined) violations.push({ home, rule, where, specifier });
       } else if (SDK_FREE.has(home) && MIDNIGHT_SDK.test(specifier)) {
         violations.push({ home, rule: `${home} → Midnight SDK`, where, specifier });
       } else if (home !== 'grant' && ACCOUNT_CHAIN.test(specifier)) {
@@ -178,10 +183,7 @@ function check() {
   return { unhomed, violations };
 }
 
-function report({ unhomed, violations }, failDeferred) {
-  const failing = violations.filter((v) => failDeferred || !DEFERRED.has(v.home));
-  const deferred = violations.filter((v) => !failDeferred && DEFERRED.has(v.home));
-
+function report({ unhomed, violations }) {
   for (const rel of unhomed) process.stdout.write(`no package: src/${rel}\n`);
 
   const byRule = (list) => {
@@ -189,22 +191,18 @@ function report({ unhomed, violations }, failDeferred) {
     for (const v of list) groups.set(v.rule, [...(groups.get(v.rule) ?? []), v]);
     return [...groups].sort(([a], [b]) => a.localeCompare(b));
   };
-  for (const [rule, list] of byRule(failing)) {
+  for (const [rule, list] of byRule(violations)) {
     process.stdout.write(`\n${rule} (${list.length})\n`);
     for (const v of list) process.stdout.write(`  ${v.where}  ${v.specifier}\n`);
   }
-  if (deferred.length > 0) {
-    process.stdout.write(`\nDeferred to the command registry, not failing: ${deferred.length} imports from the shell and the MCP server\n`);
-    for (const [rule, list] of byRule(deferred)) process.stdout.write(`  ${rule}: ${list.length}\n`);
-  }
 
-  const problems = unhomed.length + failing.length;
-  process.stdout.write(`\n${problems === 0 ? 'Layering holds.' : `${failing.length} import(s) break the layering; ${unhomed.length} file(s) have no package.`}\n`);
+  const problems = unhomed.length + violations.length;
+  process.stdout.write(`\n${problems === 0 ? 'Layering holds.' : `${violations.length} import(s) break the layering; ${unhomed.length} file(s) have no package.`}\n`);
   return problems === 0;
 }
 
-// Run as a script; imported (by the SDK-free base test), it only lends its package table.
+// Run as a script; imported, it lends its package table and its rules.
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  const ok = report(check(), process.argv.includes('--all'));
+  const ok = report(findLayeringProblems());
   process.exit(ok ? 0 : 1);
 }
