@@ -9,7 +9,8 @@
 // and the MCP server dispatch to one.
 //
 // Usage: node scripts/check-layering.mjs [--all]
-// Imported, it exports sourceFiles and homeOf: which package each file of src/ is in.
+// Imported, it exports sourceFiles and homeOf: which package each file of src/ is in,
+// and guidanceRule: the rule an import breaks around a package's agent guidance.
 // Exits 1 when a file has no package, or an import breaks a rule. The shell and
 // the MCP server are reported but do not fail the check until the command
 // registry rewires them; --all makes them fail too.
@@ -21,20 +22,26 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'src');
 
+// The packages of the split, in the layering's order.
+const PACKAGES = ['core', 'chain', 'wallet', 'contract', 'connect', 'dev', 'grant'];
+
 // Which package a file belongs to: the first pattern that matches its path
 // under src/ wins. A file that matches nothing fails the check.
 const HOMES = [
   ['shell', /^wallet\.ts$/],
   // help plays the shell's intro, and manual builds the full manual; both render the installed registry (Y24, 2D).
   ['shell', /^commands\/(help|manual)(\.definition)?\.ts$/],
-  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host|installed-commands|command-dispatch)\.ts$/],
+  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host|installed-commands|command-dispatch|agent-manual)\.ts$/],
   ['shell', /^ui\/(animate|art)\.ts$/],
   ['mcp', /^mcp-server\.ts$/],
   ['mcp', /^lib\/mcp\//],
 
+  // A package's agent guidance (<package>.guidance.ts) sits beside its commands (2G).
+  ...PACKAGES.map((pkg) => [pkg, new RegExp(`^commands/${pkg}\\.guidance\\.ts$`)]),
+
   // A command's definition (<name>.definition.ts) lives in its command's package.
   ['core', /^commands\/config(\.definition)?\.ts$/],
-  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program)\.ts$/],
+  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
   ['dev', /^ui\/(test-create-prompt|dev-keys)\.ts$/],
 
@@ -101,6 +108,23 @@ export function homeOf(file) {
   return HOMES.find(([, pattern]) => pattern.test(rel))?.[0];
 }
 
+const isGuidance = (rel) => /\.guidance\.ts$/.test(rel);
+
+/**
+ * Agent guidance is plain text for the shell and the MCP server to assemble
+ * (2G): a guidance file imports only core (the guidance type) and its own
+ * package, and no other package imports it. Paths are relative to src/.
+ * Returns the rule the import breaks, or undefined.
+ */
+export function guidanceRule(fromRel, toRel) {
+  const home = homeOf(join(SRC, fromRel));
+  const targetHome = homeOf(join(SRC, toRel));
+  if (home === undefined || targetHome === undefined || targetHome === home) return undefined;
+  if (isGuidance(fromRel) && targetHome !== 'core') return `${home} guidance → ${targetHome}`;
+  if (isGuidance(toRel) && !DEFERRED.has(home)) return `${home} → ${targetHome} guidance`;
+  return undefined;
+}
+
 function importsOf(file) {
   const source = readFileSync(file, 'utf8');
   const found = [];
@@ -127,6 +151,11 @@ function check() {
         const target = resolve(dirname(file), specifier);
         const targetHome = homeOf(target);
         if (targetHome === undefined) continue;
+        const guidance = guidanceRule(rel, relative(SRC, target));
+        if (guidance !== undefined) {
+          violations.push({ home, rule: guidance, where, specifier });
+          continue;
+        }
         const isCommand = (path) => path.startsWith('commands/');
         const callsCommand = isCommand(relative(SRC, target)) && (!isCommand(rel) || targetHome !== home);
         if (callsCommand && !DEFERRED.has(home)) {

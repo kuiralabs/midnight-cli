@@ -2,8 +2,6 @@
 // Exposes all CLI commands as MCP tools via stdio transport
 // Launch: midnight-wallet-mcp (or: node dist/mcp-server.js)
 
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -29,6 +27,7 @@ import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { installCliHost, type CliHost } from './lib/cli-host.ts';
 import { installedCommands } from './lib/installed-commands.ts';
+import { skillCore, skillFull } from './lib/mcp/skills.ts';
 
 // Skill resources — teach MCP clients how to use this CLI conversationally.
 // Split into:
@@ -36,12 +35,11 @@ import { installedCommands } from './lib/installed-commands.ts';
 //   - /full: canonical flows, error recovery, concept primers. ~2.3k tokens.
 //           Fetch on demand (errors, multi-step flows, concept questions).
 // The original `midnight-wallet://skill` URI stays as a deprecated alias for
-// /full so existing MCP clients keep working.
+// /full so existing MCP clients keep working. Both are assembled from the
+// installed packages' guidance at each read (2G).
 const SKILL_CORE_URI = 'midnight-wallet://skill/core';
 const SKILL_FULL_URI = 'midnight-wallet://skill/full';
 const SKILL_LEGACY_URI = 'midnight-wallet://skill';
-const SKILL_CORE_PATH = fileURLToPath(new URL('../docs/SKILL-CORE.md', import.meta.url));
-const SKILL_FULL_PATH = fileURLToPath(new URL('../docs/SKILL.md', import.meta.url));
 
 const confirmationStore = createConfirmationStore();
 
@@ -76,14 +74,14 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => ({
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const uri = request.params.uri;
   if (uri === SKILL_CORE_URI) {
-    const text = readFileSync(SKILL_CORE_PATH, 'utf-8');
+    const text = skillCore(installedCommands);
     return { contents: [{ uri, mimeType: 'text/markdown', text }] };
   }
   // Legacy `midnight-wallet://skill` aliases to /full so existing clients keep
   // working. Not advertised in resources/list — new clients should use
   // /core + /full explicitly.
   if (uri === SKILL_FULL_URI || uri === SKILL_LEGACY_URI) {
-    const text = readFileSync(SKILL_FULL_PATH, 'utf-8');
+    const text = skillFull(installedCommands);
     return { contents: [{ uri, mimeType: 'text/markdown', text }] };
   }
   throw new Error(`Unknown resource: ${uri}`);

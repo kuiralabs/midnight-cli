@@ -8,9 +8,11 @@
 // The shell's dispatch and flag checks read the registry since 2C; help, the
 // manual and the intro since 2D; the MCP server's tools since 2E, each tool's
 // schema generated from what it takes and its command's flags. Where the old
-// lists disagreed, Y29 (the plan's STATUS) fixes them in 2C–2G.
+// lists disagreed, Y29 (the plan's STATUS) fixes them in 2C–2G. Since 2G a
+// package is installed with its commands and its agent guidance (D19).
 
 import { FULL_FLAG, type ParsedArgs } from './argv.ts';
+import { type PackageGuidance, type ToolsTableRow, assertDistinctPlaces } from './agent-guidance.ts';
 import type { CallContext, CommandOutcome } from './call-context.ts';
 
 /** A parameter as an MCP tool's schema shows it to an agent. */
@@ -196,6 +198,13 @@ export interface CommandDefinition {
   readonly mcp?: { readonly tools: readonly ToolDefinition[] };
 }
 
+/** A package as the shell installs it: its commands and what it tells agents (spec §6.1, D19). */
+export interface CommandPackage {
+  readonly name: string;
+  readonly commands: readonly CommandDefinition[];
+  readonly guidance: PackageGuidance;
+}
+
 /** A tool as the registry holds it: its definition, its generated schema, and the command it runs. */
 export interface RegisteredTool extends ToolDefinition {
   readonly inputSchema: ToolInputSchema;
@@ -219,6 +228,8 @@ export interface CommandRegistry {
   find(name: string): CommandDefinition | undefined;
   /** Every MCP tool, in the server's order, each with its generated schema. */
   readonly tools: readonly RegisteredTool[];
+  /** The installed packages, with their guidance; none when the registry was made from bare commands. */
+  readonly packages: readonly CommandPackage[];
 }
 
 /** Thrown when definitions contradict each other or themselves. */
@@ -413,7 +424,52 @@ export function createCommandRegistry(
     globalFlagsHelp,
     find: (name) => commands.find((command) => command.name === name),
     tools: tools.sort((a, b) => a.order - b.order),
+    packages: [],
   };
+}
+
+/** Refuses guidance that contradicts itself or another package's: one place, one piece; a row only for the package's own tool, once. */
+function checkGuidance(packages: readonly CommandPackage[]): void {
+  try {
+    assertDistinctPlaces(packages.flatMap((pkg) => pkg.guidance.pieces));
+  } catch (err) {
+    throw new CommandDefinitionError((err as Error).message);
+  }
+  const rows: ToolsTableRow[] = [];
+  for (const pkg of packages) {
+    const own = new Set(pkg.commands.flatMap((command) => (command.mcp?.tools ?? []).map((tool) => tool.name)));
+    for (const row of pkg.guidance.toolsTable ?? []) {
+      if (!own.has(row.tool)) throw new CommandDefinitionError(`${pkg.name}: its tools table has a row for ${row.tool}, which none of its commands defines`);
+      rows.push(row);
+    }
+  }
+  assertUnique(rows.map((row) => row.tool), 'tools table row for');
+  assertUnique(rows.map((row) => `${row.group} ${row.order}`), 'tools table place');
+}
+
+/**
+ * Collects packages into a registry. `helpOrder` names commands in the order
+ * help lists them; a command it doesn't name follows in its package's order
+ * (a plugin's, D5). Every command is in one package.
+ */
+export function createPackageRegistry(
+  packages: readonly CommandPackage[],
+  helpOrder: readonly string[],
+  globalFlags: readonly FlagDefinition[],
+  globalFlagsHelp: readonly GlobalFlagHelp[] = [],
+): CommandRegistry {
+  assertUnique(packages.map((pkg) => pkg.name), 'package');
+  const all = packages.flatMap((pkg) => pkg.commands);
+  assertUnique(all.map((command) => command.name), 'command');
+  assertUnique(helpOrder, 'help place for');
+  const ordered = helpOrder.map((name) => {
+    const command = all.find((c) => c.name === name);
+    if (command === undefined) throw new CommandDefinitionError(`help's order names "${name}", which no package installs`);
+    return command;
+  });
+  const commands = [...ordered, ...all.filter((command) => !helpOrder.includes(command.name))];
+  checkGuidance(packages);
+  return { ...createCommandRegistry(commands, globalFlags, globalFlagsHelp), packages };
 }
 
 /**

@@ -93,8 +93,9 @@ describe('the accepted flags match the code', () => {
     return flags;
   }
 
-  // A command's definition (<name>.definition.ts) sits beside it and is not a command.
-  const commandFiles = readdirSync(COMMANDS_DIR).filter((f) => f.endsWith('.ts') && !f.endsWith('.definition.ts'));
+  // A command's definition (<name>.definition.ts) sits beside it and is not a
+  // command, nor is a package's agent guidance (<package>.guidance.ts, 2G).
+  const commandFiles = readdirSync(COMMANDS_DIR).filter((f) => f.endsWith('.ts') && !f.endsWith('.definition.ts') && !f.endsWith('.guidance.ts'));
 
   it('has an entry for every command file, and no entry without one', () => {
     expect(installedCommands.commands.map((c) => c.name).sort()).toEqual(commandFiles.map((f) => f.replace(/\.ts$/, '')).sort());
