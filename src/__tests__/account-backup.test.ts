@@ -67,11 +67,7 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-// Each test derives keys from the passphrase several times, at its real cost:
-// about 3 s on a laptop and over 7 s on a CI runner, past vitest's default 5 s.
-const KEY_DERIVING = { timeout: 60_000 };
-
-describe("an account's backup", KEY_DERIVING, () => {
+describe("an account's backup", () => {
   it('holds nothing in the clear but the network and the address', async () => {
     await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup);
     const text = fs.readFileSync(backup, 'utf8');
@@ -110,7 +106,7 @@ describe("an account's backup", KEY_DERIVING, () => {
   });
 });
 
-describe("a backup made for another device", KEY_DERIVING, () => {
+describe("a backup made for another device", () => {
   it('leaves out this machine\'s owner key, and gives the device it was made for the records', async () => {
     establishPassphrase(stateRootIn(there), PASSPHRASE);
     fs.mkdirSync(toDir, { recursive: true });
