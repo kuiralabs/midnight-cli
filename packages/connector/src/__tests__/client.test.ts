@@ -16,12 +16,12 @@ interface MockServerOptions {
   handlers?: Record<string, (params: any) => any>;
 }
 
-function createMockServer(options: MockServerOptions = {}): {
+async function createMockServer(options: MockServerOptions = {}): Promise<{
   wss: WebSocketServer;
   port: number;
   url: string;
   close: () => Promise<void>;
-} {
+}> {
   const networkId = options.networkId ?? 'Undeployed';
 
   const defaultHandlers: Record<string, (params: any) => any> = {
@@ -76,7 +76,9 @@ function createMockServer(options: MockServerOptions = {}): {
 
   const handlers = { ...defaultHandlers, ...options.handlers };
 
-  const wss = new WebSocketServer({ port: 0 });
+  const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+  // Bound to the address the client dials, so no other test's server can take the same port there.
+  await new Promise<void>((resolve) => wss.once('listening', () => resolve()));
   const port = (wss.address() as any).port as number;
 
   wss.on('connection', (ws) => {
@@ -138,14 +140,14 @@ afterEach(async () => {
 
 describe('createWalletClient', () => {
   it('connects and returns a client', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
     expect(client).toBeDefined();
     client.disconnect();
   });
 
   it('throws on network mismatch during connect', async () => {
-    server = createMockServer({ networkId: 'Undeployed' });
+    server = await createMockServer({ networkId: 'Undeployed' });
     try {
       await createWalletClient({ url: server.url, networkId: 'PreProd' });
       expect.fail('Should have thrown');
@@ -156,7 +158,7 @@ describe('createWalletClient', () => {
   });
 
   it('closes its socket when the connect handshake is refused, so the caller\'s process can exit', async () => {
-    server = createMockServer({ networkId: 'Undeployed' });
+    server = await createMockServer({ networkId: 'Undeployed' });
     const closed = new Promise<void>((resolve) => {
       server!.wss.on('connection', (ws) => ws.on('close', () => resolve()));
     });
@@ -170,7 +172,7 @@ describe('createWalletClient', () => {
   // ── Balance methods — bigint round-trip ──
 
   it('getUnshieldedBalances returns native bigint values', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
 
     const balances = await client.getUnshieldedBalances();
@@ -180,7 +182,7 @@ describe('createWalletClient', () => {
   });
 
   it('getShieldedBalances returns empty record', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
 
     const balances = await client.getShieldedBalances();
@@ -189,7 +191,7 @@ describe('createWalletClient', () => {
   });
 
   it('getDustBalance returns bigint cap and balance', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
 
     const dust = await client.getDustBalance();
@@ -202,7 +204,7 @@ describe('createWalletClient', () => {
   // ── Address methods ──
 
   it('getUnshieldedAddress returns address string', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
 
     const { unshieldedAddress } = await client.getUnshieldedAddress();
@@ -211,7 +213,7 @@ describe('createWalletClient', () => {
   });
 
   it('getShieldedAddresses returns all three fields', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
 
     const result = await client.getShieldedAddresses();
@@ -222,7 +224,7 @@ describe('createWalletClient', () => {
   });
 
   it('getDustAddress returns dust address', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
 
     const { dustAddress } = await client.getDustAddress();
@@ -234,7 +236,7 @@ describe('createWalletClient', () => {
 
   it('getTxHistory sends pageNumber and pageSize params', async () => {
     let receivedParams: any;
-    server = createMockServer({
+    server = await createMockServer({
       handlers: {
         getTxHistory: (params) => {
           receivedParams = params;
@@ -259,7 +261,7 @@ describe('createWalletClient', () => {
   // ── Configuration ──
 
   it('getConfiguration returns full config', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
 
     const config = await client.getConfiguration();
@@ -270,7 +272,7 @@ describe('createWalletClient', () => {
   });
 
   it('getConnectionStatus returns connected', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
 
     const status = await client.getConnectionStatus();
@@ -282,7 +284,7 @@ describe('createWalletClient', () => {
 
   it('makeTransfer sends correct params and returns tx hex', async () => {
     let receivedParams: any;
-    server = createMockServer({
+    server = await createMockServer({
       handlers: {
         makeTransfer: (params) => {
           receivedParams = params;
@@ -308,7 +310,7 @@ describe('createWalletClient', () => {
 
   it('submitTransaction sends tx param correctly', async () => {
     let receivedParams: any;
-    server = createMockServer({
+    server = await createMockServer({
       handlers: {
         submitTransaction: (params) => {
           receivedParams = params;
@@ -326,7 +328,7 @@ describe('createWalletClient', () => {
 
   it('balanceUnsealedTransaction sends tx and options params', async () => {
     let receivedParams: any;
-    server = createMockServer({
+    server = await createMockServer({
       handlers: {
         balanceUnsealedTransaction: (params) => {
           receivedParams = params;
@@ -345,7 +347,7 @@ describe('createWalletClient', () => {
 
   it('balanceSealedTransaction sends tx param', async () => {
     let receivedParams: any;
-    server = createMockServer({
+    server = await createMockServer({
       handlers: {
         balanceSealedTransaction: (params) => {
           receivedParams = params;
@@ -363,7 +365,7 @@ describe('createWalletClient', () => {
 
   it('makeIntent dispatches with inputs, outputs, and options', async () => {
     let receivedParams: any;
-    server = createMockServer({
+    server = await createMockServer({
       handlers: {
         makeIntent: (params) => {
           receivedParams = params;
@@ -386,7 +388,7 @@ describe('createWalletClient', () => {
 
   it('signData sends correct params and returns signature', async () => {
     let receivedParams: any;
-    server = createMockServer({
+    server = await createMockServer({
       handlers: {
         signData: (params) => {
           receivedParams = params;
@@ -408,7 +410,7 @@ describe('createWalletClient', () => {
   // ── Proving provider ──
 
   it('getProvingProvider returns proverServerUri and working stubs', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
 
     const keyMaterialProvider = {
@@ -443,7 +445,7 @@ describe('createWalletClient', () => {
 
   it('hintUsage sends methodNames array correctly', async () => {
     let receivedParams: any;
-    server = createMockServer({
+    server = await createMockServer({
       handlers: {
         hintUsage: (params) => {
           receivedParams = params;
@@ -461,7 +463,7 @@ describe('createWalletClient', () => {
   // ── Disconnect callback ──
 
   it('onDisconnect fires when server closes', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
 
     let disconnected = false;
@@ -475,7 +477,7 @@ describe('createWalletClient', () => {
   });
 
   it('disconnect closes the connection', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
 
     client.disconnect();
@@ -489,7 +491,7 @@ describe('createWalletClient', () => {
   });
 
   it('multiple onDisconnect handlers all fire', async () => {
-    server = createMockServer();
+    server = await createMockServer();
     const client = await createWalletClient({ url: server.url, networkId: 'Undeployed' });
 
     const fired: string[] = [];
@@ -507,7 +509,7 @@ describe('createWalletClient', () => {
   // ── Approval notifications ──
 
   it('fires onApprovalPending when server sends approval:pending', async () => {
-    server = createMockServer({
+    server = await createMockServer({
       handlers: {
         // Custom submitTransaction that sends notification before responding
         submitTransaction: () => {
@@ -538,7 +540,7 @@ describe('createWalletClient', () => {
   });
 
   it('fires onApprovalResolved when server sends approval:resolved', async () => {
-    server = createMockServer({
+    server = await createMockServer({
       handlers: {
         submitTransaction: () => {
           for (const client of server!.wss.clients) {
@@ -568,7 +570,7 @@ describe('createWalletClient', () => {
   // ── Error propagation ──
 
   it('propagates PermissionRejected error from server', async () => {
-    server = createMockServer({
+    server = await createMockServer({
       handlers: {
         makeTransfer: () => {
           throw {

@@ -30,7 +30,7 @@ function secretKeysFor(seedHex: string): ledger.ZswapSecretKeys {
  */
 function startFakeIndexer(events: { id: number; raw: string; maxId: number }[]): Promise<{ url: string; close: () => Promise<void> }> {
   return new Promise((resolve) => {
-    const wss = new WebSocketServer({ port: 0, handleProtocols: () => 'graphql-transport-ws' });
+    const wss = new WebSocketServer({ host: '127.0.0.1', port: 0, handleProtocols: () => 'graphql-transport-ws' });
     wss.on('connection', (socket: WsSocket) => {
       socket.on('message', (data) => {
         const msg = JSON.parse(data.toString());

@@ -15,7 +15,7 @@ afterEach(() => { for (const s of servers) s.close(); servers = []; });
 
 /** Start a ws server that ACKs the handshake then runs `script` after `subscribe`. */
 async function startServer(script: ServerScript): Promise<string> {
-  const wss = new WebSocketServer({ port: 0 });
+  const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
   servers.push(wss);
   wss.on('connection', (ws) => {
     ws.on('message', (raw) => {
@@ -27,7 +27,7 @@ async function startServer(script: ServerScript): Promise<string> {
   await new Promise<void>((resolve) => wss.on('listening', () => resolve()));
   const addr = wss.address();
   const port = typeof addr === 'object' && addr ? addr.port : 0;
-  return `ws://localhost:${port}`;
+  return `ws://127.0.0.1:${port}`;
 }
 
 const next = (data: unknown) => JSON.stringify({ id: '1', type: 'next', payload: { data } });
