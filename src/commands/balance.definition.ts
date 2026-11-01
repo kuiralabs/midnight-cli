@@ -4,6 +4,7 @@ import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM } from '../lib/c
 
 export const balanceDefinition: CommandDefinition = {
   name: 'balance',
+  order: 40,
   flags: [
     {
       name: 'force-shielded',

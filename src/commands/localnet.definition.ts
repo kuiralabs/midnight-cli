@@ -4,6 +4,7 @@ import type { CommandDefinition } from '../lib/command-definition.ts';
 
 export const localnetDefinition: CommandDefinition = {
   name: 'localnet',
+  order: 180,
   subcommands: ['up', 'stop', 'down', 'status', 'logs', 'clean'],
   flags: [
     {

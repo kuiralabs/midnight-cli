@@ -73,7 +73,7 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry since 2C)
   const payer = { name: 'test payer' } as unknown as Payer;
   const protector = { name: 'test protector' } as unknown as WalletProtector;
   const testCommand = (name: string, shell: CommandDefinition['shell'], outcome?: CommandOutcome): CommandDefinition => ({
-    name, flags: [], needsWalletSdk: false, shell,
+    name, order: 1, flags: [], needsWalletSdk: false, shell,
     load: async () => {
       loaded.push(name);
       return {
@@ -376,6 +376,7 @@ describe('the MCP tools, generated from the registry', () => {
 describe('createCommandRegistry', () => {
   const base: CommandDefinition = {
     name: 'x',
+    order: 1,
     flags: [{ name: 'a', takesValue: false, help: ['--a   A'] }],
     help: { description: 'X', usage: 'midnight x', flags: ['note', { flag: 'a' }] },
     needsWalletSdk: false,

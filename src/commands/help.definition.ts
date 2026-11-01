@@ -4,6 +4,7 @@ import type { CommandDefinition } from '../lib/command-definition.ts';
 
 export const helpDefinition: CommandDefinition = {
   name: 'help',
+  order: 200,
   flags: [
     { name: 'agent', takesValue: false },
     { name: 'intro', takesValue: false },

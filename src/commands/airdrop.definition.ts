@@ -4,6 +4,7 @@ import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM } from '../lib/c
 
 export const airdropDefinition: CommandDefinition = {
   name: 'airdrop',
+  order: 80,
   flags: [
     {
       name: 'network',

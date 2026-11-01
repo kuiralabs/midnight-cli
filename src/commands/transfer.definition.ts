@@ -4,6 +4,7 @@ import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTar
 
 export const transferDefinition: CommandDefinition = {
   name: 'transfer',
+  order: 90,
   flags: [
     {
       name: 'force-shielded',

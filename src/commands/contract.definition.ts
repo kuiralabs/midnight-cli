@@ -13,6 +13,7 @@ async function checkSendingWallet(params: Readonly<Record<string, unknown>>): Pr
 
 export const contractDefinition: CommandDefinition = {
   name: 'contract',
+  order: 160,
   subcommands: ['inspect', 'deploy', 'call', 'state'],
   flags: [
     {

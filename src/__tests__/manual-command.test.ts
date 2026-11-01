@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildManual } from '../commands/manual.ts';
+import { getConfigValue } from '../lib/cli-config.ts';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, '');
@@ -73,5 +75,24 @@ describe('mn manual', () => {
   it('produces non-trivial length (at least 200 lines)', () => {
     const m = stripAnsi(buildManual());
     expect(m.split('\n').length).toBeGreaterThanOrEqual(200);
+  });
+
+  it('describes every key `config` accepts', () => {
+    // The keys config accepts, as its refusal of an unknown key lists them.
+    let refusal = '';
+    try { getConfigValue('no-such-key'); } catch (err) { refusal = (err as Error).message; }
+    const keys = refusal.split('Valid keys: ')[1]!.split(', ');
+    expect(keys.length).toBeGreaterThan(0);
+    const section = stripAnsi(buildManual()).split('Config keys')[1]!.split('Compatibility alias')[0]!;
+    for (const key of keys) expect(section, key).toMatch(new RegExp(`^ {4}${key}\\b`, 'm'));
+  });
+});
+
+describe('help --json global flags', () => {
+  it('describes every flag the shell accepts on every command', () => {
+    const described = installedCommands.globalFlagsHelp.map((flag) => flag.name).join(' ');
+    for (const flag of installedCommands.globalFlags) {
+      expect(described, flag.name).toContain(flag.name.length === 1 ? `-${flag.name}` : `--${flag.name}`);
+    }
   });
 });

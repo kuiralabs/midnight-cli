@@ -4,6 +4,7 @@ import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition
 
 export const testDefinition: CommandDefinition = {
   name: 'test',
+  order: 140,
   subcommands: ['create', 'run', 'list', 'results'],
   flags: [
     {

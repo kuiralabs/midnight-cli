@@ -4,6 +4,7 @@ import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition
 
 export const infoDefinition: CommandDefinition = {
   name: 'info',
+  order: 30,
   flags: [
     {
       name: 'network',

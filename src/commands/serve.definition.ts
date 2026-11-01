@@ -4,6 +4,7 @@ import type { CommandDefinition } from '../lib/command-definition.ts';
 
 export const serveDefinition: CommandDefinition = {
   name: 'serve',
+  order: 130,
   flags: [
     {
       name: 'approve-all',
