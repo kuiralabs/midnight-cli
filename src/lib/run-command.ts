@@ -4,7 +4,7 @@
 import { type ParsedArgs, MINIMAL_FLAG } from './argv.ts';
 import type { Payer } from './payer.ts';
 import { createCallContext, runHandler, type CommandHandler, type OutputSink } from './call-context.ts';
-import { createSdkWarningRouter, sdkWarningCallsOn, type SdkWarningCalls } from './sdk-warnings.ts';
+import type { SdkWarningCalls } from './sdk-warnings.ts';
 import { CommandFailedError } from './errors.ts';
 
 export interface CommandRun {
@@ -14,8 +14,12 @@ export interface CommandRun {
   onProgress?: (message: string) => void;
   /** What a command that submits a transaction pays with. */
   payer?: Payer;
-  /** The host's calls, which the command runs in, with its own SDK warnings. None: a call of its own, which no host's filters report to. */
-  sdkWarnings?: SdkWarningCalls;
+  /**
+   * The calls the command runs in, which give it its own SDK warnings: the
+   * host's, so the host's filters report the SDK's warnings to this call.
+   * Required, so a host can't leave its calls without them unnoticed.
+   */
+  sdkWarnings: SdkWarningCalls;
 }
 
 /** The server's stderr: where a call's text for the person goes, never the protocol channel on stdout. */
@@ -50,7 +54,7 @@ const serverStderr = (text: string): void => { process.stderr.write(text); };
 export async function captureCommand(
   handler: CommandHandler,
   args: ParsedArgs,
-  { signal, onProgress, payer, sdkWarnings = sdkWarningCallsOn(createSdkWarningRouter()) }: CommandRun = {},
+  { signal, onProgress, payer, sdkWarnings }: CommandRun,
 ): Promise<Record<string, unknown>> {
   let result: Record<string, unknown> = {};
   const output: OutputSink = {
