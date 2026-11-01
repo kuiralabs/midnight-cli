@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { captureCommand } from '../lib/run-command.ts';
-import { SecondResultError } from '../lib/call-context.ts';
-import { CancelledError } from '../lib/errors.ts';
+import { SecondResultError, type CommandHandler } from '../lib/call-context.ts';
+import { CancelledError, CommandFailedError } from '../lib/errors.ts';
 import { classifyError } from '../lib/exit-codes.ts';
 import type { Spinner } from '../ui/spinner.ts';
 import { parseArgs, type ParsedArgs } from '../lib/argv.ts';
@@ -51,6 +51,18 @@ afterEach(() => {
 });
 
 describe('captureCommand', () => {
+  it('fails a command that returns a non-zero exit code, with the result it wrote, and passes one that returns 0', async () => {
+    const failing: CommandHandler = async (_args, ctx) => { ctx.output.result({ overall: 'fail' }); return { exitCode: 1 }; };
+    const err = await captureCommand(failing, parseArgs(['test', 'run'])).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(CommandFailedError);
+    expect((err as CommandFailedError).exitCode).toBe(1);
+    expect((err as CommandFailedError).result).toStrictEqual({ overall: 'fail' });
+    expect(classifyError(err as Error).exitCode).toBe(1);
+
+    const passing: CommandHandler = async (_args, ctx) => { ctx.output.result({ overall: 'pass' }); return { exitCode: 0 }; };
+    expect(await captureCommand(passing, parseArgs(['test', 'run']))).toStrictEqual({ overall: 'pass' });
+  });
+
   it('captures JSON output from generate command', async () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const args = parseArgs(['generate', '--network', 'undeployed', '--output', walletFile]);
