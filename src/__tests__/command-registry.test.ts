@@ -282,6 +282,15 @@ describe('the MCP tools, generated from the registry', () => {
     for (const tool of registry.tools.filter((t) => t.confirmation !== undefined)) expect(tool.confirmation!.check, tool.name).toBeTypeOf('function');
   });
 
+  it('asks for confirmation on exactly the tools that move funds, change an account or delete a seed', () => {
+    // Taking a tool off this list lets an agent run it without the user's confirmation.
+    expect(registry.tools.filter((t) => t.confirmation !== undefined).map((t) => t.name).sort()).toStrictEqual([
+      'midnight_contract_call', 'midnight_contract_deploy',
+      'midnight_grant_deploy', 'midnight_grant_deposit', 'midnight_grant_issue', 'midnight_grant_revoke', 'midnight_grant_revoke_all',
+      'midnight_transfer', 'midnight_wallet_remove',
+    ]);
+  });
+
   it('describes removing a wallet as deleting its file and seed', () => {
     const remove = registry.tools.find((t) => t.name === NEWLY_CONFIRMED)!;
     expect(confirmationText(remove, { name: 'bob' })).toBe('Remove wallet bob: its file, and the seed in it, is deleted from this machine');
