@@ -23,7 +23,7 @@ import { payerFor } from '../lib/payer.ts';
 import { dim } from '../ui/colors.ts';
 import { header, keyValue, formatNight } from '../ui/format.ts';
 import type { Spinner } from '../ui/spinner.ts';
-import { CANCELLED_MESSAGE } from '../lib/errors.ts';
+import { throwIfCancelled } from '../lib/errors.ts';
 
 const SPINNER_LABEL: Record<GrantRequest['subcommand'], string> = {
   deploy: 'Deploying the account...',
@@ -65,15 +65,12 @@ export default async function grantCommand(args: ParsedArgs, ctx: CallContext): 
     ctx.output.stderr('\n');
   }
 
-  const throwIfCancelled = (): void => {
-    if (ctx.signal.aborted) throw new Error(CANCELLED_MESSAGE);
-  };
   // Reading the account or a request submits nothing: a wallet with no Dust can still do it, and none is opened.
   const payer = paysAFee(request) ? payerFor(`grant ${request.subcommand}`, ctx) : undefined;
   const funds = payer ? await payer.assertCanPay(target, walletFlag, spinnerFor('Checking wallet...'), ctx.signal) : undefined;
   const paying = payer ? await openPayingWallet(payer, target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal) : undefined;
   try {
-    await runOwned(request, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor, throwIfCancelled }, ctx);
+    await runOwned(request, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor }, ctx);
   } finally {
     await paying?.stop();
   }
@@ -88,11 +85,10 @@ interface OwnedRun {
   paying: PayingWallet | undefined;
   funds: { dustBalance: bigint } | undefined;
   spinnerFor: (label: string) => Spinner;
-  throwIfCancelled: () => void;
 }
 
 /** Runs the command on the account, with the wallet that pays (if it pays) already open. */
-async function runOwned(request: GrantRequest, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor, throwIfCancelled }: OwnedRun, ctx: CallContext): Promise<void> {
+async function runOwned(request: GrantRequest, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor }: OwnedRun, ctx: CallContext): Promise<void> {
   const spinner = spinnerFor(SPINNER_LABEL[request.subcommand]);
   // This machine's device, made where no account is yet: it opens no account first.
   if (request.subcommand === 'device' && request.action === 'new') {
@@ -134,7 +130,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   // interruption, and the next run finishes what this one left.
   const owned: GrantAccount = await openGrantAccount(target.networkConfig, recordsDir, (line) => {
     spinner.update(line);
-    throwIfCancelled();
+    throwIfCancelled(ctx.signal);
   });
   // How the account's owner key and records are kept: sealed, or in plain text until `wallet protect`.
   const common = { subcommand: request.subcommand, network: target.network, wallet: walletName, ownerKey: owned.protection };
@@ -142,7 +138,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   // The wallet that pays, which a paying command opened above.
   const payingWallet = async (): Promise<PayingWallet> => {
     if (paying === undefined) throw new Error(`${request.subcommand} was prepared as a command that pays nothing`);
-    throwIfCancelled();
+    throwIfCancelled(ctx.signal);
     return paying;
   };
   // The owner's session, paid by the wallet.
@@ -164,7 +160,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   };
 
   try {
-    throwIfCancelled();
+    throwIfCancelled(ctx.signal);
     switch (request.subcommand) {
       case 'deploy': {
         const { deployOwnerAccount, freshOwnerDevice } = await import('@kuiralabs/midnight-account-chain/owner');

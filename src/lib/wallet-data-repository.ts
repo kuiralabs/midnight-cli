@@ -18,7 +18,7 @@
 // tests against localnet — accepted scope per architecture-deepening.md.
 
 import { Buffer } from 'node:buffer';
-import { CANCELLED_MESSAGE, throwIfCancelled } from './errors.ts';
+import { throwIfCancelled } from './errors.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
 import type { NetworkConfig, NetworkName } from './network.ts';
@@ -343,7 +343,7 @@ export class WalletDataRepository {
     const startedAt = this.now();
     let stalledWindows = 0;
     for (let attempt = 0; ; attempt++) {
-      if (opts.signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+      throwIfCancelled(opts.signal);
       const startFromId = cached ? cached.lastAppliedEventId + 1 : 0;
       opts.onStatus?.(
         attempt > 0
@@ -509,7 +509,7 @@ export class WalletDataRepository {
     try {
       // ── Sync-retry loop (build + start) ────────────────────
       for (let attempt = 1; attempt <= SYNC_MAX_ATTEMPTS; attempt++) {
-        if (opts.signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+        throwIfCancelled(opts.signal);
         const cacheBeforeBuild = opts.forceFresh
           ? null
           : await this.walletStateToRestore(seed, network, networkName, opts.log);
@@ -525,7 +525,7 @@ export class WalletDataRepository {
           });
           break;
         } catch (err: any) {
-          if (opts.signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+          throwIfCancelled(opts.signal);
 
           if (err instanceof StaleCacheError && attempt < SYNC_MAX_ATTEMPTS && writeMode) {
             opts.onStatus?.(`Cache is stale, clearing and rebuilding (attempt ${attempt + 1}/${SYNC_MAX_ATTEMPTS})...`);
@@ -566,7 +566,7 @@ export class WalletDataRepository {
       let attempt = 0;
       while (true) {
         attempt++;
-        if (opts.signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+        throwIfCancelled(opts.signal);
         try {
           result = await fn({ bundle, state: syncedState });
           break;
@@ -579,7 +579,7 @@ export class WalletDataRepository {
           await stopFacade(bundle).catch(() => {});
           bundle = undefined;
           await new Promise((r) => setTimeout(r, COLD_START_DELAY_MS));
-          if (opts.signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+          throwIfCancelled(opts.signal);
           const retryCache = loadWalletCache(address, networkName, this.cacheDir);
           bundle = await buildFacade(seed, network, retryCache, opts.log);
           syncedState = await startAndSyncFacade(bundle, {

@@ -2,7 +2,7 @@
 // Dust to spend. `mn dust register` and `mn dev` both register through here.
 
 import { waitForLiteSyncedState } from './facade.ts';
-import { CANCELLED_MESSAGE } from './errors.ts';
+import { throwIfCancelled } from './errors.ts';
 import { ensureDust } from './transfer.ts';
 import { defaultRepository } from './wallet-data-repository.ts';
 import type { NetworkConfig } from './network.ts';
@@ -41,14 +41,14 @@ export async function registerDust(seed: Buffer, networkConfig: NetworkConfig, o
       seed,
       networkConfig,
       async ({ bundle, state }) => {
-        if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+        throwIfCancelled(signal);
         onStatus?.('Checking dust status...');
 
         // ensureDust handles: early return if dust exists, registration
         // of unregistered UTXOs, waiting for dust coins.
         const result = await ensureDust(bundle, (status: string) => onStatus?.(status), state);
 
-        if (signal?.aborted) throw new Error(CANCELLED_MESSAGE);
+        throwIfCancelled(signal);
 
         // Wait for dust data to be fully populated before reading balance.
         const finalState = await waitForLiteSyncedState(bundle);

@@ -10,7 +10,7 @@
 //      A shielded address implies --shielded; the flag is optional there.
 
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { CANCELLED_MESSAGE } from '../lib/errors.ts';
+import { throwIfCancelled } from '../lib/errors.ts';
 import { MidnightBech32m, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '../lib/argv.ts';
 import { loadWalletConfig, resolveWalletPath, saveShieldedAddress } from '../lib/wallet-config.ts';
@@ -297,7 +297,7 @@ async function shieldedAirdrop(
         spinner.update('Checking dust...');
         await ensureDust(bundle, (status: string) => spinner.update(status));
 
-        if (ctx.signal.aborted) throw new Error(CANCELLED_MESSAGE);
+        throwIfCancelled(ctx.signal);
 
         spinner.update('Building shielded transaction...');
         const recipe = await bundle.facade.transferTransaction(
