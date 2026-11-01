@@ -18,6 +18,7 @@ import { DEFAULT_SERVE_PORT } from './constants.ts';
 import type { FacadeBundle } from './facade.ts';
 import type { CallSdkWarnings } from './sdk-warnings.ts';
 import { shieldedSyncEnabled } from './shielded-policy.ts';
+import { CancelledError, throwIfCancelled } from './errors.ts';
 
 /** A running mn serve, and how to stop it. */
 export interface ServeHandle {
@@ -36,6 +37,8 @@ export interface ServeManagerOptions {
   dustWaitMs?: number;
   /** The SDK warnings of the call that serves, listened to while its wallet runs. */
   sdkWarnings: CallSdkWarnings;
+  /** Cancels the start: what was started is stopped, and the start fails with CancelledError. */
+  signal?: AbortSignal;
 }
 
 /** The network and endpoints a serve for these options must use. */
@@ -165,6 +168,7 @@ export async function startServeOrReuse(options: ServeManagerOptions): Promise<S
   const requestedNetwork = (options.network ?? 'undeployed').toLowerCase();
   const onMessage = options.onMessage ?? (() => {});
 
+  throwIfCancelled(options.signal);
   if (await isPortInUse(port)) {
     const actualSdkId = await probeServeNetwork(port);
 
@@ -227,7 +231,9 @@ export interface OpenedConnector {
  */
 export async function openConnector(options: ServeManagerOptions): Promise<OpenedConnector> {
   const onMessage = options.onMessage ?? (() => {});
+  const { signal } = options;
 
+  throwIfCancelled(signal);
   // Load wallet
   const config = await unlockWallet(resolveWalletPath(options.wallet));
   const seedBuffer = Buffer.from(config.seed, 'hex');
@@ -255,7 +261,11 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
     // replaying the chain's whole Dust history (minutes on a hosted network).
     const repo = defaultRepository();
     // Best-effort, as there: a failed warm-up leaves the sync below to do it.
-    try { await repo.dust(seedBuffer, networkConfig, { onStatus: onMessage }); } catch { /* best-effort */ }
+    try {
+      await repo.dust(seedBuffer, networkConfig, { signal, onStatus: onMessage });
+    } catch {
+      throwIfCancelled(signal); // a cancel is not a failed warm-up
+    }
     const cache = await repo.walletStateToRestore(seedBuffer, networkConfig, networkName);
     const built = await buildFacade(seedBuffer, networkConfig, cache);
     bundle = built;
@@ -265,6 +275,7 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
     onMessage('Syncing wallet...');
     await startAndSyncFacade(built, {
       syncMode,
+      signal,
       onProgress: (applied, highest) => {
         if (highest > 0) {
           const pct = Math.min(Math.round((applied / highest) * 100), 100);
@@ -276,7 +287,7 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
 
     // Wait for dust
     onMessage('Waiting for dust...');
-    const syncedState = await waitForDustAvailable(built);
+    const syncedState = await waitForDustAvailable(built, undefined, signal);
     onMessage('Dust ready');
 
     // Save cache after sync
@@ -326,6 +337,10 @@ export async function startServe(options: ServeManagerOptions): Promise<ServeHan
   const port = options.port ?? DEFAULT_SERVE_PORT;
   const onMessage = options.onMessage ?? (() => {});
   const { connector, stop } = await openConnector(options);
+  if (options.signal?.aborted === true) {
+    await stop();
+    throw new CancelledError();
+  }
 
   // Start WebSocket server
   const server = createRpcServer({

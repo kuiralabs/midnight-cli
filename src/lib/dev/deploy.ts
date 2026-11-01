@@ -10,7 +10,7 @@ import { resolvePayingTarget, type Payer } from '../payer.ts';
 import type { Spinner } from '../../ui/spinner.ts';
 import type { CallSdkWarnings } from '../sdk-warnings.ts';
 
-export async function deployDevContract(projectRoot: string, wallet: string, network: string, payer: Payer, progress: Spinner, sdkWarnings: CallSdkWarnings): Promise<DeployedContract> {
+export async function deployDevContract(projectRoot: string, wallet: string, network: string, payer: Payer, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<DeployedContract> {
   // The deploy as `mn contract deploy --path <projectRoot> --wallet <wallet> --network <network>` reads it.
   const args: ParsedArgs = {
     command: 'contract',
@@ -25,5 +25,6 @@ export async function deployDevContract(projectRoot: string, wallet: string, net
     payer,
     progress: () => progress,
     sdkWarnings,
+    signal,
   });
 }

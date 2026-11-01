@@ -18,6 +18,7 @@ import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallb
 import { startServeOrReuse } from '../serve-manager.ts';
 import { OWN_COMMAND_DUST_WAIT_MS } from '../dust-wait.ts';
 import { startBuild } from './build-manager.ts';
+import { throwIfCancelled } from '../errors.ts';
 
 /**
  * Run all prep steps defined in the config, in order.
@@ -32,6 +33,7 @@ export async function runPrepSteps(
   const results: PrepStepResult[] = [];
 
   for (const step of config.prep) {
+    throwIfCancelled(ctx.signal);
     const start = Date.now();
     callbacks.onStepStart(step);
 
@@ -128,6 +130,7 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
   try {
     const state = await startAndSyncFacade(bundle, {
       syncMode: 'lite',
+      signal: ctx.signal,
       onProgress: (applied, highest) => {
         if (highest > 0) {
           const pct = Math.min(Math.round((applied / highest) * 100), 100);
@@ -199,7 +202,7 @@ async function stepDust(config: DappTestConfig, ctx: PrepContext, callbacks: Pre
 
   try {
     callbacks.onMessage('Syncing wallet...');
-    await startAndSyncFacade(bundle, { syncMode: 'lite' });
+    await startAndSyncFacade(bundle, { syncMode: 'lite', signal: ctx.signal });
 
     // Register dust (auto-registers UTXOs if needed, no-op if already available)
     callbacks.onMessage('Ensuring dust...');
@@ -214,7 +217,7 @@ async function stepDust(config: DappTestConfig, ctx: PrepContext, callbacks: Pre
     // Dust was just registered — wait for coins to actually appear on-chain.
     // This MUST use the same facade to get real-time state updates.
     callbacks.onMessage('Dust registered. Waiting for coins to become available...');
-    const dustState = await waitForDustAvailable(bundle, DUST_WAIT_TIMEOUT_MS);
+    const dustState = await waitForDustAvailable(bundle, DUST_WAIT_TIMEOUT_MS, ctx.signal);
 
     // Verify dust is actually available — don't trust silent timeouts
     const dustAvailable = hasDustAvailable(dustState);
@@ -252,6 +255,7 @@ async function stepMnServe(config: DappTestConfig, ctx: PrepContext, callbacks: 
     onMessage: (msg) => callbacks.onMessage(`[serve] ${msg}`),
     dustWaitMs: OWN_COMMAND_DUST_WAIT_MS,
     sdkWarnings: ctx.sdkWarnings,
+    signal: ctx.signal,
   });
 
   ctx.serveHandle = handle;

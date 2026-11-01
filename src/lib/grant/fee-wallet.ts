@@ -16,9 +16,9 @@ export interface PayingWallet {
 }
 
 /** The payer's wallet for `target`, as the account package's fee wallet, keeping the SDK's warnings to the paying call's `sdkWarnings`. Stopping it stops the wallet. */
-export async function openPayingWallet(payer: Payer, target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings): Promise<PayingWallet> {
+export async function openPayingWallet(payer: Payer, target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<PayingWallet> {
   const { feeWalletOver } = await import('@kuiralabs/midnight-account-chain/connector');
-  const connection = await payer.connect(target, wallet, progress, sdkWarnings);
+  const connection = await payer.connect(target, wallet, progress, sdkWarnings, signal);
   try {
     const feeWallet = await feeWalletOver({
       getShieldedAddresses: async () => (await connection.call('getShieldedAddresses', {})) as { shieldedCoinPublicKey: string; shieldedEncryptionPublicKey: string },

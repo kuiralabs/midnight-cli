@@ -30,7 +30,7 @@ export async function deployContract({ request, target, wallet, payer, progress,
   const { dappDir, info, constructorArgs, privateStateSecretKey } = request;
   const { runDeploy } = await import('./runner.ts');
 
-  return withServedWallet({ target, wallet, payer, progress, sdkWarnings }, { running: 'Deploying contract...', done: 'Contract deployed', failed: 'Deploy failed' }, async (servePort, spinner) => {
+  return withServedWallet({ target, wallet, payer, progress, sdkWarnings, signal }, { running: 'Deploying contract...', done: 'Contract deployed', failed: 'Deploy failed' }, async (servePort, spinner) => {
     const result = await runDeploy({
       dappDir,
       networkConfig: target.networkConfig,

@@ -3,6 +3,7 @@
 // and no strict sync is needed.
 
 import { NATIVE_TOKEN_TYPE } from './constants.ts';
+import { throwIfCancelled } from './errors.ts';
 import type { NetworkName } from './network.ts';
 import type { PayingTarget } from './payer.ts';
 import { resolveWalletPath, unlockWallet } from './wallet-config.ts';
@@ -15,7 +16,8 @@ import type { Spinner } from '../ui/spinner.ts';
  * active wallet is checked, the one the command's server will use. Returns
  * what it found, the Dust in Specks.
  */
-export async function assertWalletCanPay({ network, networkConfig }: PayingTarget, wallet: string | undefined, progress: Spinner): Promise<{ nightBalance: bigint; dustBalance: bigint }> {
+export async function assertWalletCanPay({ network, networkConfig }: PayingTarget, wallet: string | undefined, progress: Spinner, signal?: AbortSignal): Promise<{ nightBalance: bigint; dustBalance: bigint }> {
+  throwIfCancelled(signal);
   const walletConfig = await unlockWallet(resolveWalletPath(wallet));
   const seedBuffer = Buffer.from(walletConfig.seed, 'hex');
   const address = walletConfig.addresses[network as NetworkName];
@@ -26,7 +28,7 @@ export async function assertWalletCanPay({ network, networkConfig }: PayingTarge
     // Two cheap reads through the repo: no facade, no proof server, no strict
     // sync. Its tip-aware memo makes the next check in the same MCP session
     // nearly free.
-    const balanceView = await repo.unshielded(address, networkConfig);
+    const balanceView = await repo.unshielded(address, networkConfig, { signal });
     const nightBalance = balanceView.balances.get(NATIVE_TOKEN_TYPE) ?? 0n;
 
     if (nightBalance === 0n) {
@@ -41,7 +43,7 @@ export async function assertWalletCanPay({ network, networkConfig }: PayingTarge
       );
     }
 
-    const dustView = await repo.dust(seedBuffer, networkConfig, { onStatus: (s) => progress.update(s) });
+    const dustView = await repo.dust(seedBuffer, networkConfig, { signal, onStatus: (s) => progress.update(s) });
     if (dustView.balance === 0n && dustView.availableCoins === 0) {
       progress.fail('No dust available');
       throw new Error(

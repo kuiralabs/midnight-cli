@@ -1,0 +1,24 @@
+// A cancelled `mn test run` starts no further prep step. The steps here need
+// no chain: a cancel stops the run before the step would reach one.
+
+import { describe, expect, it } from 'vitest';
+import { runPrepSteps } from '../lib/test/prep-runner.ts';
+import { createPrepContext, type DappTestConfig } from '../lib/test/types.ts';
+import { createSdkWarningRouter } from '../lib/sdk-warnings.ts';
+import { CancelledError } from '../lib/errors.ts';
+
+const config = { network: 'undeployed', prep: ['dust', 'mn-serve'] } as unknown as DappTestConfig;
+
+describe('runPrepSteps', () => {
+  it('starts no step once the run is cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const started: string[] = [];
+    await expect(runPrepSteps(config, '/nonexistent', createPrepContext(createSdkWarningRouter().openCall().warnings, controller.signal), {
+      onStepStart: (step) => started.push(step),
+      onStepComplete: () => {},
+      onMessage: () => {},
+    })).rejects.toBeInstanceOf(CancelledError);
+    expect(started).toEqual([]);
+  });
+});

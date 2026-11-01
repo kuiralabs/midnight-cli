@@ -20,7 +20,7 @@ const OWN_CONNECTION = 'mn-own-command';
  * running there is reused (its stop does nothing); one on another network
  * refuses, saying what to do.
  */
-async function serveWallet(port: number, { network, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings): Promise<ServedWallet> {
+async function serveWallet(port: number, { network, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<ServedWallet> {
   const { startServeOrReuse } = await import('./serve-manager.ts');
   const handle = await startServeOrReuse({
     port,
@@ -30,6 +30,7 @@ async function serveWallet(port: number, { network, endpoints }: PayingTarget, w
     onMessage: (msg) => progress.update(msg),
     dustWaitMs: OWN_COMMAND_DUST_WAIT_MS,
     sdkWarnings,
+    signal,
   });
   progress.stop('mn serve ready (port ' + handle.port + ')');
   return { port: handle.port, stop: () => handle.stop() };
@@ -41,9 +42,9 @@ async function serveWallet(port: number, { network, endpoints }: PayingTarget, w
  * is running already is reused. Stopping it reverts what it balanced but
  * never submitted.
  */
-async function connectWallet({ network, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings): Promise<WalletConnection> {
+async function connectWallet({ network, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<WalletConnection> {
   const { openConnector } = await import('./serve-manager.ts');
-  const opened = await openConnector({ network, endpoints, wallet, onMessage: (msg) => progress.update(msg), dustWaitMs: OWN_COMMAND_DUST_WAIT_MS, sdkWarnings });
+  const opened = await openConnector({ network, endpoints, wallet, onMessage: (msg) => progress.update(msg), dustWaitMs: OWN_COMMAND_DUST_WAIT_MS, sdkWarnings, signal });
   let requestId = 0;
   const call = (method: PayingMethod, params: Record<string, unknown>): Promise<unknown> => {
     const handler = opened.connector.handlers[method];
@@ -62,7 +63,7 @@ export function servePayerAt(port: number): Payer {
   return {
     // The wallet mn serve pays from is mn's own: its balance is checked as mn keeps it.
     assertCanPay: assertWalletCanPay,
-    serve: (target, wallet, progress, sdkWarnings) => serveWallet(port, target, wallet, progress, sdkWarnings),
+    serve: (target, wallet, progress, sdkWarnings, signal) => serveWallet(port, target, wallet, progress, sdkWarnings, signal),
     connect: connectWallet,
   };
 }

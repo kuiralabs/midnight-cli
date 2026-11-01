@@ -244,7 +244,7 @@ async function deployContract(project: ProjectInfo, ctx: CallContext): Promise<v
   try {
     const { deployDevContract } = await import('../lib/dev/deploy.ts');
     // The payer is the caller's (the CLI passes the serve payer), as for contract and grant.
-    const deployed = await deployDevContract(project.projectRoot, DEPLOY_WALLET, DEPLOY_NETWORK, payerFor('dev deploy', ctx), ctx.progress.silent(), ctx.sdkWarnings);
+    const deployed = await deployDevContract(project.projectRoot, DEPLOY_WALLET, DEPLOY_NETWORK, payerFor('dev deploy', ctx), ctx.progress.silent(), ctx.sdkWarnings, ctx.signal);
     spinner.stop(`Deployed`);
     ctx.output.stderr(`  ${dim('address')}  ${teal(deployed.address)}\n`);
   } catch (err) {
