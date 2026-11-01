@@ -58,8 +58,8 @@ src/
   wallet.ts      CLI entry point
   mcp-server.ts  MCP server entry point
 docs/
-  SKILL.md       Agent reference (loaded as MCP resource)
-  SKILL-CORE.md  Slim agent reference for session start
+  SKILL.md       Agent reference (the skill/full MCP resource; generated)
+  SKILL-CORE.md  Slim agent reference for session start (generated)
 ```
 
 Read `CLAUDE.md` at the repo root for the full engineering standards
@@ -105,8 +105,10 @@ Read `CLAUDE.md` at the repo root for the full engineering standards
   in `commands/`. Every user-facing error includes what went wrong AND what
   to do about it.
 - **Don't break the agent surface.** `--json`, `--agent`, and the MCP tool
-  shapes are an API. If you change them, update `docs/SKILL.md` and bump
-  the version note.
+  shapes are an API. If you change them, update the agent guidance of the
+  package whose commands changed (`src/commands/<package>.guidance.ts`),
+  run `npm run skill-docs` to regenerate `docs/SKILL.md` and
+  `docs/SKILL-CORE.md`, and bump the version note.
 
 ## Reporting bugs
 
