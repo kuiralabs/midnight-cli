@@ -42,6 +42,24 @@ export class CancelledError extends Error {
   }
 }
 
+/**
+ * A command that ended with a non-zero exit code without throwing (a test run
+ * whose tests failed): the code, and the JSON result it wrote. A runner with no
+ * process exit code to set, such as the MCP server, reports it as a failure.
+ */
+export class CommandFailedError extends Error {
+  readonly exitCode: number;
+  readonly result: Readonly<Record<string, unknown>>;
+
+  constructor(command: string, exitCode: number, result: Readonly<Record<string, unknown>>) {
+    super(`${command} ended with exit code ${exitCode}: ${JSON.stringify(result)}`);
+    this.exitCode = exitCode;
+    this.result = result;
+    this.name = 'CommandFailedError';
+    Object.setPrototypeOf(this, CommandFailedError.prototype);
+  }
+}
+
 /** Throws CancelledError when the call's signal has aborted, so the call stops before its next step. */
 export function throwIfCancelled(signal: AbortSignal | undefined): void {
   if (signal?.aborted === true) throw new CancelledError();

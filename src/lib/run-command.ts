@@ -5,6 +5,7 @@ import { type ParsedArgs, MINIMAL_FLAG } from './argv.ts';
 import type { Payer } from './payer.ts';
 import { createCallContext, runHandler, type CommandHandler, type OutputSink } from './call-context.ts';
 import { createSdkWarningRouter, sdkWarningCallsOn, type SdkWarningCalls } from './sdk-warnings.ts';
+import { CommandFailedError } from './errors.ts';
 
 export interface CommandRun {
   /** Cancels the command; a call already cancelled never starts. None: it runs to the end. */
@@ -43,7 +44,8 @@ const serverStderr = (text: string): void => { process.stderr.write(text); };
  * at once never report each other's.
  *
  * Returns the result as a JSON object ({} when the command wrote none).
- * Throws the original error if the handler throws.
+ * Throws the original error if the handler throws, and CommandFailedError,
+ * carrying the result, if it returns a non-zero exit code.
  */
 export async function captureCommand(
   handler: CommandHandler,
@@ -65,7 +67,7 @@ export async function captureCommand(
   let running = true;
   const report = onProgress === undefined ? undefined : (message: string): void => { if (running) onProgress(message); };
   try {
-    await sdkWarnings.run((warnings) => runHandler(handler, args, createCallContext({
+    const outcome = await sdkWarnings.run((warnings) => runHandler(handler, args, createCallContext({
       args,
       signal: signal ?? new AbortController().signal,
       output,
@@ -73,6 +75,7 @@ export async function captureCommand(
       ...(report === undefined ? {} : { onProgress: report }),
       ...(payer === undefined ? {} : { payer }),
     })));
+    if (outcome !== undefined && outcome.exitCode !== 0) throw new CommandFailedError(args.command ?? 'the command', outcome.exitCode, result);
     return result;
   } finally {
     running = false;
