@@ -17,7 +17,7 @@ import { Buffer } from 'node:buffer';
 import { parseArgs } from '../lib/argv.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { setPrompter, type Prompter } from '../lib/prompter.ts';
-import { establishPassphrase } from '../lib/passphrase.ts';
+import { establishPassphrase, isPassphraseSet } from '../lib/passphrase.ts';
 import { deriveUnshieldedAddress } from '../lib/derive-address.ts';
 import { getCachePath } from '../lib/wallet-cache.ts';
 import { loadWalletConfig, protectAllWallets } from '../lib/wallet-config.ts';
@@ -30,6 +30,7 @@ import statusCommand from '../commands/status.ts';
 import generateCommand from '../commands/generate.ts';
 import walletCommand from '../commands/wallet.ts';
 import cacheCommand from '../commands/cache.ts';
+import testCommand from '../commands/test.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
@@ -238,6 +239,7 @@ describe('commands that write check the call before each whole write', () => {
     expect(prompter.asked).toBeGreaterThan(0);
     expect(fs.existsSync(target)).toBe(false);
     expect(io.stdout()).toBe('');
+    expect(isPassphraseSet(stateRootIn(home)), 'no new passphrase saved').toBe(false);
   });
 
   it('wallet generate: cancelled while the passphrase is asked for, it writes no wallet', async () => {
@@ -250,6 +252,7 @@ describe('commands that write check the call before each whole write', () => {
     expect(prompter.asked).toBeGreaterThan(0);
     expect(fs.existsSync(path.join(stateRootIn(home), 'wallets', 'alice.json'))).toBe(false);
     expect(io.stdout()).toBe('');
+    expect(isPassphraseSet(stateRootIn(home)), 'no new passphrase saved').toBe(false);
   });
 
   describe('wallet protect', () => {
@@ -272,6 +275,7 @@ describe('commands that write check the call before each whole write', () => {
 
       expect(files.map(isSealed)).toEqual([false, false]);
       expect(io.stdout()).toBe('');
+      expect(isPassphraseSet(stateRootIn(home)), 'no new passphrase saved').toBe(false);
     });
 
     it('cancelled while one wallet is sealed: that one is sealed whole, and the next is not touched', async () => {
@@ -324,4 +328,39 @@ describe('commands that write check the call before each whole write', () => {
     expect(fs.existsSync(cache)).toBe(true);
     expect(io.stdout()).toBe('');
   });
+});
+
+describe('test create, cancelled while Claude scaffolds', () => {
+  const originalPath = process.env.PATH;
+  afterEach(() => { process.env.PATH = originalPath; });
+
+  it('stops Claude, does not fall back to the plain scaffold, and writes no suite', async () => {
+    // A dApp with one compiled contract.
+    const dapp = path.join(home, 'dapp');
+    const compiler = path.join(dapp, 'managed', 'counter', 'compiler');
+    fs.mkdirSync(compiler, { recursive: true });
+    fs.writeFileSync(path.join(compiler, 'contract-info.json'), JSON.stringify({
+      'compiler-version': '0.30.0', 'language-version': '0.22.0', 'runtime-version': '0.15.0',
+      circuits: [{ name: 'increment', pure: false, arguments: [], 'result-type': { 'type-name': 'Tuple', types: [] } }],
+      witnesses: [],
+    }));
+    // A `claude` that says its version, then records its pid and never answers.
+    const bin = path.join(home, 'bin');
+    const started = path.join(home, 'claude.pid');
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, 'claude'), `#!/bin/sh\n[ "$1" = "--version" ] && { echo 1.0.0; exit 0; }\necho $$ > "${started}"\nexec sleep 60\n`, { mode: 0o755 });
+    process.env.PATH = `${bin}${path.delimiter}${originalPath}`;
+
+    const call = new AbortController();
+    const run = cliCall(testCommand, parseArgs(['test', 'create', '--path', dapp, '--goal', 'count up', '--json']), { signal: call.signal });
+    await expect.poll(() => fs.existsSync(started) && fs.readFileSync(started, 'utf8').trim() !== '', { timeout: 10_000 }).toBe(true);
+    const pid = Number(fs.readFileSync(started, 'utf8').trim());
+    call.abort();
+
+    await expect(run).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect.poll(() => { try { process.kill(pid, 0); return 'running'; } catch { return 'gone'; } }, { timeout: 5_000 }).toBe('gone');
+    expect(fs.existsSync(path.join(dapp, 'dapp.test.json'))).toBe(false);
+    expect(io.stderr()).not.toContain('falling back to deterministic');
+    expect(io.stdout()).toBe('');
+  }, 20_000);
 });

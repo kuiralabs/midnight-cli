@@ -288,14 +288,29 @@ export async function startLocalnet(docker: DockerCall, onStatus: (status: strin
   }
 }
 
+/** How long listing what a cancelled `localnet up` left may take. */
+const CANCELLED_LISTING_TIMEOUT_MS = 10_000;
+
 /**
  * What a cancelled `localnet up` fails with (decision 4): the containers it
  * started stay in place, and the error says which, as Docker lists them now.
  * Listing them is not cancelled with the call (it has been already); it is
- * bounded by its own time limit.
+ * bounded by its own time limit. When Docker can't list them, the error says
+ * so rather than claim none were started.
  */
-export async function localnetUpCancelled({ exec, onStderr }: Omit<DockerCall, 'signal'>): Promise<CancelledError> {
-  const left = await getServiceStatus({ signal: new AbortController().signal, exec, onStderr });
+export async function localnetUpCancelled({ exec }: Omit<DockerCall, 'signal'>): Promise<CancelledError> {
+  let left: ServiceStatus[];
+  try {
+    left = parseServiceStatus(await exec('docker', ['compose', '-f', composePath(), 'ps', '-a', '--format', 'json'], {
+      signal: new AbortController().signal,
+      timeoutMs: CANCELLED_LISTING_TIMEOUT_MS,
+    }));
+  } catch {
+    return new CancelledError(
+      `${CANCELLED_MESSAGE}: localnet up was stopped, and Docker could not list its containers, so some may still be running.\n` +
+      'Run "midnight localnet status" to see them, and "midnight localnet down" to remove them.',
+    );
+  }
   if (left.length === 0) return new CancelledError(`${CANCELLED_MESSAGE}: localnet up was stopped before it started any container.`);
   const listed = left.map((s) => `${s.name} (${s.state})`).join(', ');
   return new CancelledError(

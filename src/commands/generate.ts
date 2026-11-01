@@ -75,8 +75,8 @@ export default async function generateCommand(args: ParsedArgs, ctx: CallContext
   };
   const secrets = mnemonic ? { seed: seedBuffer.toString('hex'), mnemonic } : { seed: seedBuffer.toString('hex') };
 
-  const passphrase = await passphraseForNewSecret();
-  // Cancelled while the passphrase was asked for: no wallet is written.
+  const passphrase = await passphraseForNewSecret(undefined, { signal: ctx.signal });
+  // Cancelled while the passphrase was asked for: no wallet is written, and no new passphrase saved.
   throwIfCancelled(ctx.signal);
   const savedPath = writeSealedWallet(targetPath, config, secrets, passphrase, { overwrite: hasFlag(args, 'force') });
 

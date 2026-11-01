@@ -37,6 +37,19 @@ describe('execProgram', () => {
     expect(isAlive(pid)).toBe(false);
   });
 
+  it('kills outright a program that ignores being told to stop, so the call still ends', async () => {
+    const call = new AbortController();
+    let pid = 0;
+    const run = execProgram(node, ['-e', 'process.on("SIGTERM", () => {}); process.stderr.write(String(process.pid)); setInterval(() => {}, 1_000)'], {
+      signal: call.signal,
+      onStderr: (text) => { pid = Number(text); call.abort(); },
+    });
+
+    await expect(run).rejects.toBeInstanceOf(CancelledError);
+    expect(pid).toBeGreaterThan(0);
+    expect(isAlive(pid)).toBe(false);
+  }, 10_000);
+
   it('starts nothing for a call already cancelled', async () => {
     const call = new AbortController();
     call.abort();

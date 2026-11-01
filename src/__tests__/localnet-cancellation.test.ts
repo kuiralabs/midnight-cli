@@ -26,8 +26,8 @@ interface Run {
   killed: boolean;
 }
 
-/** What the stand-in answers a run with: Docker's stdout, or 'hang' (it runs until killed). */
-type Answer = string | 'hang';
+/** What the stand-in answers a run with: Docker's stdout, 'hang' (it runs until killed), or the error Docker fails with. */
+type Answer = string | 'hang' | Error;
 
 /** A runner that answers as Docker would and runs nothing; `onRun` sees each run as it starts. */
 function standInDocker(answer: (args: readonly string[]) => Answer, onRun: (run: Run) => void = () => {}): { exec: ExecRunner; runs: Run[] } {
@@ -42,7 +42,10 @@ function standInDocker(answer: (args: readonly string[]) => Answer, onRun: (run:
       const kill = (): void => { run.killed = true; reject(new CancelledError()); };
       if (signal.aborted) { kill(); return; }
       signal.addEventListener('abort', kill, { once: true });
-      if (reply !== 'hang') {
+      if (reply instanceof Error) {
+        signal.removeEventListener('abort', kill);
+        reject(reply);
+      } else if (reply !== 'hang') {
         signal.removeEventListener('abort', kill);
         resolve(reply);
       }
@@ -185,5 +188,17 @@ describe('localnet up, cancelled (decision 4: started containers stay, and it sa
       (run) => { if (isCompose(run.args, 'up')) setImmediate(() => call.abort()); },
     );
     await expect(startLocalnet(dockerCall(docker.exec, call.signal), () => {})).rejects.toThrow('localnet up was stopped before it started any container.');
+  });
+
+  it('when Docker can\'t list the containers afterwards, it says some may still be running, not that none were started', async () => {
+    const call = new AbortController();
+    const docker = standInDocker(
+      (args) => (isCompose(args, 'up') ? 'hang' : new Error('Cannot connect to the Docker daemon')),
+      (run) => { if (isCompose(run.args, 'up')) setImmediate(() => call.abort()); },
+    );
+    const err = await startLocalnet(dockerCall(docker.exec, call.signal), () => {}).catch((e: unknown) => e);
+    expect((err as CancelledError).code).toBe('CANCELLED');
+    expect((err as Error).message).toContain('Docker could not list its containers, so some may still be running');
+    expect((err as Error).message).not.toContain('before it started any container');
   });
 });

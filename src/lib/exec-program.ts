@@ -15,6 +15,9 @@ export interface ExecRun {
   readonly onStderr?: (text: string) => void;
 }
 
+/** How long a program told to stop (SIGTERM) gets before it is killed outright (SIGKILL). */
+const KILL_GRACE_MS = 2_000;
+
 /** Runs `file` with `args` and returns its stdout once it exits with code 0. */
 export type ExecRunner = (file: string, args: readonly string[], run: ExecRun) => Promise<string>;
 
@@ -44,9 +47,13 @@ export const execProgram: ExecRunner = (file, args, { signal, timeoutMs, onStder
   let stdout = '';
   let stderr = '';
   let ended: 'cancelled' | 'timed out' | undefined;
+  let forced: NodeJS.Timeout | undefined;
   const end = (why: 'cancelled' | 'timed out'): void => {
-    ended ??= why;
+    if (ended !== undefined) return;
+    ended = why;
     child.kill();
+    // A program that ignores SIGTERM would keep the call open: it is killed outright after a grace period.
+    forced = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
   };
   const onAbort = (): void => end('cancelled');
   signal.addEventListener('abort', onAbort, { once: true });
@@ -54,6 +61,7 @@ export const execProgram: ExecRunner = (file, args, { signal, timeoutMs, onStder
   const settle = (): void => {
     signal.removeEventListener('abort', onAbort);
     if (timer !== undefined) clearTimeout(timer);
+    if (forced !== undefined) clearTimeout(forced);
   };
   child.stdout.setEncoding('utf8').on('data', (chunk: string) => { stdout += chunk; });
   child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
