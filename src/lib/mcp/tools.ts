@@ -5,6 +5,7 @@
 
 import { type CommandRun, captureCommand } from '../run-command.ts';
 import { FULL_FLAG, type ParsedArgs } from '../argv.ts';
+import { UsageError } from '../errors.ts';
 
 // ── Tool definitions ────────────────────────────────────────
 
@@ -78,6 +79,32 @@ function transferArgs(params: Record<string, unknown>): ParsedArgs {
   delete args.flags.to;
   delete args.flags.amount;
   return args;
+}
+
+/**
+ * The parameters a call gives that the tool doesn't take, in the order given:
+ * neither one of its schema's properties nor one of `passThroughFlags`, the
+ * flags its command accepts when the tool passes other parameters on as flags.
+ */
+export function findUnknownParams(tool: Pick<ToolDef, 'inputSchema'>, params: Record<string, unknown>, passThroughFlags: readonly string[]): string[] {
+  return Object.keys(params).filter((key) => !Object.hasOwn(tool.inputSchema.properties, key) && !passThroughFlags.includes(key));
+}
+
+/**
+ * Throw a UsageError (INVALID_ARGS) naming every parameter the tool doesn't
+ * take (Y29). Each parameter used to become a flag unchecked, so a misspelt
+ * one was dropped and the command ran on its defaults; the CLI refuses an
+ * unknown flag the same way.
+ */
+export function assertKnownParams(tool: Pick<ToolDef, 'name' | 'inputSchema'>, params: Record<string, unknown>, passThroughFlags: readonly string[]): void {
+  const unknown = findUnknownParams(tool, params, passThroughFlags);
+  if (unknown.length === 0) return;
+  const accepted = Object.keys(tool.inputSchema.properties);
+  const takes = accepted.length === 0 ? 'It takes no parameters' : `Its parameters: ${accepted.join(', ')}`;
+  throw new UsageError(
+    `Unknown parameter${unknown.length > 1 ? 's' : ''} for ${tool.name}: ${unknown.join(', ')}\n` +
+    takes + (passThroughFlags.length === 0 ? '' : `, and its command's flags: ${passThroughFlags.join(', ')}`),
+  );
 }
 
 const GRANT_COMMON_PROPERTIES = {

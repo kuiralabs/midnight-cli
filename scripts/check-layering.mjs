@@ -27,7 +27,7 @@ const HOMES = [
   ['shell', /^wallet\.ts$/],
   // help plays the shell's intro, and manual builds the full manual from help's specs (Y24).
   ['shell', /^commands\/(help|manual)(\.definition)?\.ts$/],
-  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host|installed-commands)\.ts$/],
+  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host|installed-commands|command-dispatch)\.ts$/],
   ['shell', /^ui\/(animate|art)\.ts$/],
   ['mcp', /^mcp-server\.ts$/],
   ['mcp', /^lib\/mcp\//],

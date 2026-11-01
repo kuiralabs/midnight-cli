@@ -22,11 +22,13 @@ import { classifyError } from './lib/exit-codes.ts';
 import { trimAgentMessage } from './lib/error-trim.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { createConfirmationStore } from './lib/mcp/confirmation.ts';
-import { TOOLS, REQUIRES_CONFIRMATION, describePendingOp } from './lib/mcp/tools.ts';
+import { TOOLS, REQUIRES_CONFIRMATION, describePendingOp, assertKnownParams } from './lib/mcp/tools.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { installCliHost } from './lib/cli-host.ts';
+import { installedCommands } from './lib/installed-commands.ts';
+import { toolPassThroughFlags } from './lib/command-definition.ts';
 
 // Skill resources — teach MCP clients how to use this CLI conversationally.
 // Split into:
@@ -101,6 +103,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   const { name, arguments: rawParams } = request.params;
   const params = (rawParams ?? {}) as Record<string, unknown>;
   const call = toolCall(request.params._meta?.progressToken, extra);
+
+  // A parameter the tool doesn't take (not in its schema, nor a flag its
+  // command accepts when the tool passes parameters on as flags) is refused
+  // before anything runs or a token is given (Y29). An unknown tool is
+  // reported by executeTool.
+  const tool = TOOLS.find((t) => t.name === name);
+  if (tool !== undefined) {
+    try {
+      assertKnownParams(tool, params, toolPassThroughFlags(installedCommands, name));
+    } catch (err) {
+      return errorResponse(err instanceof Error ? err : new Error(String(err)));
+    }
+  }
 
   // Step 2 of confirmation: redeem the token and execute the original tool.
   if (name === 'midnight_confirm_operation') {

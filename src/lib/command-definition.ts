@@ -191,6 +191,19 @@ export function createCommandRegistry(commands: readonly CommandDefinition[], gl
   };
 }
 
+/**
+ * The flags a call of the tool may set besides its schema's parameters: when
+ * its argv passes every other parameter on as a flag (`flags: 'rest'`), the
+ * flags its command accepts and the global ones; otherwise none. Empty for a
+ * tool no command defines (the server's own confirm tool).
+ */
+export function toolPassThroughFlags(registry: CommandRegistry, toolName: string): readonly string[] {
+  const command = registry.commands.find((c) => c.mcp?.tools.some((tool) => tool.name === toolName));
+  const tool = command?.mcp?.tools.find((t) => t.name === toolName);
+  if (command === undefined || tool?.argv.flags !== 'rest') return [];
+  return [...command.flags, ...registry.globalFlags].map((flag) => flag.name);
+}
+
 /** The Flags section of `help <command>`, line by line, as shown. */
 export function flagsSectionLines(command: CommandDefinition): string[] {
   return (command.help?.flags ?? []).flatMap((entry) =>
