@@ -2,27 +2,25 @@
 // Horizontal layout: logo on left, commands on right (all on stderr)
 // Agent-friendly: plain text when piped (non-TTY)
 // JSON mode: outputs capability manifest for agent self-discovery
+// Every list of commands it shows comes from the command registry (plan 2D).
 
 import { type ParsedArgs, hasFlag } from '../lib/argv.ts';
 import { bold, teal, gray, dim } from '../ui/colors.ts';
 import { header } from '../ui/format.ts';
 import { animateMaterialize } from '../ui/animate.ts';
-import { COMMAND_BRIEFS, WORDMARK_BIG } from '../ui/art.ts';
+import { WORDMARK_BIG } from '../ui/art.ts';
+import { installedCommands } from '../lib/installed-commands.ts';
+import { commandHelpSpecs, introBriefs, type CommandHelpSpec } from '../lib/command-definition.ts';
 import { hasShownIntroThisSession, markIntroShown } from '../lib/intro-marker.ts';
 import { UsageError } from '../lib/errors.ts';
 import { writeJsonResult } from '../lib/json-output.ts';
 import { PKG_NAME, PKG_VERSION, PKG_DESCRIPTION } from '../lib/pkg.ts';
 import { INDEXER_GRAPHQL_WS_PATH } from '../lib/constants.ts';
 
-interface CommandSpec {
-  name: string;
-  description: string;
-  usage: string;
-  flags?: string[];
-  examples?: string[];
-  jsonFields?: Record<string, string>;
-}
+type CommandSpec = CommandHelpSpec;
 
+// Superseded by the registry; removal waits for Y13. Nothing reads it but the
+// registry's test, which keeps it equal to what help renders from the registry.
 const COMMAND_SPECS: CommandSpec[] = [
   {
     name: 'wallet',
@@ -632,6 +630,11 @@ const COMMAND_SPECS: CommandSpec[] = [
   },
 ];
 
+/** Every command help lists, from the registry. */
+function helpSpecs(): CommandSpec[] {
+  return commandHelpSpecs(installedCommands);
+}
+
 // Build the right column: wordmark (lines 0-2), blank, then commands
 function buildRightColumn(): string[] {
   const lines: string[] = [];
@@ -644,7 +647,7 @@ function buildRightColumn(): string[] {
   // Line 4: header
   lines.push(bold('Commands'));
   // Lines 5+: command briefs
-  for (const [name, brief] of COMMAND_BRIEFS) {
+  for (const [name, brief] of introBriefs(installedCommands)) {
     lines.push(`${teal(name.padEnd(18))}${brief}`);
   }
   // Footer
@@ -658,7 +661,7 @@ function buildRightColumn(): string[] {
 // Plain text output for non-TTY / agent-friendly
 function printPlainHelp(): void {
   process.stderr.write('\nCommands:\n\n');
-  for (const [name, brief] of COMMAND_BRIEFS) {
+  for (const [name, brief] of introBriefs(installedCommands)) {
     process.stderr.write(`  ${name.padEnd(18)}${brief}\n`);
   }
   process.stderr.write('\n  Usage: midnight <command> (or: mn <command>)\n');
@@ -697,14 +700,8 @@ function outputJsonManifest(): void {
       description: PKG_DESCRIPTION,
       bin: ['midnight', 'mn'],
     },
-    globalFlags: [
-      { name: '--json', description: 'Output structured JSON to stdout (suppresses all stderr)' },
-      { name: '--wallet <name|file>', description: 'Wallet name or path' },
-      { name: '--network <name>', description: 'Override network (preprod, preview, undeployed)' },
-      { name: '--version, -v', description: 'Print CLI version' },
-      { name: '--help, -h', description: 'Show help' },
-    ],
-    commands: COMMAND_SPECS.map(spec => ({
+    globalFlags: installedCommands.globalFlagsHelp.map(flag => ({ name: flag.name, description: flag.description })),
+    commands: helpSpecs().map(spec => ({
       name: spec.name,
       description: spec.description,
       usage: spec.usage,
@@ -771,7 +768,7 @@ examples, and JSON field schemas.
 
 COMMANDS & JSON SCHEMAS
 ───────────────────────
-${COMMAND_SPECS.filter(s => s.jsonFields).map(spec => {
+${helpSpecs().filter(s => s.jsonFields).map(spec => {
   const fields = Object.entries(spec.jsonFields!)
     .map(([k, v]) => `    ${k.padEnd(20)}${v}`)
     .join('\n');
@@ -1306,11 +1303,12 @@ export default async function helpCommand(args: ParsedArgs): Promise<void> {
   const targetCommand = args.subcommand;
 
   if (targetCommand) {
-    const spec = COMMAND_SPECS.find(s => s.name === targetCommand);
+    const specs = helpSpecs();
+    const spec = specs.find(s => s.name === targetCommand);
     if (!spec) {
       throw new UsageError(
         `Unknown command: "${targetCommand}"\n` +
-        `Available commands: ${COMMAND_SPECS.map(s => s.name).join(', ')}`
+        `Available commands: ${specs.map(s => s.name).join(', ')}`
       );
     }
     printCommandHelp(spec);
@@ -1338,5 +1336,5 @@ export default async function helpCommand(args: ParsedArgs): Promise<void> {
   if (animated) markIntroShown();
 }
 
-export { COMMAND_SPECS };
+export { COMMAND_SPECS, helpSpecs };
 export type { CommandSpec };

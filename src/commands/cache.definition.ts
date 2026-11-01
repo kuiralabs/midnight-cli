@@ -37,7 +37,7 @@ export const cacheDefinition: CommandDefinition = {
       wallet: 'Wallet name (when scoped)',
     },
   },
-  intro: { brief: 'Manage wallet cache', order: 13 },
+  intro: { brief: 'Manage wallet cache', order: 14 },
   needsWalletSdk: false,
   shell: {},
   load: () => import('./cache.ts'),

@@ -35,7 +35,7 @@ export const manualDefinition: CommandDefinition = {
       manual: 'Manual text (with ANSI colors)',
     },
   },
-  intro: { brief: 'Full reference manual', order: 18 },
+  intro: { brief: 'Full reference manual', order: 19 },
   needsWalletSdk: false,
   shell: {},
   load: () => import('./manual.ts'),

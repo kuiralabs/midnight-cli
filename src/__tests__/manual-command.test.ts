@@ -30,7 +30,7 @@ describe('mn manual', () => {
     }
   });
 
-  it('renders every command from COMMAND_SPECS', () => {
+  it('renders every command help lists, from the registry', () => {
     const m = stripAnsi(buildManual());
     const expected = [
       'wallet', 'balance', 'address', 'genesis-address', 'inspect-cost',

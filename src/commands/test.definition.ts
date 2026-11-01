@@ -136,7 +136,7 @@ export const testDefinition: CommandDefinition = {
       assertions: 'Array of assertion results',
     },
   },
-  intro: { brief: 'Run dApp E2E tests', order: 16 },
+  intro: { brief: 'Run dApp E2E tests', order: 17 },
   needsWalletSdk: true,
   shell: { signal: true },
   load: () => import('./test.ts'),

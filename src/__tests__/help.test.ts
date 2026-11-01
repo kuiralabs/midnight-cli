@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import helpCommand, { COMMAND_SPECS } from '../commands/help.ts';
+import helpCommand, { helpSpecs } from '../commands/help.ts';
 import { parseArgs } from '../lib/argv.ts';
+import { installedCommands } from '../lib/installed-commands.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 
 let io: CapturedOutput;
@@ -130,9 +131,9 @@ describe('help command — specific command help', () => {
   });
 });
 
-describe('COMMAND_SPECS', () => {
+describe('help\'s specs (from the registry)', () => {
   it('every spec has a name and description', () => {
-    for (const spec of COMMAND_SPECS) {
+    for (const spec of helpSpecs()) {
       expect(spec.name.length).toBeGreaterThan(0);
       expect(spec.description.length).toBeGreaterThan(0);
       expect(spec.usage.length).toBeGreaterThan(0);
@@ -140,8 +141,62 @@ describe('COMMAND_SPECS', () => {
   });
 
   it('every spec has at least one example', () => {
-    for (const spec of COMMAND_SPECS) {
+    for (const spec of helpSpecs()) {
       expect(spec.examples?.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('help — the lists come from the registry (2D)', () => {
+  /** The intro's command lines, in the order shown: `  name   brief`. */
+  function introLines(stderr: string): string[] {
+    return stderr.split('\n').filter((line) => /^ {2}[a-z-]+ {2,}\S/.test(line)).map((line) => line.trim().replace(/\s{2,}/, '  '));
+  }
+
+  it('the plain intro lists grant after dev, with its brief', async () => {
+    Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true });
+    await helpCommand(parseArgs(['help']));
+    const lines = introLines(io.stderr());
+    expect(lines.slice(9, 14)).toStrictEqual([
+      'contract  Inspect, deploy, call contracts',
+      'dev  Contract dev loop (watch + deploy)',
+      'grant  Grants that let agents spend',
+      'config  Manage CLI config',
+      'cache  Manage wallet cache',
+    ]);
+    expect(lines).toHaveLength(19);
+  });
+
+  it('the TTY intro lists grant after dev, with its brief', async () => {
+    await helpCommand(parseArgs(['help', '--no-intro']));
+    const err = io.stderr().replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+    const dev = err.indexOf('Contract dev loop (watch + deploy)');
+    const grant = err.indexOf('Grants that let agents spend');
+    const config = err.indexOf('Manage CLI config');
+    expect(dev).toBeGreaterThan(-1);
+    expect(grant).toBeGreaterThan(dev);
+    expect(config).toBeGreaterThan(grant);
+  });
+
+  it('help --json lists the registry\'s global flags and every command help lists, in order', async () => {
+    await helpCommand(parseArgs(['help', '--json']));
+    const manifest = JSON.parse(io.stdout()) as { globalFlags: { name: string; description: string }[]; commands: { name: string }[] };
+    expect(manifest.globalFlags).toStrictEqual([
+      { name: '--json', description: 'Output structured JSON to stdout (suppresses all stderr)' },
+      { name: '--wallet <name|file>', description: 'Wallet name or path' },
+      { name: '--network <name>', description: 'Override network (preprod, preview, undeployed)' },
+      { name: '--version, -v', description: 'Print CLI version' },
+      { name: '--help, -h', description: 'Show help' },
+    ]);
+    expect(manifest.globalFlags).toStrictEqual(installedCommands.globalFlagsHelp);
+    expect(manifest.commands.map((c) => c.name)).toStrictEqual(
+      installedCommands.commands.filter((c) => c.help !== undefined).map((c) => c.name));
+    expect(manifest.commands.map((c) => c.name)).not.toContain('status');
+  });
+
+  it('help <command> finds a command by its definition, and names the rest when it can\'t', async () => {
+    await helpCommand(parseArgs(['help', 'grant']));
+    expect(io.stdout()).toContain('This wallet\'s account, and the grants that let an agent spend from it (experimental)');
+    await expect(helpCommand(parseArgs(['help', 'status']))).rejects.toThrow(/Available commands: wallet, generate, .*, grant, localnet, help, manual$/);
   });
 });

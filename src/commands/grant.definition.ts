@@ -147,7 +147,8 @@ export const grantDefinition: CommandDefinition = {
       blockHeight: 'The block it landed in (deposit)',
     },
   },
-  // Y29: the intro lists no line for grant; recorded as it is, fixed in 2D.
+  // Y29: the intro had no line for grant until 2D; it sits beside the contract commands.
+  intro: { brief: 'Grants that let agents spend', order: 12 },
   needsWalletSdk: true,
   shell: { signal: true, payer: true },
   load: () => import('./grant.ts'),

@@ -25,7 +25,7 @@ const SRC = join(ROOT, 'src');
 // under src/ wins. A file that matches nothing fails the check.
 const HOMES = [
   ['shell', /^wallet\.ts$/],
-  // help plays the shell's intro, and manual builds the full manual from help's specs (Y24).
+  // help plays the shell's intro, and manual builds the full manual; both render the installed registry (Y24, 2D).
   ['shell', /^commands\/(help|manual)(\.definition)?\.ts$/],
   ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host|installed-commands|command-dispatch)\.ts$/],
   ['shell', /^ui\/(animate|art)\.ts$/],

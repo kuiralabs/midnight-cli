@@ -5,10 +5,10 @@
 // sits beside it (src/commands/<name>.definition.ts) and must not load the
 // handler's module until asked, so reading the registry loads no SDK.
 //
-// In 2B nothing reads the registry yet but its tests, which rebuild every
-// existing list from it. Where those lists disagree today, a definition
-// records what each says, so every rebuild is exact; Y29 (the plan's STATUS)
-// fixes the disagreements in 2C–2G.
+// The shell's dispatch and flag checks read the registry since 2C; help, the
+// manual and the intro since 2D. The MCP tools still keep their own list until
+// 2E; the registry's tests rebuild it exactly. Where the old lists disagreed,
+// Y29 (the plan's STATUS) fixes them in 2C–2G.
 
 import type { ParsedArgs } from './argv.ts';
 
@@ -128,11 +128,20 @@ export interface CommandDefinition {
   readonly mcp?: { readonly tools: readonly ToolDefinition[] };
 }
 
+/** One entry of the global flags `help --json` lists, as it shows it. */
+export interface GlobalFlagHelp {
+  /** As shown, with its value and any short form: `--version, -v`. */
+  readonly name: string;
+  readonly description: string;
+}
+
 export interface CommandRegistry {
   /** The definitions, in help's order. */
   readonly commands: readonly CommandDefinition[];
   /** Flags every command accepts. */
   readonly globalFlags: readonly FlagDefinition[];
+  /** The global flags `help --json` lists: the flags every command accepts, and the options most do. */
+  readonly globalFlagsHelp: readonly GlobalFlagHelp[];
   find(name: string): CommandDefinition | undefined;
   /** Every MCP tool, in the server's order. */
   readonly tools: readonly ToolDefinition[];
@@ -174,7 +183,11 @@ function checkDefinition(command: CommandDefinition): void {
 }
 
 /** Collects definitions into a registry, refusing any that contradict each other. */
-export function createCommandRegistry(commands: readonly CommandDefinition[], globalFlags: readonly FlagDefinition[]): CommandRegistry {
+export function createCommandRegistry(
+  commands: readonly CommandDefinition[],
+  globalFlags: readonly FlagDefinition[],
+  globalFlagsHelp: readonly GlobalFlagHelp[] = [],
+): CommandRegistry {
   assertUnique(commands.map((command) => command.name), 'command');
   assertUnique(globalFlags.map((flag) => flag.name), 'global flag');
   commands.forEach(checkDefinition);
@@ -186,6 +199,7 @@ export function createCommandRegistry(commands: readonly CommandDefinition[], gl
   return {
     commands,
     globalFlags,
+    globalFlagsHelp,
     find: (name) => commands.find((command) => command.name === name),
     tools: [...tools].sort((a, b) => a.order - b.order),
   };
@@ -208,6 +222,40 @@ export function toolPassThroughFlags(registry: CommandRegistry, toolName: string
 export function flagsSectionLines(command: CommandDefinition): string[] {
   return (command.help?.flags ?? []).flatMap((entry) =>
     typeof entry === 'string' ? [entry] : command.flags.find((flag) => flag.name === entry.flag)?.help ?? []);
+}
+
+/** One command as `help <command>`, `help --json` and `manual` show it: its help, the Flags section rendered. */
+export interface CommandHelpSpec {
+  readonly name: string;
+  readonly description: string;
+  readonly usage: string;
+  readonly flags?: readonly string[];
+  readonly examples?: readonly string[];
+  readonly jsonFields?: Readonly<Record<string, string>>;
+}
+
+/** Every command help lists, in the registry's order; a command with no help is left out. */
+export function commandHelpSpecs(registry: Pick<CommandRegistry, 'commands'>): CommandHelpSpec[] {
+  return registry.commands.flatMap((command) => {
+    const help = command.help;
+    if (help === undefined) return [];
+    return [{
+      name: command.name,
+      description: help.description,
+      usage: help.usage,
+      ...(help.flags === undefined ? {} : { flags: flagsSectionLines(command) }),
+      ...(help.examples === undefined ? {} : { examples: [...help.examples] }),
+      ...(help.jsonFields === undefined ? {} : { jsonFields: { ...help.jsonFields } }),
+    }];
+  });
+}
+
+/** The intro's command list: each command with a brief, by its place there. */
+export function introBriefs(registry: Pick<CommandRegistry, 'commands'>): [name: string, brief: string][] {
+  return registry.commands
+    .flatMap((command) => (command.intro === undefined ? [] : [{ name: command.name, ...command.intro }]))
+    .sort((a, b) => a.order - b.order)
+    .map(({ name, brief }) => [name, brief]);
 }
 
 /** The network and wallet a confirmation names: the ones given, or the active ones. */
