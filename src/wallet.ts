@@ -6,8 +6,10 @@
 import { parseArgs, hasFlag } from './lib/argv.ts';
 import { errorMessage, usageMessage } from './ui/format.ts';
 import { assertKnownFlags } from './lib/command-flags.ts';
+import { installedCommands } from './lib/installed-commands.ts';
+import { commandNeedsWalletSdk, dispatchCommand } from './lib/command-dispatch.ts';
 import { classifyError, humanizeNetworkError, EXIT_INVALID_ARGS } from './lib/exit-codes.ts';
-import { UsageError, isUsageError } from './lib/errors.ts';
+import { isUsageError } from './lib/errors.ts';
 import { writeJsonError } from './lib/json-output.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { migrateOldWallet } from './lib/wallet-paths.ts';
@@ -17,15 +19,6 @@ import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { setPrompter } from './lib/prompter.ts';
 import { createTerminalPrompter } from './ui/terminal-prompter.ts';
 import { installCliHost } from './lib/cli-host.ts';
-
-// Commands that start a WalletFacade. They (a) leave WebSocket connections in
-// the event loop that facade.stop() doesn't fully drain — so we must exit
-// explicitly — and (b) may run a cold shielded/dust sync whose transient-garbage
-// stream overflows Node's default heap, so they re-exec with more headroom
-// before any SDK/WASM loads (see lib/heap-guard.ts).
-// `dev` is included because it provisions wallets internally (airdrop + dust
-// register), which start facades whose WS handles aren't reliably reclaimed.
-const FACADE_COMMANDS = new Set(['airdrop', 'transfer', 'dust', 'balance', 'serve', 'test', 'contract', 'dev', 'grant']);
 
 // --mcp: start MCP server instead of CLI (for: npx midnight-wallet-cli --mcp)
 if (process.argv.includes('--mcp')) {
@@ -52,10 +45,14 @@ if (helpRequested) {
 // Default to help when no command given
 const command = args.command ?? 'help';
 
-// Sync commands re-exec with more heap headroom before any SDK/WASM loads.
-// No-op for non-sync commands, for the re-exec'd child, and when the heap is
-// already large enough — so help/version/config etc. pay nothing.
-if (FACADE_COMMANDS.has(command)) await ensureHeapForSync();
+// Commands that start the wallet SDK (their definition's needsWalletSdk) may
+// run a cold shielded/dust sync whose transient-garbage stream overflows
+// Node's default heap, so they re-exec with more headroom before any SDK/WASM
+// loads (see lib/heap-guard.ts). No-op for the others, for the re-exec'd
+// child, and when the heap is already large enough — so help/version/config
+// etc. pay nothing.
+const needsWalletSdk = commandNeedsWalletSdk(installedCommands, command);
+if (needsWalletSdk) await ensureHeapForSync();
 
 // Auto-migrate old ~/.midnight/wallet.json → wallets/default.json (silent, one-time)
 // Endpoint URLs can carry a Blockfrost project id: nothing mn or its libraries print shows it.
@@ -86,113 +83,25 @@ process.on('SIGTERM', handleShutdown);
 async function run(): Promise<void> {
   // An unrecognised flag is refused before anything runs, instead of being
   // ignored and the command falling back to defaults.
-  if (!helpRequested) assertKnownFlags(args);
+  if (!helpRequested) assertKnownFlags(args, installedCommands);
   // Help still shows on a Node.js too old for the wallet SDK; nothing else runs there.
   if (command !== 'help') assertNodeSupported();
-  switch (command) {
-    case 'help': {
-      const { default: handler } = await import('./commands/help.ts');
-      return handler(args);
-    }
-    case 'manual': {
-      const { default: handler } = await import('./commands/manual.ts');
-      return handler(args);
-    }
-    case 'wallet': {
-      const { default: handler } = await import('./commands/wallet.ts');
-      // wallet protect also seals grant's accounts, through the protector grant provides (D24).
-      const { accountProtector } = await import('./lib/grant/account-protector.ts');
-      return handler(args, undefined, { protectors: [accountProtector] });
-    }
-    case 'generate': {
-      process.stderr.write(
-        '\n  Note: "midnight generate" is deprecated.\n' +
-        '  Use "midnight wallet generate <name>" instead.\n\n'
-      );
-      const { default: handler } = await import('./commands/generate.ts');
-      return handler(args);
-    }
-    case 'info': {
-      const { default: handler } = await import('./commands/info.ts');
-      return handler(args);
-    }
-    case 'balance': {
-      const { default: handler } = await import('./commands/balance.ts');
-      return handler(args);
-    }
-    case 'address': {
-      const { default: handler } = await import('./commands/address.ts');
-      return handler(args);
-    }
-    case 'genesis-address': {
-      const { default: handler } = await import('./commands/genesis-address.ts');
-      return handler(args);
-    }
-    case 'inspect-cost': {
-      const { default: handler } = await import('./commands/inspect-cost.ts');
-      return handler(args);
-    }
-    case 'config': {
-      const { default: handler } = await import('./commands/config.ts');
-      return handler(args);
-    }
-    case 'cache': {
-      const { default: handler } = await import('./commands/cache.ts');
-      return handler(args);
-    }
-    case 'airdrop': {
-      const { default: handler } = await import('./commands/airdrop.ts');
-      return handler(args, signal);
-    }
-    case 'transfer': {
-      const { default: handler } = await import('./commands/transfer.ts');
-      return handler(args, signal);
-    }
-    case 'dust': {
-      const { default: handler } = await import('./commands/dust.ts');
-      return handler(args, signal);
-    }
-    case 'localnet': {
-      const { default: handler } = await import('./commands/localnet.ts');
-      return handler(args);
-    }
-    case 'status':
-      throw new Error('The "status" command is currently being reworked. Check back soon.');
-    case 'serve': {
-      const { default: handler } = await import('./commands/serve.ts');
-      return handler(args, signal);
-    }
-    case 'test': {
-      const { default: handler } = await import('./commands/test.ts');
-      return handler(args, signal);
-    }
-    case 'contract': {
-      const { default: handler } = await import('./commands/contract.ts');
-      const { servePayer } = await import('./lib/serve-payer.ts');
-      return handler(args, signal, { payer: servePayer });
-    }
-    case 'dev': {
-      const { default: handler } = await import('./commands/dev.ts');
-      const { servePayer } = await import('./lib/serve-payer.ts');
-      return handler(args, signal, { payer: servePayer });
-    }
-    case 'grant': {
-      const { default: handler } = await import('./commands/grant.ts');
-      const { servePayer } = await import('./lib/serve-payer.ts');
-      return handler(args, signal, { payer: servePayer });
-    }
-    default:
-      throw new UsageError(
-        `Unknown command: "${command}"\n` +
-        `Run "midnight help" to see available commands.`
-      );
-  }
+  // The command, what the shell gives its handler, a notice or a refusal: all from its definition.
+  return dispatchCommand(installedCommands, command, args, {
+    signal,
+    loadPayer: async () => (await import('./lib/serve-payer.ts')).servePayer,
+    // wallet protect also seals grant's accounts, through the protector grant provides (D24).
+    loadProtectors: async () => [(await import('./lib/grant/account-protector.ts')).accountProtector],
+    writeNotice: (text) => process.stderr.write(text),
+  });
 }
 
 run().then(() => {
   // A command can finish without throwing and still have failed: a test run
   // whose suite fails sets process.exitCode, and that is the code to leave with.
-  if (FACADE_COMMANDS.has(command)) {
+  // A command that started the wallet SDK leaves WebSocket connections in the
+  // event loop that facade.stop() doesn't fully drain, so it exits explicitly.
+  if (needsWalletSdk) {
     process.exit(process.exitCode ?? 0);
   }
 }).catch((err: Error) => {

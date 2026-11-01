@@ -5,10 +5,11 @@ import serveCommand from '../commands/serve.ts';
 import { parseArgs } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
 import { findUnknownFlags } from '../lib/command-flags.ts';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 describe('serve --approve-fees', () => {
   it('is a flag serve accepts', () => {
-    expect(findUnknownFlags(parseArgs(['serve', '--approve-fees']))).toEqual([]);
+    expect(findUnknownFlags(parseArgs(['serve', '--approve-fees']), installedCommands)).toEqual([]);
   });
 
   it('refuses to combine with --approve-all, before loading any wallet', async () => {

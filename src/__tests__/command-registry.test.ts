@@ -1,9 +1,11 @@
-// The command registry (plan 2B): every command defined once, beside it. Until
-// 2C–2E switch them over, dispatch, help, the intro and the MCP server keep
-// their own lists; each test here rebuilds one of those lists from the
-// registry and requires it to equal the list as it is, so the switch can't
-// change what a user or an agent sees. Where the lists disagree today, the
-// definitions record what each says (Y29 fixes them later).
+// The command registry (plan 2B): every command defined once, beside it.
+// Since 2C the CLI's dispatch, its SDK commands and its accepted flags come
+// from it; their tests pin what the lists they replaced said. Until 2D–2E
+// switch them over, help, the intro and the MCP server keep their own lists;
+// each test here rebuilds one of those lists from the registry and requires it
+// to equal the list as it is, so the switch can't change what a user or an
+// agent sees. Where the lists disagree today, the definitions record what each
+// says (Y29 fixes them later).
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -14,9 +16,15 @@ import {
   confirmationText,
   createCommandRegistry,
   flagsSectionLines,
+  toolPassThroughFlags,
   type CommandDefinition,
 } from '../lib/command-definition.ts';
 import { COMMAND_FLAGS, GLOBAL_FLAGS } from '../lib/command-flags.ts';
+import { commandNeedsWalletSdk, dispatchCommand, type ShellProvisions } from '../lib/command-dispatch.ts';
+import { parseArgs, type ParsedArgs } from '../lib/argv.ts';
+import { isUsageError } from '../lib/errors.ts';
+import type { Payer } from '../lib/payer.ts';
+import type { WalletProtector } from '../lib/wallet-protector.ts';
 import { COMMAND_SPECS, type CommandSpec } from '../commands/help.ts';
 import { COMMAND_BRIEFS } from '../ui/art.ts';
 import { TOOLS, REQUIRES_CONFIRMATION, describePendingOp, handlerLoaders } from '../lib/mcp/tools.ts';
@@ -24,74 +32,119 @@ import { TOOLS, REQUIRES_CONFIRMATION, describePendingOp, handlerLoaders } from 
 const SRC = join(import.meta.dirname, '..');
 const registry = installedCommands;
 
-/** A single-quoted TypeScript string literal's value. */
-function unquote(literal: string): string {
-  return literal.slice(1, -1).replace(/\\(.)/g, (_, c: string) => (c === 'n' ? '\n' : c));
-}
+describe('the dispatch (src/lib/command-dispatch.ts, from the registry since 2C)', () => {
+  // What the switch in src/wallet.ts gave each command before 2C, as it was
+  // read from that switch at b5dc946: the registry's dispatch must give the same.
+  const GENERATE_NOTICE = '\n  Note: "midnight generate" is deprecated.\n  Use "midnight wallet generate <name>" instead.\n\n';
+  const STATUS_REFUSAL = 'The "status" command is currently being reworked. Check back soon.';
+  const SWITCH_BEFORE_2C: Record<string, { signal?: true; payer?: true; protectors?: true; notice?: string; unavailable?: string }> = {
+    'address': {}, 'airdrop': { signal: true }, 'balance': {}, 'cache': {}, 'config': {},
+    'contract': { signal: true, payer: true }, 'dev': { signal: true, payer: true }, 'dust': { signal: true },
+    'generate': { notice: GENERATE_NOTICE }, 'genesis-address': {}, 'grant': { signal: true, payer: true },
+    'help': {}, 'info': {}, 'inspect-cost': {}, 'localnet': {}, 'manual': {}, 'serve': { signal: true },
+    'status': { unavailable: STATUS_REFUSAL }, 'test': { signal: true }, 'transfer': { signal: true },
+    'wallet': { protectors: true },
+  };
 
-describe('the dispatch (src/wallet.ts)', () => {
-  // The dispatch is a switch, not a list, and wallet.ts runs the CLI when
-  // imported; so its cases are read from the source, every one accounted for.
-  const source = readFileSync(join(SRC, 'wallet.ts'), 'utf8');
-  const body = source.slice(source.indexOf('switch (command) {'), source.indexOf('    default:'));
-  const cases = body.split(/\n    case /).slice(1).map((block) => {
-    const name = block.match(/^'([a-z-]+)'/)?.[1];
-    const loads = block.match(/import\('\.\/commands\/([a-z-]+)\.ts'\)/)?.[1];
-    const thrown = block.match(/throw new Error\(('(?:[^'\\]|\\.)*')\)/)?.[1];
-    const notice = block.match(/process\.stderr\.write\(([^;]*)\);/)?.[1];
-    return {
-      name,
-      loads,
-      signal: /handler\(args, signal\b/.test(block),
-      payer: /\{ payer: servePayer \}/.test(block),
-      protectors: /\{ protectors: \[accountProtector\] \}/.test(block),
-      notice: notice === undefined ? undefined : [...notice.matchAll(/'(?:[^'\\]|\\.)*'/g)].map((m) => unquote(m[0])).join(''),
-      unavailable: thrown === undefined ? undefined : unquote(thrown),
-    };
+  it('gives every command what the switch gave it', () => {
+    const given = Object.fromEntries(registry.commands.map((c) => [c.name, { ...c.shell }]));
+    expect(given).toStrictEqual(SWITCH_BEFORE_2C);
   });
 
-  it('reads every case: each loads its own command or refuses it', () => {
-    expect(cases.length).toBe(21);
-    for (const c of cases) {
-      expect(c.name).toBeDefined();
-      expect(c.loads === c.name || (c.loads === undefined && c.unavailable !== undefined), String(c.name)).toBe(true);
-    }
-  });
-
-  it('is rebuilt exactly: its commands and what the shell gives each', () => {
-    const today = cases.map(({ loads: _loads, ...c }) => c).sort((a, b) => a.name!.localeCompare(b.name!));
-    const rebuilt = registry.commands.map((c) => ({
-      name: c.name,
-      signal: c.shell.signal === true,
-      payer: c.shell.payer === true,
-      protectors: c.shell.protectors === true,
-      notice: c.shell.notice,
-      unavailable: c.shell.unavailable,
-    })).sort((a, b) => a.name.localeCompare(b.name));
-    expect(rebuilt).toStrictEqual(today);
-  });
-
-  it('loads each handler from the module the dispatch imports', async () => {
-    for (const c of cases.filter((c) => c.loads !== undefined)) {
-      const fromDispatch = await import(`../commands/${c.loads}.ts`);
-      const fromRegistry = await registry.find(c.name!)!.load();
-      expect(fromRegistry.default, c.name).toBe(fromDispatch.default);
+  it('loads each handler from its own command\'s module', async () => {
+    for (const c of registry.commands.filter((c) => c.shell.unavailable === undefined)) {
+      const fromModule = await import(`../commands/${c.name}.ts`);
+      expect((await c.load()).default, c.name).toBe(fromModule.default);
     }
   }, 120_000);
-});
 
-describe('the commands that need the wallet SDK (FACADE_COMMANDS in src/wallet.ts)', () => {
-  it('is rebuilt exactly', () => {
-    const source = readFileSync(join(SRC, 'wallet.ts'), 'utf8');
-    const listed = source.match(/const FACADE_COMMANDS = new Set\(\[([^\]]*)\]\)/)![1]!;
-    const today = [...listed.matchAll(/'([a-z-]+)'/g)].map((m) => m[1]!);
-    const rebuilt = registry.commands.filter((c) => c.needsWalletSdk).map((c) => c.name);
-    expect(new Set(rebuilt)).toStrictEqual(new Set(today));
-    expect(rebuilt).toHaveLength(today.length);
+  // A registry of test commands whose handlers record what they were given.
+  const received: { name: string; args: ParsedArgs; signal: AbortSignal | undefined; context: unknown }[] = [];
+  const notices: string[] = [];
+  const loaded: string[] = [];
+  const payer = { name: 'test payer' } as unknown as Payer;
+  const protector = { name: 'test protector' } as unknown as WalletProtector;
+  const testCommand = (name: string, shell: CommandDefinition['shell']): CommandDefinition => ({
+    name, flags: [], needsWalletSdk: false, shell,
+    load: async () => {
+      loaded.push(name);
+      return { default: async (args, signal, context) => { received.push({ name, args, signal, context }); } };
+    },
+  });
+  const testRegistry = createCommandRegistry([
+    testCommand('plain', {}),
+    testCommand('cancellable', { signal: true }),
+    testCommand('paying', { signal: true, payer: true }),
+    testCommand('protecting', { protectors: true }),
+    testCommand('noticed', { notice: 'deprecated\n' }),
+    testCommand('refused', { unavailable: 'not now' }),
+  ], []);
+  const controller = new AbortController();
+  const provisions: ShellProvisions = {
+    signal: controller.signal,
+    loadPayer: async () => payer,
+    loadProtectors: async () => [protector],
+    writeNotice: (text) => notices.push(text),
+  };
+  const run = async (name: string) => {
+    received.length = 0; notices.length = 0; loaded.length = 0;
+    const args = parseArgs([name, '--json']);
+    await dispatchCommand(testRegistry, name, args, provisions);
+    return { args, call: received[0]! };
+  };
+
+  it('passes the args, and the signal, payer and protectors only when the definition asks', async () => {
+    const plain = await run('plain');
+    expect(plain.call).toStrictEqual({ name: 'plain', args: plain.args, signal: undefined, context: undefined });
+    expect((await run('cancellable')).call).toMatchObject({ signal: controller.signal, context: undefined });
+    expect((await run('paying')).call).toMatchObject({ signal: controller.signal, context: { payer } });
+    const protecting = await run('protecting');
+    expect(protecting.call.signal).toBeUndefined();
+    expect(protecting.call.context).toStrictEqual({ protectors: [protector] });
+  });
+
+  it('writes a notice before the handler loads', async () => {
+    await run('noticed');
+    expect(notices).toStrictEqual(['deprecated\n']);
+    expect(loaded).toStrictEqual(['noticed']);
+  });
+
+  it('refuses an unavailable command with its message, loading nothing', async () => {
+    loaded.length = 0;
+    await expect(dispatchCommand(testRegistry, 'refused', parseArgs(['refused']), provisions)).rejects.toThrow(new Error('not now'));
+    expect(loaded).toStrictEqual([]);
+  });
+
+  it('refuses status, as the switch did, without loading it', async () => {
+    const err = await dispatchCommand(registry, 'status', parseArgs(['status']), provisions).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(isUsageError(err)).toBe(false);
+    expect((err as Error).message).toBe(STATUS_REFUSAL);
+  });
+
+  it('refuses a command not installed as a usage error naming it', async () => {
+    const err = await dispatchCommand(registry, 'no-such-command', parseArgs(['no-such-command']), provisions).catch((e: unknown) => e);
+    expect(isUsageError(err)).toBe(true);
+    expect((err as Error).message).toBe('Unknown command: "no-such-command"\nRun "midnight help" to see available commands.');
   });
 });
 
-describe('the accepted flags (COMMAND_FLAGS and GLOBAL_FLAGS)', () => {
+describe('the commands that need the wallet SDK (heap re-exec and forced exit)', () => {
+  // FACADE_COMMANDS in src/wallet.ts before 2C.
+  const FACADE_COMMANDS_BEFORE_2C = ['airdrop', 'transfer', 'dust', 'balance', 'serve', 'test', 'contract', 'dev', 'grant'];
+
+  it('are the ones FACADE_COMMANDS listed', () => {
+    const rebuilt = registry.commands.filter((c) => commandNeedsWalletSdk(registry, c.name)).map((c) => c.name);
+    expect(new Set(rebuilt)).toStrictEqual(new Set(FACADE_COMMANDS_BEFORE_2C));
+    expect(rebuilt).toHaveLength(FACADE_COMMANDS_BEFORE_2C.length);
+  });
+
+  it('do not include a command that is not installed', () => {
+    expect(commandNeedsWalletSdk(registry, 'no-such-command')).toBe(false);
+  });
+});
+
+describe('the accepted flags (COMMAND_FLAGS and GLOBAL_FLAGS, superseded by the registry; removal waits for Y13)', () => {
   it('COMMAND_FLAGS is rebuilt exactly, each command\'s flags in their order', () => {
     const rebuilt = Object.fromEntries(registry.commands.map((c) => [c.name, c.flags.map((f) => f.name)]));
     expect(rebuilt).toStrictEqual(COMMAND_FLAGS);
@@ -216,6 +269,17 @@ describe('the MCP tools (TOOLS in src/lib/mcp/tools.ts)', () => {
         expect(confirmationText(tool, params), `${tool.name} ${JSON.stringify(params)}`).toBe(describePendingOp(tool.name, params));
       }
     }
+  });
+
+  it('lets a tool pass on its command\'s flags beyond its schema only when its argv passes the rest on', () => {
+    // midnight_transfer passes the rest on as flags: transfer's flags and the global ones.
+    expect(toolPassThroughFlags(registry, 'midnight_transfer')).toStrictEqual([
+      ...registry.find('transfer')!.flags.map((f) => f.name), 'help', 'h', 'json', 'version', 'v',
+    ]);
+    // midnight_config_get maps only its own parameters.
+    expect(toolPassThroughFlags(registry, 'midnight_config_get')).toStrictEqual([]);
+    // The server's own confirm tool belongs to no command.
+    expect(toolPassThroughFlags(registry, 'midnight_confirm_operation')).toStrictEqual([]);
   });
 
   it('maps only parameters its schema has onto argv', () => {

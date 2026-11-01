@@ -9,7 +9,13 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
-import { COMMAND_FLAGS, GLOBAL_FLAGS, findUnknownFlags, assertKnownFlags } from '../lib/command-flags.ts';
+import { findUnknownFlags as findUnknownFlagsIn, assertKnownFlags as assertKnownFlagsIn } from '../lib/command-flags.ts';
+import { installedCommands } from '../lib/installed-commands.ts';
+import type { ParsedArgs } from '../lib/argv.ts';
+
+// The refusal reads the installed commands' registry, as the CLI's does.
+const findUnknownFlags = (args: ParsedArgs) => findUnknownFlagsIn(args, installedCommands);
+const assertKnownFlags = (args: ParsedArgs) => assertKnownFlagsIn(args, installedCommands);
 
 describe('assertKnownFlags', () => {
   it('rejects an unsplit multi-flag argument (one token containing spaces), before anything runs', () => {
@@ -33,8 +39,8 @@ describe('assertKnownFlags', () => {
   });
 
   it('accepts the global flags on every command', () => {
-    for (const command of Object.keys(COMMAND_FLAGS)) {
-      const args = parseArgs([command, ...GLOBAL_FLAGS.map((f) => (f.length === 1 ? `-${f}` : `--${f}`))]);
+    for (const { name: command } of installedCommands.commands) {
+      const args = parseArgs([command, ...installedCommands.globalFlags.map(({ name: f }) => (f.length === 1 ? `-${f}` : `--${f}`))]);
       expect(findUnknownFlags(args), command).toEqual([]);
     }
   });
@@ -50,7 +56,7 @@ describe('assertKnownFlags', () => {
   });
 });
 
-describe('COMMAND_FLAGS matches the code', () => {
+describe('the accepted flags match the code', () => {
   // A flag a command reads but the registry lacks would be rejected even
   // though it works; a registry entry no code reads would be accepted and
   // silently ignored (the bug this guards against). Derive each command's
@@ -81,7 +87,7 @@ describe('COMMAND_FLAGS matches the code', () => {
     for (const [call, implied] of Object.entries(HELPER_FLAGS)) {
       if (source.includes(call)) implied.forEach((f) => flags.add(f));
     }
-    for (const g of GLOBAL_FLAGS) flags.delete(g);
+    for (const g of installedCommands.globalFlags) flags.delete(g.name);
     return flags;
   }
 
@@ -89,11 +95,11 @@ describe('COMMAND_FLAGS matches the code', () => {
   const commandFiles = readdirSync(COMMANDS_DIR).filter((f) => f.endsWith('.ts') && !f.endsWith('.definition.ts'));
 
   it('has an entry for every command file, and no entry without one', () => {
-    expect(Object.keys(COMMAND_FLAGS).sort()).toEqual(commandFiles.map((f) => f.replace(/\.ts$/, '')).sort());
+    expect(installedCommands.commands.map((c) => c.name).sort()).toEqual(commandFiles.map((f) => f.replace(/\.ts$/, '')).sort());
   });
 
   it.each(commandFiles.map((f) => f.replace(/\.ts$/, '')))('%s: registry equals the flags its code reads', (command) => {
     const source = readFileSync(join(COMMANDS_DIR, `${command}.ts`), 'utf-8');
-    expect([...COMMAND_FLAGS[command]!].sort()).toEqual([...flagsReadBy(source)].sort());
+    expect(installedCommands.find(command)!.flags.map((f) => f.name).sort()).toEqual([...flagsReadBy(source)].sort());
   });
 });
