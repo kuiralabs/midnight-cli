@@ -123,9 +123,10 @@ try {
   `], join(work, 'node_modules', 'midnight-wallet-cli'));
   check('a shielded address parses', parsed.trim() === 'parsed' && address.length > 90, `${address.length} characters${parsed.trim() === 'parsed' ? '' : `, ${parsed.trim()}`}`);
 
-  // mn grant drives the account package it installed: its driver must load from
-  // the installed tree and answer that the new wallet has no account. Asking
-  // that reaches no chain, and the package fetches no proving key for it.
+  // mn grant drives the account package it installed: its owner records load
+  // from the installed tree and answer that the new wallet has no account.
+  // Asking that reaches no chain and opens no proving-artefact cache (the
+  // release gate's live run checks the cache, around the first deploy).
   let grant = '';
   try {
     execFileSync(mn, ['grant', 'status', '--wallet', 'check', '--network', 'undeployed', '--node', 'ws://127.0.0.1:9', '--indexer-ws', 'ws://127.0.0.1:9/api/v4/graphql/ws', '--proof-server', 'http://127.0.0.1:9'], {
@@ -136,8 +137,7 @@ try {
     grant = String(error.stderr ?? error.message);
   }
   check('mn grant drives the installed account package', /Wallet "check" has no account on undeployed yet/.test(grant), grant.includes('has no account') ? 'no account yet, as for a new wallet' : grant.trim().split('\n').slice(-2).join(' | '));
-  const cached = existsSync(join(home, '.midnight', 'account-artifacts')) ? readdirSync(join(home, '.midnight', 'account-artifacts')) : [];
-  check('its proving-artefact cache is under ~/.midnight, empty of keys', cached.length === 1 && readdirSync(join(home, '.midnight', 'account-artifacts', cached[0])).join() === 'compiler', cached.join(', '));
+  check('it opens no proving-artefact cache', !existsSync(join(home, '.midnight', 'account-artifacts')), 'none under ~/.midnight');
   const chains = copiesOf(work, '@kuiralabs/midnight-account-chain');
   check('one copy of @kuiralabs/midnight-account-chain', chains.length === 1, chains.join(', '));
 
