@@ -22,7 +22,7 @@ import { classifyError } from './lib/exit-codes.ts';
 import { trimAgentMessage } from './lib/error-trim.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { createConfirmationStore } from './lib/mcp/confirmation.ts';
-import { assertKnownParams } from './lib/mcp/tools.ts';
+import { assertKnownParams } from './lib/mcp/known-params.ts';
 import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from './lib/mcp/registry-tools.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';

@@ -1,12 +1,9 @@
 // The command registry (plan 2B): every command defined once, beside it.
 // Since 2C the CLI's dispatch, its SDK commands and its accepted flags come
-// from it, and since 2D help, the manual and the intro; their tests pin what
-// the lists they replaced said, and those lists stay until Y13 approves their
-// removal. Since 2E the MCP server's tools come from it too: the tests here
-// compare what it generates with the list the server kept until then (TOOLS),
-// which differs only in the parameters the schemas gain (Y29). Where the lists
-// disagree, the definitions record what each says, and Y29 fixes them one by
-// one (2D: the intro gains grant's line; 2E: the schemas).
+// from it, since 2D help, the manual and the intro, and since 2E the MCP
+// server's tools. The lists they replaced are gone (Y13); what each output
+// says is pinned by the behaviour snapshot, and the tests here check what the
+// registry must hold on its own.
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -27,7 +24,6 @@ import {
 } from '../lib/command-definition.ts';
 import { getValidNetworkNames } from '../lib/network.ts';
 import { CONFIRM_TOOL, listedTools } from '../lib/mcp/registry-tools.ts';
-import { COMMAND_FLAGS, GLOBAL_FLAGS } from '../lib/command-flags.ts';
 import { commandNeedsWalletSdk, dispatchCommand, type ShellProvisions } from '../lib/command-dispatch.ts';
 import { FULL_FLAG, parseArgs, type ParsedArgs } from '../lib/argv.ts';
 import { CancelledError, isUsageError } from '../lib/errors.ts';
@@ -38,9 +34,6 @@ import { settings } from '../lib/settings.ts';
 import type { Payer } from '../lib/payer.ts';
 import { createSdkWarningRouter, sdkWarningCallsOn } from '../lib/sdk-warnings.ts';
 import type { WalletProtector } from '../lib/wallet-protector.ts';
-import { COMMAND_SPECS } from '../commands/help.ts';
-import { COMMAND_BRIEFS } from '../ui/art.ts';
-import { TOOLS, REQUIRES_CONFIRMATION, describePendingOp, handlerLoaders } from '../lib/mcp/tools.ts';
 
 const SRC = join(import.meta.dirname, '..');
 const registry = installedCommands;
@@ -204,16 +197,7 @@ describe('the commands that need the wallet SDK (heap re-exec and forced exit)',
   });
 });
 
-describe('the accepted flags (COMMAND_FLAGS and GLOBAL_FLAGS, superseded by the registry; removal waits for Y13)', () => {
-  it('COMMAND_FLAGS is rebuilt exactly, each command\'s flags in their order', () => {
-    const rebuilt = Object.fromEntries(registry.commands.map((c) => [c.name, c.flags.map((f) => f.name)]));
-    expect(rebuilt).toStrictEqual(COMMAND_FLAGS);
-  });
-
-  it('GLOBAL_FLAGS is rebuilt exactly', () => {
-    expect(registry.globalFlags.map((f) => f.name)).toStrictEqual(GLOBAL_FLAGS);
-  });
-
+describe('the accepted flags', () => {
   it('a flag takes a value exactly when the code reads one for it', () => {
     // getFlag/requireFlag read a value, hasFlag a bare switch, wherever in src/ a flag is read.
     const kinds = new Map<string, Set<boolean>>();
@@ -245,27 +229,7 @@ describe('the accepted flags (COMMAND_FLAGS and GLOBAL_FLAGS, superseded by the 
   });
 });
 
-describe('help\'s command specs (COMMAND_SPECS in src/commands/help.ts, superseded by the registry; removal waits for Y13)', () => {
-  // What help, help --json and the manual render since 2D.
-  const rebuilt = commandHelpSpecs(registry);
-
-  it('is rebuilt exactly, in its order', () => {
-    expect(rebuilt).toStrictEqual(COMMAND_SPECS);
-  });
-
-  it('is rebuilt byte for byte as help --json and the manual read it', () => {
-    expect(JSON.stringify(rebuilt)).toBe(JSON.stringify(COMMAND_SPECS));
-  });
-});
-
-describe('the intro\'s briefs (COMMAND_BRIEFS in src/ui/art.ts, superseded by the registry; removal waits for Y13)', () => {
-  it('is rebuilt exactly, in its order, with grant\'s line added after dev (Y29)', () => {
-    const before = [...COMMAND_BRIEFS];
-    const dev = before.findIndex(([name]) => name === 'dev');
-    before.splice(dev + 1, 0, ['grant', 'Grants that let agents spend']);
-    expect(introBriefs(registry)).toStrictEqual(before);
-  });
-
+describe('the intro\'s briefs', () => {
   it('names every command help lists but generate (wallet generate in the intro), and not status (disabled)', () => {
     const listed = new Set(introBriefs(registry).map(([name]) => name));
     const missing = commandHelpSpecs(registry).map((spec) => spec.name).filter((name) => !listed.has(name));
@@ -274,69 +238,11 @@ describe('the intro\'s briefs (COMMAND_BRIEFS in src/ui/art.ts, superseded by th
   });
 });
 
-describe('the MCP server\'s handler loaders (handlerLoaders in src/lib/mcp/tools.ts)', () => {
-  it('names the same commands', () => {
-    const rebuilt = registry.commands.filter((c) => c.mcp !== undefined).map((c) => c.name).sort();
-    expect(rebuilt).toStrictEqual(Object.keys(handlerLoaders).sort());
-  });
-
-  it('loads the same handler for each', async () => {
-    for (const [name, loader] of Object.entries(handlerLoaders)) {
-      expect((await registry.find(name)!.load()).default, name).toBe((await loader()).default);
-    }
-  }, 120_000);
-});
-
-describe('the MCP tools, generated from the registry (TOOLS in src/lib/mcp/tools.ts, superseded by the registry; removal waits for Y13)', () => {
+describe('the MCP tools, generated from the registry', () => {
   const tools = listedTools(registry);
-  const before = (name: string) => TOOLS.find((t) => t.name === name)!;
-
-  // The parameters each tool's schema gains in 2E (Y29): flags of its command
-  // that agents could pass but not see. Nothing else of tools/list changes.
-  const ADDED_IN_2E: Record<string, string[]> = {
-    midnight_info: ['network'],
-    midnight_balance: ['force-shielded', 'no-cache', 'seed', 'shielded', 'node', 'proof-server'],
-    midnight_address: ['wallet'],
-    midnight_airdrop: ['network', 'node', 'indexer-ws', 'proof-server'],
-    midnight_transfer: ['force-shielded', 'network', 'shielded', 'node', 'indexer-ws', 'proof-server'],
-    midnight_dust_register: ['network', 'node', 'indexer-ws', 'proof-server'],
-    midnight_dust_status: ['network'],
-    midnight_contract_state: ['node', 'indexer-ws', 'proof-server'],
-    midnight_contract_deploy: ['secret-key', 'node', 'indexer-ws', 'proof-server'],
-    midnight_contract_call: ['node', 'indexer-ws', 'proof-server'],
-    ...Object.fromEntries(['status', 'list', 'request', 'deploy', 'deposit', 'issue', 'revoke', 'revoke_all']
-      .map((sub) => [`midnight_grant_${sub}`, ['node', 'indexer-ws', 'proof-server']])),
-  };
-
-  it('lists the same tools in the same order, the server\'s confirm tool last, as it was', () => {
-    expect(tools.map((t) => t.name)).toStrictEqual(TOOLS.map((t) => t.name));
+  it('lists the registry\'s tools in its order, the server\'s confirm tool last', () => {
+    expect(tools.map((t) => t.name)).toStrictEqual([...registry.tools.map((t) => t.name), CONFIRM_TOOL.name]);
     expect(tools.at(-1)).toStrictEqual(CONFIRM_TOOL);
-    expect(JSON.stringify(CONFIRM_TOOL.inputSchema)).toBe(JSON.stringify(before('midnight_confirm_operation').inputSchema));
-  });
-
-  it('keeps every name, description, annotation and required list byte for byte', () => {
-    for (const tool of tools) {
-      const old = before(tool.name);
-      expect(JSON.stringify([tool.name, tool.description, tool.annotations, tool.inputSchema.required]), tool.name)
-        .toBe(JSON.stringify([old.name, old.description, old.annotations, old.inputSchema.required]));
-      expect(Object.keys(tool.inputSchema), tool.name).toStrictEqual(Object.keys(old.inputSchema));
-    }
-  });
-
-  it('keeps every property each schema had, in its place and as it read, and adds only the flags agents could already pass', () => {
-    for (const tool of tools) {
-      const old = before(tool.name).inputSchema.properties;
-      const keys = Object.keys(tool.inputSchema.properties);
-      const kept = Object.fromEntries(keys.slice(0, Object.keys(old).length).map((k) => [k, tool.inputSchema.properties[k]]));
-      expect(JSON.stringify(kept), tool.name).toBe(JSON.stringify(old));
-      expect(keys.slice(Object.keys(old).length), tool.name).toStrictEqual(ADDED_IN_2E[tool.name] ?? []);
-    }
-  });
-
-  it('adds only parameters 2C already let through, so no call that ran before is refused', () => {
-    for (const tool of registry.tools) {
-      for (const name of ADDED_IN_2E[tool.name] ?? []) expect(toolPassThroughFlags(registry, tool.name), `${tool.name}: ${name}`).toContain(name);
-    }
   });
 
   it('has, in each schema, exactly the tool\'s own params and the flags of its command that agents may pass and that apply to its subcommand', () => {
@@ -368,30 +274,12 @@ describe('the MCP tools, generated from the registry (TOOLS in src/lib/mcp/tools
     expect(NETWORK_PARAM.enum).toStrictEqual(getValidNetworkNames());
   });
 
-  // The one tool confirmed since 2E (Y29): it was marked destructive yet ran at once.
+  // Confirmed since 2E (Y29): it was marked destructive yet ran at once.
   const NEWLY_CONFIRMED = 'midnight_wallet_remove';
 
-  it('needs confirmation for the same tools, and for wallet remove', () => {
-    const rebuilt = new Set(registry.tools.filter((t) => t.confirmation !== undefined).map((t) => t.name));
-    expect(rebuilt).toStrictEqual(new Set([...REQUIRES_CONFIRMATION, NEWLY_CONFIRMED]));
-    // Every one checks the call before a token is given, as each had a check.
+  it('needs confirmation for wallet remove, and every confirmed tool checks the call before a token is given', () => {
+    expect(registry.tools.find((t) => t.name === NEWLY_CONFIRMED)!.confirmation).toBeDefined();
     for (const tool of registry.tools.filter((t) => t.confirmation !== undefined)) expect(tool.confirmation!.check, tool.name).toBeTypeOf('function');
-  });
-
-  it('gives each confirmation the same text', () => {
-    const samples: Record<string, unknown>[] = [
-      {},
-      { network: 'preprod' },
-      { wallet: 'alice', network: 'undeployed', amount: '5', to: 'mn_addr_undeployed1x', args: '[1,2]', path: './dapp', circuit: 'inc', address: '0xab', grant: '3', link: 'l' },
-      { wallet: null, network: null, args: '', path: undefined },
-    ];
-    const confirmed = registry.tools.filter((t) => t.confirmation !== undefined && t.name !== NEWLY_CONFIRMED);
-    expect(confirmed.length).toBe(REQUIRES_CONFIRMATION.size);
-    for (const tool of confirmed) {
-      for (const params of samples) {
-        expect(confirmationText(tool, params), `${tool.name} ${JSON.stringify(params)}`).toBe(describePendingOp(tool.name, params));
-      }
-    }
   });
 
   it('describes removing a wallet as deleting its file and seed', () => {

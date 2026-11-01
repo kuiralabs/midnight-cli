@@ -1,85 +1,36 @@
 import { describe, it, expect } from 'vitest';
-import { COMMAND_SPECS } from '../commands/help.ts';
+import { commandHelpSpecs } from '../lib/command-definition.ts';
+import { installedCommands } from '../lib/installed-commands.ts';
+import { listedTools } from '../lib/mcp/registry-tools.ts';
 
-// We test the MCP tool definitions by importing the TOOLS array structure
-// and verifying it matches COMMAND_SPECS. We can't easily test the actual
-// MCP server (it takes over stdio), but we verify the tool coverage.
+// Every command an agent can use has an MCP tool: the tools the server lists
+// (from the registry) against the commands help lists (from the registry).
 
-// Expected MCP tool names — one per CLI command/subcommand
-const EXPECTED_TOOLS = [
-  'midnight_wallet_generate',
-  'midnight_wallet_list',
-  'midnight_wallet_use',
-  'midnight_wallet_info',
-  'midnight_wallet_remove',
-  'midnight_info',
-  'midnight_balance',
-  'midnight_address',
-  'midnight_genesis_address',
-  'midnight_inspect_cost',
-  'midnight_airdrop',
-  'midnight_transfer',
-  'midnight_dust_register',
-  'midnight_dust_status',
-  'midnight_config_get',
-  'midnight_config_set',
-  'midnight_config_unset',
-  'midnight_cache_clear',
-  'midnight_localnet_up',
-  'midnight_localnet_stop',
-  'midnight_localnet_down',
-  'midnight_localnet_status',
-  'midnight_localnet_clean',
-  'midnight_localnet_logs',
-  'midnight_status',
-  'midnight_confirm_operation',
-  'midnight_contract_inspect',
-  'midnight_contract_state',
-  'midnight_contract_deploy',
-  'midnight_contract_call',
-  'midnight_grant_status',
-  'midnight_grant_list',
-  'midnight_grant_request',
-  'midnight_grant_deploy',
-  'midnight_grant_deposit',
-  'midnight_grant_issue',
-  'midnight_grant_revoke',
-  'midnight_grant_revoke_all',
-];
+const TOOL_NAMES = listedTools(installedCommands).map((tool) => tool.name);
+
+// help/manual are info channels (the skill resource serves agents),
+// serve/test/dev are long-running and interactive, generate is deprecated.
+const NO_TOOL = new Set(['help', 'manual', 'serve', 'test', 'dev', 'generate']);
+
+const hasTool = (command: string): boolean => {
+  const normalized = command.replace('-', '_');
+  return TOOL_NAMES.some((t) => t === `midnight_${normalized}` || t.startsWith(`midnight_${normalized}_`));
+};
 
 describe('MCP tool coverage', () => {
   it('every CLI command has at least one MCP tool', () => {
-    // CLI commands that should have MCP tools.
-    // Exemptions: help/manual are info channels (skill resource serves agents),
-    // serve/test/dev are long-running interactive, generate is deprecated.
-    const cliCommands = COMMAND_SPECS.map(s => s.name).filter(n => n !== 'help' && n !== 'manual' && n !== 'serve' && n !== 'test' && n !== 'dev' && n !== 'generate');
-
-    for (const cmd of cliCommands) {
-      // Normalize: dust → midnight_dust_register, midnight_dust_status
-      // localnet → midnight_localnet_up, etc.
-      const normalized = cmd.replace('-', '_');
-      const hasMatch = EXPECTED_TOOLS.some(t =>
-        t === `midnight_${normalized}` || t.startsWith(`midnight_${normalized}_`)
-      );
-      expect(hasMatch, `CLI command "${cmd}" should have a matching MCP tool`).toBe(true);
+    for (const spec of commandHelpSpecs(installedCommands).filter((s) => !NO_TOOL.has(s.name))) {
+      expect(hasTool(spec.name), `CLI command "${spec.name}" should have a matching MCP tool`).toBe(true);
     }
   });
 
-  it('has 38 expected tools', () => {
-    expect(EXPECTED_TOOLS).toHaveLength(38);
-  });
-
-  it('every COMMAND_SPEC with jsonFields is covered', () => {
-    // help/manual are info channels, serve/test/dev are long-running, generate is deprecated.
-    const commandsWithJson = COMMAND_SPECS.filter(s => s.jsonFields && s.name !== 'help' && s.name !== 'manual' && s.name !== 'serve' && s.name !== 'test' && s.name !== 'dev' && s.name !== 'generate');
-    // Should have at least one tool per command
+  it('every command with JSON fields has a tool', () => {
+    const commandsWithJson = commandHelpSpecs(installedCommands).filter((s) => s.jsonFields && !NO_TOOL.has(s.name));
     expect(commandsWithJson.length).toBeGreaterThan(0);
-    for (const spec of commandsWithJson) {
-      const normalized = spec.name.replace('-', '_');
-      const hasMatch = EXPECTED_TOOLS.some(t =>
-        t === `midnight_${normalized}` || t.startsWith(`midnight_${normalized}_`)
-      );
-      expect(hasMatch, `${spec.name} should have an MCP tool`).toBe(true);
-    }
+    for (const spec of commandsWithJson) expect(hasTool(spec.name), `${spec.name} should have an MCP tool`).toBe(true);
+  });
+
+  it('lists the confirm tool', () => {
+    expect(TOOL_NAMES).toContain('midnight_confirm_operation');
   });
 });
