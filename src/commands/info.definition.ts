@@ -1,0 +1,41 @@
+// The `info` command, described once (plan 2B, spec §4.1).
+
+import type { CommandDefinition } from '../lib/command-definition.ts';
+
+export const infoDefinition: CommandDefinition = {
+  name: 'info',
+  flags: [
+    { name: 'network', takesValue: true },
+    { name: 'wallet', takesValue: true, help: ['--wallet <name|file> Wallet name or path'] },
+  ],
+  help: {
+    description: 'Display wallet address, network, creation date (no secrets shown)',
+    usage: 'midnight info [--wallet <name|file>]',
+    flags: [{ flag: 'wallet' }],
+    examples: ['midnight info', 'midnight info --wallet my-wallet.json'],
+    jsonFields: {
+      addresses: 'Per-network unshielded addresses { preprod, preview, undeployed }',
+      shieldedAddresses: 'Per-network shielded addresses { preprod, preview, undeployed }',
+      activeNetwork: 'Currently active network',
+      activeAddress: 'Unshielded address for active network (also written to stdout)',
+      createdAt: 'ISO 8601 creation timestamp',
+      file: 'Wallet file path',
+    },
+  },
+  intro: { brief: 'Display wallet metadata', order: 2 },
+  needsWalletSdk: false,
+  shell: {},
+  load: () => import('./info.ts'),
+  mcp: {
+    tools: [
+      {
+        name: 'midnight_info',
+        description: 'Wallet metadata.',
+        annotations: { readOnlyHint: true, idempotentHint: true },
+        inputSchema: { type: 'object', properties: { wallet: { type: 'string' } } },
+        argv: { flags: 'rest' },
+        order: 6,
+      },
+    ],
+  },
+};
