@@ -16,11 +16,10 @@
 //   node scripts/fresh-install-check.mjs      (after `npm run build`)
 
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { startLocalRegistryProcess } from './local-registry.mjs';
-import { makeShrinkwrap, registryDist } from './make-shrinkwrap.mjs';
+import { packRelease } from './pack-release.mjs';
 
 const repo = new URL('..', import.meta.url).pathname;
 const run = (command, args, cwd) => execFileSync(command, args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -126,29 +125,14 @@ const check = (what, ok, detail = '') => {
 };
 
 const work = mkdtempSync(join(tmpdir(), 'mn-fresh-install-'));
-const shrinkwrapPath = join(repo, 'npm-shrinkwrap.json');
 let registry;
 try {
-  // The workspace packages mn depends on, packed from this checkout (until they
-  // are published, a consumer's npm finds them nowhere else), served with mn by
-  // a local registry, as npm installs a published package: npm honours mn's
-  // shrinkwrap only when its registry says the package has one.
-  const tarballs = join(work, 'registry');
-  mkdirSync(tarballs);
-  const manifest = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8'));
-  const workspaces = manifest.workspaces
-    .map((dir) => ({ dir, name: JSON.parse(readFileSync(join(repo, dir, 'package.json'), 'utf-8')).name }))
-    .filter(({ name }) => manifest.dependencies[name] !== undefined);
-  for (const { dir } of workspaces) run('npm', ['pack', '--pack-destination', tarballs], join(repo, dir));
-  registry = await startLocalRegistryProcess(tarballs);
-
-  // mn, packed with the shrinkwrap the release job writes.
-  makeShrinkwrap({ dist: registryDist(registry.url), out: shrinkwrapPath });
-  try {
-    run('npm', ['pack', '--pack-destination', tarballs], repo);
-  } finally {
-    rmSync(shrinkwrapPath, { force: true });
-  }
+  // mn and the workspace packages it depends on, as a release publishes them,
+  // served by a local registry as npm installs a published package.
+  const packed = await packRelease(join(work, 'registry'));
+  registry = packed.registry;
+  const { workspaces } = packed;
+  const manifest = { name: packed.name, version: packed.version };
 
   const version = manifest.version;
   const prefix = join(work, 'prefix');
@@ -168,7 +152,7 @@ try {
     const engine = join(installed, 'node_modules', name);
     for (const sdk of ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4']) {
       const copies = resolvedCopies(engine, sdk);
-      check(`${name} resolves one copy of ${sdk}`, copies.length === 1, copies.map((c) => `${c.version} ${c.dir.slice(installed.length)}`).join(', '));
+      check(`${name} resolves one copy of ${sdk}`, copies.length === 1, copies.map((c) => `${c.version} ${c.dir.slice(realpathSync(installed).length)}`).join(', '));
     }
   }
 
