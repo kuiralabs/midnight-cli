@@ -1,5 +1,5 @@
 // The shell refuses a flag the command doesn't accept before the command runs,
-// and shows help instead when help is asked for. Run as the CLI is: this
+// and shows the command's help instead when help is asked for. Run as the CLI is: this
 // checkout's entry point in its own process, with a temporary home that holds
 // no wallet, so a command that ran would fail with WALLET_NOT_FOUND (exit 3).
 
@@ -47,11 +47,30 @@ describe('the unknown-flag refusal, through the shell', () => {
     expect(JSON.parse(run.stdout)).toMatchObject({ error: true, code: 'WALLET_NOT_FOUND' });
   });
 
-  it('shows help instead when help is asked for, whatever else is on the line', () => {
-    // Today that is the general help, not the command's own.
+  it('shows the command\'s own help instead when help is asked for, whatever else is on the line', () => {
     const run = mn('info', '--bogus', '--help');
     expect(run.status).toBe(0);
-    expect(run.stdout + run.stderr).toContain('Commands:');
+    expect(run.stdout + run.stderr).toBe(mn('help', 'info').stdout + mn('help', 'info').stderr);
+    expect(run.stdout + run.stderr).toContain('Display wallet address, network, creation date');
     expect(run.stdout + run.stderr).not.toContain('Unknown flag');
+  });
+
+  it('shows the command\'s help for a subcommand line too, and -h does the same', () => {
+    const own = mn('help', 'wallet');
+    expect(mn('wallet', 'generate', 'alice', '--help').stdout + mn('wallet', 'generate', 'alice', '--help').stderr).toBe(own.stdout + own.stderr);
+    expect(mn('wallet', '-h').stdout + mn('wallet', '-h').stderr).toBe(own.stdout + own.stderr);
+  });
+
+  it('shows the general help for --help alone, or after a command it doesn\'t know', () => {
+    for (const run of [mn('--help'), mn('bogus', '--help'), mn('help', '--help')]) {
+      expect(run.status).toBe(0);
+      expect(run.stdout + run.stderr).toContain('Commands:');
+    }
+  });
+
+  it('keeps --help --json as the JSON manifest', () => {
+    const run = mn('--help', '--json');
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout)).toMatchObject({ cli: { name: 'midnight-wallet-cli' } });
   });
 });
