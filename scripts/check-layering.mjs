@@ -29,7 +29,7 @@ const HOMES = [
   ['shell', /^wallet\.ts$/],
   // help plays the shell's intro, and manual builds the full manual; both render the installed registry.
   ['shell', /^commands\/(help|manual)(\.definition)?\.ts$/],
-  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host|installed-commands|command-dispatch|agent-manual|readme-commands)\.ts$/],
+  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host|installed-commands|installed-engines|command-dispatch|agent-manual|readme-commands)\.ts$/],
   ['shell', /^ui\/(animate|art)\.ts$/],
   ['mcp', /^mcp-server\.ts$/],
   ['mcp', /^lib\/mcp\//],
@@ -95,9 +95,9 @@ const DISPATCHERS = new Set(['shell', 'mcp']);
 
 const MIDNIGHT_SDK = /^@midnight(-ntwrk|ntwrk)\//;
 
-// The one module that may import an engine: core's loader, which imports the
-// engine for a network's SDK set when a call needs it.
-const ENGINE_LOADER = 'lib/engine.ts';
+// The one module that may import an engine: the shell's list of the engines
+// it ships, which the host installs as core's engine loader.
+const ENGINE_LOADER = 'lib/installed-engines.ts';
 
 const ACCOUNT_CHAIN = /^@kuiralabs\/midnight-account/;
 
