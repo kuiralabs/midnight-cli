@@ -289,17 +289,35 @@ type Made = { path: string; kind: 'link' | 'folder' };
 /** The packages a script imports, where the engine's install has each, and the SDK set they are. */
 type ScriptPackages = Pick<EngineContractScripts, 'packages' | 'packageFolder'> & { readonly set: string };
 
-/** The installed copy of each scope the script packages use (`@midnight-ntwrk`, …), and the node_modules holding them. */
+/**
+ * The installed copy of each scope the script packages use (`@midnight-ntwrk`,
+ * …), and the node_modules holding them: each only when it holds every script
+ * package of its kind. An install can hoist some of an engine's packages away
+ * from the rest (a workspace puts a package both engines share at its root),
+ * and a tree linked whole must then not stand in for the packages it lacks.
+ */
 function installedTrees({ packages, packageFolder }: ScriptPackages): { root: string | null; scopes: Map<string, string> } {
-  const scopes = new Map<string, string>();
-  let root: string | null = null;
+  const folders = new Map<string, string>();
   for (const name of packages) {
-    if (!name.startsWith('@')) continue;
     const folder = packageFolder(name);
-    if (folder === null) continue;
-    const scope = name.slice(0, name.indexOf('/'));
-    if (!scopes.has(scope)) scopes.set(scope, dirname(folder));
-    root ??= dirname(dirname(folder));
+    if (folder !== null) folders.set(name, folder);
+  }
+  const scopeOf = (name: string): string => name.slice(0, name.indexOf('/'));
+  const holderOf = (name: string): string | undefined => {
+    const folder = folders.get(name);
+    if (folder === undefined) return undefined;
+    return name.startsWith('@') ? dirname(dirname(folder)) : dirname(folder);
+  };
+  const holders = new Set(packages.map(holderOf));
+  const root = holders.size === 1 ? [...holders][0] ?? null : null;
+  const scopes = new Map<string, string>();
+  for (const scope of new Set(packages.filter((name) => name.startsWith('@')).map(scopeOf))) {
+    const inScope = new Set(packages.filter((name) => name.startsWith(scope + '/')).map((name) => {
+      const folder = folders.get(name);
+      return folder === undefined ? undefined : dirname(folder);
+    }));
+    const only = inScope.size === 1 ? [...inScope][0] : undefined;
+    if (only !== undefined) scopes.set(scope, only);
   }
   return { root, scopes };
 }
@@ -308,8 +326,10 @@ function installedTrees({ packages, packageFolder }: ScriptPackages): { root: st
  * Make the script packages, and whatever else a dApp's witnesses import from
  * the same installed tree, resolvable from `userNodeModules`, finding the
  * engine's copy by name (never by walking up from this file):
- *   - a dApp with no node_modules gets a link to the node_modules holding them;
- *   - a dApp without one of their scopes gets a link to that whole scope;
+ *   - a dApp with no node_modules gets a link to the node_modules holding them
+ *     all, or else a folder of its own for the links below;
+ *   - a dApp without one of their scopes gets a link to that whole scope, when
+ *     one folder holds all of the scope's script packages;
  *   - a package still missing (in a scope the dApp has, or unscoped) is linked
  *     on its own.
  * Never replaces what the dApp has: the user may pin a version we shouldn't
@@ -324,26 +344,43 @@ export function overlayScriptPackages(userNodeModules: string, scriptPackages: S
       made.push({ path: at, kind: 'link' });
     } catch { /* left out: the script reports the missing package */ }
   };
+  const folder = (at: string): boolean => {
+    if (existsSync(at)) return true;
+    try {
+      mkdirSync(at);
+      made.push({ path: at, kind: 'folder' });
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const { root, scopes } = installedTrees(scriptPackages);
   if (!existsSync(userNodeModules)) {
-    if (root !== null) link(root, userNodeModules);
-    return made;
+    if (root !== null) {
+      link(root, userNodeModules);
+      return made;
+    }
+    if (!folder(userNodeModules)) return made;
   }
   // A scope linked whole is the engine's own folder: nothing is linked inside
   // it, which would write into the engine's install.
   const linkedWhole = new Set<string>();
-  for (const [scope, folder] of scopes) {
+  for (const [scope, scopeFolder] of scopes) {
     const at = join(userNodeModules, scope);
     if (!existsSync(at)) {
-      link(folder, at);
+      link(scopeFolder, at);
       linkedWhole.add(scope);
     }
   }
   for (const name of scriptPackages.packages) {
-    if (name.startsWith('@') && linkedWhole.has(name.slice(0, name.indexOf('/')))) continue;
+    const scope = name.startsWith('@') ? name.slice(0, name.indexOf('/')) : null;
+    if (scope !== null && linkedWhole.has(scope)) continue;
     const at = join(userNodeModules, name);
-    const target = existsSync(at) ? null : scriptPackages.packageFolder(name);
-    if (target !== null) link(target, at);
+    if (existsSync(at)) continue;
+    const target = scriptPackages.packageFolder(name);
+    if (target === null) continue;
+    if (scope !== null && !folder(join(userNodeModules, scope))) continue;
+    link(target, at);
   }
   return made;
 }
