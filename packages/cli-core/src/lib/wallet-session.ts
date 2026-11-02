@@ -5,15 +5,25 @@
 // everything (the program is the operator), so its rules hold here too: a
 // transaction balanced or built but never submitted is reverted on close, and
 // one the chain refuses is reverted at once. Transactions travel as hex.
+//
+// Just after a wallet opens, the SDK can refuse for lack of NIGHT the wallet
+// has (its coin index isn't built yet: the cold-start race the CLI's own
+// writes retry). Until the session has built its first transaction, it meets
+// that by reopening the wallet and asking again, a few times.
 
 import { engineFor, type DAppConnector, type OpenedConnector, type TransactionDetail } from './engine.ts';
 import type { NetworkConfig, NetworkName } from './network.ts';
 import { resolveNetwork } from './resolve-network.ts';
 import { shieldedSyncEnabled } from './shielded-policy.ts';
 import { throwIfCancelled } from './errors.ts';
+import { isColdStartRace } from './sdk-errors.ts';
 
 /** The calls a session makes, under one connection name for the connector's pending transactions. */
 const SESSION_CONNECTION = 'wallet-session';
+/** How many times a session asks for its first transaction through the cold-start race, in all. */
+const COLD_START_ATTEMPTS = 5;
+/** The wait before reopening the wallet, which gives the indexer time to settle. */
+const COLD_START_DELAY_MS = 5_000;
 
 /** A wallet's addresses on the session's network, bech32m, and its shielded keys, hex. */
 export interface WalletAddresses {
@@ -70,19 +80,52 @@ export interface WalletSession {
   close(): Promise<void>;
 }
 
-/** The session over a connector opened in this process; closing it stops the connector. */
+export interface SessionReopening {
+  /** Opens the same wallet again, as it was first opened. */
+  reopen: () => Promise<OpenedConnector>;
+  /** What the session is doing, for a progress line. */
+  onMessage?: (message: string) => void;
+  /** The wait before each reopening, in milliseconds. */
+  delayMs?: number;
+}
+
+/**
+ * The session over a connector opened in this process; closing it stops the
+ * connector. With `reopening`, the session meets the cold-start race before
+ * its first transaction by reopening the wallet.
+ */
 export function sessionOver(
   network: NetworkName,
   opened: OpenedConnector,
   readTransaction: (tx: string, stage: 'unsealed' | 'sealed') => TransactionDetail[],
+  reopening?: SessionReopening,
 ): WalletSession {
-  const { connector } = opened;
+  let current = opened;
   let requestId = 0;
   let closed = false;
+  // Once a transaction is built, reopening would revert it under the caller.
+  let built = false;
   const call = async (method: string, params: Record<string, unknown>): Promise<unknown> => {
     if (closed) throw new Error('The wallet session is closed');
-    const handler = handlerOf(connector, method);
+    const handler = handlerOf(current.connector, method);
     return handler(params, { notify: () => {}, connectionId: SESSION_CONNECTION, requestId: ++requestId, metadata: {} });
+  };
+  /** Builds a transaction, through the cold-start race while it is the session's first. */
+  const build = async (method: string, params: Record<string, unknown>): Promise<string> => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const { tx } = (await call(method, params)) as { tx: string };
+        built = true;
+        return tx;
+      } catch (err) {
+        if (built || reopening === undefined || attempt >= COLD_START_ATTEMPTS || !isColdStartRace(err)) throw err;
+        reopening.onMessage?.(`Refreshing wallet state (attempt ${attempt + 1}/${COLD_START_ATTEMPTS})...`);
+        await current.stop();
+        await new Promise((resolve) => setTimeout(resolve, reopening.delayMs ?? COLD_START_DELAY_MS));
+        if (closed) throw new Error('The wallet session is closed');
+        current = await reopening.reopen();
+      }
+    }
   };
 
   return {
@@ -106,15 +149,14 @@ export function sessionOver(
       return { unshielded: { ...unshielded }, shielded: { ...shielded }, dust: balance };
     },
     async balanceTransaction(tx) {
-      return ((await call('balanceUnsealedTransaction', { tx })) as { tx: string }).tx;
+      return build('balanceUnsealedTransaction', { tx });
     },
     async swap(give, take) {
-      const result = await call('makeIntent', {
+      return build('makeIntent', {
         desiredInputs: give.map(({ kind, type, value }) => ({ kind, type, value })),
         desiredOutputs: take.map(({ kind, type, value, recipient }) => ({ kind, type, value, recipient })),
         options: { payFees: true },
       });
-      return (result as { tx: string }).tx;
     },
     async sign(data, encoding) {
       return (await call('signData', { data, options: { encoding, keyType: 'unshielded' } })) as SignedData;
@@ -129,8 +171,8 @@ export function sessionOver(
     async close() {
       if (closed) return;
       closed = true;
-      await connector.revertPendingTxs(SESSION_CONNECTION).catch(() => { /* best-effort: the wallet is stopping */ });
-      await opened.stop();
+      await current.connector.revertPendingTxs(SESSION_CONNECTION).catch(() => { /* best-effort: the wallet is stopping */ });
+      await current.stop();
     },
   };
 }
@@ -168,7 +210,7 @@ export async function openWalletSession(options: OpenWalletSessionOptions): Prom
   const networkConfig = options.networkConfig
     ?? resolveNetwork({ args: { command: 'wallet-session', subcommand: '', positionals: [], flags: { network } } }).config;
   const engine = await engineFor(network);
-  const opened = await engine.wallet.openConnector({
+  const open = () => engine.wallet.openConnector({
     seed,
     network,
     networkConfig,
@@ -178,5 +220,5 @@ export async function openWalletSession(options: OpenWalletSessionOptions): Prom
     signal,
     onMessage: options.onMessage ?? (() => {}),
   });
-  return sessionOver(network, opened, (tx, stage) => engine.ledger.readTransaction(tx, stage));
+  return sessionOver(network, await open(), (tx, stage) => engine.ledger.readTransaction(tx, stage), { reopen: open, onMessage: options.onMessage });
 }

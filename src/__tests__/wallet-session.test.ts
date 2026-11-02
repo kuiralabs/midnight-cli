@@ -117,4 +117,73 @@ describe('wallet session', () => {
     await expect(session.balances()).rejects.toThrow('The wallet session is closed');
     await expect(session.readTransaction('beef', 'sealed')).rejects.toThrow('The wallet session is closed');
   });
+
+  describe('the cold-start race before its first transaction', () => {
+    // The SDK's refusal when its coin index isn't built yet, as the session met it live just after a Dust registration.
+    const coldStart = () => Object.assign(new Error('Insufficient funds'), { _tag: 'Wallet.InsufficientFunds', tokenType: NIGHT_RAW, amount: 0n });
+    const dustShortage = () => Object.assign(new Error('Insufficient Funds: could not balance dust'), { _tag: 'Wallet.InsufficientFunds', tokenType: 'dust' });
+    const give = [{ kind: 'unshielded' as const, type: NIGHT_RAW, value: 5n }];
+    const take = [{ kind: 'unshielded' as const, type: OTHER_TOKEN, value: 9n, recipient: RECIPIENT }];
+
+    /** A wallet opened in this process whose swaps answer as `initSwap` says, and its stop. */
+    function openedWith(initSwap: () => Promise<unknown>) {
+      const bundle = createBundleStub({ initSwap });
+      const connector = createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+      return { connector, stop: vi.fn(async () => { connector.dispose(); }) };
+    }
+
+    it('reopens the wallet and asks again, until the swap is built', async () => {
+      const first = openedWith(() => Promise.reject(coldStart()));
+      const second = openedWith(() => Promise.reject(coldStart()));
+      const third = openedWith(() => Promise.resolve({ type: 'SWAP' }));
+      const reopen = vi.fn().mockResolvedValueOnce(second).mockResolvedValueOnce(third);
+      const messages: string[] = [];
+      const session = sessionOver('undeployed', first, () => [], { reopen, onMessage: (m) => messages.push(m), delayMs: 0 });
+
+      expect(await session.swap(give, take)).toBe('abcd');
+      expect(reopen).toHaveBeenCalledTimes(2);
+      expect(first.stop).toHaveBeenCalledOnce();
+      expect(second.stop).toHaveBeenCalledOnce();
+      expect(messages).toEqual(['Refreshing wallet state (attempt 2/5)...', 'Refreshing wallet state (attempt 3/5)...']);
+      await session.close();
+      expect(third.stop).toHaveBeenCalledOnce();
+    });
+
+    it('gives up after five attempts with the SDK\'s refusal', async () => {
+      const reopen = vi.fn(async () => openedWith(() => Promise.reject(coldStart())));
+      const session = sessionOver('undeployed', openedWith(() => Promise.reject(coldStart())), () => [], { reopen, delayMs: 0 });
+
+      await expect(session.swap(give, take)).rejects.toMatchObject({ _tag: 'Wallet.InsufficientFunds' });
+      expect(reopen).toHaveBeenCalledTimes(4);
+      await session.close();
+    });
+
+    it('does not reopen once it has built a transaction, which reopening would revert under the caller', async () => {
+      const initSwap = vi.fn().mockResolvedValueOnce({ type: 'SWAP' }).mockRejectedValue(coldStart());
+      const reopen = vi.fn();
+      const session = sessionOver('undeployed', openedWith(initSwap), () => [], { reopen, delayMs: 0 });
+
+      await session.swap(give, take);
+      await expect(session.swap(give, take)).rejects.toMatchObject({ _tag: 'Wallet.InsufficientFunds' });
+      expect(reopen).not.toHaveBeenCalled();
+      await session.close();
+    });
+
+    it('does not reopen for a Dust shortage, which only waiting fixes', async () => {
+      vi.useFakeTimers();
+      try {
+        const reopen = vi.fn();
+        const session = sessionOver('undeployed', openedWith(() => Promise.reject(dustShortage())), () => [], { reopen, delayMs: 0 });
+
+        // The connector waits for Dust between its own attempts; none comes.
+        const failure = session.swap(give, take).catch((e: unknown) => e);
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(await failure).toBeInstanceOf(Error);
+        expect(reopen).not.toHaveBeenCalled();
+        await session.close();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });
