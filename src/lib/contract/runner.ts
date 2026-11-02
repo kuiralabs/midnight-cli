@@ -14,6 +14,8 @@ import { createRequire } from 'node:module';
 import { assertEndpointUsable } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
 import type { NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { engineFor, type EngineContractScripts, type ScriptParts } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { findContractInfo } from './inspect.ts';
+import { assertContractRunsOn } from './runtime-check.ts';
 import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
 import { coerceArg } from './arg-coerce.ts';
 import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
@@ -107,6 +109,9 @@ export function indexerEnvironment(networkConfig: NetworkConfig): Record<string,
 }
 
 export async function runState(options: StateOptions): Promise<StateResult> {
+  // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
+  throwIfCancelled(options.signal);
+  await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network);
   const { scripts } = (await engineFor(options.network)).contracts;
   const script = scripts.state(options, SCRIPT_PARTS);
   const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal });
@@ -118,6 +123,9 @@ export async function runState(options: StateOptions): Promise<StateResult> {
 }
 
 export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
+  // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
+  throwIfCancelled(options.signal);
+  await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network);
   const { scripts } = (await engineFor(options.network)).contracts;
   const script = scripts.deploy(options, SCRIPT_PARTS);
   // The private-state secret goes to the subprocess via env (never the on-disk
@@ -135,6 +143,9 @@ export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
 }
 
 export async function runCall(options: CallOptions): Promise<CallResult> {
+  // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
+  throwIfCancelled(options.signal);
+  await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network);
   const { scripts } = (await engineFor(options.network)).contracts;
   const script = scripts.call(options, SCRIPT_PARTS);
   const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal });

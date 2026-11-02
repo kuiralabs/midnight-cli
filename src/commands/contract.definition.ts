@@ -214,7 +214,11 @@ export const contractDefinition: CommandDefinition = {
           },
           async check(params, call) {
             const { resolveContractDeployRequest } = await import('../lib/contract/request.ts');
-            resolveContractDeployRequest(call.argv());
+            const args = call.argv();
+            const { info } = resolveContractDeployRequest(args);
+            const { resolvePayingTarget } = await import('@kuiralabs/midnight-cli-core/lib/payer');
+            const { assertContractRunsOn } = await import('../lib/contract/runtime-check.ts');
+            await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'deploy').network);
             await checkSendingWallet(params);
           },
         },
@@ -244,7 +248,11 @@ export const contractDefinition: CommandDefinition = {
           },
           async check(params, call) {
             const { resolveContractCallRequest } = await import('../lib/contract/request.ts');
-            resolveContractCallRequest(call.argv());
+            const args = call.argv();
+            const { info } = resolveContractCallRequest(args);
+            const { resolvePayingTarget } = await import('@kuiralabs/midnight-cli-core/lib/payer');
+            const { assertContractRunsOn } = await import('../lib/contract/runtime-check.ts');
+            await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'call').network);
             await checkSendingWallet(params);
           },
         },

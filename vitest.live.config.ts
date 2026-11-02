@@ -7,6 +7,7 @@ import base from './vitest.config.ts';
 
 export default defineConfig({
   resolve: base.resolve,
+  ssr: base.ssr,
   test: {
     ...base.test,
     include: ['src/**/*.live.test.ts'],
