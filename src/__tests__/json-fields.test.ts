@@ -39,32 +39,31 @@ async function run(...argv: string[]): Promise<Record<string, unknown>> {
   return captureCommand(handler as CommandHandler, args, ownCall());
 }
 
-// In order: a later run reads what an earlier one wrote. Each run lists the
-// fields it writes that its help doesn't name yet: wallet's and generate's help
-// predate what they write, and correcting help is a change to what users and
-// agents read, waiting on the owner's approval. A field missing from help that
-// isn't listed here fails, and so does a listed one once help names it.
-const runs: ReadonlyArray<readonly [argv: readonly string[], notYetInHelp: readonly string[]]> = [
-  [['wallet', 'generate', 'alice'], ['addresses', 'shieldedAddresses', 'activeAddress', 'activeNetwork', 'seed', 'file', 'createdAt', 'mnemonic']],
-  [['wallet', 'generate', 'bob'], ['addresses', 'shieldedAddresses', 'activeAddress', 'activeNetwork', 'seed', 'file', 'createdAt', 'mnemonic']],
-  [['wallet', 'use', 'alice'], ['wallet']],
-  [['wallet', 'list'], ['activeNetwork']],
-  [['wallet', 'info', 'bob'], ['addresses', 'activeAddress', 'activeNetwork', 'createdAt', 'file', 'shieldedAddresses']],
-  [['info'], []],
-  [['address', '--seed', 'aa'.repeat(32), '--network', 'undeployed'], []],
-  [['genesis-address', '--network', 'undeployed'], []],
-  [['config', 'set', 'network', 'preview'], []],
-  [['config', 'get', 'network'], []],
-  [['config', 'unset', 'network'], []],
-  [['cache', 'clear'], []],
-  [['generate', '--output', 'legacy.json'], ['addresses', 'activeAddress', 'activeNetwork']],
+// In order: a later run reads what an earlier one wrote.
+const runs: ReadonlyArray<readonly string[]> = [
+  ['wallet', 'generate', 'alice'],
+  ['wallet', 'generate', 'bob'],
+  ['wallet', 'use', 'alice'],
+  ['wallet', 'list'],
+  ['wallet', 'info', 'bob'],
+  ['wallet', 'seed', 'bob', '--entropy'],
+  ['wallet', 'remove', 'bob'],
+  ['wallet', 'protect'],
+  ['info'],
+  ['address', '--seed', 'aa'.repeat(32), '--network', 'undeployed'],
+  ['genesis-address', '--network', 'undeployed'],
+  ['config', 'set', 'network', 'preview'],
+  ['config', 'get', 'network'],
+  ['config', 'unset', 'network'],
+  ['cache', 'clear'],
+  ['generate', '--output', 'legacy.json'],
 ];
 
 describe('every field a command writes with --json is one its definition names', () => {
-  it.each(runs.map(([argv, notYetInHelp]) => [argv.join(' '), argv, notYetInHelp] as const))('%s', async (_name, argv, notYetInHelp) => {
+  it.each(runs.map((argv) => [argv.join(' '), argv] as const))('%s', async (_name, argv) => {
     const declared = Object.keys(installedCommands.find(argv[0]!)!.help?.jsonFields ?? {});
     const written = Object.keys(await run(...argv.map((a) => (a === 'legacy.json' ? path.join(home, a) : a))));
     expect(written.length).toBeGreaterThan(0);
-    expect(written.filter((field) => !declared.includes(field)).sort()).toStrictEqual([...notYetInHelp].sort());
+    expect(written.filter((field) => !declared.includes(field))).toStrictEqual([]);
   });
 });
