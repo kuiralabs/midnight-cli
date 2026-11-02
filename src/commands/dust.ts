@@ -1,7 +1,6 @@
 // dust command — register UTXOs for dust generation, check status, export a snapshot
 // Usage: midnight dust register | midnight dust status | midnight dust export
 
-import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, rejectNoCacheForWrites } from '../lib/argv.ts';
 import { UsageError, throwIfCancelled } from '../lib/errors.ts';
@@ -9,10 +8,8 @@ import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveSeed } from '../lib/seed-resolver.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides, type NetworkConfig } from '../lib/network.ts';
-import { deriveDustSeed } from '../engine/rc/derivation.ts';
 import { registerDust } from '../lib/dust-register.ts';
 import { checkBalance } from '../lib/balance-subscription.ts';
-import { dustPublicKeyHex } from '../engine/rc/dust-direct-cache.ts';
 import { exportDustSnapshot } from '../lib/dust-export.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { header, keyValue, divider, formatDust, successMessage, toDust } from '../ui/format.ts';

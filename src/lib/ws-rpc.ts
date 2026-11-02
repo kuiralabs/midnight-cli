@@ -3,20 +3,10 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import { notice } from './notices.ts';
+import type { APIError, RpcHandler, RpcHandlerContext } from './connector-api.ts';
 
-/**
- * The DApp Connector API's error codes, as its specification names them
- * (dapp-connector-api's ErrorCodes; a test keeps the two equal). The wire
- * protocol is the same whatever SDK set serves it, so the transport owns it.
- */
-export type ErrorCode = 'InternalError' | 'Rejected' | 'InvalidRequest' | 'PermissionRejected' | 'Disconnected';
-
-/** The DApp Connector API's error: an Error with its code and reason, told apart by `type` (the specification's APIError). */
-export type APIError = Error & {
-  type: 'DAppConnectorAPIError';
-  code: ErrorCode;
-  reason: string;
-};
+// The wire types the connector's handlers use, from where every package can reach them.
+export { createApiError, type APIError, type ErrorCode, type RpcHandler, type RpcHandlerContext } from './connector-api.ts';
 
 // ── JSON-RPC 2.0 types ──
 
@@ -52,22 +42,6 @@ export interface JsonRpcNotification {
   method: string;
   params?: Record<string, unknown>;
 }
-
-// ── Handler context & type ──
-
-/** Per-invocation context passed to each handler (scoped to the calling connection) */
-export interface RpcHandlerContext {
-  /** Send a JSON-RPC notification to the calling client */
-  notify: (method: string, params?: Record<string, unknown>) => void;
-  /** ID of the connection that sent this request (e.g. "conn_1") */
-  connectionId: string;
-  /** JSON-RPC request ID */
-  requestId: number | string;
-  /** Handlers can stash arbitrary data here for onResponse to read */
-  metadata: Record<string, unknown>;
-}
-
-export type RpcHandler = (params: Record<string, unknown>, context: RpcHandlerContext) => Promise<unknown>;
 
 // ── DApp Connector error code → JSON-RPC error code mapping ──
 
@@ -372,14 +346,4 @@ export function createRpcServer(options: RpcServerOptions): RpcServer {
   }
 
   return { wss, connections, ready, close };
-}
-
-// ── APIError factory ──
-
-export function createApiError(code: ErrorCode, reason: string): APIError {
-  const error = new Error(reason) as APIError;
-  error.type = 'DAppConnectorAPIError';
-  error.code = code;
-  error.reason = reason;
-  return error;
 }

@@ -42,12 +42,12 @@ const HOMES = [
   // The SDK engines: each is the only code that imports its SDK set.
   ['engine', /^engine\//],
 
-  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|wallet-cache|cache-indexer|reader-cache-files)\.ts$/],
+  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|wallet-cache|cache-indexer|reader-cache-files|connector-api|dust-wait|fee-limits|tx-serde|sign-data|approval|dust-balancing-plan|dust-registration-plan)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
   ['dev', /^ui\/(test-create-prompt|dev-keys)\.ts$/],
 
   ['chain', /^commands\/status(\.definition)?\.ts$/],
-  ['chain', /^lib\/(node-rpc|chain-id|indexer-graphql|graphql-ws-subscription|event-tip|ledger-guard|node-ready|indexer-ready|proof-server-ready|chain-clock|endpoint-check|balance-subscription)\.ts$/],
+  ['chain', /^lib\/(node-rpc|chain-id|indexer-graphql|graphql-ws-subscription|event-tip|ledger-guard|node-ready|indexer-ready|proof-server-ready|chain-clock|endpoint-check|balance-subscription|tx-segments)\.ts$/],
 
   ['wallet', /^commands\/(wallet|generate|address|genesis-address|info|balance|transfer|airdrop|dust|cache)(\.definition)?\.ts$/],
   ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|transfer|transfer-request|sync-eta|wallet-can-pay|wallet-create|airdrop|wallet-protector|chain-caches|wallet-paths|fork-schedule)\.ts$/],
@@ -58,7 +58,7 @@ const HOMES = [
   ['contract', /^lib\/chain-params\.ts$/],
 
   ['connect', /^commands\/serve(\.definition)?\.ts$/],
-  ['connect', /^lib\/(dapp-connector|ws-rpc|approval|fee-limits|fee-only-check|sign-data|sign-recipe|tx-inspect|tx-segments|tx-serde|serve-manager|serve-payer)\.ts$/],
+  ['connect', /^lib\/(dapp-connector|ws-rpc|sign-recipe|serve-manager|serve-payer)\.ts$/],
 
   ['dev', /^commands\/(dev|test|localnet)(\.definition)?\.ts$/],
   ['dev', /^lib\/localnet\.ts$/],
@@ -105,7 +105,6 @@ const ENGINE_LOADER = 'lib/engine.ts';
 export const PENDING_ENGINE = new Set([
   'commands/airdrop.ts',
   'commands/balance.ts',
-  'commands/dust.ts',
   'commands/transfer.ts',
   'lib/dapp-connector.ts',
   'lib/dust-wallet.ts',
