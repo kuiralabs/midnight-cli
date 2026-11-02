@@ -36,11 +36,20 @@ if (hasFlag(args, 'version') || hasFlag(args, 'v')) {
   process.exit(0);
 }
 
-// Global --help / -h handling. `mn <cmd> --help` shows help whatever other
-// flags are present, so flag checking is skipped for it.
+// Global --help / -h handling. `mn <cmd> --help` shows that command's help,
+// as `mn help <cmd>` does, whatever other flags are present, so flag checking
+// is skipped for it; with no command help lists, the general help.
 const helpRequested = hasFlag(args, 'help') || hasFlag(args, 'h');
 if (helpRequested) {
+  const target = args.command !== undefined && installedCommands.find(args.command)?.help !== undefined ? args.command : undefined;
   args.command = 'help';
+  args.positionals = [];
+  if (target !== undefined && target !== 'help') {
+    args.subcommand = target;
+    args.flags = {};
+  } else {
+    args.subcommand = undefined;
+  }
 }
 
 // Default to help when no command given
