@@ -9,18 +9,18 @@
 // Security: the cached state contains owned coins but NOT the secret keys. Same
 // sensitivity as the wallet file (mode 0o600).
 
-import { bindCachesToIndexer } from './cache-indexer.ts';
+import { bindCachesToIndexer } from '../../lib/cache-indexer.ts';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, readdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import { DIR_MODE, FILE_MODE } from './constants.ts';
-import { deriveShieldedSeed } from '../engine/rc/derivation.ts';
+import { DIR_MODE, FILE_MODE } from '../../lib/constants.ts';
+import { deriveShieldedSeed } from './derivation.ts';
 import { readShieldedBalanceDirect, type ShieldedDirectOptions } from './shielded-direct.ts';
-import { fetchEventTip, isCursorBeyondTip } from './event-tip.ts';
-import { cacheKeyOf, cacheRootDir } from './wallet-cache.ts';
+import { fetchEventTip, isCursorBeyondTip } from '../../lib/event-tip.ts';
+import { clearShieldedDirectCache, getShieldedCachePath } from '../../lib/reader-cache-files.ts';
 
 // v2: ledger-9 states replace ledger-8 ones. Dev-preset localnets share a genesis
 // hash, so the chain-id guard can't keep a ledger-8 cache off a ledger-9 chain.
@@ -51,19 +51,6 @@ export function shieldedCoinPublicKeyHexFromSeed(seedBuffer: Buffer): string {
   return keys.coinPublicKey;
 }
 
-function shieldedCacheDir(network: string, cacheDir?: string): string {
-  const base = cacheRootDir(cacheDir);
-  return join(base, network);
-}
-
-export function getShieldedCachePath(
-  network: string,
-  pubkeyHex: string,
-  cacheDir?: string,
-): string {
-  const prefix = cacheKeyOf(pubkeyHex);
-  return join(shieldedCacheDir(network, cacheDir), `shielded-${prefix}.json`);
-}
 
 /**
  * Load a cached ZswapLocalState for the given (network, coin pubkey).
@@ -135,48 +122,6 @@ export function saveShieldedCache(
   }
 }
 
-/**
- * Remove shielded-direct cache files. Scope:
- *  - (network, pubkeyHex) → single file
- *  - (network)            → all shielded-* files in that network dir
- *  - (neither)            → all shielded-* files across all networks
- */
-export function clearShieldedDirectCache(
-  network?: string,
-  pubkeyHex?: string,
-  cacheDir?: string,
-): void {
-  const base = cacheRootDir(cacheDir);
-
-  if (network && pubkeyHex) {
-    const path = getShieldedCachePath(network, pubkeyHex, cacheDir);
-    try { unlinkSync(path); } catch { /* not found is ok */ }
-    return;
-  }
-
-  const wipeNetworkDir = (dir: string) => {
-    if (!existsSync(dir)) return;
-    try {
-      for (const file of readdirSync(dir)) {
-        if (file.startsWith('shielded-') && file.endsWith('.json')) {
-          try { unlinkSync(join(dir, file)); } catch { /* best-effort */ }
-        }
-      }
-    } catch { /* best-effort */ }
-  };
-
-  if (network) {
-    wipeNetworkDir(shieldedCacheDir(network, cacheDir));
-    return;
-  }
-
-  if (!existsSync(base)) return;
-  try {
-    for (const net of readdirSync(base)) {
-      wipeNetworkDir(join(base, net));
-    }
-  } catch { /* best-effort */ }
-}
 
 export interface ShieldedBalanceResult {
   /** Native (NIGHT) shielded balance in atomic units. */

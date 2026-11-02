@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { WebSocketServer, type WebSocket as WsSocket } from 'ws';
 import type { AddressInfo } from 'node:net';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { readShieldedBalanceDirect } from '../lib/shielded-direct.ts';
+import { readShieldedBalanceDirect } from '../engine/rc/shielded-direct.ts';
 import { deriveShieldedSeed } from '../engine/rc/derivation.ts';
 import zswapEvents from './fixtures/zswap-events-localnet.json';
 

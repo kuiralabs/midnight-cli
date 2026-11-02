@@ -17,7 +17,7 @@
 //
 // Pure logic: returns values, never writes to stdout/stderr or exits.
 
-import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
+import { anyEngine } from './engine.ts';
 import { buildFacade, stopFacade, overlayDustDirectSnapshot } from './facade.ts';
 import { type NetworkConfig } from './network.ts';
 import { defaultRepository, type WalletDataRepository } from './wallet-data-repository.ts';
@@ -91,7 +91,7 @@ export async function exportDustSnapshot(
   networkConfig: NetworkConfig,
   options: DustExportOptions = {},
 ): Promise<DustExportResult> {
-  const pubkeyHex = dustPublicKeyHexFromSeed(seedBuffer);
+  const pubkeyHex = (await anyEngine()).keys.dustPublicKeyHex(seedBuffer);
   const repo = options.repository ?? defaultRepository();
 
   const view = await repo.dust(seedBuffer, networkConfig, {

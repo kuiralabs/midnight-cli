@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { overlayDustDirectSnapshot } from '../lib/facade.ts';
-import type { DustCacheEntry } from '../lib/dust-direct-cache.ts';
+import type { DustCacheEntry } from '../engine/rc/dust-direct-cache.ts';
 import { DUST_STATE_OWNED_HEX } from './fixtures/dust-state-owned.ts';
 
 // overlayDustDirectSnapshot is the seam behind `dust export` (and the write-command
@@ -99,7 +99,7 @@ import { join } from 'node:path';
 import { exportDustSnapshot } from '../lib/dust-export.ts';
 import { WalletDataRepository } from '../lib/wallet-data-repository.ts';
 import type { NetworkConfig } from '../lib/network.ts';
-import type { DustDirectResult } from '../lib/dust-direct.ts';
+import type { DustDirectResult } from '../engine/rc/dust-direct.ts';
 
 const EXPORT_NETWORK: NetworkConfig = {
   indexer: 'http://test/indexer', indexerWS: 'ws://test/indexer/ws',

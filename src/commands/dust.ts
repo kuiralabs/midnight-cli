@@ -12,7 +12,7 @@ import { applyEndpointOverrides, type NetworkConfig } from '../lib/network.ts';
 import { deriveDustSeed } from '../engine/rc/derivation.ts';
 import { registerDust } from '../lib/dust-register.ts';
 import { checkBalance } from '../lib/balance-subscription.ts';
-import { dustPublicKeyHex } from '../lib/dust-direct-cache.ts';
+import { dustPublicKeyHex } from '../engine/rc/dust-direct-cache.ts';
 import { exportDustSnapshot } from '../lib/dust-export.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { header, keyValue, divider, formatDust, successMessage, toDust } from '../ui/format.ts';

@@ -34,13 +34,8 @@ import {
   overlayDustDirectSnapshot,
 } from './facade.ts';
 import { isColdStartRace } from './sdk-errors.ts';
-import {
-  loadDustCache,
-  saveDustCache,
-  dustPublicKeyHexFromSeed,
-  validateDustCacheChainId,
-  clearDustDirectCache,
-} from './dust-direct-cache.ts';
+import { loadDustCache, saveDustCache, dustPublicKeyHexFromSeed, validateDustCacheChainId } from '../engine/rc/dust-direct-cache.ts';
+import { clearDustDirectCache } from './reader-cache-files.ts';
 import {
   loadWalletCache,
   saveWalletCache,
@@ -51,9 +46,9 @@ import {
 import { getChainGenesisHash } from './chain-id.ts';
 import { assertLedgerSupported, fetchProtocolVersion } from './ledger-guard.ts';
 import { checkBalance, type BalanceSummary } from './balance-subscription.ts';
-import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from './dust-direct.ts';
+import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from '../engine/rc/dust-direct.ts';
 import { bindCachesToIndexer, describeIndexerChange } from './cache-indexer.ts';
-import { nativeDustSyncAvailable, runDustSyncNative } from './dust-sync-native.ts';
+import { nativeDustSyncAvailable, runDustSyncNative } from '../engine/rc/dust-sync-native.ts';
 import type { VerboseLog } from './verbose.ts';
 import { callNodeRpc } from './node-rpc.ts';
 import { deriveDustSeed } from '../engine/rc/derivation.ts';

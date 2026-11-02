@@ -10,7 +10,7 @@ import {
   nativeDustSyncAvailable,
   runDustSyncNative,
   type SidecarCheckpoint,
-} from '../lib/dust-sync-native.ts';
+} from '../engine/rc/dust-sync-native.ts';
 import { DUST_STATE_OWNED_HEX } from './fixtures/dust-state-owned.ts';
 
 describe('resumeDecision (kill-safe resume)', () => {

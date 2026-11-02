@@ -16,9 +16,9 @@ import {
   INITIAL_NIGHT_DUST_RATIO,
   INITIAL_GENERATION_DECAY_RATE,
   INITIAL_DUST_GRACE_PERIOD_SECONDS,
-} from './constants.ts';
-import { subscribeGraphqlWs } from './graphql-ws-subscription.ts';
-import { settings } from './settings.ts';
+} from '../../lib/constants.ts';
+import { subscribeGraphqlWs } from '../../lib/graphql-ws-subscription.ts';
+import { settings } from '../../lib/settings.ts';
 
 // MN_DISABLE_DUST_COLLAPSE=1 disables the dust generation-tree collapse (debugging / safety valve): settings().isDustCollapseOff.
 

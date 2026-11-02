@@ -24,7 +24,7 @@ import {
   scriptRuntime,
   undoOverlay,
 } from '../lib/contract/runner.ts';
-import { platformPackageBinary } from '../lib/dust-sync-native.ts';
+import { platformPackageBinary } from '../engine/rc/dust-sync-native.ts';
 
 const NETWORK = { indexer: 'http://localhost:28088/api/v4/graphql', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws', node: 'ws://localhost:29944', proofServer: 'http://localhost:26300', networkId: 'Undeployed' };
 let dir: string;

@@ -4,9 +4,8 @@
 import { type ParsedArgs, getFlag, hasFlag } from '../lib/argv.ts';
 import { UsageError, throwIfCancelled } from '../lib/errors.ts';
 import { clearWalletCache } from '../lib/wallet-cache.ts';
-import { clearDustDirectCache, dustPublicKeyHexFromSeed } from '../lib/dust-direct-cache.ts';
-import { clearShieldedDirectCache, shieldedCoinPublicKeyHexFromSeed } from '../lib/shielded-direct-cache.ts';
-import { clearNativeDustCheckpoint } from '../lib/dust-sync-native.ts';
+import { clearDustDirectCache, clearNativeDustCheckpoint, clearShieldedDirectCache } from '../lib/reader-cache-files.ts';
+import { engineFor } from '../lib/engine.ts';
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { green } from '../ui/colors.ts';
@@ -36,11 +35,12 @@ export default async function cacheCommand(args: ParsedArgs, ctx: CallContext): 
     const address = config.addresses[networkName];
     clearWalletCache(address, networkName);
     // Also clear the dust-direct cache for this wallet on this network.
-    const dustPubkey = dustPublicKeyHexFromSeed(Buffer.from(config.seed, 'hex'));
+    const { keys } = await engineFor(networkName);
+    const dustPubkey = keys.dustPublicKeyHex(Buffer.from(config.seed, 'hex'));
     clearDustDirectCache(networkName, dustPubkey);
     clearNativeDustCheckpoint(networkName, dustPubkey);
     // And the shielded-direct cache (keyed by the wallet's coin public key).
-    const shieldedPubkey = shieldedCoinPublicKeyHexFromSeed(Buffer.from(config.seed, 'hex'));
+    const shieldedPubkey = keys.shieldedCoinPublicKeyHex(Buffer.from(config.seed, 'hex'));
     clearShieldedDirectCache(networkName, shieldedPubkey);
     if (jsonMode) {
       ctx.output.result({ action: 'clear', scope: 'wallet', wallet: walletFlag, network: networkName });

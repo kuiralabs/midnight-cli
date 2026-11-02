@@ -14,10 +14,10 @@ import { randomBytes } from 'node:crypto';
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import { DIR_MODE, FILE_MODE } from './constants.ts';
-import { deriveDustSeed } from '../engine/rc/derivation.ts';
+import { DIR_MODE, FILE_MODE } from '../../lib/constants.ts';
+import { deriveDustSeed } from './derivation.ts';
 import { type DustRetention } from './dust-direct.ts';
-import { cacheKeyOf, cacheRootDir } from './wallet-cache.ts';
+import { dustCacheDir, getDustCachePath } from '../../lib/reader-cache-files.ts';
 
 // v2 added the retention fields (owned generation indices + frontier) that the
 // generation-tree collapse needs. v1 caches lack them and are invalidated, so
@@ -65,19 +65,6 @@ export function dustPublicKeyHexFromSeed(seedBuffer: Buffer): string {
   return dustPublicKeyHex(sk.publicKey);
 }
 
-function dustCacheDir(network: string, cacheDir?: string): string {
-  const base = cacheRootDir(cacheDir);
-  return join(base, network);
-}
-
-export function getDustCachePath(
-  network: string,
-  pubkeyHex: string,
-  cacheDir?: string,
-): string {
-  const prefix = cacheKeyOf(pubkeyHex);
-  return join(dustCacheDir(network, cacheDir), `dust-${prefix}.json`);
-}
 
 /**
  * Load a cached DustLocalState for the given (network, dust pubkey).
@@ -194,45 +181,3 @@ export function validateDustCacheChainId(
   return wiped;
 }
 
-/**
- * Remove dust-direct cache files. Scope:
- *  - (network, pubkeyHex) → single file
- *  - (network)            → all dust-* files in that network dir
- *  - (neither)            → all dust-* files across all networks
- */
-export function clearDustDirectCache(
-  network?: string,
-  pubkeyHex?: string,
-  cacheDir?: string,
-): void {
-  const base = cacheRootDir(cacheDir);
-
-  if (network && pubkeyHex) {
-    const path = getDustCachePath(network, pubkeyHex, cacheDir);
-    try { unlinkSync(path); } catch { /* not found is ok */ }
-    return;
-  }
-
-  const wipeNetworkDir = (dir: string) => {
-    if (!existsSync(dir)) return;
-    try {
-      for (const file of readdirSync(dir)) {
-        if (file.startsWith('dust-') && file.endsWith('.json')) {
-          try { unlinkSync(join(dir, file)); } catch { /* best-effort */ }
-        }
-      }
-    } catch { /* best-effort */ }
-  };
-
-  if (network) {
-    wipeNetworkDir(dustCacheDir(network, cacheDir));
-    return;
-  }
-
-  if (!existsSync(base)) return;
-  try {
-    for (const net of readdirSync(base)) {
-      wipeNetworkDir(join(base, net));
-    }
-  } catch { /* best-effort */ }
-}

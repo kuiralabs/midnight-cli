@@ -23,7 +23,7 @@ import { FORK_SCHEDULE } from './fork-schedule.ts';
 import { getNetworkId } from './network-id.ts';
 import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from '../engine/rc/derivation.ts';
 import { type WalletCacheData } from './wallet-cache.ts';
-import { loadDustCache, dustPublicKeyHex, type DustCacheEntry } from './dust-direct-cache.ts';
+import { loadDustCache, dustPublicKeyHex, type DustCacheEntry } from '../engine/rc/dust-direct-cache.ts';
 import {
   DUST_COST_OVERHEAD,
   DUST_FEE_BLOCKS_MARGIN,
