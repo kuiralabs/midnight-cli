@@ -24,8 +24,8 @@ import {
   INITIAL_NIGHT_DUST_RATIO,
   INITIAL_GENERATION_DECAY_RATE,
   INITIAL_DUST_GRACE_PERIOD_SECONDS,
-} from './constants.ts';
-import { subscribeGraphqlWs } from './graphql-ws-subscription.ts';
+} from '../../lib/constants.ts';
+import { subscribeGraphqlWs } from '../../lib/graphql-ws-subscription.ts';
 
 const SUBSCRIPTION_QUERY = `
   subscription DustGenerations($a: DustAddress!, $s: Int!, $e: Int!) {

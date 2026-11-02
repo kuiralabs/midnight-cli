@@ -42,7 +42,7 @@ const HOMES = [
   // The SDK engines: each is the only code that imports its SDK set.
   ['engine', /^engine\//],
 
-  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance)\.ts$/],
+  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|wallet-cache|cache-indexer|reader-cache-files)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
   ['dev', /^ui\/(test-create-prompt|dev-keys)\.ts$/],
 
@@ -50,7 +50,7 @@ const HOMES = [
   ['chain', /^lib\/(node-rpc|chain-id|indexer-graphql|graphql-ws-subscription|event-tip|ledger-guard|node-ready|indexer-ready|proof-server-ready|chain-clock|endpoint-check|balance-subscription)\.ts$/],
 
   ['wallet', /^commands\/(wallet|generate|address|genesis-address|info|balance|transfer|airdrop|dust|cache)(\.definition)?\.ts$/],
-  ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|wallet-cache|cache-indexer|transfer|transfer-request|sync-eta|wallet-can-pay|wallet-create|airdrop|wallet-protector|chain-caches|wallet-paths|fork-schedule)\.ts$/],
+  ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|transfer|transfer-request|sync-eta|wallet-can-pay|wallet-create|airdrop|wallet-protector|chain-caches|wallet-paths|fork-schedule)\.ts$/],
   ['wallet', /^lib\/(dust-[a-z-]+|shielded-[a-z-]+)\.ts$/],
 
   ['contract', /^commands\/(contract|inspect-cost)(\.definition)?\.ts$/],
@@ -110,17 +110,10 @@ export const PENDING_ENGINE = new Set([
   'lib/contract/providers.ts',
   'lib/contract/runner.ts',
   'lib/dapp-connector.ts',
-  'lib/dust-balance-direct.ts',
-  'lib/dust-collapse.ts',
-  'lib/dust-direct-cache.ts',
-  'lib/dust-direct.ts',
-  'lib/dust-sync-native.ts',
   'lib/dust-wallet.ts',
   'lib/facade.ts',
   'lib/fork-schedule.ts',
   'lib/grant/sealed-account.ts',
-  'lib/shielded-direct-cache.ts',
-  'lib/shielded-direct.ts',
   'lib/sign-recipe.ts',
   'lib/test/prep-runner.ts',
   'lib/transfer-request.ts',

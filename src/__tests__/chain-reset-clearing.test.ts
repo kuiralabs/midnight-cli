@@ -8,8 +8,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { clearChainCaches } from '../lib/chain-caches.ts';
 import { getCachePath } from '../lib/wallet-cache.ts';
-import { getDustCachePath } from '../lib/dust-direct-cache.ts';
-import { getShieldedCachePath } from '../lib/shielded-direct-cache.ts';
+import { getDustCachePath } from '../lib/reader-cache-files.ts';
+import { getShieldedCachePath } from '../lib/reader-cache-files.ts';
 import { PRIVATE_STATE_DATABASE, clearDappPrivateState } from '../lib/contract/private-state.ts';
 
 let dir: string;

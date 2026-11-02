@@ -14,7 +14,7 @@ import { WalletDataRepository, type DustView, type UnshieldedView, type RepoDeps
 import { UnsupportedLedgerError } from '../lib/ledger-guard.ts';
 import type { NetworkConfig } from '../lib/network.ts';
 import type { BalanceSummary } from '../lib/balance-subscription.ts';
-import type { DustDirectResult } from '../lib/dust-direct.ts';
+import type { DustDirectResult } from '../engine/rc/dust-direct.ts';
 
 // ── Test fixtures ─────────────────────────────────────────
 

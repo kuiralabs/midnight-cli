@@ -13,7 +13,7 @@ import { shieldedSyncEnabled, shieldedDisabledReason } from '../lib/shielded-pol
 import { getNetworkId } from '../lib/network-id.ts';
 import { isNativeToken } from '../lib/balance-subscription.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
-import { readShieldedBalanceCached } from '../lib/shielded-direct-cache.ts';
+import { readShieldedBalanceCached } from '../engine/rc/shielded-direct-cache.ts';
 import { assertLedgerSupported, fetchProtocolVersion } from '../lib/ledger-guard.ts';
 import { deriveShieldedAddress, deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
 import { getChainGenesisHash } from '../lib/chain-id.ts';

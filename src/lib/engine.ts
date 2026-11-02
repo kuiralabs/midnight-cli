@@ -19,6 +19,10 @@ export interface EngineKeys {
   shieldedAddress(seed: Buffer, network: NetworkName): string;
   /** The shielded address on every network. */
   shieldedAddresses(seed: Buffer): Record<NetworkName, string>;
+  /** The Dust public key, hex: what the Dust reader's cache is named by. */
+  dustPublicKeyHex(seed: Buffer): string;
+  /** The shielded coin public key, hex: what the shielded reader's cache is named by. */
+  shieldedCoinPublicKeyHex(seed: Buffer): string;
 }
 
 /** A line of what a transaction is, as an approval prompt shows it. */

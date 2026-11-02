@@ -4,9 +4,9 @@
 // `cache clear` clears the same set.
 
 import { clearWalletCache } from './wallet-cache.ts';
-import { clearDustDirectCache } from './dust-direct-cache.ts';
-import { clearShieldedDirectCache } from './shielded-direct-cache.ts';
-import { clearNativeDustCheckpoint } from './dust-sync-native.ts';
+import { clearDustDirectCache } from './reader-cache-files.ts';
+import { clearShieldedDirectCache } from './reader-cache-files.ts';
+import { clearNativeDustCheckpoint } from './reader-cache-files.ts';
 
 /**
  * Clears every wallet cache kept for `network` (all networks when undefined):

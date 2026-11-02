@@ -32,7 +32,7 @@ export type WalletCommandContext = CallContext<WalletProtector>;
 
 /** The shielded coin public key of the wallet `name`, unlocked with mn's passphrase. */
 export async function coinKeyOfWallet(name: string): Promise<string> {
-  // Loaded here, not up front: it brings in the ledger, which the other wallet subcommands don't need.
-  const { shieldedCoinPublicKeyHexFromSeed } = await import('./shielded-direct-cache.ts');
-  return shieldedCoinPublicKeyHexFromSeed(Buffer.from((await unlockWallet(resolveWalletPath(name))).seed, 'hex'));
+  // The engine loads the SDK, which the other wallet subcommands don't need: loaded here, not up front.
+  const { anyEngine } = await import('./engine.ts');
+  return (await anyEngine()).keys.shieldedCoinPublicKeyHex(Buffer.from((await unlockWallet(resolveWalletPath(name))).seed, 'hex'));
 }
