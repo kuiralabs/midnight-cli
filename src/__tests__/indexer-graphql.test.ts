@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { IndexerQueryError, queryIndexer } from '../lib/indexer-graphql.ts';
+import { IndexerQueryError, queryIndexer } from '@kuiralabs/midnight-chain/lib/indexer-graphql';
 import { startLocalIndexer, type LocalIndexer } from './helpers/local-indexer.ts';
 
 let indexer: LocalIndexer | undefined;

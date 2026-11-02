@@ -19,7 +19,7 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { deriveShieldedSeed } from './derivation.ts';
 import { readShieldedBalanceDirect, type ShieldedDirectOptions } from './shielded-direct.ts';
-import { fetchEventTip, isCursorBeyondTip } from '../../lib/event-tip.ts';
+import { fetchEventTip, isCursorBeyondTip } from '@kuiralabs/midnight-chain/lib/event-tip';
 import { clearShieldedDirectCache, getShieldedCachePath } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
 
 // v2: ledger-9 states replace ledger-8 ones. Dev-preset localnets share a genesis

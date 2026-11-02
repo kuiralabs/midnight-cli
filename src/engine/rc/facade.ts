@@ -31,8 +31,8 @@ import {
   PRE_SEND_SYNC_TIMEOUT_MS,
 } from '@kuiralabs/midnight-cli-core/lib/constants';
 import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
-import { assertNetworkAnswers } from '../../lib/endpoint-check.ts';
-import { isStreamEmpty } from '../../lib/event-tip.ts';
+import { assertNetworkAnswers } from '@kuiralabs/midnight-chain/lib/endpoint-check';
+import { isStreamEmpty } from '@kuiralabs/midnight-chain/lib/event-tip';
 import { CancelledError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export type SyncMode = 'full' | 'lite' | 'no-dust';

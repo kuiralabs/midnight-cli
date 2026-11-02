@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocketServer } from 'ws';
-import { fetchEventTip, isCursorBeyondTip, isStreamEmpty } from '../lib/event-tip.ts';
+import { fetchEventTip, isCursorBeyondTip, isStreamEmpty } from '@kuiralabs/midnight-chain/lib/event-tip';
 
 let servers: WebSocketServer[] = [];
 afterEach(() => { for (const s of servers) s.close(); servers = []; });

@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, EndpointShutDownError, blockfrostEndpoints } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
-import { assertNetworkAnswers } from '../lib/endpoint-check.ts';
+import { assertNetworkAnswers } from '@kuiralabs/midnight-chain/lib/endpoint-check';
 
 const ID = 'nightpreprodAbCdEfGhIjKlMnOpQrStUv0123';
 const LOCAL = { indexer: 'http://localhost:8088/api/v4/graphql', indexerWS: 'ws://localhost:8088/api/v4/graphql/ws', node: 'ws://localhost:9944' };

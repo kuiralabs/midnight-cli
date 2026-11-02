@@ -4,7 +4,7 @@
 // parameters: on a ledger-9 localnet the block limits for read time and
 // block usage are 2x and 5x the initial ones.
 
-import { queryIndexer } from './indexer-graphql.ts';
+import { queryIndexer } from '@kuiralabs/midnight-chain/lib/indexer-graphql';
 
 export interface ChainLedgerParameters {
   height: number;

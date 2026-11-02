@@ -26,7 +26,8 @@
   ],
   "workspaces": [
     "packages/connector",
-    "packages/cli-core"
+    "packages/cli-core",
+    "packages/chain"
   ],
   "bin": {
     "midnight": "dist/wallet.js",
@@ -46,7 +47,7 @@
   },
   "scripts": {
     "wallet": "tsx --conditions=midnight-cli-source src/wallet.ts",
-    "build": "npm run build -w @kuiralabs/midnight-cli-core && node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && bun build src/wallet.ts src/mcp-server.ts --outdir dist --splitting --target node --format esm --packages external --minify --banner \"#!/usr/bin/env node\"",
+    "build": "npm run build -w @kuiralabs/midnight-cli-core && npm run build -w @kuiralabs/midnight-chain && node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && bun build src/wallet.ts src/mcp-server.ts --outdir dist --splitting --target node --format esm --packages external --minify --banner \"#!/usr/bin/env node\"",
     "mcp": "tsx --conditions=midnight-cli-source src/mcp-server.ts",
     "link": "bun link",
     "prepublishOnly": "npm run build && npm run test",
@@ -60,6 +61,7 @@
   "dependencies": {
     "@kuiralabs/midnight-account": "0.2.0-rc.0",
     "@kuiralabs/midnight-account-chain": "0.3.0-rc.0",
+    "@kuiralabs/midnight-chain": "0.1.0-rc.0",
     "@kuiralabs/midnight-cli-core": "0.1.0-rc.0",
     "@midnight-ntwrk/compact-runtime": "0.20.0",
     "@midnight-ntwrk/ledger-v8": "8.1.0",

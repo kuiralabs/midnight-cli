@@ -57,7 +57,7 @@ export { isDustRelatedError, isSdkInsufficientFundsError } from '@kuiralabs/midn
 import { isColdStartRace, isDustRelatedError } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { DustFeeNotGeneratedError, planRegistration } from '@kuiralabs/midnight-cli-core/lib/dust-registration-plan';
 import { formatWait } from '@kuiralabs/midnight-cli-core/lib/duration';
-import { assertChainClockCurrent, fetchChainTime } from '../../lib/chain-clock.ts';
+import { assertChainClockCurrent, fetchChainTime } from '@kuiralabs/midnight-chain/lib/chain-clock';
 import { awaitDustForFee, sleep } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
 
 /** How long the transfer retry waits for Dust to grow when the fee is above the pre-flight threshold. */

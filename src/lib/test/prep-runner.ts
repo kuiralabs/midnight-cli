@@ -6,7 +6,7 @@ import { clearWalletCache } from '@kuiralabs/midnight-cli-core/lib/wallet-cache'
 import { resolveWalletPath, unlockWallet } from '../wallet-config.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import type { NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { assertLedger9StackReachable, assertLedgerSupported } from '../ledger-guard.ts';
+import { assertLedger9StackReachable, assertLedgerSupported } from '@kuiralabs/midnight-chain/lib/ledger-guard';
 
 import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallbacks } from './types.ts';
 import { startServeOrReuse } from '../serve-manager.ts';

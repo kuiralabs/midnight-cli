@@ -25,7 +25,7 @@ import {
   INITIAL_GENERATION_DECAY_RATE,
   INITIAL_DUST_GRACE_PERIOD_SECONDS,
 } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { subscribeGraphqlWs } from '../../lib/graphql-ws-subscription.ts';
+import { subscribeGraphqlWs } from '@kuiralabs/midnight-chain/lib/graphql-ws-subscription';
 
 const SUBSCRIPTION_QUERY = `
   subscription DustGenerations($a: DustAddress!, $s: Int!, $e: Int!) {

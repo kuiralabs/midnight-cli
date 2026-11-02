@@ -5,10 +5,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { checkBalance } from '../lib/balance-subscription.ts';
+import { checkBalance } from '@kuiralabs/midnight-chain/lib/balance-subscription';
 import { BlockfrostProjectIdRequiredError, EndpointShutDownError, blockfrostEndpoints } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
-import { subscribeGraphqlWs } from '../lib/graphql-ws-subscription.ts';
-import { callNodeRpc } from '../lib/node-rpc.ts';
+import { subscribeGraphqlWs } from '@kuiralabs/midnight-chain/lib/graphql-ws-subscription';
+import { callNodeRpc } from '@kuiralabs/midnight-chain/lib/node-rpc';
 
 const NO_ID = blockfrostEndpoints('preprod', undefined);
 const ADDRESS = 'mn_addr_preprod1m5cjx3u3hmfhm5268muqp499y82e3fuxj65jpqq7sd0r9x07n3fqk36yhe';

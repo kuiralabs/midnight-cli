@@ -11,9 +11,9 @@ import { Buffer } from 'node:buffer';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { WalletDataRepository, type DustView, type UnshieldedView, type RepoDeps } from '../engine/rc/wallet-data-repository.ts';
-import { UnsupportedLedgerError } from '../lib/ledger-guard.ts';
+import { UnsupportedLedgerError } from '@kuiralabs/midnight-chain/lib/ledger-guard';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
-import type { BalanceSummary } from '../lib/balance-subscription.ts';
+import type { BalanceSummary } from '@kuiralabs/midnight-chain/lib/balance-subscription';
 import type { DustDirectResult } from '../engine/rc/dust-direct.ts';
 
 // ── Test fixtures ─────────────────────────────────────────

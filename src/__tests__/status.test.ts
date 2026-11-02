@@ -115,7 +115,7 @@ describe('status command', () => {
   /** Runs status as the CLI would; the exit code it gives, which the shell sets. */
   async function runStatus(flags: Record<string, string | true> = {}) {
     // Dynamic import to get fresh module
-    const mod = await import('../commands/status.ts');
+    const mod = await import('@kuiralabs/midnight-chain/commands/status');
     return cliCall(mod.default, {
       command: 'status',
       subcommand: undefined,
