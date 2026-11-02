@@ -58,9 +58,14 @@ describe('verbose, per call', () => {
   });
 
   it('a call after a verbose one is quiet', async () => {
-    await captureCommand(balanceCommand, parseArgs(['balance', VERBOSE_ADDRESS, '--verbose', ...UNREACHABLE]), ownCall()).catch(() => {});
+    const verbose = await captureCommand(balanceCommand, parseArgs(['balance', VERBOSE_ADDRESS, '--verbose', ...UNREACHABLE]), ownCall()).then(() => null, (err: unknown) => err);
+    // It got as far as its first diagnostic, and failed connecting.
+    expect(notices.some((line) => line.includes(`balance: address=${VERBOSE_ADDRESS}`))).toBe(true);
     notices = [];
-    await captureCommand(balanceCommand, parseArgs(['balance', QUIET_ADDRESS, ...UNREACHABLE]), ownCall()).catch(() => {});
+    const quiet = await captureCommand(balanceCommand, parseArgs(['balance', QUIET_ADDRESS, ...UNREACHABLE]), ownCall()).then(() => null, (err: unknown) => err);
+    // It got as far too, failing the same way, past where the verbose one wrote its diagnostic.
+    expect(quiet).toBeInstanceOf(Error);
+    expect((quiet as Error).message).toBe((verbose as Error).message.replace(VERBOSE_ADDRESS, QUIET_ADDRESS));
     expect(notices.filter((line) => /\] \w+: /.test(line))).toEqual([]);
   });
 
