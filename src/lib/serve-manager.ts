@@ -8,14 +8,9 @@ import { loadWalletConfig, resolveWalletPath, unlockWallet } from './wallet-conf
 import { resolveNetwork } from './resolve-network.ts';
 import { assertLedgerSupported } from './ledger-guard.ts';
 import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName } from './network.ts';
-import { buildFacade, isFacadeSynced, startAndSyncFacade, stopFacade, waitForDustAvailable } from './facade.ts';
-import { bindCachesToIndexer, describeIndexerChange } from './cache-indexer.ts';
-import { saveWalletCache } from './wallet-cache.ts';
-import { defaultRepository } from './wallet-data-repository.ts';
-import { createDAppConnector, type DAppConnectorCallbacks } from './dapp-connector.ts';
+import { engineFor, type DAppConnectorCallbacks, type OpenedConnector } from './engine.ts';
 import { createRpcServer, type RpcServer } from './ws-rpc.ts';
 import { DEFAULT_SERVE_PORT } from './constants.ts';
-import type { FacadeBundle } from './facade.ts';
 import type { CallSdkWarnings } from './sdk-warnings.ts';
 import { shieldedSyncEnabled } from './shielded-policy.ts';
 import { CancelledError, throwIfCancelled } from './errors.ts';
@@ -219,10 +214,8 @@ export async function startServeOrReuse(options: ServeManagerOptions): Promise<S
 }
 
 /** A wallet's DApp connector in this process, approving everything, and how to stop it. */
-export interface OpenedConnector {
-  connector: ReturnType<typeof createDAppConnector>;
-  stop(): Promise<void>;
-}
+/** The connector over a synced wallet; stop() stops both. */
+export type { OpenedConnector } from './engine.ts';
 
 /**
  * The wallet's DApp connector in this process, in --approve-all mode, with no
@@ -248,83 +241,29 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
     onMessage(`SDK: ${msg}`);
   });
   // A failure before the connector is handed back stops what was started, so
-  // the listener doesn't outlive this call and the facade doesn't keep syncing.
-  let bundle: Awaited<ReturnType<typeof buildFacade>> | undefined;
-  let connector: ReturnType<typeof createDAppConnector>;
+  // the listener doesn't outlive this call and the wallet doesn't keep syncing.
+  let opened: OpenedConnector;
   try {
-    // Build & sync facade
-    onMessage('Building wallet facade...');
-    const indexerChange = bindCachesToIndexer(networkName, networkConfig.indexerWS);
-    if (indexerChange) onMessage(describeIndexerChange(networkName, indexerChange));
-    // As the repository's own borrowers do: warm the Dust checkpoint, then
-    // restore from it when there is no saved wallet, instead of the SDK
-    // replaying the chain's whole Dust history (minutes on a hosted network).
-    const repo = defaultRepository();
-    // Best-effort, as there: a failed warm-up leaves the sync below to do it.
-    try {
-      await repo.dust(seedBuffer, networkConfig, { signal, onStatus: onMessage });
-    } catch {
-      throwIfCancelled(signal); // a cancel is not a failed warm-up
-    }
-    const cache = await repo.walletStateToRestore(seedBuffer, networkConfig, networkName);
-    const built = await buildFacade(seedBuffer, networkConfig, cache);
-    bundle = built;
-
-    // As `mn serve` does: skip the slow shielded sync where shielded is unusable (no faucet).
-    const syncMode = shieldedSyncEnabled(networkName) ? 'full' : 'lite';
-    onMessage('Syncing wallet...');
-    await startAndSyncFacade(built, {
-      syncMode,
-      signal,
-      onProgress: (applied, highest) => {
-        if (highest > 0) {
-          const pct = Math.min(Math.round((applied / highest) * 100), 100);
-          onMessage(`Syncing wallet... ${pct}%`);
-        }
-      },
-    });
-    onMessage('Wallet synced');
-
-    // Wait for dust
-    onMessage('Waiting for dust...');
-    const syncedState = await waitForDustAvailable(built, undefined, signal);
-    onMessage('Dust ready');
-
-    // Save cache after sync
-    try { await saveWalletCache(address, networkName, built.facade); } catch { /* best-effort */ }
-
-    // Create DApp Connector — approve-all mode for tests
-    connector = createDAppConnector({
-      bundle: built,
+    opened = await (await engineFor(networkName)).wallet.openConnector({
+      seed: seedBuffer,
+      network: networkName,
       networkConfig,
-      approvalOptions: { approveAll: true, autoApproveReads: true },
-      // Reads answer from the state this sync ended on, and from every later
-      // one that is synced by the rule the sync used.
-      initialState: syncedState,
-      isCurrent: (state) => isFacadeSynced(state, syncMode, built.emptyStreams),
+      address,
+      // As `mn serve` does: skip the slow shielded sync where shielded is unusable (no faucet).
+      syncMode: shieldedSyncEnabled(networkName) ? 'full' : 'lite',
       dustWaitMs: options.dustWaitMs,
-      callbacks: {
-        onPhaseStart: (_connId, _method, phase) => {
-          onMessage(`${phase}...`);
-        },
-        onPhaseComplete: (_connId, _method, phase, durationMs) => {
-          onMessage(`${phase} ${Math.round(durationMs)}ms`);
-        },
-      },
+      signal,
+      onMessage,
     });
   } catch (err) {
     stopListening();
-    if (bundle !== undefined) { try { await stopFacade(bundle); } catch { /* best-effort */ } }
     throw err;
   }
-  const started = bundle;
-
   return {
-    connector,
+    connector: opened.connector,
     async stop() {
-      connector.dispose();
       stopListening();
-      try { await stopFacade(started); } catch { /* best-effort */ }
+      await opened.stop();
     },
   };
 }

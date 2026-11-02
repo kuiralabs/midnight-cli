@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { Buffer } from 'node:buffer';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import { WalletDataRepository, type DustView, type UnshieldedView, type RepoDeps } from '../lib/wallet-data-repository.ts';
+import { WalletDataRepository, type DustView, type UnshieldedView, type RepoDeps } from '../engine/rc/wallet-data-repository.ts';
 import { UnsupportedLedgerError } from '../lib/ledger-guard.ts';
 import type { NetworkConfig } from '../lib/network.ts';
 import type { BalanceSummary } from '../lib/balance-subscription.ts';

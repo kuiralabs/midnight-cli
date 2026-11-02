@@ -5,6 +5,12 @@
 // Loading an engine loads its SDK, so the loader imports it only when asked.
 
 import type { NetworkConfig, NetworkName } from './network.ts';
+import type { CallSdkWarnings } from './sdk-warnings.ts';
+import type { VerboseLog } from './verbose.ts';
+import type { ApprovalOptions } from './approval.ts';
+import type { FeeLimits } from './fee-limits.ts';
+import type { RpcHandler } from './connector-api.ts';
+import type { Spinner } from '../ui/spinner.ts';
 
 /** An SDK set mn runs on. */
 export type SdkSet = 'rc';
@@ -156,6 +162,251 @@ export interface EngineReaders {
   shieldedBalance(seed: Buffer, network: NetworkName, indexerWS: string, options?: ShieldedCachedOptions): Promise<ShieldedBalanceResult>;
 }
 
+// ── The wallet ──
+
+/** An address's unshielded balances, as the indexer's UTXOs give them. */
+export interface BalanceSummary {
+  balances: Map<string, bigint>;
+  utxoCount: number;
+  txCount: number;
+  highestTxId: number;
+  /** Count of unspent native-token UTXOs registered for dust generation. */
+  registeredUtxos: number;
+  /** Count of unspent native-token UTXOs NOT registered for dust generation. */
+  unregisteredUtxos: number;
+}
+
+export interface TransferParams {
+  seedBuffer: Buffer;
+  networkConfig: NetworkConfig;
+  recipientAddress: string;
+  amountNight: number;
+  signal?: AbortSignal;
+  onSync?: (applied: number, highest: number) => void;
+  onSyncDetail?: (walletsStillSyncing: string) => void;
+  onDust?: (status: string) => void;
+  onProving?: () => void;
+  onSubmitting?: () => void;
+  /** Fires every second while waiting for chain finalization. `elapsedMs`
+   * is the time since the submit started. Use to drive an elapsed-time
+   * display so users see the wait is alive.
+   */
+  onSubmittingTick?: (elapsedMs: number) => void;
+  onSyncWarning?: (tag: string, message: string) => void;
+  /** The call's SDK warnings, listened to for the whole transfer. */
+  sdkWarnings: CallSdkWarnings;
+  /** The call's verbose lines. */
+  log?: VerboseLog;
+}
+
+export interface TransferResult {
+  txHash: string;
+  amountMicroNight: bigint;
+}
+
+export interface EnsureDustResult {
+  alreadyAvailable: boolean;
+  txHash?: string;
+}
+
+export type AirdropParams = Omit<TransferParams, 'seedBuffer'>;
+
+export interface DustRegisterOptions {
+  signal?: AbortSignal;
+  /** What the registration is doing now, for a progress line. */
+  onStatus?: (status: string) => void;
+  /** Wallet sync progress, as blocks applied of the highest seen. */
+  onSyncProgress?: (applied: number, highest: number) => void;
+  /** Which wallets the sync still waits on. */
+  onSyncDetail?: (detail: string) => void;
+  /** A transient SDK error the sync is retrying past. */
+  onSyncWarning?: (tag: string, message: string) => void;
+  /** The call's SDK warnings, listened to for the whole registration. */
+  sdkWarnings: CallSdkWarnings;
+  /** The call's verbose lines. */
+  log?: VerboseLog;
+}
+
+export interface DustRegistration {
+  /** The wallet had Dust already; nothing was registered. */
+  alreadyAvailable: boolean;
+  txHash?: string;
+  /** The Dust balance once synced, in its smallest unit. */
+  dustBalance: bigint;
+}
+
+export interface DustExportResult {
+  network: string;
+  /** Dust public key (hex) this snapshot belongs to — derived from the seed. */
+  dustPublicKey: string;
+  /** Last dust event id the snapshot covers; -1 if the wallet has no dust events yet. */
+  offset: number;
+  /** Dust balance encoded in the snapshot, at export time. */
+  balance: bigint;
+  /** Dust events applied during this export's sync (delta since any prior cache). */
+  eventCount: number;
+  /** True if an existing dust-direct cache was extended; false if synced from scratch. */
+  fromCache: boolean;
+  /**
+   * True iff the sync stopped short of the chain tip. The snapshot is still a
+   * valid checkpoint — restoring it is strictly better than starting cold — but
+   * it is NOT current, and a wallet restored from it still has events to catch
+   * up on. Consumers must not treat a partial export as a warm wallet.
+   */
+  partial: boolean;
+  /** The facade-restorable dust snapshot — pass as `dustSerializedState`. */
+  snapshot: string;
+}
+
+export interface UnshieldedView extends BalanceSummary {
+  fromCache: boolean;
+  fetchedAt: number;
+}
+
+export interface ReadOptions {
+  /** Bypass every cache layer and re-fetch from network. */
+  forceFresh?: boolean;
+  signal?: AbortSignal;
+  /** Status hook for spinner wiring. */
+  onStatus?: (s: string) => void;
+  /**
+   * Raw progress signal during the underlying network fetch. For dust this
+   * fires per-chunk (events applied vs max event id); for unshielded it
+   * fires per-UTXO-batch (current tx vs highest tx id). Callers that already
+   * have a spinner usually use this to render a percentage.
+   */
+  onProgress?: (current: number, highest: number) => void;
+  /** The call's verbose lines. */
+  log?: VerboseLog;
+}
+
+/** A wallet's Dust, as mn's reader found it. */
+export interface DustBalance {
+  balance: bigint;
+  availableCoins: number;
+  ownedUtxoCount: number;
+  syncTime: Date;
+  /**
+   * True iff any cache layer participated — either an in-memory memo hit, OR a
+   * disk-cache resume (delta sync from a previous checkpoint). False only for
+   * a true cold scan from event 0.
+   */
+  fromCache: boolean;
+  /** Number of events applied by this call (0 on memo hits; delta count on disk-resume; full count on cold). */
+  eventsApplied: number;
+  /**
+   * Id of the last dust event folded into `state`; -1 when the wallet has no
+   * dust events on this chain yet. This is the snapshot offset a restoring
+   * wallet resumes from, and it lives nowhere else in the view.
+   */
+  lastAppliedEventId: number;
+  /**
+   * True iff the sync stopped short of the chain tip even after exhausting the
+   * partial-resume loop — the state is a valid checkpoint but NOT current.
+   * Callers that hand this state to another wallet (`dust export`) must surface
+   * it: restoring a short state looks like success and then silently falls back
+   * to the SDK's cold sync for the remaining events.
+   */
+  partial: boolean;
+  /** Wall-clock millis when this value was last refreshed from the network. */
+  fetchedAt: number;
+}
+
+/** What a wallet operation reports while it syncs the wallet. */
+export interface WalletSyncHooks {
+  signal?: AbortSignal;
+  log?: VerboseLog;
+  onStatus?: (status: string) => void;
+  onSyncProgress?: (applied: number, highest: number) => void;
+  onSyncDetail?: (detail: string) => void;
+}
+
+/** A shielded payment of NIGHT from a seed's wallet. */
+export interface ShieldedTransferParams extends WalletSyncHooks {
+  seed: Buffer;
+  network: NetworkName;
+  networkConfig: NetworkConfig;
+  /** The recipient's shielded address on `network`. */
+  recipient: string;
+  /** In NIGHT's smallest unit. */
+  amount: bigint;
+  /** Says each step, and the time the submit has taken. */
+  progress: Spinner;
+  /** The refusal when the wallet holds less shielded NIGHT than `amount`, given what it holds, in NIGHT. */
+  insufficient: (availableNight: string) => string;
+  /** Right after another payment the wallet's Dust can be short of this fee: wait when the rest is moments away. */
+  waitForDustToCover: boolean;
+  /** The paying wallet's own shielded address, once synced. */
+  onSenderShieldedAddress?: (address: string) => void;
+}
+
+/** A wallet a test's preparation checks, by its seed and its saved address. */
+export interface PrepWallet {
+  seed: Buffer;
+  network: NetworkName;
+  networkConfig: NetworkConfig;
+  address: string;
+  signal?: AbortSignal;
+  onMessage: (message: string) => void;
+}
+
+export interface DAppConnectorCallbacks {
+  onPhaseStart?: (connectionId: string, method: string, phase: string) => void;
+  onPhaseComplete?: (connectionId: string, method: string, phase: string, durationMs: number) => void;
+}
+
+/** A wallet's DApp connector: the API's methods as RPC handlers. */
+export interface DAppConnector {
+  handlers: Record<string, RpcHandler>;
+  /** Revert all pending (unsubmitted) transactions for a connection, releasing locked coins. */
+  revertPendingTxs(connectionId: string): Promise<void>;
+  /** True if any connection has a balanced-but-not-submitted transaction. */
+  hasPendingTxs(): boolean;
+  dispose(): void;
+}
+
+/** The connector over a synced wallet, in --approve-all mode, for a command of mn's own; stop() stops both. */
+export interface OpenedConnector {
+  connector: DAppConnector;
+  stop(): Promise<void>;
+}
+
+/** A wallet synced for mn serve, while the serve runs. */
+export interface ServedWalletSession {
+  /** Waits for the wallet's Dust coins to be available (on preprod 10 to 30 s after a sync); whether they are. */
+  waitForDust(): Promise<boolean>;
+  /** Saves the wallet's state for the next start; best-effort. */
+  saveState(): Promise<void>;
+  /** The DApp connector over the wallet, reading from the state the last wait ended on. */
+  connect(options: { approvalOptions: ApprovalOptions; feeLimits?: FeeLimits; callbacks?: DAppConnectorCallbacks }): DAppConnector;
+}
+
+/** A wallet, through the SDK's wallet and mn's readers. */
+export interface EngineWallet {
+  /** The unshielded balance of an address, through mn's cache. */
+  unshieldedBalance(address: string, networkConfig: NetworkConfig, options?: ReadOptions): Promise<UnshieldedView>;
+  /** A seed's Dust, through mn's reader and its cache. */
+  dustBalance(seed: Buffer, networkConfig: NetworkConfig, options?: ReadOptions): Promise<DustBalance>;
+  /** An unshielded payment of NIGHT. */
+  transfer(params: TransferParams): Promise<TransferResult>;
+  /** NIGHT from the genesis wallet (a local chain only). */
+  airdrop(params: AirdropParams): Promise<TransferResult>;
+  /** A shielded payment of NIGHT; its transaction hash. */
+  shieldedTransfer(params: ShieldedTransferParams): Promise<string>;
+  /** Registers a seed's NIGHT for Dust, unless it has Dust already. */
+  registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions): Promise<DustRegistration>;
+  /** A seed's Dust as a snapshot another wallet restores from. */
+  exportDust(seed: Buffer, network: string, networkConfig: NetworkConfig, options?: { signal?: AbortSignal; log?: VerboseLog; onProgress?: (eventsApplied: number, maxIdSeen: number) => void }): Promise<DustExportResult>;
+  /** A test wallet's unshielded NIGHT after a quick sync; its state is saved when it holds some. */
+  prepNightBalance(wallet: PrepWallet): Promise<bigint>;
+  /** Makes sure a test wallet has Dust, registering and then waiting up to `waitMs` for it. */
+  prepDust(wallet: PrepWallet, waitMs: number): Promise<{ alreadyAvailable: boolean; dustAvailable: boolean }>;
+  /** The connector over a seed's wallet, synced and its Dust ready, for a command of mn's own. */
+  openConnector(options: { seed: Buffer; network: NetworkName; networkConfig: NetworkConfig; address: string; syncMode: 'full' | 'lite'; dustWaitMs?: number; signal?: AbortSignal; onMessage: (message: string) => void }): Promise<OpenedConnector>;
+  /** Syncs a seed's wallet strictly for mn serve and runs `serve` with it; the wallet stops when `serve` ends. */
+  serveWallet<T>(options: { seed: Buffer; networkConfig: NetworkConfig; network: NetworkName; address: string; syncMode: 'full' | 'lite' } & WalletSyncHooks, serve: (session: ServedWalletSession) => Promise<T>): Promise<T>;
+}
+
 /** One SDK set, as mn uses it. */
 export interface Engine {
   readonly set: SdkSet;
@@ -163,6 +414,7 @@ export interface Engine {
   readonly ledger: EngineLedger;
   readonly contracts: EngineContracts;
   readonly readers: EngineReaders;
+  readonly wallet: EngineWallet;
 }
 
 /** The SDK set a network runs on. */

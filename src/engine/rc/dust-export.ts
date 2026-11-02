@@ -17,34 +17,14 @@
 //
 // Pure logic: returns values, never writes to stdout/stderr or exits.
 
-import { anyEngine } from './engine.ts';
+import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
 import { buildFacade, stopFacade, overlayDustDirectSnapshot } from './facade.ts';
-import { type NetworkConfig } from './network.ts';
+import { type NetworkConfig } from '../../lib/network.ts';
 import { defaultRepository, type WalletDataRepository } from './wallet-data-repository.ts';
-import type { VerboseLog } from './verbose.ts';
+import type { VerboseLog } from '../../lib/verbose.ts';
+import type { DustExportResult } from '../../lib/engine.ts';
+export type { DustExportResult } from '../../lib/engine.ts';
 
-export interface DustExportResult {
-  network: string;
-  /** Dust public key (hex) this snapshot belongs to — derived from the seed. */
-  dustPublicKey: string;
-  /** Last dust event id the snapshot covers; -1 if the wallet has no dust events yet. */
-  offset: number;
-  /** Dust balance encoded in the snapshot, at export time. */
-  balance: bigint;
-  /** Dust events applied during this export's sync (delta since any prior cache). */
-  eventCount: number;
-  /** True if an existing dust-direct cache was extended; false if synced from scratch. */
-  fromCache: boolean;
-  /**
-   * True iff the sync stopped short of the chain tip. The snapshot is still a
-   * valid checkpoint — restoring it is strictly better than starting cold — but
-   * it is NOT current, and a wallet restored from it still has events to catch
-   * up on. Consumers must not treat a partial export as a warm wallet.
-   */
-  partial: boolean;
-  /** The facade-restorable dust snapshot — pass as `dustSerializedState`. */
-  snapshot: string;
-}
 
 export interface DustExportOptions {
   onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
@@ -91,7 +71,7 @@ export async function exportDustSnapshot(
   networkConfig: NetworkConfig,
   options: DustExportOptions = {},
 ): Promise<DustExportResult> {
-  const pubkeyHex = (await anyEngine()).keys.dustPublicKeyHex(seedBuffer);
+  const pubkeyHex = dustPublicKeyHexFromSeed(seedBuffer);
   const repo = options.repository ?? defaultRepository();
 
   const view = await repo.dust(seedBuffer, networkConfig, {

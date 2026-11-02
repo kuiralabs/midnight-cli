@@ -9,23 +9,16 @@
 //      file required, useful for funding externally-generated addresses.
 //      A shielded address implies --shielded; the flag is optional there.
 
-import * as ledger from '@midnightntwrk/ledger-v9';
 import { throwIfCancelled } from '../lib/errors.ts';
-import { MidnightBech32m, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '../lib/argv.ts';
 import { loadWalletConfig, resolveWalletPath, saveShieldedAddress } from '../lib/wallet-config.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '../lib/network.ts';
-import { getNetworkId } from '../lib/network-id.ts';
 import { GENESIS_SEED } from '../lib/constants.ts';
-import { deriveShieldedAddress } from '../engine/rc/derive-address.ts';
-import { ensureDust } from '../lib/transfer.ts';
+import { engineFor } from '../lib/engine.ts';
 import { parseAmount, nightToMicro } from '../lib/amount.ts';
-import { airdropNight } from '../lib/airdrop.ts';
-import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { header, keyValue, divider, formatAddress, successMessage } from '../ui/format.ts';
 import { bold, dim } from '../ui/colors.ts';
-import { trackElapsed } from '../ui/spinner.ts';
 import type { CallContext } from '../lib/call-context.ts';
 
 export default async function airdropCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
@@ -84,8 +77,8 @@ export default async function airdropCommand(args: ParsedArgs, ctx: CallContext)
 type UnshieldedDestination = { kind: 'address'; address: string };
 
 type ShieldedDestination =
-  | { kind: 'address'; raw: ShieldedAddress; bech32m: string }
-  | { kind: 'wallet'; raw: ShieldedAddress; bech32m: string; walletPath: string };
+  | { kind: 'address'; bech32m: string }
+  | { kind: 'wallet'; bech32m: string; walletPath: string };
 
 function looksLikeBech32mAddress(value: string): boolean {
   return value.startsWith('mn_addr_') || value.startsWith('mn_shield-addr_');
@@ -100,7 +93,7 @@ async function resolveDestination(
   const walletFlag = getFlag(args, 'wallet');
 
   if (walletFlag !== undefined && looksLikeBech32mAddress(walletFlag)) {
-    return resolveAddressDestination(walletFlag, networkName, networkConfig, isShielded);
+    return resolveAddressDestination(walletFlag, networkName, isShielded);
   }
 
   // Fall back to wallet file (name, path, or active wallet)
@@ -109,21 +102,20 @@ async function resolveDestination(
 
   if (isShielded) {
     // The wallet's own shielded address, as its file keeps it: receiving needs no passphrase.
-    const stored = config.shieldedAddresses?.[networkName as NetworkName];
+    const stored = config.shieldedAddresses?.[networkName];
     if (stored === undefined) throw new Error(`Wallet ${walletPath} keeps no shielded address for ${networkName}.`);
-    const decoded = resolveAddressDestination(stored, networkName, networkConfig, true) as ShieldedDestination;
-    return { kind: 'wallet', raw: decoded.raw, bech32m: decoded.bech32m, walletPath };
+    const decoded = await resolveAddressDestination(stored, networkName, true) as ShieldedDestination;
+    return { kind: 'wallet', bech32m: decoded.bech32m, walletPath };
   }
 
   return { kind: 'address', address: config.addresses[networkName] };
 }
 
-function resolveAddressDestination(
+async function resolveAddressDestination(
   address: string,
   networkName: NetworkName,
-  networkConfig: NetworkConfig,
   isShielded: boolean,
-): UnshieldedDestination | ShieldedDestination {
+): Promise<UnshieldedDestination | ShieldedDestination> {
   const looksShielded = address.startsWith('mn_shield-addr_');
 
   // The inverse mismatch (shielded address without --shielded) never
@@ -149,14 +141,12 @@ function resolveAddressDestination(
   }
 
   if (isShielded) {
-    const networkId = getNetworkId(networkConfig.networkId);
-    let raw: ShieldedAddress;
     try {
-      raw = MidnightBech32m.parse(address).decode(ShieldedAddress, networkId);
+      (await engineFor(networkName)).keys.assertAddress(address, 'shielded', networkName);
     } catch (err: any) {
       throw new Error(`Invalid shielded address: ${err.message}`);
     }
-    return { kind: 'address', raw, bech32m: address };
+    return { kind: 'address', bech32m: address };
   }
 
   return { kind: 'address', address };
@@ -168,7 +158,7 @@ async function unshieldedAirdrop(
   args: ParsedArgs,
   destination: UnshieldedDestination,
   amountNight: number,
-  networkName: string,
+  networkName: NetworkName,
   networkConfig: NetworkConfig,
   ctx: CallContext,
 ): Promise<void> {
@@ -184,7 +174,7 @@ async function unshieldedAirdrop(
   const spinner = ctx.progress.start('Starting genesis wallet...');
 
   try {
-    const result = await airdropNight({
+    const result = await (await engineFor(networkName)).wallet.airdrop({
       networkConfig,
       recipientAddress,
       amountNight,
@@ -252,22 +242,20 @@ async function shieldedAirdrop(
   args: ParsedArgs,
   destination: ShieldedDestination,
   amountNight: number,
-  networkName: string,
+  networkName: NetworkName,
   networkConfig: NetworkConfig,
   ctx: CallContext,
 ): Promise<void> {
   const amount = nightToMicro(amountNight);
 
   const genesisSeedBuffer = Buffer.from(GENESIS_SEED, 'hex');
-  const nightToken = ledger.unshieldedToken().raw;
 
-  const userShieldedAddress = destination.raw;
   const userShieldedAddrStr = destination.bech32m;
   // Cache the shielded address into the wallet file so subsequent reads
   // can short-circuit. Only meaningful when the destination came from a
   // managed wallet — for a raw address there's nothing to cache.
   if (destination.kind === 'wallet') {
-    saveShieldedAddress(destination.walletPath, networkName as NetworkName, userShieldedAddrStr);
+    saveShieldedAddress(destination.walletPath, networkName, userShieldedAddrStr);
   }
 
   ctx.output.stderr('\n' + header('Shielded Airdrop') + '\n\n');
@@ -282,67 +270,27 @@ async function shieldedAirdrop(
   const spinner = ctx.progress.start('Syncing genesis wallet...');
 
   try {
-    const txHash = await defaultRepository().withFacade(
-      genesisSeedBuffer,
+    const txHash = await (await engineFor(networkName)).wallet.shieldedTransfer({
+      seed: genesisSeedBuffer,
+      network: networkName,
       networkConfig,
-      async ({ bundle, state }) => {
-        const genesisShieldedBalance = state.shielded.balances[nightToken] ?? 0n;
-        if (genesisShieldedBalance < amount) {
-          const available = Number(genesisShieldedBalance) / 1_000_000;
-          throw new Error(
-            `Genesis wallet has insufficient shielded balance: ${available.toFixed(6)} NIGHT available, ${amountNight} NIGHT requested`
-          );
+      recipient: userShieldedAddrStr,
+      amount,
+      progress: spinner,
+      waitForDustToCover: false,
+      insufficient: (available) =>
+        `Genesis wallet has insufficient shielded balance: ${available} NIGHT available, ${amountNight} NIGHT requested`,
+      log: ctx.diagnostics.line,
+      signal: ctx.signal,
+      onStatus: (s) => spinner.update(s),
+      onSyncProgress: (applied, highest) => {
+        if (highest > 0) {
+          const pct = Math.min(Math.round((applied / highest) * 100), 100);
+          spinner.update(pct >= 100 ? 'Syncing genesis wallet...' : `Syncing genesis wallet... ${pct}%`);
         }
-
-        spinner.update('Checking dust...');
-        await ensureDust(bundle, (status: string) => spinner.update(status));
-
-        throwIfCancelled(ctx.signal);
-
-        spinner.update('Building shielded transaction...');
-        const recipe = await bundle.facade.transferTransaction(
-          [{
-            type: 'shielded' as const,
-            outputs: [{ type: nightToken, amount, receiverAddress: userShieldedAddress }],
-          }],
-          { ttl: new Date(Date.now() + 60 * 60 * 1000) },
-        );
-
-        spinner.update('Signing...');
-        const signed = await bundle.facade.signRecipe(
-          recipe,
-          bundle.keystore.signDataAsync,
-        );
-
-        spinner.update('Generating ZK proof (this may take a few minutes)...');
-        const finalized = await bundle.facade.finalizeRecipe(signed);
-
-        // SDK v4 facade.submitTransaction blocks until the chain finalizes
-        // the block (typically 12 to 30s on hosted networks, ~6 to 12s on
-        // localnet). trackElapsed updates the spinner once a second so
-        // users see the wait is alive, not stuck.
-        const txId = await trackElapsed(
-          spinner,
-          'Submitting and waiting for finalization (typically 12 to 30s)...',
-          bundle.facade.submitTransaction(finalized),
-        );
-        return String(txId);
       },
-      {
-        syncMode: 'full',
-        log: ctx.diagnostics.line,
-        requireStrictSync: true,
-        signal: ctx.signal,
-        onStatus: (s) => spinner.update(s),
-        onSyncProgress: (applied, highest) => {
-          if (highest > 0) {
-            const pct = Math.min(Math.round((applied / highest) * 100), 100);
-            spinner.update(pct >= 100 ? 'Syncing genesis wallet...' : `Syncing genesis wallet... ${pct}%`);
-          }
-        },
-        onSyncDetail: (detail) => spinner.update(`Syncing genesis wallet... (waiting on: ${detail})`),
-      },
-    );
+      onSyncDetail: (detail) => spinner.update(`Syncing genesis wallet... (waiting on: ${detail})`),
+    });
 
     spinner.stop('Transaction submitted');
 

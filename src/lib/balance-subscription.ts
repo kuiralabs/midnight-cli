@@ -3,16 +3,8 @@ import { assertEndpointUsable, endpointRefusalFromWsError } from './blockfrost.t
 import { NATIVE_TOKEN_TYPE, BALANCE_CHECK_TIMEOUT_MS } from './constants.ts';
 import { CancelledError } from './errors.ts';
 
-export interface BalanceSummary {
-  balances: Map<string, bigint>;
-  utxoCount: number;
-  txCount: number;
-  highestTxId: number;
-  /** Count of unspent native-token UTXOs registered for dust generation. */
-  registeredUtxos: number;
-  /** Count of unspent native-token UTXOs NOT registered for dust generation. */
-  unregisteredUtxos: number;
-}
+export type { BalanceSummary } from './engine.ts';
+import type { BalanceSummary } from './engine.ts';
 
 interface Utxo {
   value: string;

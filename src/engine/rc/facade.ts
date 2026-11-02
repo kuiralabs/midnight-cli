@@ -1,5 +1,5 @@
 import { ShieldedWallet } from '@midnightntwrk/wallet-sdk/shielded';
-import { notice } from './notices.ts';
+import { notice } from '../../lib/notices.ts';
 import {
   UnshieldedWallet,
   createKeystore,
@@ -18,22 +18,22 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk';
 import * as rx from 'rxjs';
 
-import { type NetworkConfig } from './network.ts';
+import { type NetworkConfig } from '../../lib/network.ts';
 import { FORK_SCHEDULE } from './fork-schedule.ts';
-import { getNetworkId } from './network-id.ts';
-import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from '../engine/rc/derivation.ts';
-import { type WalletCacheData } from './wallet-cache.ts';
-import { loadDustCache, dustPublicKeyHex, type DustCacheEntry } from '../engine/rc/dust-direct-cache.ts';
+import { getNetworkId } from '../../lib/network-id.ts';
+import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from './derivation.ts';
+import { type WalletCacheData } from '../../lib/wallet-cache.ts';
+import { loadDustCache, dustPublicKeyHex, type DustCacheEntry } from './dust-direct-cache.ts';
 import {
   DUST_COST_OVERHEAD,
   DUST_FEE_BLOCKS_MARGIN,
   SYNC_TIMEOUT_MS,
   PRE_SEND_SYNC_TIMEOUT_MS,
-} from './constants.ts';
-import type { VerboseLog } from './verbose.ts';
-import { assertNetworkAnswers } from './endpoint-check.ts';
-import { isStreamEmpty } from './event-tip.ts';
-import { CancelledError, throwIfCancelled } from './errors.ts';
+} from '../../lib/constants.ts';
+import type { VerboseLog } from '../../lib/verbose.ts';
+import { assertNetworkAnswers } from '../../lib/endpoint-check.ts';
+import { isStreamEmpty } from '../../lib/event-tip.ts';
+import { CancelledError, throwIfCancelled } from '../../lib/errors.ts';
 
 export type SyncMode = 'full' | 'lite' | 'no-dust';
 // full    = shielded + unshielded + dust

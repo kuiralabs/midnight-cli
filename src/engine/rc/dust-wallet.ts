@@ -13,8 +13,8 @@ import { CustomForkingDustWallet, DustWallet as SdkDustWallet, asV8DustParameter
 import { V1Builder } from '@midnightntwrk/wallet-sdk/dust/v1';
 import { Migration, Transacting, V2Builder, WalletError } from '@midnightntwrk/wallet-sdk/dust/v2';
 import { LedgerOps } from '@midnightntwrk/wallet-sdk/utilities';
-import { type DustInput, chooseDustCoins, planDustInputs, spreadFeeAcrossInputs } from './dust-balancing-plan.ts';
-import { type DustShortfall, withDustShortfall } from './sdk-errors.ts';
+import { type DustInput, chooseDustCoins, planDustInputs, spreadFeeAcrossInputs } from '../../lib/dust-balancing-plan.ts';
+import { type DustShortfall, withDustShortfall } from '../../lib/sdk-errors.ts';
 
 type SdkTransacting = Transacting.TransactingCapabilityImplementation<ledger.FinalizedTransaction>;
 type RecipeArguments = Parameters<SdkTransacting['computeBalancingRecipe']>;

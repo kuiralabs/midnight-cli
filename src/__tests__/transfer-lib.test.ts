@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateRecipientAddress, isDustRelatedError } from '../lib/transfer.ts';
+import { validateRecipientAddress, isDustRelatedError } from '../engine/rc/transfer.ts';
 import { nightToMicro, parseAmount } from '../lib/amount.ts';
 import { getNetworkConfig } from '../lib/network.ts';
 import { deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';

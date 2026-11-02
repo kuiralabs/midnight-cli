@@ -23,7 +23,7 @@ import type { BalancingRecipe, WalletFacade } from '@midnightntwrk/wallet-sdk/fa
 import { feeOnlyRefusals, readDAppTransaction } from '../engine/rc/fee-only-check.ts';
 import {
   PartlySignedTransactionError, SignedTransactionNeedsUnshieldedError, assertSignable, signRecipe, unshieldedImbalanceSegments, unshieldedSignatures,
-} from '../lib/sign-recipe.ts';
+} from '../engine/rc/sign-recipe.ts';
 import {
   AGENT_SK, AGENT_VK, NETWORK, TTL, WALLET_SK, WALLET_VK,
   agentPaysMerchant, buildTx, pay, spend, unsealedBytes,

@@ -21,14 +21,14 @@ export async function assertWalletCanPay({ network, networkConfig }: PayingTarge
   const walletConfig = await unlockWallet(resolveWalletPath(wallet));
   const seedBuffer = Buffer.from(walletConfig.seed, 'hex');
   const address = walletConfig.addresses[network as NetworkName];
-  const { defaultRepository } = await import('./wallet-data-repository.ts');
-  const repo = defaultRepository();
+  const { engineFor } = await import('./engine.ts');
+  const { wallet: repo } = await engineFor(network);
 
   try {
     // Two cheap reads through the repo: no facade, no proof server, no strict
     // sync. Its tip-aware memo makes the next check in the same MCP session
     // nearly free.
-    const balanceView = await repo.unshielded(address, networkConfig, { signal });
+    const balanceView = await repo.unshieldedBalance(address, networkConfig, { signal });
     const nightBalance = balanceView.balances.get(NATIVE_TOKEN_TYPE) ?? 0n;
 
     if (nightBalance === 0n) {
@@ -43,7 +43,7 @@ export async function assertWalletCanPay({ network, networkConfig }: PayingTarge
       );
     }
 
-    const dustView = await repo.dust(seedBuffer, networkConfig, { signal, onStatus: (s) => progress.update(s) });
+    const dustView = await repo.dustBalance(seedBuffer, networkConfig, { signal, onStatus: (s) => progress.update(s) });
     if (dustView.balance === 0n && dustView.availableCoins === 0) {
       progress.fail('No dust available');
       throw new Error(

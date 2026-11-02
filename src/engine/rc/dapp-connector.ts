@@ -2,40 +2,38 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import { notice } from './notices.ts';
+import { notice } from '../../lib/notices.ts';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
 import type { FacadeState, WalletEntry } from '@midnightntwrk/wallet-sdk/facade';
 import type { FinalizedTx } from '@midnightntwrk/wallet-sdk';
 
 import { type FacadeBundle, hasDustAvailable } from './facade.ts';
-import { LEDGER_9_FORK_VERSION, type NetworkConfig } from './network.ts';
-import type { ApprovalOptions } from './approval.ts';
-import { promptApproval } from './approval.ts';
-import { createApiError, type RpcHandler, type RpcHandlerContext } from './connector-api.ts';
-import { createPhaseTracker, type PhaseTracker } from './phase-tracker.ts';
-import { toHex, fromHex } from './tx-serde.ts';
-import { getNetworkId } from './network-id.ts';
-import { isDustShortage } from './sdk-errors.ts';
-import { DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits } from './fee-limits.ts';
-import { inspectTxHex } from '../engine/rc/tx-inspect.ts';
-import { expiredIntents, feeOnlyRefusals, readDAppTransaction, type DAppTxStage, type FeeCheckTransaction } from '../engine/rc/fee-only-check.ts';
+import { LEDGER_9_FORK_VERSION, type NetworkConfig } from '../../lib/network.ts';
+import type { ApprovalOptions } from '../../lib/approval.ts';
+import { promptApproval } from '../../lib/approval.ts';
+import { createApiError, type RpcHandler, type RpcHandlerContext } from '../../lib/connector-api.ts';
+import { createPhaseTracker, type PhaseTracker } from '../../lib/phase-tracker.ts';
+import { toHex, fromHex } from '../../lib/tx-serde.ts';
+import { getNetworkId } from '../../lib/network-id.ts';
+import { isDustShortage } from '../../lib/sdk-errors.ts';
+import { DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits } from '../../lib/fee-limits.ts';
+import { inspectTxHex } from './tx-inspect.ts';
+import { expiredIntents, feeOnlyRefusals, readDAppTransaction, type DAppTxStage, type FeeCheckTransaction } from './fee-only-check.ts';
 import { PartlySignedTransactionError, assertSignable, signRecipe } from './sign-recipe.ts';
-import { decodeSignPayload, signedMessageBytes } from './sign-data.ts';
-import { DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan } from './dust-wait.ts';
-import { formatWait } from './duration.ts';
-import { fetchPartialSuccessSegments, type SegmentResult } from './tx-segments.ts';
-import { walletsBelowLedger9 } from './ledger-guard.ts';
-import { TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS } from './constants.ts';
-import { dim } from '../ui/colors.ts';
-import { roughDust, toDust } from '../ui/format.ts';
+import { decodeSignPayload, signedMessageBytes } from '../../lib/sign-data.ts';
+import { DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan } from '../../lib/dust-wait.ts';
+import { formatWait } from '../../lib/duration.ts';
+import { fetchPartialSuccessSegments, type SegmentResult } from '../../lib/tx-segments.ts';
+import { walletsBelowLedger9 } from '../../lib/ledger-guard.ts';
+import { TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS } from '../../lib/constants.ts';
+import { dim } from '../../ui/colors.ts';
+import { roughDust, toDust } from '../../ui/format.ts';
+import type { DAppConnector, DAppConnectorCallbacks } from '../../lib/engine.ts';
+export type { DAppConnector, DAppConnectorCallbacks } from '../../lib/engine.ts';
 
 // ── Types ──
 
-export interface DAppConnectorCallbacks {
-  onPhaseStart?: (connectionId: string, method: string, phase: string) => void;
-  onPhaseComplete?: (connectionId: string, method: string, phase: string, durationMs: number) => void;
-}
 
 export interface DAppConnectorOptions {
   bundle: FacadeBundle;
@@ -69,14 +67,6 @@ export interface DAppConnectorOptions {
 /** Which token kinds the facade balances a dApp's transaction in. */
 export type TokenKindsToBalance = 'all' | Array<'dust' | 'shielded' | 'unshielded'>;
 
-export interface DAppConnector {
-  handlers: Record<string, RpcHandler>;
-  /** Revert all pending (unsubmitted) transactions for a connection, releasing locked coins. */
-  revertPendingTxs(connectionId: string): Promise<void>;
-  /** True if any connection has a balanced-but-not-submitted transaction. */
-  hasPendingTxs(): boolean;
-  dispose(): void;
-}
 
 // ── Factory ──
 
@@ -149,8 +139,8 @@ function extractErrorDetail(err: unknown): string {
   return deduped.join(' → ') || 'Unknown error';
 }
 
-/** The error message when the operator declines an approval prompt. */
-export const OPERATOR_REJECTED_MESSAGE = 'User rejected the request';
+export { OPERATOR_REJECTED_MESSAGE } from '../../lib/connector-api.ts';
+import { OPERATOR_REJECTED_MESSAGE } from '../../lib/connector-api.ts';
 
 /** The connector API's history entry for one wallet history entry. */
 export type HistoryEntry = {

@@ -36,7 +36,7 @@ describe('the plain values the base keeps match the SDK', () => {
   it("keeps the ledger-9 fork at the SDK's version, and the facade's schedule starts there", async () => {
     const { ProtocolVersion } = await import('@midnightntwrk/wallet-sdk');
     const { LEDGER_9_FORK_VERSION } = await import('../lib/network.ts');
-    const { FORK_SCHEDULE } = await import('../lib/fork-schedule.ts');
+    const { FORK_SCHEDULE } = await import('../engine/rc/fork-schedule.ts');
     expect(LEDGER_9_FORK_VERSION).toBe(ProtocolVersion.V9NativeForkVersion);
     expect(FORK_SCHEDULE.v9).toBe(LEDGER_9_FORK_VERSION);
   });
