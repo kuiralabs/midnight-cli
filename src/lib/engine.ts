@@ -21,10 +21,32 @@ export interface EngineKeys {
   shieldedAddresses(seed: Buffer): Record<NetworkName, string>;
 }
 
+/** A line of what a transaction is, as an approval prompt shows it. */
+export interface TransactionDetail {
+  label: string;
+  value: string;
+}
+
+/** A chain's block limits: time in picoseconds, the rest in bytes. */
+export interface BlockLimits {
+  readTime: number;
+  computeTime: number;
+  blockUsage: number;
+  bytesWritten: number;
+  bytesChurned: number;
+}
+
+/** What an engine reads from the ledger's serialized values. */
+export interface EngineLedger {
+  /** The block limits in serialized ledger parameters (hex), as the indexer serves them. Throws when the bytes aren't this set's ledger parameters. */
+  blockLimits(parametersHex: string): BlockLimits;
+}
+
 /** One SDK set, as mn uses it. */
 export interface Engine {
   readonly set: SdkSet;
   readonly keys: EngineKeys;
+  readonly ledger: EngineLedger;
 }
 
 /** The SDK set a network runs on. */
