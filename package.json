@@ -53,7 +53,8 @@
     "test:live": "vitest run --config vitest.live.config.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "skill-docs": "tsx scripts/write-skill-docs.ts"
+    "skill-docs": "tsx scripts/write-skill-docs.ts",
+    "readme-commands": "tsx scripts/write-readme-commands.ts"
   },
   "dependencies": {
     "@kuiralabs/midnight-account": "0.2.0-rc.0",
