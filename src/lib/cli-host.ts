@@ -5,7 +5,8 @@
 //     calls it runs, whose SDK warnings go to the call that raised them;
 //   - a notice sink: stderr;
 //   - settings, read from the environment as each is needed;
-//   - the state root, ~/.midnight, read as each path is built.
+//   - the state root, ~/.midnight, read as each path is built;
+//   - the SDK engines this build ships.
 // The prompter is the CLI's alone: the MCP server has no terminal to ask at.
 
 import { homedir } from 'node:os';
@@ -15,6 +16,8 @@ import { setNoticeSink } from './notices.ts';
 import { setSettingsSource, settingsFromEnvironment } from './settings.ts';
 import { setHostPathsSource } from './state-root.ts';
 import { MIDNIGHT_DIR } from './constants.ts';
+import { setEngineLoader } from './engine.ts';
+import { loadInstalledEngine } from './installed-engines.ts';
 import type { SdkWarningCalls } from './sdk-warnings.ts';
 
 /** What the host gives its runners. */
@@ -28,5 +31,6 @@ export function installCliHost(): CliHost {
   setNoticeSink((line) => process.stderr.write(line + '\n'));
   setSettingsSource(() => settingsFromEnvironment(process.env));
   setHostPathsSource(() => ({ stateRoot: join(homedir(), MIDNIGHT_DIR), home: homedir() }));
+  setEngineLoader(loadInstalledEngine);
   return { sdkWarnings };
 }

@@ -1,7 +1,8 @@
 // The Midnight SDK, behind one interface. Everything that touches an SDK set
 // is an engine's; the rest of mn reaches it through the engine for its
 // network, and names no SDK type. One engine today, for the SDK's release
-// candidates (rc). The interface grows area by area as code moves behind it.
+// candidates (rc). Which engines there are is the host's: it installs a
+// loader at start (the shell, the engines it ships), as it does the settings.
 // Loading an engine loads its SDK, so the loader imports it only when asked.
 
 import type { NetworkConfig, NetworkName } from './network.ts';
@@ -422,12 +423,24 @@ export function sdkSetOf(_network: NetworkName): SdkSet {
   return 'rc';
 }
 
+/** Loads the engine for an SDK set: the host's, which knows the engines it ships. */
+export type EngineLoader = (set: SdkSet) => Promise<Engine>;
+
+let loader: EngineLoader | undefined;
+
 // The engine this process has loaded: one per process, since two SDK sets'
 // WASM ledgers can't share one.
 let loaded: Promise<Engine> | undefined;
 
+/** The host's loader of engines, set once at start; a new loader forgets the engine an old one loaded. */
+export function setEngineLoader(next: EngineLoader): void {
+  loader = next;
+  loaded = undefined;
+}
+
 function loadEngine(set: SdkSet): Promise<Engine> {
-  loaded ??= import('../engine/rc/index.ts').then((module) => module.rcEngine);
+  if (loader === undefined) throw new Error('No SDK engine is installed: the host sets an engine loader at start (setEngineLoader)');
+  loaded ??= loader(set);
   return loaded.then((engine) => {
     if (engine.set !== set) throw new Error(`This process runs the ${engine.set} SDK set and can't load the ${set} one`);
     return engine;

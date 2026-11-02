@@ -38,16 +38,17 @@ describe('the layering', () => {
     expect(importRule('commands/dev.ts', 'commands/contract.ts')).toBe('command → contract command');
   });
 
-  it('lets only core\'s loader reach an engine, and an engine reach only core and chain', () => {
-    expect(importRule('lib/engine.ts', 'engine/rc/index.ts')).toBeUndefined();
-    expect(importRule('commands/address.ts', 'engine/rc/derive-address.ts')).toBe('wallet → engine (reach it through lib/engine.ts)');
-    expect(importRule('lib/wallet-create.ts', 'engine/rc/index.ts')).toBe('wallet → engine (reach it through lib/engine.ts)');
+  it('lets only the shell\'s list of engines reach an engine, and an engine reach only core and chain', () => {
+    expect(importRule('lib/installed-engines.ts', 'engine/rc/index.ts')).toBeUndefined();
+    expect(importRule('lib/engine.ts', 'engine/rc/index.ts')).toBe('core → engine (reach it through lib/installed-engines.ts)');
+    expect(importRule('commands/address.ts', 'engine/rc/derive-address.ts')).toBe('wallet → engine (reach it through lib/installed-engines.ts)');
+    expect(importRule('lib/wallet-create.ts', 'engine/rc/index.ts')).toBe('wallet → engine (reach it through lib/installed-engines.ts)');
     expect(importRule('engine/rc/derive-address.ts', 'lib/network.ts')).toBeUndefined();
     expect(importRule('engine/rc/index.ts', 'lib/facade.ts')).toBe('engine → wallet');
   });
 
   it('lets only an engine import the SDK', () => {
     // findLayeringProblems above finds none elsewhere; core, chain and every package are held to it alike.
-    expect(importRule('lib/wallet-create.ts', 'engine/rc/derivation.ts')).toBe('wallet → engine (reach it through lib/engine.ts)');
+    expect(importRule('lib/wallet-create.ts', 'engine/rc/derivation.ts')).toBe('wallet → engine (reach it through lib/installed-engines.ts)');
   });
 });
