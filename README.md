@@ -13,7 +13,7 @@ A standalone CLI wallet for the Midnight blockchain. Manage wallets, check balan
 Built for two audiences: **beginners** starting their first Midnight project (a local chain + funded wallets + contract deploy in minutes), and **AI agents** (Cursor, Claude Code, any MCP client) using the same primitives via a built-in MCP server.
 
 > [!IMPORTANT]
-> **0.6.0 (prerelease, `npm install -g midnight-wallet-cli@next`) is ledger-9 only.** It is built on wallet-sdk 2.0.0-rc.0, ledger-v9 1.0.0-rc.5, midnight-js 5.0.0-rc.1 and compact-runtime 0.20.0 (contracts compiled with Compact 0.35 / language 0.27). It refuses any chain still on ledger 8, which today includes `preview` and `preprod`: stay on 0.5.x (`npm install -g midnight-wallet-cli@latest`) for those.
+> **0.6.0 (prerelease, `npm install -g midnight-wallet-cli@next`) is ledger-9 only.** It is built on wallet-sdk 2.0.0-rc.0, ledger-v9 1.0.0-rc.5, midnight-js 5.0.0-rc.1 and compact-runtime 0.20.0 (contracts compiled with Compact 0.35 / language 0.27). `stagenet` runs on the beta set instead (wallet-sdk 5.0 beta split packages, ledger-v9 1.0.0-rc.3, midnight-js 5.0.0-beta.6, compact-runtime 0.18.0-rc.1, contracts compiled with compactc 0.33), which mn loads for that network alone. It refuses any chain still on ledger 8, which today includes `preview` and `preprod`: stay on 0.5.x (`npm install -g midnight-wallet-cli@latest`) for those.
 >
 > `midnight localnet up` is refused on this build, because no published indexer image runs ledger 9 yet. Run a ledger-9 stack yourself (node 2.1.0-rc.2, proof-server 9.0.0-rc.8, a 4.4 indexer) and point mn at it. On the default ports (node 9944, indexer 8088, proof server 6300) `--network undeployed` reaches it with no configuration. On other ports pass `--node`, `--indexer-ws` and `--proof-server` per command, or save them once with `midnight config set node <url>`, `midnight config set indexer-ws <url>` and `midnight config set proof-server <url>`.
 
@@ -108,8 +108,9 @@ midnight transfer mn_addr_preprod1... 100
 | `undeployed` | Local network. On this build: a ledger-9 stack you run yourself (`midnight localnet up` is refused) |
 | `preprod` | Midnight pre-production testnet (ledger 8 today: refused by this build, use 0.5.x). Its indexer and node are served by Blockfrost: needs a project id |
 | `preview` | Midnight preview testnet (ledger 8 today: refused by this build, use 0.5.x) |
+| `stagenet` | Sig Network's testnet, on the beta SDK set: mn runs it through its beta engine, picked by the network. NIGHT from https://faucet.stagenet.shielded.tools; no shielded faucet, so shielded sync is off by default. Its proof server must match its node (`midnightntwrk/proof-server:9.0.0-rc.5_experimental`). `mn grant` is refused there for now |
 
-Wallets are network-agnostic — one seed derives addresses for all three networks. Use `--network <name>` on any command, or persist it with `midnight config set network preview`.
+Wallets are network-agnostic — one seed derives addresses for all four networks. Use `--network <name>` on any command, or persist it with `midnight config set network preview`.
 
 ### Preprod and Blockfrost
 
