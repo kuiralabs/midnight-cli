@@ -123,27 +123,8 @@ export function saveShieldedCache(
 }
 
 
-export interface ShieldedBalanceResult {
-  /** Native (NIGHT) shielded balance in atomic units. */
-  balance: bigint;
-  /** Number of spendable NIGHT coins. */
-  availableCoins: number;
-  /** Events applied in this run (delta since last cache save). */
-  eventCount: number;
-  /** Latest event id in the saved cache (carried from prior cache if no new events). */
-  lastAppliedEventId: number;
-  /** True if an existing cache was loaded and extended; false if synced from scratch. */
-  fromCache: boolean;
-  /** True if the sync stopped before catching up (timeout/abort) — resume next call. */
-  partial: boolean;
-}
-
-export interface ShieldedCachedOptions extends Pick<ShieldedDirectOptions, 'onProgress' | 'signal' | 'timeoutMs'> {
-  /** Ignore any cached state and re-sync from the beginning (honours --no-cache). */
-  forceFresh?: boolean;
-  /** Current chain genesis hash — stored on save and checked on load (chain-reset guard). */
-  chainId?: string;
-}
+export type { ShieldedBalanceResult, ShieldedCachedOptions } from '../../lib/engine.ts';
+import type { ShieldedBalanceResult, ShieldedCachedOptions } from '../../lib/engine.ts';
 
 /**
  * Read the shielded NIGHT balance for a wallet seed, using (and refreshing) the

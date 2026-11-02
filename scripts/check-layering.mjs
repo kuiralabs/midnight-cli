@@ -104,7 +104,6 @@ const ENGINE_LOADER = 'lib/engine.ts';
 // list only shrinks (a test pins it), and is empty when the engine is done.
 export const PENDING_ENGINE = new Set([
   'commands/airdrop.ts',
-  'commands/balance.ts',
   'commands/transfer.ts',
   'lib/dapp-connector.ts',
   'lib/dust-wallet.ts',

@@ -51,7 +51,6 @@ describe('the layering', () => {
   it('has no module importing the SDK outside the engine but those still waiting to move', () => {
     expect([...PENDING_ENGINE].sort()).toStrictEqual([
       'commands/airdrop.ts',
-      'commands/balance.ts',
       'commands/transfer.ts',
       'lib/dapp-connector.ts',
       'lib/dust-wallet.ts',

@@ -9,7 +9,7 @@ import { rawContractState } from './contract-providers.ts';
 import { assertAddress } from './addresses.ts';
 import { SCRIPT_PACKAGES, generateCallScript, generateDeployScript, generateStateScript, packageFolder } from './contract-scripts.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
-import { shieldedCoinPublicKeyHexFromSeed } from './shielded-direct-cache.ts';
+import { readShieldedBalanceCached, shieldedCoinPublicKeyHexFromSeed } from './shielded-direct-cache.ts';
 import { deriveAllAddresses, deriveAllShieldedAddresses, deriveShieldedAddressString, deriveUnshieldedAddress } from './derive-address.ts';
 
 export const rcEngine: Engine = {
@@ -44,5 +44,8 @@ export const rcEngine: Engine = {
       call: generateCallScript,
       state: generateStateScript,
     },
+  },
+  readers: {
+    shieldedBalance: readShieldedBalanceCached,
   },
 };
