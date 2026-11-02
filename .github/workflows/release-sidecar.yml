@@ -174,6 +174,8 @@ jobs:
             if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "$name@$version is published already"
             else
+              # An engine ships the SDK set the tests ran on, for a program that installs it without mn.
+              case "$name" in @kuiralabs/midnight-engine-*) node scripts/make-shrinkwrap.mjs --package "$dir" ;; esac
               ( cd "$dir" && npm publish --access public ${{ env.PRERELEASE == 'true' && '--tag next' || '' }} )
             fi
           done
