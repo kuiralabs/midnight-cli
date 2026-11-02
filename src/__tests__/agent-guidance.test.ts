@@ -15,7 +15,7 @@ import {
   type CommandPackage,
   type CommandRegistry,
 } from '../lib/command-definition.ts';
-import { GuidanceError, assembleGuidance, type GuidancePiece, type GuidanceText } from '../lib/agent-guidance.ts';
+import { GuidanceError, assembleGuidance, sectionsWithAdded, type GuidancePiece, type GuidanceText } from '../lib/agent-guidance.ts';
 import { AGENT_MANUAL_SECTIONS, TOOL_GROUPS, agentManual } from '../lib/agent-manual.ts';
 import { SKILL_CORE_SECTIONS, SKILL_FULL_SECTIONS, skillCore, skillFull } from '../lib/mcp/skills.ts';
 import { listedTools } from '../lib/mcp/registry-tools.ts';
@@ -57,6 +57,70 @@ describe('assembleGuidance', () => {
 
   it('refuses two pieces in one place of a section', () => {
     expect(() => assembleGuidance('skill-core', ['a'], [piece('a', 1, 'x'), piece('a', 1, 'y')])).toThrow(/place 1 in section "a"/);
+  });
+});
+
+describe('sections a package adds', () => {
+  const added = (name: string, after: string, text: GuidanceText = 'skill-core') => ({ text, name, after });
+
+  it('follow the section they name, several after one in the order given, each followed by its own', () => {
+    expect(sectionsWithAdded('skill-core', ['a', 'b'], [added('x', 'a'), added('y', 'a'), added('z', 'x'), added('w', 'b', 'skill-full')])).toStrictEqual(['a', 'x', 'z', 'y', 'b']);
+  });
+
+  it('refuse a section added twice, or over one the text has', () => {
+    expect(() => sectionsWithAdded('skill-core', ['a'], [added('x', 'a'), added('x', 'a')])).toThrow(GuidanceError);
+    expect(() => sectionsWithAdded('skill-core', ['a', 'b'], [added('b', 'a')])).toThrow(/"b" of skill-core is added twice, or over one it has/);
+  });
+
+  it('refuse one placed after a section the text has not', () => {
+    expect(() => sectionsWithAdded('skill-core', ['a'], [added('x', 'nope')])).toThrow(/No section of skill-core is called "nope", which "x" should follow/);
+  });
+
+  it('reach the skills and the manual with the package\'s pieces in them', () => {
+    const plugin: CommandPackage = {
+      name: 'plugin',
+      commands: [],
+      guidance: {
+        sections: [added('plugin-notes', 'safety-rules'), added('plugin-notes', 'secrets', 'skill-full'), added('plugin-notes', 'overview', 'agent-manual')],
+        pieces: [
+          piece('plugin-notes', 0, '## Plugin notes (core)\n'),
+          piece('plugin-notes', 0, '## Plugin notes (full)\n', 'skill-full'),
+          piece('plugin-notes', 0, 'PLUGIN NOTES\n', 'agent-manual'),
+        ],
+      },
+    };
+    const registry = createPackageRegistry([...installedCommands.packages, plugin], installedCommands.globalFlags, installedCommands.globalFlagsHelp);
+    const core = skillCore(registry);
+    expect(core.indexOf('## Plugin notes (core)')).toBeGreaterThan(core.indexOf('## Safety rules'));
+    expect(core.indexOf('## Plugin notes (core)')).toBeLessThan(core.indexOf('## When to fetch'));
+    expect(skillFull(registry)).toContain('## Plugin notes (full)');
+    expect(agentManual(registry)).toContain('PLUGIN NOTES');
+  });
+});
+
+describe('what the skills say from the registry', () => {
+  it('names every confirmed tool in both skills\' safety rules, and the manual\'s confirmation flow', () => {
+    const confirmed = installedCommands.tools.filter((tool) => tool.confirmation !== undefined).map((tool) => tool.name);
+    expect(confirmed.length).toBeGreaterThan(1);
+    for (const text of [skillCore(installedCommands), skillFull(installedCommands)]) {
+      const rule = text.split('\n').find((line) => line.startsWith('- **Some tools use a two-step confirmation token**'))!;
+      for (const name of confirmed) expect(rule, name).toContain(`\`${name}\``);
+    }
+    const flow = agentManual(installedCommands).split('TWO-STEP CONFIRMATION FLOW')[1]!.split('MCP RESOURCES')[0]!;
+    for (const name of confirmed) expect(flow, name).toContain(`  ${name}\n`);
+  });
+
+  it('names the commands no tool runs, and says no more that every command is a tool', () => {
+    const full = skillFull(installedCommands);
+    expect(full).not.toContain('Every CLI command is also an MCP tool');
+    expect(full).not.toContain('mn status');
+    expect(full).toContain('the user runs them in their own terminal: `mn generate`, `mn serve`, `mn dev`, `mn help`, `mn manual`');
+  });
+
+  it('leaves a package\'s own lines out with the package', () => {
+    expect(skillFull(installedCommands)).toContain('Deploy the wallet\'s account, fund it');
+    expect(skillFull(withoutPackage('grant'))).not.toContain('Deploy the wallet\'s account, fund it');
+    expect(skillFull(withoutPackage('grant'))).not.toContain('midnight_grant_issue');
   });
 });
 

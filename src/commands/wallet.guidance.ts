@@ -8,6 +8,20 @@ import type { PackageGuidance } from '../lib/agent-guidance.ts';
 export const walletGuidance: PackageGuidance = {
   pieces: [
     {
+      text: 'skill-full',
+      section: 'what-you-can-do',
+      order: 10,
+      body: `- Manage wallets, check balances, transfer NIGHT (unshielded or shielded) and register Dust, the fee token.
+`,
+    },
+    {
+      text: 'skill-full',
+      section: 'not-this-cli',
+      order: 20,
+      body: `- Not quick to prime Dust on a hosted network, on this ledger-9 build: priming always runs in WASM (the native accelerator is built for ledger 8 and is not used), so a cold prime takes minutes, not seconds.
+`,
+    },
+    {
       text: 'agent-manual',
       section: 'shielded-transactions',
       order: 10,

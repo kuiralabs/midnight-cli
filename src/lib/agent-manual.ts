@@ -5,7 +5,7 @@
 // registry's tools, each in the topic group its package's row names.
 
 import { PKG_VERSION } from './pkg.ts';
-import { GuidanceError, assembleGuidance, type GuidancePiece, type ToolsTableRow } from './agent-guidance.ts';
+import { GuidanceError, assembleGuidance, sectionsWithAdded, type GuidancePiece, type ToolsTableRow } from './agent-guidance.ts';
 import { commandHelpSpecs, type CommandRegistry, type RegisteredTool } from './command-definition.ts';
 
 /** The manual's sections, in order. */
@@ -251,8 +251,8 @@ without hardcoding per-tool rules:
       text: 'agent-manual',
       section: 'two-step-confirmation',
       order: 0,
-      body: `TWO-STEP CONFIRMATION FLOW (midnight_transfer)
-──────────────────────────────────────────────
+      body: `TWO-STEP CONFIRMATION FLOW
+──────────────────────────
 
 midnight_transfer does NOT execute on the first call. It returns a pending
 token that the agent must show to the user for consent, then redeem via
@@ -265,6 +265,15 @@ midnight_confirm_operation to actually execute.
            → actual transfer result (txHash, etc)
 
 Tokens are single-use and expire after 5 minutes.
+
+`,
+    },
+    {
+      text: 'agent-manual',
+      section: 'two-step-confirmation',
+      order: 20,
+      body: `Every tool that moves funds, changes an account or deletes a seed works
+the same way (midnight_wallet_generate only with force: true):
 
 `,
     },
@@ -316,8 +325,15 @@ resources/list. Ground responses in these instead of training-data guesses.
     },
 ];
 
+/** The tools behind the two-step confirmation, one per line, from the registry. */
+function confirmedTools(registry: CommandRegistry): GuidancePiece {
+  const names = registry.tools.filter((tool) => tool.confirmation !== undefined).map((tool) => `  ${tool.name}\n`);
+  return { text: 'agent-manual', section: 'two-step-confirmation', order: 30, body: `${names.join('')}\n` };
+}
+
 /** The `help --agent` manual for the installed packages. */
 export function agentManual(registry: CommandRegistry): string {
-  const pieces = [overview(), jsonSchemas(registry), mcpTools(registry), ...SHELL_PIECES, ...registry.packages.flatMap((pkg) => pkg.guidance.pieces)];
-  return assembleGuidance('agent-manual', AGENT_MANUAL_SECTIONS, pieces);
+  const pieces = [overview(), jsonSchemas(registry), mcpTools(registry), confirmedTools(registry), ...SHELL_PIECES, ...registry.packages.flatMap((pkg) => pkg.guidance.pieces)];
+  const added = registry.packages.flatMap((pkg) => pkg.guidance.sections ?? []);
+  return assembleGuidance('agent-manual', sectionsWithAdded('agent-manual', AGENT_MANUAL_SECTIONS, added), pieces);
 }

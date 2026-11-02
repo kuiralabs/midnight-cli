@@ -2,11 +2,21 @@
 
 You have access to the `midnight-wallet-cli` MCP server. This document teaches you how to use it well. Read it once at the start of a session; use it as reference throughout.
 
-> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 (preview and preprod today) is refused up front with an error saying so: tell the user to use `midnight-wallet-cli` 0.5.x for it, don't retry. `midnight_localnet_up` is refused too, because no published indexer image runs ledger 9 yet. The user runs a ledger-9 stack themselves; on the default ports (node 9944, indexer 8088, proof server 6300) `undeployed` reaches it with no configuration, otherwise set its URLs with `midnight_config_set` (keys `node`, `indexer-ws`, `proof-server`) or pass `--node` / `--indexer-ws` / `--proof-server` on the CLI.
+> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 (preview and preprod today) is refused up front with an error saying so: tell the user to use `midnight-wallet-cli` 0.5.x for it, don't retry. The user runs a ledger-9 stack themselves; on the default ports (node 9944, indexer 8088, proof server 6300) `undeployed` reaches it with no configuration, otherwise set its URLs with `midnight_config_set` (keys `node`, `indexer-ws`, `proof-server`) or pass `--node` / `--indexer-ws` / `--proof-server` on the CLI.
+
+> `midnight_localnet_up` is refused on this build, because no published indexer image runs ledger 9 yet.
 
 ## What you can do with this CLI
 
-Manage wallets, check balances, transfer NIGHT tokens, register dust (fee token), manage a local Midnight network, act as a fee wallet for an agent's dApp transactions (`mn serve --approve-fees`), and deploy/call/inspect Compact smart contracts — all on behalf of the user. Every CLI command is also an MCP tool.
+Act on the user's behalf on Midnight, through what the installed packages bring:
+
+- Manage wallets, check balances, transfer NIGHT (unshielded or shielded) and register Dust, the fee token.
+- Deploy, call, inspect and read Compact smart contracts, and read the chain's block limits.
+- Serve a wallet to a dApp over the DApp connector, including as a fee wallet for an agent's transactions (`mn serve --approve-fees`).
+- Scaffold and run a dApp's end-to-end tests, and manage a local Midnight network.
+- Deploy the wallet's account, fund it, and issue and revoke the grants that let an agent spend from it.
+
+Most commands are MCP tools (`tools/list` shows each, and what it takes). These have none, and the user runs them in their own terminal: `mn generate`, `mn serve`, `mn dev`, `mn help`, `mn manual`; some subcommands have none either.
 
 ## Core concepts (teach these accurately)
 
@@ -118,11 +128,12 @@ Running a suite is a CLI command, not an MCP tool: `mn test run --suite <name>` 
 
 ## Safety rules (non-negotiable)
 
-- **Read tools** (`readOnlyHint: true`) — safe to call without user consent. Examples: balance, info, list, status, address derivation.
-- **Destructive tools** (`destructiveHint: true`) — require explicit user consent before calling. Examples: transfer, airdrop, dust register, wallet generate, wallet remove, cache clear, localnet down.
+- **Read tools** (`readOnlyHint: true`) — safe to call without user consent.
+- **Destructive tools** (`destructiveHint: true`) — require explicit user consent before calling.
 - **Open-world tools** (`openWorldHint: true`) — touch the network/chain/Docker. Can fail non-deterministically; retry is usually safe for reads, risky for writes.
 - **Never** auto-execute a fund-moving operation. Always describe amount + recipient + network first.
 - **Never** invent a mnemonic, seed, or private key. If the user needs one, call `midnight_wallet_generate`.
+- **Some tools use a two-step confirmation token**: `midnight_wallet_generate`, `midnight_wallet_remove`, `midnight_transfer`, `midnight_contract_deploy`, `midnight_contract_call`, `midnight_grant_deploy`, `midnight_grant_deposit`, `midnight_grant_issue`, `midnight_grant_revoke`, `midnight_grant_revoke_all`. The first call returns a pending token + description and does nothing else; show the description verbatim, and call `midnight_confirm_operation({ token })` only after the user explicitly says yes. (`midnight_wallet_generate` asks only with `force: true`, which replaces a wallet.)
 
 ## Error recovery recipes
 
@@ -166,11 +177,12 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 ## What this CLI is NOT
 
 - Not a custody service. Keys are on the user's disk (`~/.midnight/wallets/<name>.json`).
-- Not an instant-sync tool for a first-time wallet on a hosted network. First run replays the chain's event history; the CLI caches state after that so repeat runs are fast. On this ledger-9 build dust priming always runs in WASM (the native accelerator is built for ledger 8 and is not used), so a cold prime takes minutes, not seconds.
+- Not an instant-sync tool for a first-time wallet on a hosted network. First run replays the chain's event history; the CLI caches state after that so repeat runs are fast.
 - Not a contract compiler. The project's `package.json` should expose a `compact` script (Midnight convention, e.g. `"compact": "compact compile src/foo.compact src/managed/foo"`) or a `compile` script as a generic fallback. `mn dev` detects whichever is present; create-mn-app and midnight-starship templates ship with the `compact` script already wired.
+- Not quick to prime Dust on a hosted network, on this ledger-9 build: priming always runs in WASM (the native accelerator is built for ledger 8 and is not used), so a cold prime takes minutes, not seconds.
 
 ## Authoritative references
 
 - `mn help <command>` — per-command usage and flags.
 - `mn help --agent` — structured reference manual for AI clients.
-- `mn status` — live network health (indexer, node, proof server).
+- `mn help --json` — every command's usage, flags and JSON fields, as JSON.

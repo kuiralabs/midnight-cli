@@ -7,6 +7,13 @@ import type { PackageGuidance } from '../lib/agent-guidance.ts';
 export const grantGuidance: PackageGuidance = {
   pieces: [
     {
+      text: 'skill-full',
+      section: 'what-you-can-do',
+      order: 50,
+      body: `- Deploy the wallet's account, fund it, and issue and revoke the grants that let an agent spend from it.
+`,
+    },
+    {
       text: 'agent-manual',
       section: 'grants',
       order: 10,

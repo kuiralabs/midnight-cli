@@ -7,6 +7,13 @@ import type { PackageGuidance } from '../lib/agent-guidance.ts';
 export const connectGuidance: PackageGuidance = {
   pieces: [
     {
+      text: 'skill-full',
+      section: 'what-you-can-do',
+      order: 30,
+      body: `- Serve a wallet to a dApp over the DApp connector, including as a fee wallet for an agent's transactions (\`mn serve --approve-fees\`).
+`,
+    },
+    {
       text: 'agent-manual',
       section: 'dapp-connector',
       order: 10,

@@ -36,9 +36,19 @@ export interface ToolsTableRow {
   readonly params?: readonly string[];
 }
 
+/** A section a package adds to a text, for its own pieces: placed right after a section the text has. */
+export interface GuidanceSection {
+  readonly text: GuidanceText;
+  readonly name: string;
+  /** The section it follows: one of the text's own, or one another package adds. */
+  readonly after: string;
+}
+
 /** What a package tells agents. */
 export interface PackageGuidance {
   readonly pieces: readonly GuidancePiece[];
+  /** Sections it adds to the texts, beyond the ones their assemblers own. */
+  readonly sections?: readonly GuidanceSection[];
   readonly toolsTable?: readonly ToolsTableRow[];
 }
 
@@ -53,6 +63,32 @@ export class GuidanceError extends Error {
 /** The pieces, among these, of a text that name a section its skeleton lacks. */
 export function unplacedPieces(text: GuidanceText, sections: readonly string[], pieces: readonly GuidancePiece[]): GuidancePiece[] {
   return pieces.filter((piece) => piece.text === text && !sections.includes(piece.section));
+}
+
+/**
+ * A text's sections: its skeleton's, each followed by the sections packages
+ * add after it (several after one in the order given, each followed by its
+ * own). Refuses a section added twice or over one the text has, and one
+ * placed after a section the text doesn't have.
+ */
+export function sectionsWithAdded(text: GuidanceText, skeleton: readonly string[], added: readonly GuidanceSection[]): string[] {
+  const own = added.filter((section) => section.text === text);
+  const names = new Set<string>(skeleton);
+  for (const { name } of own) {
+    if (names.has(name)) throw new GuidanceError(`Section "${name}" of ${text} is added twice, or over one it has`);
+    names.add(name);
+  }
+  const sections: string[] = [];
+  const place = (name: string): void => {
+    sections.push(name);
+    for (const next of own.filter((section) => section.after === name)) place(next.name);
+  };
+  skeleton.forEach(place);
+  const unplaced = own.filter((section) => !sections.includes(section.name));
+  if (unplaced.length > 0) {
+    throw new GuidanceError(`No section of ${text} is called ${unplaced.map((section) => `"${section.after}"`).join(', ')}, which ${unplaced.map((section) => `"${section.name}"`).join(', ')} should follow`);
+  }
+  return sections;
 }
 
 /** Refuses two pieces in one place of one section. */
