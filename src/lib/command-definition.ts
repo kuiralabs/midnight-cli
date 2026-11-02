@@ -132,8 +132,6 @@ export interface ToolArgv {
    * when given a truthy value, and the schema shows only those.
    */
   readonly flags: 'rest' | readonly string[];
-  /** Flags whose string value "true" becomes a bare flag. */
-  readonly trueStrings?: readonly string[];
   /** Flags always set. */
   readonly fixedFlags?: Readonly<Record<string, true>>;
   /** Flag values used when the parameter is not given (or empty). */
@@ -150,6 +148,8 @@ export interface ToolCheckCall {
 
 /** A tool behind the two-step confirmation. */
 export interface ToolConfirmation {
+  /** Whether this call needs confirming; absent: every call does. */
+  readonly when?: (params: Readonly<Record<string, unknown>>) => boolean;
   /** The text the user confirms, from the tool's parameters; absent: the check works it out. */
   readonly describe?: (params: Readonly<Record<string, unknown>>) => string;
   /**
@@ -385,8 +385,6 @@ export function toolArgv(tool: RegisteredTool, params: Readonly<Record<string, u
     const flag = key === 'full' ? FULL_FLAG : key;
     if (typeof value === 'boolean') {
       if (value) flags[flag] = true;
-    } else if (value === 'true' && argv.trueStrings?.includes(key)) {
-      flags[flag] = true;
     } else {
       flags[flag] = String(value);
     }
@@ -466,23 +464,6 @@ export function createPackageRegistry(
   return { ...createCommandRegistry(commands, globalFlags, globalFlagsHelp), packages };
 }
 
-/**
- * Superseded by the registry (a tool's schema lists every parameter it takes,
- * and is the one check); kept until its last callers go.
- *
- * The flags a call of the tool could set besides its schema's parameters
- * under the old pass-through rule: when its argv passes every other parameter on as a
- * flag (`flags: 'rest'`), the flags its command accepts and the global ones;
- * otherwise none. Empty for a tool no command defines (the server's own
- * confirm tool).
- */
-export function toolPassThroughFlags(registry: CommandRegistry, toolName: string): readonly string[] {
-  const command = registry.commands.find((c) => c.mcp?.tools.some((tool) => tool.name === toolName));
-  const tool = command?.mcp?.tools.find((t) => t.name === toolName);
-  if (command === undefined || tool?.argv.flags !== 'rest') return [];
-  return [...command.flags, ...registry.globalFlags].map((flag) => flag.name);
-}
-
 /** The Flags section of `help <command>`, line by line, as shown. */
 export function flagsSectionLines(command: CommandDefinition): string[] {
   return (command.help?.flags ?? []).flatMap((entry) =>
@@ -529,6 +510,11 @@ export function confirmationTarget(params: Readonly<Record<string, unknown>>): {
     network: (params.network as string | undefined) ?? 'active network',
     wallet: (params.wallet as string | undefined) ?? 'active wallet',
   };
+}
+
+/** The call needs the user's confirmation before it runs: the tool is confirmed, and its `when` doesn't exempt these parameters. */
+export function needsConfirmation(tool: ToolDefinition, params: Readonly<Record<string, unknown>>): boolean {
+  return tool.confirmation !== undefined && (tool.confirmation.when?.(params) ?? true);
 }
 
 /** The text a user confirms for a tool's call when its check gives none. */

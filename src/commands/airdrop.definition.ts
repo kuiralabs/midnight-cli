@@ -21,7 +21,7 @@ export const airdropDefinition: CommandDefinition = {
       name: 'shielded',
       takesValue: false,
       help: ['--shielded           Airdrop shielded NIGHT (from genesis shielded balance)'],
-      agent: { type: 'string', description: 'Set to "true" for shielded airdrop' },
+      agent: { type: 'boolean', description: 'Airdrop shielded NIGHT (from the genesis shielded balance)' },
     },
     {
       name: 'verbose',
@@ -74,7 +74,7 @@ export const airdropDefinition: CommandDefinition = {
     tools: [
       {
         name: 'midnight_airdrop',
-        description: 'Fund from genesis (undeployed). `wallet` accepts a wallet name, a wallet JSON path, or a raw bech32m address (mn_addr_… or mn_shield-addr_…). Add `shielded: "true"` to fund a shielded balance.',
+        description: 'Fund from genesis (undeployed). `wallet` accepts a wallet name, a wallet JSON path, or a raw bech32m address (mn_addr_… or mn_shield-addr_…). Add `shielded: true` to fund a shielded balance.',
         annotations: { destructiveHint: true, openWorldHint: true },
         params: [
           { name: 'amount', schema: { type: 'string', description: 'NIGHT' } },

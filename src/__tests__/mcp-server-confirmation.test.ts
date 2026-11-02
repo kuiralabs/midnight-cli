@@ -138,6 +138,46 @@ describe('midnight_grant_deposit', () => {
   }, 60_000);
 });
 
+describe('midnight_wallet_generate with force', () => {
+  const walletFile = (name: string) => path.join(home, '.midnight', 'wallets', `${name}.json`);
+
+  it('answers with a token naming what is deleted, and replaces nothing', async () => {
+    const before = fs.readFileSync(walletFile('carol'), 'utf8');
+    const pending = await call('midnight_wallet_generate', { name: 'carol', force: true });
+
+    expect(pending.pending).toBe(true);
+    expect(pending.tool).toBe('midnight_wallet_generate');
+    expect(pending.description).toBe('Replace wallet carol: its file, and the seed in it, is deleted from this machine and a new wallet written in its place');
+    expect(fs.readFileSync(walletFile('carol'), 'utf8')).toBe(before);
+  });
+
+  it('says nothing is replaced when no wallet has the name', async () => {
+    const pending = await call('midnight_wallet_generate', { name: 'dave', force: true });
+
+    expect(pending.description).toBe('Create wallet dave (no wallet of that name exists, so nothing is replaced)');
+    expect(fs.existsSync(walletFile('dave'))).toBe(false);
+  });
+
+  it('replaces the wallet once the token is confirmed', async () => {
+    const before = JSON.parse(fs.readFileSync(walletFile('carol'), 'utf8')) as { addresses: Record<string, string> };
+    const pending = await call('midnight_wallet_generate', { name: 'carol', force: true });
+    const done = await call('midnight_confirm_operation', { token: pending.token });
+
+    expect(done.error, String(done.message)).toBeUndefined();
+    const after = JSON.parse(fs.readFileSync(walletFile('carol'), 'utf8')) as { addresses: Record<string, string> };
+    expect(after.addresses.undeployed).not.toBe(before.addresses.undeployed);
+    // Generating makes the new wallet active; alice stays the active one for the tests after.
+    await call('midnight_wallet_use', { name: 'alice' });
+  }, 60_000);
+
+  it('runs at once without force, and refuses a wallet that exists', async () => {
+    const refused = await call('midnight_wallet_generate', { name: 'bob' });
+
+    expect(refused.pending).toBeUndefined();
+    expect(String(refused.message)).toContain('Wallet "bob" already exists');
+  });
+});
+
 describe('midnight_wallet_remove', () => {
   const walletFile = (name: string) => path.join(home, '.midnight', 'wallets', `${name}.json`);
 

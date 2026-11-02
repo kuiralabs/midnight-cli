@@ -23,7 +23,7 @@ export const walletDefinition: CommandDefinition = {
       takesValue: false,
       subcommands: ['generate'],
       help: ['--force             Overwrite existing wallet file'],
-      agent: { type: 'string' },
+      agent: { type: 'boolean', description: 'Replace an existing wallet of that name (asks for confirmation: its seed is deleted)' },
     },
     {
       name: 'mnemonic',
@@ -110,7 +110,19 @@ export const walletDefinition: CommandDefinition = {
           { flag: 'force' },
         ],
         required: ['name'],
-        argv: { subcommand: 'generate', positionals: ['name'], flags: 'rest', trueStrings: ['force'] },
+        argv: { subcommand: 'generate', positionals: ['name'], flags: 'rest' },
+        // Replacing a wallet deletes its seed, so a call with force is confirmed like remove.
+        confirmation: {
+          when: (params) => params.force === true,
+          async check(params) {
+            const fs = await import('node:fs');
+            const { walletFilePath } = await import('../lib/wallet-create.ts');
+            const name = String(params.name);
+            return fs.existsSync(walletFilePath(name))
+              ? `Replace wallet ${name}: its file, and the seed in it, is deleted from this machine and a new wallet written in its place`
+              : `Create wallet ${name} (no wallet of that name exists, so nothing is replaced)`;
+          },
+        },
         order: 1,
       },
       {

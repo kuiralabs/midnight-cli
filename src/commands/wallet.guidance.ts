@@ -119,7 +119,7 @@ starts with mn_addr_ or mn_shield-addr_, it's used as an address directly.
  10. midnight_dust_status          → Check remaining dust
 
   Shielded workflow:
-  1. midnight_airdrop              → Fund shielded (amount: "100", shielded: "true")
+  1. midnight_airdrop              → Fund shielded (amount: "100", shielded: true)
   2. midnight_balance              → Shows both unshielded + shielded
   3. midnight_transfer             → Returns pending token for shielded send
   4. (show + consent) → midnight_confirm_operation

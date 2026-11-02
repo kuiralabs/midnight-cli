@@ -34,13 +34,6 @@ export interface CallOutput {
   stderr(text: string): void;
 }
 
-/** Where a runner sends what a call's output is given. */
-export interface OutputSink {
-  result(data: Readonly<Record<string, unknown>>): void;
-  stdout(text: string): void;
-  stderr(text: string): void;
-}
-
 /** A call's progress: the spinners of its steps, what they say to the caller, and which one runs now. Its own per call. */
 export type CallProgress = Progress;
 
@@ -96,7 +89,7 @@ export class SecondResultError extends Error {
 }
 
 /** A call's output over `sink`: one result at most, each piece passed on as it comes. */
-export function callOutput(sink: OutputSink): CallOutput {
+export function callOutput(sink: CallOutput): CallOutput {
   let hasResult = false;
   return {
     result(data) {
@@ -128,7 +121,7 @@ export function hostCallConfig(): CallConfig {
 export interface CallParts<Protector = unknown> {
   readonly args: ParsedArgs;
   readonly signal: AbortSignal;
-  readonly output: OutputSink;
+  readonly output: CallOutput;
   /** Where what the call's spinners say goes besides the terminal (the MCP server's progress notifications); none for the CLI. */
   readonly onProgress?: ProgressReport;
   /** Where the call's SDK warnings go, from the router of the host that runs it; none: a call of its own, which no host's filters report to. */
