@@ -16,6 +16,8 @@ import { freshGrantee, grantRequestFor, grantRequestLink } from '@kuiralabs/midn
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const TSX = path.join(REPO, 'node_modules', '.bin', 'tsx');
 const ENDPOINTS = { node: 'ws://localhost:29944', 'indexer-ws': 'ws://localhost:28088/api/v4/graphql/ws', 'proof-server': 'http://localhost:26300' };
+// How a confirmation names those endpoints.
+const VIA = '. Endpoints: node ws://localhost:29944, indexer ws://localhost:28088/api/v4/graphql/ws, proof server http://localhost:26300';
 
 // An account's records as mn 0.6.0-rc.10 left them.
 const ACCOUNT = '5e'.repeat(32);
@@ -87,14 +89,14 @@ describe('every tool that acts answers with a token, and does nothing until it i
     3, new Uint8Array(32).fill(0x9a), 2,
   ));
   const cases: Array<[string, () => Record<string, unknown>, () => string | RegExp]> = [
-    ['midnight_transfer', () => ({ to: 'carol', amount: '5', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => 'Send 5 NIGHT from alice to carol on undeployed'],
-    ['midnight_contract_deploy', () => ({ path: dappDir, wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => `Deploy contract from ${dappDir} as alice on undeployed`],
-    ['midnight_contract_call', () => ({ path: dappDir, address: ADDRESS, circuit: 'increment', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => `Call circuit increment on contract ${ADDRESS} as alice on undeployed`],
-    ['midnight_grant_deploy', () => ({ wallet: 'carol', network: 'undeployed', ...ENDPOINTS }), () => "Deploy an account for carol on undeployed; its owner key is made on this machine and kept encrypted under mn's passphrase"],
-    ['midnight_grant_deposit', () => ({ amount: '2', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => `Deposit 2 shielded NIGHT (2000000 in the smallest unit) from wallet alice into its account ${ACCOUNT} on undeployed`],
-    ['midnight_grant_issue', () => ({ link: link(), wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => new RegExp(`^Issue a grant on alice's account on undeployed, letting an agent spend from it within these terms .*${ACCOUNT}`)],
-    ['midnight_grant_revoke', () => ({ grant: '3', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => "Revoke grant 3 on alice's account on undeployed"],
-    ['midnight_grant_revoke_all', () => ({ wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => "Revoke every grant on alice's account on undeployed"],
+    ['midnight_transfer', () => ({ to: 'carol', amount: '5', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => 'Send 5 NIGHT from alice to carol on undeployed' + VIA],
+    ['midnight_contract_deploy', () => ({ path: dappDir, wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => `Deploy contract from ${dappDir} as alice on undeployed` + VIA],
+    ['midnight_contract_call', () => ({ path: dappDir, address: ADDRESS, circuit: 'increment', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => `Call circuit increment on contract ${ADDRESS} as alice on undeployed` + VIA],
+    ['midnight_grant_deploy', () => ({ wallet: 'carol', network: 'undeployed', ...ENDPOINTS }), () => "Deploy an account for carol on undeployed; its owner key is made on this machine and kept encrypted under mn's passphrase" + VIA],
+    ['midnight_grant_deposit', () => ({ amount: '2', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => `Deposit 2 shielded NIGHT (2000000 in the smallest unit) from wallet alice into its account ${ACCOUNT} on undeployed` + VIA],
+    ['midnight_grant_issue', () => ({ link: link(), wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => new RegExp(`^Issue a grant on alice's account on undeployed, letting an agent spend from it within these terms .*${ACCOUNT}[\\s\\S]*\\. Endpoints: node ws://localhost:29944, indexer ws://localhost:28088/api/v4/graphql/ws, proof server http://localhost:26300$`)],
+    ['midnight_grant_revoke', () => ({ grant: '3', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => "Revoke grant 3 on alice's account on undeployed" + VIA],
+    ['midnight_grant_revoke_all', () => ({ wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => "Revoke every grant on alice's account on undeployed" + VIA],
     ['midnight_wallet_remove', () => ({ name: 'carol' }), () => 'Remove wallet carol: its file, and the seed in it, is deleted from this machine'],
   ];
 
@@ -125,7 +127,7 @@ describe('midnight_grant_deposit', () => {
     expect(pending.pending).toBe(true);
     expect(pending.token).toEqual(expect.any(String));
     expect(pending.tool).toBe('midnight_grant_deposit');
-    expect(pending.description).toBe(`Deposit 1.5 shielded NIGHT (1500000 in the smallest unit) from wallet alice into its account ${ACCOUNT} on undeployed`);
+    expect(pending.description).toBe(`Deposit 1.5 shielded NIGHT (1500000 in the smallest unit) from wallet alice into its account ${ACCOUNT} on undeployed${VIA}`);
     // Nothing was built or kept: the records are as they were, and no private state was opened.
     expect(fs.readdirSync(recordsDir)).toEqual(['owner.json']);
     expect(JSON.parse(fs.readFileSync(path.join(recordsDir, 'owner.json'), 'utf8'))).toEqual(OWNER_RECORD);
@@ -136,6 +138,27 @@ describe('midnight_grant_deposit', () => {
     expect(refused).toMatchObject({ error: true, code: 'INVALID_ARGS' });
     expect(refused.token).toBeUndefined();
   }, 60_000);
+});
+
+describe('endpoints in what the user confirms', () => {
+  it('names one set with config for the network, and leaves out what is the network\'s own', async () => {
+    const file = path.join(home, '.midnight', 'config.json');
+    const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined;
+    fs.writeFileSync(file, JSON.stringify({ ...(before === undefined ? {} : JSON.parse(before)), networks: { undeployed: { 'proof-server': 'http://proofs.example:6300' } } }));
+    try {
+      const pending = await call('midnight_transfer', { to: 'carol', amount: '5', wallet: 'alice', network: 'undeployed', node: ENDPOINTS.node, 'indexer-ws': ENDPOINTS['indexer-ws'] });
+      expect(pending.error, String(pending.message)).toBeUndefined();
+      expect(pending.description).toBe('Send 5 NIGHT from alice to carol on undeployed. Endpoints: node ws://localhost:29944, indexer ws://localhost:28088/api/v4/graphql/ws, proof server http://proofs.example:6300 (set with config)');
+    } finally {
+      if (before === undefined) fs.rmSync(file);
+      else fs.writeFileSync(file, before);
+    }
+  });
+
+  it('names none for a tool that takes no endpoints', async () => {
+    const pending = await call('midnight_wallet_remove', { name: 'carol' });
+    expect(pending.description).toBe('Remove wallet carol: its file, and the seed in it, is deleted from this machine');
+  });
 });
 
 describe('midnight_wallet_generate with force', () => {

@@ -5,6 +5,8 @@
 // the confirmation flow gives.
 
 import { type CommandRun, captureCommand } from '../run-command.ts';
+import { getEndpointOverridesForNetwork, loadCliConfig } from '../cli-config.ts';
+import { resolveNetworkName } from '../resolve-network.ts';
 import {
   type CommandRegistry,
   type RegisteredTool,
@@ -50,15 +52,39 @@ export async function runTool(tool: RegisteredTool, params: Readonly<Record<stri
   return captureCommand((await tool.command.load()).default, toolArgv(tool, params), call);
 }
 
+/** The endpoint parameters, and how a confirmation names each. */
+const ENDPOINTS = [['node', 'node'], ['indexer-ws', 'indexer'], ['proof-server', 'proof server']] as const;
+
+/**
+ * The endpoints the call is sent to other than the network's own, for the
+ * text the user confirms: each given as a parameter, or else set for the
+ * network with `config set`. Empty when the tool takes no endpoints or none
+ * is overridden. Without it, a transaction's proof could go to a host the
+ * user never saw.
+ */
+export function endpointOverridesNote(tool: RegisteredTool, params: Readonly<Record<string, unknown>>): string {
+  const properties = tool.inputSchema.properties;
+  if (!ENDPOINTS.some(([param]) => Object.hasOwn(properties, param))) return '';
+  const configured = getEndpointOverridesForNetwork(loadCliConfig(), resolveNetworkName({ args: toolArgv(tool, params) }));
+  const named = ENDPOINTS.flatMap(([param, label]) => {
+    const given = params[param];
+    if (typeof given === 'string' && given !== '') return [`${label} ${given}`];
+    const set = configured[param];
+    return set === undefined ? [] : [`${label} ${set} (set with config)`];
+  });
+  return named.length === 0 ? '' : `. Endpoints: ${named.join(', ')}`;
+}
+
 /**
  * For a tool behind confirmation: runs its check, which throws when the call
  * can't run, and returns the text the user confirms (the check's own, or the
- * definition's from the parameters).
+ * definition's from the parameters), naming any endpoint the call is sent to
+ * other than the network's own.
  */
 export async function confirmationFor(tool: RegisteredTool, params: Readonly<Record<string, unknown>>, call: CommandRun): Promise<string> {
   const found = await tool.confirmation?.check?.(params, {
     argv: () => toolArgv(tool, params),
     run: async (args) => captureCommand((await tool.command.load()).default, args, call),
   });
-  return found ?? confirmationText(tool, params);
+  return (found ?? confirmationText(tool, params)) + endpointOverridesNote(tool, params);
 }
