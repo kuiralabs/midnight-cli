@@ -19,6 +19,9 @@ import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
 import { isDustShortage } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits } from '@kuiralabs/midnight-cli-core/lib/fee-limits';
 import { inspectTxHex } from './tx-inspect.ts';
+import { readOffer, spentNullifiers } from './offer-reader.ts';
+import { assertSpendsNoOfferCoin, type OpenOffer } from '@kuiralabs/midnight-cli-core/lib/open-offers';
+import { NotAnOfferError, describeLeg } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
 import { expiredIntents, feeOnlyRefusals, readDAppTransaction, type DAppTxStage, type FeeCheckTransaction } from './fee-only-check.ts';
 import { PartlySignedTransactionError, assertSignable, signRecipe } from './sign-recipe.ts';
 import { decodeSignPayload, signedMessageBytes } from '@kuiralabs/midnight-cli-core/lib/sign-data';
@@ -40,6 +43,12 @@ export interface DAppConnectorOptions {
   approvalOptions: ApprovalOptions;
   /** Under --approve-fees: the most a transaction may cost, and how many may wait unsubmitted. */
   feeLimits?: FeeLimits;
+  /**
+   * The swap offers this wallet has open. A transaction this connector builds
+   * that would spend one's coins (cancelling it) is refused, unless it is the
+   * cancel itself. None when absent.
+   */
+  openOffers?: () => readonly OpenOffer[];
   callbacks?: DAppConnectorCallbacks;
   /**
    * The state the caller's own sync ended on. Reads answer from it at once;
@@ -277,6 +286,17 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     if (txMap.size === 0) pendingTxsByConnection.delete(connectionId);
   }
 
+  /**
+   * Hands a built transaction on: it is no longer this connection's to revert,
+   * on disconnect or by the abandon timer. A swap offer is one: its maker never
+   * submits it, a taker does. False when the connection holds no such transaction.
+   */
+  function handOffPendingTx(connectionId: string, txHex: string): boolean {
+    const held = pendingTxsByConnection.get(connectionId)?.has(txHex) ?? false;
+    untrackPendingTx(connectionId, txHex);
+    return held;
+  }
+
   /** Revert and clean up all pending transactions for a connection (disconnect). */
   async function revertPendingTxs(connectionId: string): Promise<void> {
     const txMap = pendingTxsByConnection.get(connectionId);
@@ -295,7 +315,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
   /** Sign, prove (with timeout), and serialize a transaction recipe.
    *  Returns both the serialized hex and the finalized tx object (for tracking/revert). */
-  async function processRecipe(recipe: any, tracker?: PhaseTracker): Promise<{ hex: string; finalized: ledger.FinalizedTransaction }> {
+  async function processRecipe(recipe: any, tracker?: PhaseTracker, cancelling: readonly string[] = []): Promise<{ hex: string; finalized: ledger.FinalizedTransaction }> {
     tracker?.start('signing');
     let signed: any;
     try {
@@ -329,8 +349,19 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     } finally {
       clearTimeout(timer);
     }
+    const hex = toHex(finalized.serialize());
+    // Spending an open swap offer's coins would cancel it: refused, unless this transaction is that cancel.
+    const open = options.openOffers?.() ?? [];
+    if (open.length > 0) {
+      try {
+        assertSpendsNoOfferCoin(open, spentNullifiers(hex), cancelling);
+      } catch (err) {
+        try { await facade.revert(finalized); } catch { /* best-effort */ }
+        throw err;
+      }
+    }
     tracker?.complete();
-    return { hex: toHex(finalized.serialize()), finalized };
+    return { hex, finalized };
   }
 
   /**
@@ -517,6 +548,82 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     } finally {
       releaseSlot?.();
     }
+  }
+
+  /**
+   * Takes a swap offer (a sealed transaction, hex): checks the offer's own
+   * signatures and proofs before building anything (a forged or tampered one
+   * fails here, not after this wallet's proof), adds this wallet's half and
+   * the whole swap's fee, checks the result in full, and holds it pending for
+   * the connection until it is submitted. Whether these are the agreed terms,
+   * and whether the offer is still live, are the caller's checks, made first.
+   */
+  async function takeOffer(connectionId: string, txHex: string): Promise<string> {
+    assertWalletStarted();
+    const { terms } = readOffer(txHex);
+    const offer = adopt(txHex, 'Finalized');
+    const context: RpcHandlerContext = { notify: () => {}, connectionId, requestId: 0, metadata: {} };
+    const tracker = makeTracker('takeOffer', context);
+
+    tracker.start('approve');
+    await requireApproval('takeOffer', [
+      { label: 'You give', value: describeLeg(terms.want) },
+      { label: 'You get', value: describeLeg(terms.give) },
+      ...inspectTxHex(txHex, 'sealed'),
+    ], context);
+
+    tracker.start('checking');
+    try {
+      await facade.validateTransaction(offer, { flags: { enforceBalancing: false, verifySignatures: true, enforceLimits: false } });
+    } catch (cause) {
+      throw new NotAnOfferError(`its signatures or proofs don't check (${extractErrorDetail(cause)})`, { cause });
+    }
+
+    tracker.start('building');
+    const ttl = createTtl();
+    const recipe: any = await withDustRetry(() => facade.balanceFinalizedTransaction(offer, secretKeys, { ttl, tokenKindsToBalance: 'all' }));
+    const { hex, finalized } = await processRecipe(recipe, tracker);
+    try {
+      await facade.validateTransaction(finalized, { flags: { enforceBalancing: true, verifySignatures: true, enforceLimits: true }, blockData: recipe.blockData });
+    } catch (cause) {
+      try { await facade.revert(finalized); } catch { /* best-effort */ }
+      throw new Error(`The swap this wallet built doesn't check, so it was not kept: ${extractErrorDetail(cause)}`, { cause });
+    }
+    trackPendingTx(connectionId, hex, finalized);
+    return hex;
+  }
+
+  /**
+   * Cancels open swap offers of this wallet's: sends its whole balance of
+   * each token they give back to its own shielded address, which spends the
+   * offers' coins (it costs a fee in Dust). Refused, and nothing kept, when
+   * the transaction doesn't spend every coin of every offer (one already
+   * taken, or coins this wallet no longer sees). Held pending for the
+   * connection until it is submitted.
+   */
+  async function cancelOffers(connectionId: string, offers: readonly OpenOffer[]): Promise<string> {
+    assertWalletStarted();
+    const state = getState();
+    const tokens = [...new Set(offers.map((offer) => offer.terms.give.token))];
+    const outputs = tokens.map((type) => {
+      const amount = state.shielded.balances[type] ?? 0n;
+      if (amount === 0n) throw createApiError('InvalidRequest', `This wallet holds none of token ${type}: the offer's coins are gone (it was taken)`);
+      return { type, amount, receiverAddress: state.shielded.address };
+    });
+    const context: RpcHandlerContext = { notify: () => {}, connectionId, requestId: 0, metadata: {} };
+    const tracker = makeTracker('cancelOffers', context);
+    tracker.start('approve');
+    await requireApproval('cancelOffers', offers.map((offer) => ({ label: 'Cancel', value: `${offer.id.slice(0, 16)}… (${describeLeg(offer.terms.give)})` })), context);
+    tracker.start('building');
+    const recipe = await withDustRetry(() => facade.transferTransaction([{ type: 'shielded' as const, outputs }], secretKeys, { ttl: createTtl() }));
+    const { hex, finalized } = await processRecipe(recipe, tracker, offers.map((offer) => offer.id));
+    const spent = new Set(spentNullifiers(hex).map((n) => n.toLowerCase()));
+    if (!offers.every((offer) => offer.nullifiers.every((n) => spent.has(n.toLowerCase())))) {
+      try { await facade.revert(finalized); } catch { /* best-effort */ }
+      throw createApiError('InvalidRequest', 'The cancel would not spend every coin of the offers: one was taken, or its coins are gone');
+    }
+    trackPendingTx(connectionId, hex, finalized);
+    return hex;
   }
 
   /** Encode an SDK address object to bech32m string. */
@@ -1015,5 +1122,5 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     return false;
   }
 
-  return { handlers, revertPendingTxs, hasPendingTxs, dispose };
+  return { handlers, revertPendingTxs, handOffPendingTx, takeOffer, cancelOffers, hasPendingTxs, dispose };
 }

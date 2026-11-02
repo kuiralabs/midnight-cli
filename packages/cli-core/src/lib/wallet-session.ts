@@ -17,6 +17,8 @@ import { resolveNetwork } from './resolve-network.ts';
 import { shieldedSyncEnabled } from './shielded-policy.ts';
 import { throwIfCancelled } from './errors.ts';
 import { isColdStartRace } from './sdk-errors.ts';
+import type { SwapLeg } from './swap-offer.ts';
+import type { OpenOffer } from './open-offers.ts';
 
 /** The calls a session makes, under one connection name for the connector's pending transactions. */
 const SESSION_CONNECTION = 'wallet-session';
@@ -70,6 +72,20 @@ export interface WalletSession {
   balanceTransaction(tx: string): Promise<string>;
   /** A swap offer: the wallet gives `give` for `take`, paying its fees; the transaction to submit or hand on. */
   swap(give: TokenAmount[], take: TokenPayment[]): Promise<string>;
+  /**
+   * The maker's half of a shielded swap: it gives `give` and is paid `want` to
+   * its own shielded address, paying no fee (the taker pays the swap's). The
+   * offer (sealed, hex) is handed off: closing the session doesn't cancel it.
+   */
+  makeOffer(give: SwapLeg, want: SwapLeg): Promise<string>;
+  /**
+   * Takes a swap offer (sealed, hex): the offer is validated before anything
+   * is built, then this wallet adds its half and the fee. The swap (sealed,
+   * hex), to submit. Check the terms and that the offer is live first.
+   */
+  takeOffer(tx: string): Promise<string>;
+  /** Cancels open swap offers of this wallet's by spending their coins back to itself (a fee in Dust); the cancel (sealed, hex), to submit. */
+  cancelOffers(offers: readonly OpenOffer[]): Promise<string>;
   /** Signs `data` (hex, base64 or text, as `encoding` says) with the wallet's unshielded key. */
   sign(data: string, encoding: 'hex' | 'base64' | 'text'): Promise<SignedData>;
   /** Submits a sealed transaction (hex) and waits for it to be finalized; its hash. */
@@ -111,10 +127,10 @@ export function sessionOver(
     return handler(params, { notify: () => {}, connectionId: SESSION_CONNECTION, requestId: ++requestId, metadata: {} });
   };
   /** Builds a transaction, through the cold-start race while it is the session's first. */
-  const build = async (method: string, params: Record<string, unknown>): Promise<string> => {
+  const build = async (making: () => Promise<string>): Promise<string> => {
     for (let attempt = 1; ; attempt++) {
       try {
-        const { tx } = (await call(method, params)) as { tx: string };
+        const tx = await making();
         built = true;
         return tx;
       } catch (err) {
@@ -149,14 +165,32 @@ export function sessionOver(
       return { unshielded: { ...unshielded }, shielded: { ...shielded }, dust: balance };
     },
     async balanceTransaction(tx) {
-      return build('balanceUnsealedTransaction', { tx });
+      return build(async () => ((await call('balanceUnsealedTransaction', { tx })) as { tx: string }).tx);
     },
     async swap(give, take) {
-      return build('makeIntent', {
+      return build(async () => ((await call('makeIntent', {
         desiredInputs: give.map(({ kind, type, value }) => ({ kind, type, value })),
         desiredOutputs: take.map(({ kind, type, value, recipient }) => ({ kind, type, value, recipient })),
         options: { payFees: true },
-      });
+      })) as { tx: string }).tx);
+    },
+    async makeOffer(give, want) {
+      const { shieldedAddress } = (await call('getShieldedAddresses', {})) as { shieldedAddress: string };
+      const offer = await build(async () => ((await call('makeIntent', {
+        desiredInputs: [{ kind: 'shielded', type: give.token, value: give.amount }],
+        desiredOutputs: [{ kind: 'shielded', type: want.token, value: want.amount, recipient: shieldedAddress }],
+        options: { intentId: 'random', payFees: false },
+      })) as { tx: string }).tx);
+      current.connector.handOffPendingTx(SESSION_CONNECTION, offer);
+      return offer;
+    },
+    async takeOffer(tx) {
+      if (closed) throw new Error('The wallet session is closed');
+      return build(() => current.connector.takeOffer(SESSION_CONNECTION, tx));
+    },
+    async cancelOffers(offers) {
+      if (closed) throw new Error('The wallet session is closed');
+      return build(() => current.connector.cancelOffers(SESSION_CONNECTION, offers));
     },
     async sign(data, encoding) {
       return (await call('signData', { data, options: { encoding, keyType: 'unshielded' } })) as SignedData;

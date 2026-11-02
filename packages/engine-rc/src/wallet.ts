@@ -3,6 +3,9 @@
 // The flows are the ones the commands, the test preparation and mn serve ran
 // themselves before the SDK moved behind the engine.
 
+import { deriveUnshieldedAddress } from './derive-address.ts';
+import { assertSpendsNoOfferCoin, readOpenOffers } from '@kuiralabs/midnight-cli-core/lib/open-offers';
+import { spentNullifiers } from './offer-reader.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { MidnightBech32m } from '@midnightntwrk/wallet-sdk/address-format';
 import type {
@@ -70,6 +73,17 @@ async function shieldedTransfer(params: ShieldedTransferParams): Promise<string>
 
       progress.update('Generating ZK proof (this may take a few minutes)...');
       const finalized = await bundle.facade.finalizeRecipe(signed);
+
+      // Spending an open swap offer's coins would cancel it: refused.
+      const open = readOpenOffers(network, deriveUnshieldedAddress(seed, network));
+      if (open.length > 0) {
+        try {
+          assertSpendsNoOfferCoin(open, spentNullifiers(Buffer.from(finalized.serialize()).toString('hex')));
+        } catch (err) {
+          try { await bundle.facade.revert(finalized); } catch { /* best-effort */ }
+          throw err;
+        }
+      }
 
       // facade.submitTransaction blocks until the chain finalizes the block
       // (typically 12 to 30s on hosted networks, ~6 to 12s on localnet).
@@ -219,6 +233,7 @@ const openConnector: EngineWallet['openConnector'] = async (options): Promise<Op
       initialState: syncedState,
       isCurrent: (state) => isFacadeSynced(state, syncMode, built.emptyStreams),
       dustWaitMs: options.dustWaitMs,
+      openOffers: () => readOpenOffers(network, address),
       callbacks: {
         onPhaseStart: (_connId, _method, phase) => {
           onMessage(`${phase}...`);
@@ -268,6 +283,7 @@ const serveWallet: EngineWallet['serveWallet'] = (options, serve) => {
         // one that is synced by the rule the sync used.
         initialState: lastState,
         isCurrent: (state) => isFacadeSynced(state, syncMode, bundle.emptyStreams),
+        openOffers: () => readOpenOffers(network, address),
       }),
     };
     return serve(session);

@@ -5,6 +5,8 @@
 // loader at start (the shell, the engines it ships), as it does the settings.
 // Loading an engine loads its SDK, so the loader imports it only when asked.
 
+import type { OfferContents } from './swap-offer.ts';
+import type { OpenOffer } from './open-offers.ts';
 import { sdkSetOfNetwork, type NetworkConfig, type NetworkName } from './network.ts';
 import type { CallSdkWarnings } from './sdk-warnings.ts';
 import type { VerboseLog } from './verbose.ts';
@@ -57,6 +59,10 @@ export interface EngineLedger {
   nightTokenId(): string;
   /** What a serialized transaction (hex) is, as an approval prompt shows it; never throws. */
   readTransaction(txHex: string, stage: 'unsealed' | 'sealed'): TransactionDetail[];
+  /** What a swap offer (a sealed transaction, hex) gives and wants, and the coins it spends, from its bytes alone. Throws NotAnOfferError for anything else. */
+  readOffer(txHex: string): OfferContents;
+  /** The nullifiers of the shielded coins a transaction (hex, sealed or not) spends. Throws when the bytes aren't a ledger-9 transaction. */
+  spentNullifiers(txHex: string): string[];
 }
 
 /** A contract's ledger state read without its compiled contract: cells as their field-aligned bytes in hex, maps by size. */
@@ -369,6 +375,12 @@ export interface DAppConnector {
   handlers: Record<string, RpcHandler>;
   /** Revert all pending (unsubmitted) transactions for a connection, releasing locked coins. */
   revertPendingTxs(connectionId: string): Promise<void>;
+  /** Stop tracking a built transaction as this connection's (a swap offer handed to a taker): it is never reverted. False when the connection holds no such transaction. */
+  handOffPendingTx(connectionId: string, txHex: string): boolean;
+  /** Takes a swap offer (sealed, hex): validates it before building, adds this wallet's half and the fee, validates the whole, and holds it pending for the connection; the swap, sealed, hex. The terms and liveness are the caller's to check first. */
+  takeOffer(connectionId: string, txHex: string): Promise<string>;
+  /** Cancels open swap offers of this wallet's by spending their coins back to itself; the cancel, sealed, hex, pending until submitted. Refused when it wouldn't spend every coin of every offer. */
+  cancelOffers(connectionId: string, offers: readonly OpenOffer[]): Promise<string>;
   /** True if any connection has a balanced-but-not-submitted transaction. */
   hasPendingTxs(): boolean;
   dispose(): void;

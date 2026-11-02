@@ -17,6 +17,9 @@ import { Effect } from 'effect';
 import { HISTORY, TEST_NETWORK_CONFIG, connectorStub, type BundleOverrides, type StubConnector, type StubEngine } from './connector-stub.ts';
 import { startLocalIndexer, type LocalIndexer } from './local-indexer.ts';
 import { ledgerTx, type Ledger } from './ledger-tx.ts';
+import { SWAP_OFFER_HEX, OFFER_GIVE } from '../fixtures/swap-offer.ts';
+import { NotAnOfferError } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
+import { OfferCoinsInUseError, type OpenOffer } from '@kuiralabs/midnight-cli-core/lib/open-offers';
 import type { SignatureVerifyingKey } from '@midnightntwrk/ledger-v9';
 import { signedMessageBytes } from '@kuiralabs/midnight-cli-core/lib/sign-data';
 import type { RpcHandlerContext } from '@kuiralabs/midnight-cli-core/lib/connector-api';
@@ -1583,6 +1586,104 @@ export function connectorSuite(engine: ConnectorEngine): void {
       });
     });
 
+    describe('swap offers', () => {
+      /** The real offer, as the SDK holds a finalized transaction. */
+      const offerTx = () => engine.ledger.Transaction.deserialize('signature', 'proof', 'binding', Buffer.from(SWAP_OFFER_HEX, 'hex'));
+      const offerNullifier = () => (offerTx().guaranteedOffer!.inputs[0]!.nullifier as string);
+      const openOffer = (): OpenOffer => ({
+        id: 'f8'.repeat(32),
+        terms: { give: { token: OFFER_GIVE, amount: 10n }, want: { token: '00'.repeat(31) + '02', amount: 7n } },
+        nullifiers: [offerNullifier()],
+        madeAt: new Date(0),
+        expiresAt: new Date(0),
+      });
+
+      it('takes an offer: checks its signatures and proofs before building, balances every kind, checks the whole, and holds it pending', async () => {
+        const validate = vi.fn().mockResolvedValue(undefined);
+        const balance = vi.fn().mockResolvedValue({ type: 'RECIPE', blockData: 'block' });
+        const bundle = createBundleStub({ validateTransaction: validate, balanceFinalizedTransaction: balance });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+
+        expect(await connector.takeOffer('taker', SWAP_OFFER_HEX)).toBe(FINALIZED_HEX);
+
+        expect(validate.mock.calls[0]![1]).toEqual({ flags: { enforceBalancing: false, verifySignatures: true, enforceLimits: false } });
+        expect(engine.handleHex(validate.mock.calls[0]![0])).toBe(SWAP_OFFER_HEX);
+        const [call] = balance.mock.calls;
+        expect(engine.handleHex(call![0])).toBe(SWAP_OFFER_HEX);
+        if (engine.secretKeys !== undefined) expect(call![1]).toBe(engine.secretKeys);
+        expect(call!.at(-1)).toMatchObject({ tokenKindsToBalance: 'all' });
+        expect(validate.mock.calls[1]![1]).toEqual({ flags: { enforceBalancing: true, verifySignatures: true, enforceLimits: true }, blockData: 'block' });
+        expect(connector.hasPendingTxs()).toBe(true);
+      });
+
+      it('refuses an offer whose signatures or proofs don\'t check, before building anything', async () => {
+        const balance = vi.fn();
+        const bundle = createBundleStub({ validateTransaction: vi.fn().mockRejectedValue(new Error('invalid proof')), balanceFinalizedTransaction: balance });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+
+        const err = await connector.takeOffer('taker', SWAP_OFFER_HEX).catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(NotAnOfferError);
+        expect((err as Error).message).toContain("its signatures or proofs don't check (invalid proof)");
+        expect(balance).not.toHaveBeenCalled();
+      });
+
+      it('refuses a transaction that is no offer before validating anything', async () => {
+        const validate = vi.fn();
+        connector = engine.createDAppConnector({ bundle: createBundleStub({ validateTransaction: validate }), networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+
+        await expect(connector.takeOffer('taker', SEALED_AGENT_TX)).rejects.toBeInstanceOf(NotAnOfferError);
+        expect(validate).not.toHaveBeenCalled();
+      });
+
+      it('refuses, and reverts, a transaction it built that would spend an open offer\'s coins', async () => {
+        const revertFn = vi.fn().mockResolvedValue(undefined);
+        const built = offerTx();
+        const bundle = createBundleStub({ finalizeRecipe: () => Promise.resolve(built) });
+        (bundle.facade as any).revert = revertFn;
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true }, openOffers: () => [openOffer()] });
+
+        const err = await connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx()).catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(OfferCoinsInUseError);
+        expect(revertFn).toHaveBeenCalledWith(built);
+        expect(connector.hasPendingTxs()).toBe(false);
+      });
+
+      it('cancels an offer by sending its whole balance of the token back to itself, which spends the offer\'s coins', async () => {
+        const transfer = vi.fn().mockResolvedValue({ type: 'UNPROVEN_TRANSACTION' });
+        const bundle = createBundleStub({
+          stateFn: () => rx.of(mockState({ shieldedBalances: { [OFFER_GIVE]: 100n } })),
+          transferTransaction: transfer,
+          finalizeRecipe: () => Promise.resolve(offerTx()),
+        });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true }, openOffers: () => [openOffer()] });
+
+        expect(await connector.cancelOffers('maker', [openOffer()])).toBe(SWAP_OFFER_HEX);
+        const [[outputs]] = transfer.mock.calls;
+        expect(outputs).toHaveLength(1);
+        expect(outputs[0].type).toBe('shielded');
+        expect(outputs[0].outputs).toHaveLength(1);
+        expect(outputs[0].outputs[0]).toMatchObject({ type: OFFER_GIVE, amount: 100n });
+        expect(outputs[0].outputs[0].receiverAddress.coinPublicKeyString()).toBe(WALLET_SHIELDED.coinPublicKeyString());
+        expect(connector.hasPendingTxs()).toBe(true);
+      });
+
+      it('refuses a cancel that would not spend the offer\'s coins, keeping nothing', async () => {
+        const revertFn = vi.fn().mockResolvedValue(undefined);
+        const bundle = createBundleStub({
+          stateFn: () => rx.of(mockState({ shieldedBalances: { [OFFER_GIVE]: 100n } })),
+          finalizeRecipe: () => Promise.resolve(sealedTx(5)),
+        });
+        (bundle.facade as any).revert = revertFn;
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+
+        await expect(connector.cancelOffers('maker', [openOffer()])).rejects.toMatchObject({ code: 'InvalidRequest' });
+        expect(revertFn).toHaveBeenCalled();
+        expect(connector.hasPendingTxs()).toBe(false);
+      });
+    });
+
     describe('pending tx tracking (hex-based)', () => {
       it('untrackPendingTx works via hex key (not object identity)', async () => {
         // balanceUnsealedTransaction tracks a tx, then submitTransaction untracks by hex.
@@ -1643,6 +1744,28 @@ export function connectorSuite(engine: ConnectorEngine): void {
         await connector.revertPendingTxs(connId);
         expect(revertFn).toHaveBeenCalledTimes(1);
         expect(revertFn).toHaveBeenCalledWith(finalized);
+      });
+
+      it('a transaction handed off is never reverted, on disconnect or by the abandon timer', async () => {
+        vi.useFakeTimers();
+        try {
+          const revertFn = vi.fn().mockResolvedValue(undefined);
+          process.stderr.write = (() => true) as any;
+          const bundle = createBundleStub({ finalizeRecipe: () => Promise.resolve(sealedTx(5)) });
+          (bundle.facade as any).revert = revertFn;
+          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+
+          const built = await connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx('conn_offer')) as { tx: string };
+          expect(connector.handOffPendingTx('conn_offer', built.tx)).toBe(true);
+          expect(connector.handOffPendingTx('conn_offer', built.tx)).toBe(false);
+          expect(connector.hasPendingTxs()).toBe(false);
+
+          await connector.revertPendingTxs('conn_offer');
+          await vi.advanceTimersByTimeAsync(121_000);
+          expect(revertFn).not.toHaveBeenCalled();
+        } finally {
+          vi.useRealTimers();
+        }
       });
 
       it('submitTransaction rejection reverts and untracks', async () => {

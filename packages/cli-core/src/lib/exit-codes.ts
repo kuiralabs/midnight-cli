@@ -59,6 +59,14 @@ export const ERROR_CODES = {
   OTHER_SDK_SET: 'OTHER_SDK_SET',
   /** An engine's SDK packages reach more than one copy of its ledger: mn was installed without its shrinkwrap (bun's installer). Recovery: install mn with npm. */
   MIXED_SDK_LAYOUT: 'MIXED_SDK_LAYOUT',
+  /** Bytes given as a swap offer are not one: not a sealed ledger-9 transaction, or not a shielded half swap. Recovery: ask the maker for the offer again. */
+  NOT_AN_OFFER: 'NOT_AN_OFFER',
+  /** A swap offer's own terms differ from the agreed ones. Recovery: don't take it; agree the terms again with the maker. */
+  TERMS_MISMATCH: 'TERMS_MISMATCH',
+  /** A swap offer is past the expiry its maker set. Recovery: ask the maker for a new one. */
+  OFFER_EXPIRED: 'OFFER_EXPIRED',
+  /** A spend would use coins an open swap offer of this wallet's holds, cancelling it. Recovery: cancel the offer first (mn swap cancel), or wait until it is taken. */
+  OFFER_COINS_IN_USE: 'OFFER_COINS_IN_USE',
   /** mn's passphrase was wrong, or a sealed secret was changed. Recovery: run it again with the passphrase mn was protected with. */
   WRONG_PASSPHRASE: 'WRONG_PASSPHRASE',
   /** A secret was needed and no passphrase could be had. Recovery: set MN_PASSPHRASE, or run at a terminal. */
@@ -66,8 +74,8 @@ export const ERROR_CODES = {
   UNKNOWN: 'UNKNOWN',
 } as const;
 
-/** Errors about mn's passphrase, the caller's to fix, classified by their code before any usage error. */
-const PASSPHRASE_ERROR_CODES: ReadonlySet<string> = new Set([ERROR_CODES.WRONG_PASSPHRASE, ERROR_CODES.PASSPHRASE_REQUIRED]);
+/** Errors the caller fixes (mn's passphrase, an offer that isn't the agreed one), classified by their code before any usage error. */
+const CALLER_ERROR_CODES: ReadonlySet<string> = new Set([ERROR_CODES.WRONG_PASSPHRASE, ERROR_CODES.PASSPHRASE_REQUIRED, ERROR_CODES.NOT_AN_OFFER, ERROR_CODES.TERMS_MISMATCH, ERROR_CODES.OFFER_EXPIRED, ERROR_CODES.OFFER_COINS_IN_USE]);
 
 /** Typed setup errors that carry their own `code`; classified by it, not by message text. */
 const SETUP_ERROR_CODES: ReadonlySet<string> = new Set([
@@ -97,7 +105,7 @@ export function classifyError(err: Error): ClassifiedError {
   // A usage error is the caller's to fix, whatever its text (the CLI and MCP agree on this).
   // (Tested through `unknown`: UsageError has Error's shape, so narrowing `err` itself would leave `never`.)
   const code = (err as { code?: unknown }).code;
-  if (typeof code === 'string' && PASSPHRASE_ERROR_CODES.has(code)) {
+  if (typeof code === 'string' && CALLER_ERROR_CODES.has(code)) {
     return { exitCode: EXIT_INVALID_ARGS, errorCode: code as ErrorCode };
   }
   if (isUsageError(err as unknown)) {
