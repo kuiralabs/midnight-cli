@@ -5,7 +5,7 @@
 // loader at start (the shell, the engines it ships), as it does the settings.
 // Loading an engine loads its SDK, so the loader imports it only when asked.
 
-import type { NetworkConfig, NetworkName } from './network.ts';
+import { sdkSetOfNetwork, type NetworkConfig, type NetworkName } from './network.ts';
 import type { CallSdkWarnings } from './sdk-warnings.ts';
 import type { VerboseLog } from './verbose.ts';
 import type { ApprovalOptions } from './approval.ts';
@@ -424,9 +424,9 @@ export interface Engine {
   readonly wallet: EngineWallet;
 }
 
-/** The SDK set a network runs on. */
-export function sdkSetOf(_network: NetworkName): SdkSet {
-  return 'rc';
+/** The SDK set a network runs on, as the network table names it. */
+export function sdkSetOf(network: NetworkName): SdkSet {
+  return sdkSetOfNetwork(network);
 }
 
 /** Loads the engine for an SDK set: the host's, which knows the engines it ships. */

@@ -3,6 +3,7 @@ import { execSync } from 'child_process';
 import { loadCliConfig, getEndpointOverridesForNetwork } from './cli-config.ts';
 import { INDEXER_GRAPHQL_PATH, INDEXER_GRAPHQL_WS_PATH } from './constants.ts';
 import { settings } from './settings.ts';
+import type { SdkSet } from './engine.ts';
 
 export type NetworkName = 'preprod' | 'preview' | 'undeployed';
 
@@ -45,6 +46,18 @@ const NETWORK_CONFIGS: Record<NetworkName, NetworkConfig> = {
     networkId: 'Undeployed',
   },
 };
+
+/** The SDK set each network runs on, whose engine a call on it loads (D28). */
+const NETWORK_SDK_SETS: Record<NetworkName, SdkSet> = {
+  preprod: 'rc',
+  preview: 'rc',
+  undeployed: 'rc',
+};
+
+/** The SDK set a network runs on. */
+export function sdkSetOfNetwork(name: NetworkName): SdkSet {
+  return NETWORK_SDK_SETS[name];
+}
 
 const VALID_NETWORK_NAMES: readonly NetworkName[] = ['preprod', 'preview', 'undeployed'] as const;
 
