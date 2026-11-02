@@ -251,6 +251,7 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
 
     const result = await runState({
       dappDir,
+      network,
       networkConfig,
       managedDir: info.managedDir,
       contractName: info.name,

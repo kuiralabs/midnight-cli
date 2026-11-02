@@ -35,6 +35,7 @@ export async function callContract({ request, target, wallet, payer, progress, s
   return withServedWallet({ target, wallet, payer, progress, sdkWarnings, signal }, { running: `Calling ${circuit}...`, done: `${circuit} called`, failed: 'Call failed' }, async (servePort, spinner) => {
     const result = await runCall({
       dappDir,
+      network: target.network,
       networkConfig: target.networkConfig,
       managedDir: info.managedDir,
       contractName: info.name,

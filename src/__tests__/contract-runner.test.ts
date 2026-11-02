@@ -25,18 +25,23 @@ import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
 import {
-  PROVIDER_IMPORTS,
-  walletProviderCode,
-  providerSetupCode,
-  generateDeployScript,
-  generateCallScript,
-  generateStateScript,
+  SCRIPT_PARTS,
   SCRIPT_PRELUDE,
   indexerEnvironment,
   runCall,
   runDeploy,
   runState,
 } from '../lib/contract/runner.ts';
+import * as rcScripts from '../engine/rc/contract-scripts.ts';
+import { PROVIDER_IMPORTS, walletProviderCode } from '../engine/rc/contract-scripts.ts';
+import type { CallScript, DeployScript, StateScript } from '../lib/engine.ts';
+
+// The rc engine's scripts, with the parts the runner gives every engine.
+const generateDeployScript = (opts: DeployScript & { dappDir?: string }): string => rcScripts.generateDeployScript(opts, SCRIPT_PARTS);
+const generateCallScript = (opts: CallScript & { dappDir?: string }): string => rcScripts.generateCallScript(opts, SCRIPT_PARTS);
+const generateStateScript = (opts: StateScript & { dappDir?: string }): string => rcScripts.generateStateScript(opts, SCRIPT_PARTS);
+const providerSetupCode = (networkConfig: Parameters<typeof rcScripts.providerSetupCode>[0], key: string): string => rcScripts.providerSetupCode(networkConfig, key, SCRIPT_PARTS);
+
 import type { NetworkConfig } from '../lib/network.ts';
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
@@ -259,7 +264,7 @@ describe('a cancelled run', () => {
   it('starts no script for a deploy, a call or a state read whose run was cancelled, and says it was cancelled', async () => {
     const dappDir = mkdtempSync(join(tmpdir(), 'mn-cancelled-run-'));
     try {
-      const common = { dappDir, networkConfig: NETWORK, managedDir: join(dappDir, 'managed', 'counter'), contractName: 'counter', signal: AbortSignal.abort() };
+      const common = { dappDir, network: 'undeployed' as const, networkConfig: NETWORK, managedDir: join(dappDir, 'managed', 'counter'), contractName: 'counter', signal: AbortSignal.abort() };
       await expect(runDeploy({ ...common, servePort: 9932 })).rejects.toBeInstanceOf(CancelledError);
       await expect(runCall({ ...common, servePort: 9932, contractAddress: 'ab'.repeat(32), circuit: 'increment' })).rejects.toBeInstanceOf(CancelledError);
       await expect(runState({ ...common, contractAddress: 'ab'.repeat(32) })).rejects.toBeInstanceOf(CancelledError);

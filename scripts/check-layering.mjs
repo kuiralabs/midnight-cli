@@ -107,7 +107,6 @@ export const PENDING_ENGINE = new Set([
   'commands/balance.ts',
   'commands/dust.ts',
   'commands/transfer.ts',
-  'lib/contract/runner.ts',
   'lib/dapp-connector.ts',
   'lib/dust-wallet.ts',
   'lib/facade.ts',
