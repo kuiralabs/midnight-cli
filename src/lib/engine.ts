@@ -58,12 +58,67 @@ export type RawStateValue =
   | { type: 'map'; size: number }
   | { type: 'boundedMerkleTree'; height: number; root: string[] | null };
 
+/** What every SDK set's contract script shares, which the contract runner gives the engine. */
+export interface ScriptParts {
+  /** First in every script: reports a failure as one marked line. */
+  readonly prelude: string;
+  /** The client of mn serve's RPC on that port, defining rpcConnect, rpcCall and rpcClose. */
+  rpcClientCode(servePort: number): string;
+  /** Defines coerceArg, which turns a JSON argument into a circuit's runtime value. */
+  readonly coerceArgFn: string;
+  /** Defines resolvePrivateStateSecretKey. */
+  readonly privateStateSecretFn: string;
+  /** Where the dApp's witnesses may be, relative to its folder. */
+  readonly witnessCandidates: readonly string[];
+  /** The environment variables carrying the indexer's URLs, which never go into a script's text. */
+  readonly indexerUrlEnv: string;
+  readonly indexerWsUrlEnv: string;
+}
+
+/** A compiled contract, as the scripts load it. */
+export interface ScriptContract {
+  networkConfig: NetworkConfig;
+  managedDir: string;
+  contractName: string;
+}
+
+export interface DeployScript extends ScriptContract {
+  servePort: number;
+  privateStateKey?: string;
+  args?: unknown[];
+}
+
+export interface CallScript extends ScriptContract {
+  servePort: number;
+  contractAddress: string;
+  circuit: string;
+  args?: unknown[];
+  privateStateKey?: string;
+}
+
+export interface StateScript extends ScriptContract {
+  contractAddress: string;
+}
+
+/** The scripts mn runs in a dApp's folder, and the packages they import, for one SDK set. */
+export interface EngineContractScripts {
+  /** Every package a script imports, and the compact runtime a compiled contract imports. */
+  readonly packages: readonly string[];
+  /** The folder of one of them as this engine's install has it; null when it isn't installed. */
+  packageFolder(name: string): string | null;
+  deploy(script: DeployScript, parts: ScriptParts): string;
+  call(script: CallScript, parts: ScriptParts): string;
+  state(script: StateScript, parts: ScriptParts): string;
+}
+
 /** What an engine does with contracts in mn's own process. */
 export interface EngineContracts {
   /** A deployed contract's raw ledger state from the indexer; null when no contract is at `address`. */
   rawState(networkConfig: NetworkConfig, address: string): Promise<RawStateValue | null>;
   /** Whether midnight-js accepts a private-state password (its own policy, which a random draw can miss). */
   acceptsPrivateStatePassword(password: string): boolean;
+  /** The scripts the contract runner runs in a dApp's folder. */
+  readonly scripts: EngineContractScripts;
 }
 
 /** One SDK set, as mn uses it. */

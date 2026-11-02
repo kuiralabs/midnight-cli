@@ -5,7 +5,15 @@
 
 import { describe, expect, it } from 'vitest';
 import { BlockfrostProjectIdRequiredError, blockfrostEndpoints } from '../lib/blockfrost.ts';
-import { generateCallScript, generateDeployScript, generateStateScript, indexerEnvironment } from '../lib/contract/runner.ts';
+import { SCRIPT_PARTS, indexerEnvironment } from '../lib/contract/runner.ts';
+import * as rcScripts from '../engine/rc/contract-scripts.ts';
+import type { CallScript, DeployScript, StateScript } from '../lib/engine.ts';
+
+// The rc engine's scripts, with the parts the runner gives every engine.
+const generateDeployScript = (opts: DeployScript & { dappDir?: string }): string => rcScripts.generateDeployScript(opts, SCRIPT_PARTS);
+const generateCallScript = (opts: CallScript & { dappDir?: string }): string => rcScripts.generateCallScript(opts, SCRIPT_PARTS);
+const generateStateScript = (opts: StateScript & { dappDir?: string }): string => rcScripts.generateStateScript(opts, SCRIPT_PARTS);
+
 import type { NetworkConfig } from '../lib/network.ts';
 
 const ID = 'nightpreprodAbCdEfGhIjKlMnOpQrStUv0123';

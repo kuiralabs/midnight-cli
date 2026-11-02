@@ -1,6 +1,9 @@
 // Contract runner — execute contract operations in the dApp's own process context.
 // Uses mn's serve RPC server for wallet operations (balance, sign, submit).
 // The generated script only needs contract SDK + RPC client — no wallet SDK.
+// The engine for the network's SDK set writes the script and names the
+// packages it imports; the runner adds what every set's script shares, makes
+// those packages resolvable from the dApp, and runs it.
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -9,7 +12,8 @@ import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { assertEndpointUsable } from '../blockfrost.ts';
-import type { NetworkConfig } from '../network.ts';
+import type { NetworkConfig, NetworkName } from '../network.ts';
+import { engineFor, type EngineContractScripts, type ScriptParts } from '../engine.ts';
 import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
 import { coerceArg } from './arg-coerce.ts';
 import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
@@ -22,55 +26,11 @@ import { CancelledError, throwIfCancelled } from '../errors.ts';
 // the script needs is linked by name into the dApp's node_modules instead, and
 // Node's normal walk-up from the script finds it there.
 
-/**
- * Every package a generated script imports, and the compact runtime the
- * user's compiled contract imports. Each is found by name from mn's own
- * location and linked into the dApp by name, so this works wherever the
- * packages sit (our checkout, our install, or someone else's hoisted tree).
- * A test keeps this list in step with the scripts' imports.
- */
-export const SCRIPT_PACKAGES = [
-  '@midnight-ntwrk/compact-js',
-  '@midnight-ntwrk/compact-runtime',
-  '@midnight-ntwrk/midnight-js-contracts',
-  '@midnight-ntwrk/midnight-js-http-client-proof-provider',
-  '@midnight-ntwrk/midnight-js-indexer-public-data-provider',
-  '@midnight-ntwrk/midnight-js-level-private-state-provider',
-  '@midnight-ntwrk/midnight-js-network-id',
-  '@midnight-ntwrk/midnight-js-node-zk-config-provider',
-  '@midnight-ntwrk/midnight-js-types',
-  '@midnight-ntwrk/midnight-js-utils',
-  'ws',
-] as const;
-
-/** The folder of the installed package `name`, as mn resolves it; null when it isn't installed. */
-export function packageFolder(name: string): string | null {
-  // node:module's createRequire works in every host (Node, the test runner,
-  // the bundle); a package exported to `import` only is found through
-  // import.meta.resolve where the host has it.
-  let entry: string;
-  try {
-    entry = createRequire(import.meta.url).resolve(name);
-  } catch {
-    try {
-      entry = fileURLToPath(import.meta.resolve(name));
-    } catch {
-      return null;
-    }
-  }
-  for (let dir = dirname(entry); ; dir = dirname(dir)) {
-    const manifest = join(dir, 'package.json');
-    if (existsSync(manifest)) {
-      try {
-        if ((JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string }).name === name) return dir;
-      } catch { /* not this one: keep looking up */ }
-    }
-    if (dirname(dir) === dir) return null;
-  }
-}
 
 export interface RunnerOptions {
   dappDir: string;
+  /** The network: its engine writes the script. */
+  network: NetworkName;
   networkConfig: NetworkConfig;
   managedDir: string;
   contractName: string;
@@ -107,6 +67,8 @@ export interface CallOptions extends RunnerOptions {
 
 export interface StateOptions {
   dappDir: string;
+  /** The network: its engine writes the script. */
+  network: NetworkName;
   networkConfig: NetworkConfig;
   managedDir: string;
   contractName: string;
@@ -145,8 +107,9 @@ export function indexerEnvironment(networkConfig: NetworkConfig): Record<string,
 }
 
 export async function runState(options: StateOptions): Promise<StateResult> {
-  const script = generateStateScript(options);
-  const result = await executeScript({ dir: options.dappDir, script, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal });
+  const { scripts } = (await engineFor(options.network)).contracts;
+  const script = scripts.state(options, SCRIPT_PARTS);
+  const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal });
   try {
     return JSON.parse(result) as StateResult;
   } catch {
@@ -155,14 +118,15 @@ export async function runState(options: StateOptions): Promise<StateResult> {
 }
 
 export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
-  const script = generateDeployScript(options);
+  const { scripts } = (await engineFor(options.network)).contracts;
+  const script = scripts.deploy(options, SCRIPT_PARTS);
   // The private-state secret goes to the subprocess via env (never the on-disk
   // script) so a caller-chosen owner is not written to the filesystem.
   const extraEnv = {
     ...indexerEnvironment(options.networkConfig),
     ...(options.privateStateSecretKey ? { MN_PRIVATE_STATE_SECRET: options.privateStateSecretKey } : {}),
   };
-  const result = await executeScript({ dir: options.dappDir, script, onMessage: options.onMessage, env: extraEnv, signal: options.signal });
+  const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: extraEnv, signal: options.signal });
   try {
     return JSON.parse(result) as DeployResult;
   } catch {
@@ -171,8 +135,9 @@ export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
 }
 
 export async function runCall(options: CallOptions): Promise<CallResult> {
-  const script = generateCallScript(options);
-  const result = await executeScript({ dir: options.dappDir, script, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal });
+  const { scripts } = (await engineFor(options.network)).contracts;
+  const script = scripts.call(options, SCRIPT_PARTS);
+  const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal });
   try {
     return JSON.parse(result) as CallResult;
   } catch {
@@ -228,149 +193,6 @@ function rpcClose() {
 `;
 }
 
-/**
- * SDK imports used by walletProviderCode and providerSetupCode. Kept out of
- * those fragments so a test can evaluate a fragment with the same bindings.
- */
-export const PROVIDER_IMPORTS = `
-import { createWalletProvider, createMidnightProvider, Transaction } from '@midnight-ntwrk/midnight-js-types';
-import { toHex, fromHex } from '@midnight-ntwrk/midnight-js-utils';
-import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
-import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
-import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
-import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
-`;
-
-/**
- * walletProvider + midnightProvider backed by mn serve RPC. midnight-js 5
- * passes version-tagged txs ({ version: 'v9', tx }) and refuses providers that
- * do not declare `supportedEras`; createWalletProvider/createMidnightProvider
- * declare v9 and unwrap/re-tag, so the bodies below see live ledger-v9 txs.
- */
-export function walletProviderCode(): string {
-  return `
-const walletState = await rpcCall('getShieldedAddresses', {});
-
-const walletProvider = createWalletProvider({
-  getCoinPublicKey: () => walletState.shieldedCoinPublicKey,
-  getEncryptionPublicKey: () => walletState.shieldedEncryptionPublicKey,
-  // ttl is ignored: mn serve applies its own TTL when balancing.
-  async balanceTx(tx) {
-    const result = await rpcCall('balanceUnsealedTransaction', { tx: toHex(tx.serialize()) });
-    return Transaction.deserialize('signature', 'proof', 'binding', fromHex(result.tx));
-  },
-});
-
-const midnightProvider = createMidnightProvider(async (tx) => {
-  await rpcCall('submitTransaction', { tx: toHex(tx.serialize()) });
-  return tx.identifiers()[0];
-});
-`;
-}
-
-// resolvePrivateStateSecretKey serialized for the generated script (same
-// .toString()-inlining trick as ARG_COERCE_FN, so makeInitialPrivateState below
-// and the test suite share one implementation).
-const PRIVATE_STATE_SECRET_FN = `\nconst resolvePrivateStateSecretKey = (${resolvePrivateStateSecretKey.toString()});\n`;
-
-function contractSetupCode(contractName: string, managedDir: string): string {
-  return `
-import { pathToFileURL } from 'node:url';
-import { resolve } from 'node:path';
-import { CompiledContract } from '@midnight-ntwrk/compact-js';
-
-const MANAGED_DIR = ${JSON.stringify(managedDir)};
-
-// Load compiled contract class
-const contractMod = await import(pathToFileURL(resolve(MANAGED_DIR, 'contract', 'index.js')).href);
-
-// Try to load witnesses and private state factory.
-// Both relative-to-cwd locations and contract/<...> locations are checked
-// so mn dev (which chdirs into the contract sub-package) and mn contract
-// deploy run from a workspace root both work.
-const WITNESS_CANDIDATES = ${JSON.stringify(WITNESS_FILE_CANDIDATES)};
-let witnesses;
-let createPrivateState;
-for (const p of WITNESS_CANDIDATES) {
-  try {
-    const wMod = await import(pathToFileURL(resolve(p)).href);
-    if (wMod.witnesses) { witnesses = wMod.witnesses; }
-    // Look for createInitialPrivateState or create*PrivateState
-    for (const key of Object.keys(wMod)) {
-      if (typeof wMod[key] === 'function' && key.startsWith('create') && key.toLowerCase().includes('privatestate')) {
-        createPrivateState = wMod[key];
-      }
-    }
-    if (witnesses) break;
-  } catch {}
-}
-
-// Note: callers (commands/contract.ts, commands/dev.ts) preflight when the
-// contract's compiler-info declares witnesses, so a missing module here means
-// the contract truly has no witnesses (vacant is correct). The runtime
-// warning still names every path we tried — useful when the SDK later
-// complains about a specific witness name despite preflight passing.
-if (!witnesses) {
-  process.stderr.write('Warning: No witnesses module found — using vacant witnesses. Searched:\\n');
-  for (const p of WITNESS_CANDIDATES) process.stderr.write('  - ' + p + '\\n');
-}
-
-// Generate initial private state.
-// Uses a deterministic seed derived from the wallet so post/takeDown use the same key.
-// The private state provider (leveldb) persists between calls, but initialPrivateState
-// is the fallback when no stored state exists yet.
-${PRIVATE_STATE_SECRET_FN}
-function makeInitialPrivateState() {
-  if (createPrivateState) {
-    // Secret precedence (see resolvePrivateStateSecretKey, injected above via
-    // .toString()): an explicit mn --secret-key (from env MN_PRIVATE_STATE_SECRET,
-    // never on disk) wins, else a deterministic key from the wallet's coin public
-    // key so post/takeDown reuse it, else random.
-    const secretKey = resolvePrivateStateSecretKey(
-      process.env.MN_PRIVATE_STATE_SECRET,
-      walletState?.shieldedCoinPublicKey,
-    );
-    try { return createPrivateState(secretKey); } catch {}
-    try { return createPrivateState(); } catch {}
-  }
-  return {};
-}
-
-const compiled = witnesses
-  ? CompiledContract.make(${JSON.stringify(contractName)}, contractMod.Contract).pipe(
-      (c) => CompiledContract.withWitnesses(c, witnesses),
-      (c) => CompiledContract.withCompiledFileAssets(c, MANAGED_DIR),
-    )
-  : CompiledContract.make(${JSON.stringify(contractName)}, contractMod.Contract).pipe(
-      CompiledContract.withVacantWitnesses,
-      (c) => CompiledContract.withCompiledFileAssets(c, MANAGED_DIR),
-    );
-`;
-}
-
-/** The `providers` object deploy/call pass to midnight-js-contracts. */
-export function providerSetupCode(networkConfig: NetworkConfig, privateStateKey: string): string {
-  return `
-const zkConfigProvider = new NodeZkConfigProvider(MANAGED_DIR);
-
-const providers = {
-  privateStateProvider: levelPrivateStateProvider({
-    privateStateStoreName: ${JSON.stringify(privateStateKey)},
-    privateStoragePasswordProvider: () => Promise.resolve('mn-contract-default-pwd-16ch'),
-    accountId: 'mn-contract-runner',
-  }),
-  publicDataProvider: indexerPublicDataProvider({
-    queryURL: process.env.${INDEXER_URL_ENV},
-    subscriptionURL: process.env.${INDEXER_WS_URL_ENV},
-  }),
-  zkConfigProvider,
-  proofProvider: httpClientProofProvider({ url: ${JSON.stringify(networkConfig.proofServer)}, zkConfigProvider }),
-  walletProvider,
-  midnightProvider,
-};
-`;
-}
-
 // ── Script generation ──
 
 /**
@@ -403,6 +225,11 @@ const providers = {
  */
 const ARG_COERCE_FN = `\nconst coerceArg = (${coerceArg.toString()});\n`;
 
+// resolvePrivateStateSecretKey serialized for the generated script (the same
+// .toString()-inlining trick as ARG_COERCE_FN, so the script's
+// makeInitialPrivateState and the test suite share one implementation).
+const PRIVATE_STATE_SECRET_FN = `\nconst resolvePrivateStateSecretKey = (${resolvePrivateStateSecretKey.toString()});\n`;
+
 /** Marks the line a generated script reports its failure on, so mn can tell it from progress and warnings. */
 export const SCRIPT_ERROR_MARKER = '__MN_ERROR__';
 
@@ -429,164 +256,30 @@ export function scriptFailureMessage(stderr: string, exitCode: number | null): s
   return stderr.trim() || `Script exited with code ${exitCode}`;
 }
 
-export function generateDeployScript(opts: DeployOptions): string {
-  const privateStateKey = opts.privateStateKey ?? `${opts.contractName}PrivateState`;
-  // Constructor args are pre-serialized to JSON here (still in our process)
-  // so the generated script just spreads them. The coerceArg helper inside
-  // the bridge then upgrades number → BigInt and number[] → Uint8Array, the
-  // two coercions Compact circuits invariably need.
-  const argsLiteral = JSON.stringify(opts.args ?? []);
-
-  return `${SCRIPT_PRELUDE}
-import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-setNetworkId(${JSON.stringify(opts.networkConfig.networkId.toLowerCase())});
-
-${rpcClientCode(opts.servePort)}
-${contractSetupCode(opts.contractName, opts.managedDir)}
-
-process.stderr.write('Connecting to mn serve...\\n');
-await rpcConnect();
-process.stderr.write('Connected\\n');
-
-${PROVIDER_IMPORTS}
-${walletProviderCode()}
-${providerSetupCode(opts.networkConfig, privateStateKey)}
-
-import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
-
-${ARG_COERCE_FN}
-const constructorArgs = (${argsLiteral}).map(coerceArg);
-process.stderr.write('Deploying contract' + (constructorArgs.length ? ' with ' + constructorArgs.length + ' constructor arg(s)...' : '...') + '\\n');
-const deployed = await deployContract(providers, {
-  compiledContract: compiled,
-  privateStateId: ${JSON.stringify(privateStateKey)},
-  initialPrivateState: makeInitialPrivateState(),
-  args: constructorArgs,
-});
-
-const address = deployed.deployTxData?.public?.contractAddress ?? 'unknown';
-process.stderr.write('Deploy complete: ' + address + '\\n');
-
-console.log(JSON.stringify({ contractAddress: address }));
-rpcClose();
-process.exit(0);
-`;
-}
-
-export function generateCallScript(opts: CallOptions): string {
-  const privateStateKey = opts.privateStateKey ?? `${opts.contractName}PrivateState`;
-
-  return `${SCRIPT_PRELUDE}
-import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-setNetworkId(${JSON.stringify(opts.networkConfig.networkId.toLowerCase())});
-
-${rpcClientCode(opts.servePort)}
-${contractSetupCode(opts.contractName, opts.managedDir)}
-
-process.stderr.write('Connecting to mn serve...\\n');
-await rpcConnect();
-process.stderr.write('Connected\\n');
-
-${PROVIDER_IMPORTS}
-${walletProviderCode()}
-${providerSetupCode(opts.networkConfig, privateStateKey)}
-
-import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
-
-process.stderr.write('Finding deployed contract...\\n');
-const deployed = await findDeployedContract(providers, {
-  compiledContract: compiled,
-  contractAddress: ${JSON.stringify(opts.contractAddress)},
-  privateStateId: ${JSON.stringify(privateStateKey)},
-  initialPrivateState: makeInitialPrivateState(),
-});
-
-process.stderr.write('Calling ${opts.circuit}...\\n');
-${ARG_COERCE_FN}
-const args = (${JSON.stringify(opts.args ?? [])}).map(coerceArg);
-await deployed.callTx.${opts.circuit}(...args);
-
-console.log(JSON.stringify({ status: 'success', circuit: ${JSON.stringify(opts.circuit)} }));
-rpcClose();
-process.exit(0);
-`;
-}
-
-export function generateStateScript(opts: StateOptions): string {
-  return `${SCRIPT_PRELUDE}
-import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-setNetworkId(${JSON.stringify(opts.networkConfig.networkId.toLowerCase())});
-
-import { pathToFileURL } from 'node:url';
-import { resolve } from 'node:path';
-import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
-
-const MANAGED_DIR = ${JSON.stringify(opts.managedDir)};
-
-// Load the contract module which exports the ledger() function
-const contractMod = await import(pathToFileURL(resolve(MANAGED_DIR, 'contract', 'index.js')).href);
-
-if (typeof contractMod.ledger !== 'function') {
-  fail(new Error('Contract module does not export a ledger() function'));
-}
-
-process.stderr.write('Querying contract state...\\n');
-const provider = indexerPublicDataProvider({
-  queryURL: process.env.${INDEXER_URL_ENV},
-  subscriptionURL: process.env.${INDEXER_WS_URL_ENV},
-});
-
-const contractState = await provider.queryContractState(${JSON.stringify(opts.contractAddress)});
-if (!contractState) {
-  fail(new Error('No contract found at address ${opts.contractAddress}'));
-}
-
-process.stderr.write('Parsing ledger state...\\n');
-// ledger() expects contractState.data (ChargedState), not the full ContractState
-const state = contractMod.ledger(contractState.data ?? contractState);
-
-// Extract scalar fields and map fields
-const fields = {};
-const maps = {};
-
-for (const key of Object.keys(state)) {
-  const val = state[key];
-
-  // Check if it's a map-like (has size() and Symbol.iterator)
-  if (val && typeof val === 'object' && typeof val.size === 'function') {
-    try {
-      maps[key] = { size: val.size().toString() };
-    } catch {
-      maps[key] = { size: '?' };
-    }
-  } else if (typeof val === 'bigint') {
-    fields[key] = val.toString();
-  } else if (typeof val === 'string') {
-    fields[key] = val;
-  } else if (typeof val === 'boolean') {
-    fields[key] = String(val);
-  } else if (val instanceof Uint8Array) {
-    fields[key] = Array.from(val).map(b => b.toString(16).padStart(2, '0')).join('');
-  } else if (val !== undefined && val !== null) {
-    try { fields[key] = JSON.stringify(val); } catch { fields[key] = '?'; }
-  }
-}
-
-console.log(JSON.stringify({ fields, maps }));
-process.exit(0);
-`;
-}
+/** What every SDK set's script shares, for the engine to write it with. */
+export const SCRIPT_PARTS: ScriptParts = {
+  prelude: SCRIPT_PRELUDE,
+  rpcClientCode,
+  coerceArgFn: ARG_COERCE_FN,
+  privateStateSecretFn: PRIVATE_STATE_SECRET_FN,
+  witnessCandidates: WITNESS_FILE_CANDIDATES,
+  indexerUrlEnv: INDEXER_URL_ENV,
+  indexerWsUrlEnv: INDEXER_WS_URL_ENV,
+};
 
 // ── Script execution ──
 
 /** What the overlay made, to undo afterwards newest first: a link, or a folder it created. */
 type Made = { path: string; kind: 'link' | 'folder' };
 
-/** The installed copy of each scope SCRIPT_PACKAGES uses (`@midnight-ntwrk`, …), and the node_modules holding them. */
-function installedTrees(): { root: string | null; scopes: Map<string, string> } {
+/** The packages a script imports, and where the engine's install has each. */
+type ScriptPackages = Pick<EngineContractScripts, 'packages' | 'packageFolder'>;
+
+/** The installed copy of each scope the script packages use (`@midnight-ntwrk`, …), and the node_modules holding them. */
+function installedTrees({ packages, packageFolder }: ScriptPackages): { root: string | null; scopes: Map<string, string> } {
   const scopes = new Map<string, string>();
   let root: string | null = null;
-  for (const name of SCRIPT_PACKAGES) {
+  for (const name of packages) {
     if (!name.startsWith('@')) continue;
     const folder = packageFolder(name);
     if (folder === null) continue;
@@ -598,9 +291,9 @@ function installedTrees(): { root: string | null; scopes: Map<string, string> } 
 }
 
 /**
- * Make SCRIPT_PACKAGES, and whatever else a dApp's witnesses import from the
- * same installed tree, resolvable from `userNodeModules`, finding mn's copy
- * by name (never by walking up from this file):
+ * Make the script packages, and whatever else a dApp's witnesses import from
+ * the same installed tree, resolvable from `userNodeModules`, finding the
+ * engine's copy by name (never by walking up from this file):
  *   - a dApp with no node_modules gets a link to the node_modules holding them;
  *   - a dApp without one of their scopes gets a link to that whole scope;
  *   - a package still missing (in a scope the dApp has, or unscoped) is linked
@@ -609,7 +302,7 @@ function installedTrees(): { root: string | null; scopes: Map<string, string> } 
  * shadow. What can't be found or linked is left out, and the script then fails
  * with Node's clear ERR_MODULE_NOT_FOUND.
  */
-export function overlayScriptPackages(userNodeModules: string): Made[] {
+export function overlayScriptPackages(userNodeModules: string, scriptPackages: ScriptPackages): Made[] {
   const made: Made[] = [];
   const link = (target: string, at: string): void => {
     try {
@@ -617,7 +310,7 @@ export function overlayScriptPackages(userNodeModules: string): Made[] {
       made.push({ path: at, kind: 'link' });
     } catch { /* left out: the script reports the missing package */ }
   };
-  const { root, scopes } = installedTrees();
+  const { root, scopes } = installedTrees(scriptPackages);
   if (!existsSync(userNodeModules)) {
     if (root !== null) link(root, userNodeModules);
     return made;
@@ -626,9 +319,9 @@ export function overlayScriptPackages(userNodeModules: string): Made[] {
     const at = join(userNodeModules, scope);
     if (!existsSync(at)) link(folder, at);
   }
-  for (const name of SCRIPT_PACKAGES) {
+  for (const name of scriptPackages.packages) {
     const at = join(userNodeModules, name);
-    const target = existsSync(at) ? null : packageFolder(name);
+    const target = existsSync(at) ? null : scriptPackages.packageFolder(name);
     if (target !== null) link(target, at);
   }
   return made;
@@ -658,12 +351,12 @@ const isAlive = (pid: number): boolean => {
  * removes links another still uses; a run that died leaves its pid, which the
  * next run drops.
  */
-export function acquireOverlay(dappDir: string): void {
+export function acquireOverlay(dappDir: string, scriptPackages: ScriptPackages): void {
   const record = join(dappDir, OVERLAY_RECORD);
   let held: OverlayRecord | null = null;
   try { held = JSON.parse(readFileSync(record, 'utf8')) as OverlayRecord; } catch { /* none yet */ }
   const live = (held?.pids ?? []).filter(isAlive);
-  const made = held !== null ? held.made : overlayScriptPackages(join(dappDir, 'node_modules'));
+  const made = held !== null ? held.made : overlayScriptPackages(join(dappDir, 'node_modules'), scriptPackages);
   writeFileSync(record, JSON.stringify({ pids: [...live, process.pid], made } satisfies OverlayRecord));
 }
 
@@ -695,6 +388,8 @@ export interface ScriptRun {
   cwd?: string;
   /** Make mn's own SDK packages resolvable from `dir` when it lacks them. Default true. */
   overlaySdk?: boolean;
+  /** The packages the script imports, and where the engine's install has each: what the overlay links. */
+  packages: ScriptPackages;
   /** What the script is for: part of its (hidden, removed afterwards) file name. Default "contract". */
   label?: string;
   /** Stops the run when it aborts: the script's process is killed, and the run fails as cancelled. */
@@ -736,7 +431,7 @@ export function scriptRuntime(
 }
 
 /** Runs a generated script and returns what it wrote to stdout. Throws its marked error when it fails. */
-export async function executeScript({ dir: dappDir, script, onMessage, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal, findRuntime = scriptRuntime }: ScriptRun): Promise<string> {
+export async function executeScript({ dir: dappDir, script, packages, onMessage, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal, findRuntime = scriptRuntime }: ScriptRun): Promise<string> {
   throwIfCancelled(signal);
   // ESM resolution walks up from the importing file's location to find
   // node_modules; NODE_PATH does NOT work for ESM. Three different files
@@ -751,7 +446,7 @@ export async function executeScript({ dir: dappDir, script, onMessage, env: extr
   const runtime = findRuntime();
   // Unique to this run, so two at once in one directory never share a script.
   const scriptPath = join(dappDir, `.mn-${label}-${Date.now()}-${randomBytes(SCRIPT_NAME_RANDOM_BYTES).toString('hex')}.mjs`);
-  if (overlaySdk) acquireOverlay(dappDir);
+  if (overlaySdk) acquireOverlay(dappDir, packages);
   const cleanup = () => {
     try { unlinkSync(scriptPath); } catch {}
     // Our share of the overlay goes back; the last run out undoes it (links

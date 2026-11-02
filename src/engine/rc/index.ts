@@ -7,6 +7,7 @@ import { validatePassword } from '@midnight-ntwrk/midnight-js-utils';
 import { blockLimitsOf } from './ledger-parameters.ts';
 import { rawContractState } from './contract-providers.ts';
 import { assertAddress } from './addresses.ts';
+import { SCRIPT_PACKAGES, generateCallScript, generateDeployScript, generateStateScript, packageFolder } from './contract-scripts.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
 import { shieldedCoinPublicKeyHexFromSeed } from './shielded-direct-cache.ts';
 import { deriveAllAddresses, deriveAllShieldedAddresses, deriveShieldedAddressString, deriveUnshieldedAddress } from './derive-address.ts';
@@ -35,6 +36,13 @@ export const rcEngine: Engine = {
       } catch {
         return false;
       }
+    },
+    scripts: {
+      packages: SCRIPT_PACKAGES,
+      packageFolder,
+      deploy: generateDeployScript,
+      call: generateCallScript,
+      state: generateStateScript,
     },
   },
 };

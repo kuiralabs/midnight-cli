@@ -12,18 +12,27 @@ import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   NoNodeRuntimeError,
-  SCRIPT_PACKAGES,
-  acquireOverlay,
+  SCRIPT_PARTS,
+  acquireOverlay as acquireOverlayFor,
   executeScript,
   releaseOverlay,
-  generateCallScript,
-  generateDeployScript,
-  generateStateScript,
-  overlayScriptPackages,
-  packageFolder,
+  overlayScriptPackages as overlayScriptPackagesFor,
   scriptRuntime,
   undoOverlay,
 } from '../lib/contract/runner.ts';
+import * as rcScripts from '../engine/rc/contract-scripts.ts';
+import { SCRIPT_PACKAGES, packageFolder } from '../engine/rc/contract-scripts.ts';
+import { rcEngine } from '../engine/rc/index.ts';
+import type { CallScript, DeployScript, StateScript } from '../lib/engine.ts';
+
+// The rc engine's scripts, with the parts the runner gives every engine.
+const generateDeployScript = (opts: DeployScript & { dappDir?: string }): string => rcScripts.generateDeployScript(opts, SCRIPT_PARTS);
+const generateCallScript = (opts: CallScript & { dappDir?: string }): string => rcScripts.generateCallScript(opts, SCRIPT_PARTS);
+const generateStateScript = (opts: StateScript & { dappDir?: string }): string => rcScripts.generateStateScript(opts, SCRIPT_PARTS);
+// The overlay of the rc engine's packages.
+const overlayScriptPackages = (userNodeModules: string) => overlayScriptPackagesFor(userNodeModules, rcEngine.contracts.scripts);
+const acquireOverlay = (dir: string): void => acquireOverlayFor(dir, rcEngine.contracts.scripts);
+
 import { platformPackageBinary } from '../engine/rc/dust-sync-native.ts';
 
 const NETWORK = { indexer: 'http://localhost:28088/api/v4/graphql', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws', node: 'ws://localhost:29944', proofServer: 'http://localhost:26300', networkId: 'Undeployed' };
@@ -131,7 +140,7 @@ describe('a dApp laid out unlike ours', () => {
   });
 
   it('with no Node to run under, refuses before writing anything to the dApp', async () => {
-    await expect(executeScript({ dir, script: 'console.log(1)', findRuntime: () => { throw new NoNodeRuntimeError(); } })).rejects.toThrow(NoNodeRuntimeError);
+    await expect(executeScript({ dir, script: 'console.log(1)', packages: rcEngine.contracts.scripts, findRuntime: () => { throw new NoNodeRuntimeError(); } })).rejects.toThrow(NoNodeRuntimeError);
     expect(fs.readdirSync(dir)).toEqual([]);
   });
 });

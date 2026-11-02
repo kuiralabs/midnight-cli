@@ -3,7 +3,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import type { TestAction, DappTestConfig } from './types.ts';
-import type { NetworkConfig } from '../network.ts';
+import type { NetworkConfig, NetworkName } from '../network.ts';
 import { runDeploy, runCall, runState, type StateResult } from '../contract/runner.ts';
 import { findContractInfo, type ContractInfo } from '../contract/inspect.ts';
 import { analyzeWitnessDependencies } from './circuit-witness-deps.ts';
@@ -104,6 +104,7 @@ export async function runActions(options: ActionsRunnerOptions): Promise<ActionR
     try {
       const result = await executeAction(action, {
         dappDir,
+        network,
         networkConfig,
         managedDir: info.managedDir,
         contractName: info.name,
@@ -153,6 +154,7 @@ export async function runActions(options: ActionsRunnerOptions): Promise<ActionR
 
 interface ExecutionContext {
   dappDir: string;
+  network: NetworkName;
   networkConfig: NetworkConfig;
   managedDir: string;
   contractName: string;
@@ -194,6 +196,7 @@ async function executeDeploy(action: TestAction, ctx: ExecutionContext): Promise
 
   const result = await runDeploy({
     dappDir: ctx.dappDir,
+    network: ctx.network,
     networkConfig: ctx.networkConfig,
     managedDir: ctx.managedDir,
     contractName: ctx.contractName,
@@ -242,6 +245,7 @@ async function executeCall(action: TestAction, ctx: ExecutionContext): Promise<A
   try {
     stateBefore = await runState({
       dappDir: ctx.dappDir,
+      network: ctx.network,
       networkConfig: ctx.networkConfig,
       managedDir: ctx.managedDir,
       contractName: ctx.contractName,
@@ -257,6 +261,7 @@ async function executeCall(action: TestAction, ctx: ExecutionContext): Promise<A
 
   await runCall({
     dappDir: ctx.dappDir,
+    network: ctx.network,
     networkConfig: ctx.networkConfig,
     managedDir: ctx.managedDir,
     contractName: ctx.contractName,
@@ -272,6 +277,7 @@ async function executeCall(action: TestAction, ctx: ExecutionContext): Promise<A
   try {
     stateAfter = await runState({
       dappDir: ctx.dappDir,
+      network: ctx.network,
       networkConfig: ctx.networkConfig,
       managedDir: ctx.managedDir,
       contractName: ctx.contractName,
@@ -300,6 +306,7 @@ async function executeState(action: TestAction, ctx: ExecutionContext): Promise<
 
   const stateResult = await runState({
     dappDir: ctx.dappDir,
+    network: ctx.network,
     networkConfig: ctx.networkConfig,
     managedDir: ctx.managedDir,
     contractName: ctx.contractName,
