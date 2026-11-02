@@ -42,6 +42,7 @@ export const TOOL_GROUPS: readonly { readonly id: string; readonly title: string
   { id: 'contracts', title: 'Contracts (Compact smart contracts)', width: 52 },
   { id: 'test-framework', title: 'Test Framework', width: 52 },
   { id: 'grants', title: 'Grants (experimental)', width: 53 },
+  { id: 'swaps', title: 'Swaps (experimental)', width: 53 },
 ];
 
 /** Where a tool no package gives a row for is listed, with its own description. */

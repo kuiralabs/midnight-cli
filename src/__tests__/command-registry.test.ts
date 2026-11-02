@@ -50,6 +50,8 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => 
     'contract': { payer: true }, 'dev': { payer: true }, 'dust': {},
     'generate': { notice: GENERATE_NOTICE }, 'genesis-address': {}, 'grant': { payer: true },
     'help': {}, 'info': {}, 'inspect-cost': {}, 'localnet': {}, 'manual': {}, 'serve': {},
+    // Added since the registry: swap, which pays through the payer as grant does.
+    'swap': { payer: true },
     'status': { unavailable: STATUS_REFUSAL }, 'test': {}, 'transfer': {},
     'wallet': { protectors: true },
   };
@@ -188,7 +190,8 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => 
 
 describe('the commands that need the wallet SDK (heap re-exec and forced exit)', () => {
   // FACADE_COMMANDS in src/wallet.ts before the registry.
-  const FACADE_COMMANDS_BEFORE_REGISTRY = ['airdrop', 'transfer', 'dust', 'balance', 'serve', 'test', 'contract', 'dev', 'grant'];
+  // And swap, added since.
+  const FACADE_COMMANDS_BEFORE_REGISTRY = ['airdrop', 'transfer', 'dust', 'balance', 'serve', 'test', 'contract', 'dev', 'grant', 'swap'];
 
   it('are the ones FACADE_COMMANDS listed', () => {
     const rebuilt = registry.commands.filter((c) => commandNeedsWalletSdk(registry, c.name)).map((c) => c.name);
@@ -286,6 +289,7 @@ describe('the MCP tools, generated from the registry', () => {
     expect(registry.tools.filter((t) => t.confirmation !== undefined).map((t) => t.name).sort()).toStrictEqual([
       'midnight_contract_call', 'midnight_contract_deploy',
       'midnight_grant_deploy', 'midnight_grant_deposit', 'midnight_grant_issue', 'midnight_grant_revoke', 'midnight_grant_revoke_all',
+      'midnight_swap_cancel', 'midnight_swap_make', 'midnight_swap_take',
       'midnight_transfer', 'midnight_wallet_generate', 'midnight_wallet_remove',
     ]);
   });
@@ -376,6 +380,11 @@ describe('the MCP tools, generated from the registry', () => {
     ['midnight_grant_request', { link: 'L', cap: '5' }, args('grant', 'issue', ['L'], { cap: '5' })],
     ['midnight_grant_deploy', { network: 'undeployed' }, args('grant', 'deploy', [], { network: 'undeployed' })],
     ['midnight_grant_deposit', { amount: '1.5', wallet: 'alice' }, args('grant', 'deposit', ['1.5'], { wallet: 'alice' })],
+    ['midnight_swap_make', { give: '10', 'give-token': 'aa', want: '7', 'want-token': 'bb', 'expires-in': '600' }, args('swap', 'make', [], { give: '10', 'give-token': 'aa', want: '7', 'want-token': 'bb', 'expires-in': '600' })],
+    ['midnight_swap_inspect', { file: 'offer.json' }, args('swap', 'inspect', ['offer.json'], {})],
+    ['midnight_swap_take', { file: 'offer.json', give: '10', 'give-token': 'aa', want: '7', 'want-token': 'bb', wallet: 'bob' }, args('swap', 'take', ['offer.json'], { give: '10', 'give-token': 'aa', want: '7', 'want-token': 'bb', wallet: 'bob' })],
+    ['midnight_swap_cancel', { id: '3fa1c0de' }, args('swap', 'cancel', ['3fa1c0de'], {})],
+    ['midnight_swap_list', { network: 'undeployed' }, args('swap', 'list', [], { network: 'undeployed' })],
     ['midnight_grant_issue', { link: 'L', 'per-call': '2' }, args('grant', 'issue', ['L'], { 'per-call': '2', yes: true })],
     ['midnight_grant_revoke', { grant: '3' }, args('grant', 'revoke', ['3'], {})],
     ['midnight_grant_revoke_all', {}, args('grant', 'revoke-all', [], {})],

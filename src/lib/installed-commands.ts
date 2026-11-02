@@ -24,6 +24,7 @@ import { testDefinition } from '../commands/test.definition.ts';
 import { devDefinition } from '../commands/dev.definition.ts';
 import { contractDefinition } from '../commands/contract.definition.ts';
 import { grantDefinition } from '../commands/grant.definition.ts';
+import { swapDefinition } from '../commands/swap.definition.ts';
 import { localnetDefinition } from '../commands/localnet.definition.ts';
 import { statusDefinition } from '@kuiralabs/midnight-chain/commands/status.definition';
 import { helpDefinition } from '../commands/help.definition.ts';
@@ -35,6 +36,7 @@ import { contractGuidance } from '../commands/contract.guidance.ts';
 import { connectGuidance } from '../commands/connect.guidance.ts';
 import { devGuidance } from '../commands/dev.guidance.ts';
 import { grantGuidance } from '../commands/grant.guidance.ts';
+import { swapGuidance } from '../commands/swap.guidance.ts';
 
 /** The shell answers these before any command runs: no tool passes them on. */
 const SHELL_ANSWERS = { notForAgents: 'the shell answers it before any command runs' };
@@ -71,6 +73,7 @@ export const installedCommands = createPackageRegistry([
   },
   { name: 'contract', commands: [inspectCostDefinition, contractDefinition], guidance: contractGuidance },
   { name: 'connect', commands: [serveDefinition], guidance: connectGuidance },
+  { name: 'swap', commands: [swapDefinition], guidance: swapGuidance },
   { name: 'dev', commands: [testDefinition, devDefinition, localnetDefinition], guidance: devGuidance },
   { name: 'grant', commands: [grantDefinition], guidance: grantGuidance },
   { name: 'shell', commands: [helpDefinition, manualDefinition], guidance: { pieces: [] } },

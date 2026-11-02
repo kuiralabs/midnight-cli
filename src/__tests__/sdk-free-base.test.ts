@@ -71,7 +71,7 @@ describe('the SDK-free base', () => {
         cwd: ROOT, encoding: 'utf8', timeout: 120_000, env: { ...process.env, HOME: dir },
       });
       expect(run.status, run.stderr).toBe(0);
-      expect(JSON.parse(run.stdout.trim().split('\n').at(-1)!)).toEqual([21, 37]);
+      expect(JSON.parse(run.stdout.trim().split('\n').at(-1)!)).toEqual([22, 42]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -162,10 +162,10 @@ describe('help — the lists come from the registry', () => {
       'contract  Inspect, deploy, call contracts',
       'dev  Contract dev loop (watch + deploy)',
       'grant  Grants that let agents spend',
+      'swap  Private swaps through offer files',
       'config  Manage CLI config',
-      'cache  Manage wallet cache',
     ]);
-    expect(lines).toHaveLength(19);
+    expect(lines).toHaveLength(20);
   });
 
   it('the TTY intro lists grant after dev, with its brief', async () => {

@@ -49,6 +49,7 @@ Install the prerelease with npm (or run it with `npx`). It ships an `npm-shrinkw
 | `midnight test <create\|run\|list\|results> [options]` | Generate and run E2E test suites for Midnight dApps |
 | `midnight dev [path]` | Iteration loop for Compact contract development (localnet + compile-on-save + one-key deploy) |
 | `midnight contract <inspect\|deploy\|call\|state> [options]` | Inspect, deploy, call, and query Midnight smart contracts |
+| `midnight swap <make\|inspect\|take\|cancel\|list> [options]` | Private swaps of shielded tokens, through offer files (experimental) |
 | `midnight grant <deploy\|deposit\|status\|list\|issue\|revoke\|revoke-all\|export\|import\|device> [options]` | This wallet's account, and the grants that let an agent spend from it (experimental) |
 | `midnight localnet <up\|stop\|down\|status\|logs\|clean>` | Manage a local Midnight network via Docker Compose (up is refused on this ledger-9 build) |
 | `midnight help [command]` | Show usage for all commands or a specific command |
