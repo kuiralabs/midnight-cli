@@ -7,6 +7,7 @@
 // node:test as that suite is written.
 
 import { execFileSync } from 'node:child_process';
+import { rcEngine } from '../engine/rc/index.ts';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -101,10 +102,10 @@ describe("the account's owner key", () => {
 describe("the account's private-state password", () => {
   it('is made once, meets midnight-js\'s policy, is sealed, and reads back the same', () => {
     const key = createAccountKey(dir, PASSPHRASE);
-    const password = sealedPrivateStatePassword(dir, key);
+    const password = sealedPrivateStatePassword(dir, key, rcEngine.contracts.acceptsPrivateStatePassword);
     expect(() => validatePassword(password)).not.toThrow();
     expect(filesText()).not.toContain(password);
-    expect(sealedPrivateStatePassword(dir, key)).toBe(password);
+    expect(sealedPrivateStatePassword(dir, key, rcEngine.contracts.acceptsPrivateStatePassword)).toBe(password);
   });
 });
 

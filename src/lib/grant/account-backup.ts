@@ -10,6 +10,7 @@
 // a second device (`midnight grant device add`).
 
 import * as fs from 'node:fs';
+import { anyEngine } from '../engine.ts';
 import * as path from 'node:path';
 import type { Arm } from '@kuiralabs/midnight-account';
 import { type OwnerRecord, type Roster, ownerDeviceFromSecret } from '@kuiralabs/midnight-account-chain/owner';
@@ -96,7 +97,7 @@ export async function exportAccount(dir: string, network: string, passphrase: st
     roster: sealedOwnerStore(dir, key).readRoster(),
     ...(forDevice === undefined ? { device: { arm: device.arm, secret: device.secretText(), readSecret: Buffer.from(sealedDeviceReadSecret(dir, key)).toString('hex') } } : {}),
     devices: [...new Set([...knownDevices(dir, key, device), ...(forDevice === undefined ? [] : [deviceCodeOf(forDevice, forDevice.readKey)])])],
-    privateStatePassword: sealedPrivateStatePassword(dir, key),
+    privateStatePassword: sealedPrivateStatePassword(dir, key, (await anyEngine()).contracts.acceptsPrivateStatePassword),
     privateState: fs.existsSync(database) ? Object.fromEntries(filesUnder(database).map((f) => [f, fs.readFileSync(path.join(database, f)).toString('base64')])) : {},
   };
   const backup: AccountBackupFile = {

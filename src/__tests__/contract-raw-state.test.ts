@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { ChargedState, ContractState, StateBoundedMerkleTree, StateMap, StateValue } from '@midnight-ntwrk/compact-runtime';
-import { describeRawState } from '../lib/contract/raw-state.ts';
+import { describeRawState } from '../engine/rc/raw-state.ts';
 
 const atom = (bytes: number[]) => ({ value: [new Uint8Array(bytes)], alignment: [{ tag: 'atom' as const, value: { tag: 'bytes' as const, length: bytes.length } }] });
 

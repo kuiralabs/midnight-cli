@@ -9,7 +9,8 @@ import { saveShieldedAddress, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides } from '../lib/network.ts';
 import { getNetworkId } from '../lib/network-id.ts';
-import { resolveTransferRequest, decodeShieldedRecipient, type TransferRequest } from '../lib/transfer-request.ts';
+import { resolveTransferRequest, type TransferRequest } from '../lib/transfer-request.ts';
+import { decodeShieldedAddress } from '../engine/rc/addresses.ts';
 import { executeTransfer, ensureDust } from '../lib/transfer.ts';
 import { nightToMicro } from '../lib/amount.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
@@ -136,7 +137,7 @@ async function shieldedTransfer(
     indexerWS: getFlag(args, 'indexer-ws'),
   }, networkName);
 
-  const decodedRecipient = decodeShieldedRecipient(recipientAddress, networkName);
+  const decodedRecipient = decodeShieldedAddress(recipientAddress, networkName);
 
   ctx.output.stderr('\n' + header('Shielded Transfer') + '\n\n');
   ctx.output.stderr(keyValue('Network', networkName) + '\n');

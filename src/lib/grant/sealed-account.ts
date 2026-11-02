@@ -29,7 +29,6 @@ import {
   freshOwnerDevice,
   ownerDeviceFromSecret,
 } from '@kuiralabs/midnight-account-chain/owner';
-import { validatePassword } from '@midnight-ntwrk/midnight-js-utils';
 import { FILE_MODE } from '../constants.ts';
 import { deviceCodeOf, joinCodeOf } from './device-code.ts';
 import { UsageError } from '../errors.ts';
@@ -190,19 +189,14 @@ export function sealedDeviceKeys(dir: string, key: Uint8Array): SealedDeviceKeys
 
 // The private state's password: random, from an alphabet of all four of
 // midnight-js's character classes, redrawn until it meets midnight-js's own
-// policy (a random draw can still hold a run such as "abcd").
+// policy, which the engine checks (a random draw can still hold a run such as "abcd").
 const PASSWORD_LENGTH = 32;
 const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789-_.~!@#%^*+=';
 
-const freshPrivateStatePassword = (): string => {
+const freshPrivateStatePassword = (accepts: (password: string) => boolean): string => {
   for (;;) {
     const password = [...randomBytes(PASSWORD_LENGTH)].map((byte) => PASSWORD_ALPHABET[byte % PASSWORD_ALPHABET.length]).join('');
-    try {
-      validatePassword(password);
-      return password;
-    } catch {
-      // Drawn again.
-    }
+    if (accepts(password)) return password;
   }
 };
 
@@ -211,18 +205,22 @@ export function keepPrivateStatePassword(dir: string, key: Uint8Array, password:
   writeJsonDurably(path.join(dir, PRIVATE_STATE_FILE), { password: sealWithKey(key, Buffer.from(password, 'utf8'), 'private-state-password') }, { exclusive: true });
 }
 
-/** The account's private-state password: made on first use, sealed under `key`, the same every time after. */
-export function sealedPrivateStatePassword(dir: string, key: Uint8Array): string {
+/**
+ * The account's private-state password: made on first use, sealed under
+ * `key`, the same every time after. `accepts` is midnight-js's policy, from
+ * the engine (an engine's contracts.acceptsPrivateStatePassword).
+ */
+export function sealedPrivateStatePassword(dir: string, key: Uint8Array, accepts: (password: string) => boolean): string {
   const file = path.join(dir, PRIVATE_STATE_FILE);
   const kept = readJsonIfPresent<{ password: KeyedSecret }>(file);
   if (kept !== undefined) return openWithKey(key, kept.password, 'private-state-password').toString('utf8');
-  const password = freshPrivateStatePassword();
+  const password = freshPrivateStatePassword(accepts);
   try {
     writeJsonDurably(file, { password: sealWithKey(key, Buffer.from(password, 'utf8'), 'private-state-password') }, { exclusive: true });
     return password;
   } catch (error) {
     // Another run made it first: that one is the account's.
-    if (error instanceof FileExistsError) return sealedPrivateStatePassword(dir, key);
+    if (error instanceof FileExistsError) return sealedPrivateStatePassword(dir, key, accepts);
     throw error;
   }
 }

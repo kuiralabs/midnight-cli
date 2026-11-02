@@ -7,6 +7,7 @@
 // passphrase it was made with.
 
 import * as fs from 'node:fs';
+import { rcEngine } from '../engine/rc/index.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -60,7 +61,7 @@ beforeEach(async () => {
   store.writeOwner(RECORD);
   store.writeRoster(ROSTER);
   sealedDeviceKeys(fromDir, key).keep(freshOwnerDevice('k1'));
-  sealedPrivateStatePassword(fromDir, key);
+  sealedPrivateStatePassword(fromDir, key, rcEngine.contracts.acceptsPrivateStatePassword);
   await (await privateStateIn(here, fromDir)).privateState.set(PRIVATE_STATE_ID, PRIVATE_STATE as never);
 });
 afterEach(() => {

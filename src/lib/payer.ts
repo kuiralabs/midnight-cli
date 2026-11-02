@@ -4,14 +4,14 @@
 // pay with a wallet of its own.
 
 import { type ParsedArgs, getFlag } from './argv.ts';
-import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig } from './network.ts';
+import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName } from './network.ts';
 import { resolveNetwork } from './resolve-network.ts';
 import type { Spinner } from '../ui/spinner.ts';
 import type { CallSdkWarnings } from './sdk-warnings.ts';
 
 /** The network a command acts on, with its endpoints resolved. */
 export interface PayingTarget {
-  network: string;
+  network: NetworkName;
   networkConfig: NetworkConfig;
   /** The endpoints given as flags, which a server started for the command must use too. */
   endpoints: EndpointOverrides;

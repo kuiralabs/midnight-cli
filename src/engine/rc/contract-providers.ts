@@ -2,8 +2,10 @@
 // Deploy/call use the runner (generated scripts in dApp context) which build their own providers.
 
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
-import { assertEndpointUsable } from '../blockfrost.ts';
-import type { NetworkConfig } from '../network.ts';
+import { assertEndpointUsable } from '../../lib/blockfrost.ts';
+import type { NetworkConfig } from '../../lib/network.ts';
+import type { RawStateValue } from '../../lib/engine.ts';
+import { describeRawState } from './raw-state.ts';
 
 /**
  * Build a lightweight indexer-only provider for state queries.
@@ -15,4 +17,10 @@ export function buildStateProvider(networkConfig: NetworkConfig) {
     queryURL: networkConfig.indexer,
     subscriptionURL: networkConfig.indexerWS ?? networkConfig.indexer.replace('http', 'ws'),
   });
+}
+
+/** A deployed contract's ledger state as plain JSON, read without its compiled contract; null when no contract is at `address`. */
+export async function rawContractState(networkConfig: NetworkConfig, address: string): Promise<RawStateValue | null> {
+  const found = await buildStateProvider(networkConfig).queryContractState(address);
+  return found ? describeRawState(found.data.state) : null;
 }
