@@ -4,13 +4,18 @@
 
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import * as rx from 'rxjs';
-import { MidnightBech32m, ShieldedAddress, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
+import { DustAddress, MidnightBech32m, ShieldedAddress, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { sessionOver, type WalletSession } from '@kuiralabs/midnight-cli-core/lib/wallet-session';
 import type { TransactionDetail } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { TEST_NETWORK_CONFIG, WALLET_SHIELDED, WALLET_UNSHIELDED, createBundleStub, mockState } from './helpers/connector-stub.ts';
+import { deriveShieldedAddress, deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { TEST_NETWORK_CONFIG, connectorStub } from './helpers/connector-stub.ts';
 import { createDAppConnector } from '@kuiralabs/midnight-engine-rc/dapp-connector';
+import { FORK_SCHEDULE } from '@kuiralabs/midnight-engine-rc/fork-schedule';
 import { agentPaysMerchant, unsealedBytes } from './helpers/ledger-tx.ts';
+
+const { WALLET_SHIELDED, WALLET_UNSHIELDED, createBundleStub, mockState } = connectorStub({
+  createDAppConnector, deriveShieldedAddress, DustAddress, UnshieldedAddress, ledger9ProtocolVersion: FORK_SCHEDULE.v9,
+});
 
 const NIGHT_RAW = '0000000000000000000000000000000000000000000000000000000000000000';
 const OTHER_TOKEN = '02' + '00'.repeat(31);
