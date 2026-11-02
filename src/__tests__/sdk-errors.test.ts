@@ -3,7 +3,12 @@
 // (an Effect tagged error carrying tokenType), not just matching strings.
 
 import { describe, it, expect } from 'vitest';
-import { dustShortfallOf, isColdStartRace, isDustShortage, withDustShortfall } from '../lib/sdk-errors.ts';
+import { Brand, Effect } from 'effect';
+import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
+import { NodeClientError } from '@midnightntwrk/wallet-sdk/node-client/effect';
+import { dustShortfallOf, isColdStartRace, isDustShortage, nodeRefusalOf, withDustShortfall, withNodeReason } from '../lib/sdk-errors.ts';
+import { TransactionRefusedError } from '../lib/errors.ts';
+import { classifyError } from '../lib/exit-codes.ts';
 
 /** wallet-sdk 2.0's dust InsufficientFundsError: tagged, with the token it could not balance. */
 function sdkInsufficientFunds(tokenType: string): Error {
@@ -135,5 +140,54 @@ describe('isColdStartRace', () => {
 
   it('is not anything else', () => {
     expect(isColdStartRace(new Error('Transaction submission error'))).toBe(false);
+  });
+});
+
+// A node's refusal, built as wallet-sdk 2.0 raises it: its submission
+// service wraps the node client's error in a SubmissionError, and the promise
+// rejects with an Effect FiberFailure that holds it.
+describe("the node's reason for refusing a transaction", () => {
+  // The transaction's bytes, branded as the SDK brands them (its SerializedTransaction is a nominal brand it doesn't export).
+  type TxData = ConstructorParameters<typeof NodeClientError.SubmissionError>[0]['txData'];
+  const TX_DATA = Brand.nominal<TxData>()(new Uint8Array([0]));
+  const refusal = (nodeError: unknown): Promise<never> => {
+    const failure = Effect.runPromise(Effect.fail(new SubmissionError({ message: 'Transaction submission error', cause: nodeError })));
+    failure.catch(() => {});
+    return failure;
+  };
+  const caught = (promise: Promise<never>) => promise.catch((err: Error) => err);
+
+  it('is found under the SDK\'s wrappers, and reported as a TransactionRefusedError classified by it', async () => {
+    const thrown = await caught(refusal(new NodeClientError.SubmissionError({ message: 'Transaction submission failed', txData: TX_DATA, cause: new Error('1010: Invalid Transaction: Custom error: 170') })));
+    expect(thrown.message).toBe('Transaction submission error');
+    expect(nodeRefusalOf(thrown)).toBe('1010: Invalid Transaction: Custom error: 170');
+    const reported = withNodeReason(thrown);
+    expect(reported).toBeInstanceOf(TransactionRefusedError);
+    expect(reported.message).toBe('The node refused the transaction: 1010: Invalid Transaction: Custom error: 170');
+    expect(reported.cause).toBe(thrown);
+    expect(classifyError(reported)).toEqual({ exitCode: 6, errorCode: 'INVALID_DUST_PROOF' });
+    // Unexplained, the same error was UNKNOWN.
+    expect(classifyError(thrown).errorCode).toBe('UNKNOWN');
+  });
+
+  it("is the node client's own words when the node gave none", async () => {
+    const thrown = await caught(refusal(new NodeClientError.TransactionInvalidError({ message: 'Transaction is invalid and was rejected by the node', txData: TX_DATA })));
+    expect(nodeRefusalOf(thrown)).toBe('Transaction is invalid and was rejected by the node');
+    expect(classifyError(withNodeReason(thrown))).toEqual({ exitCode: 6, errorCode: 'TX_REJECTED' });
+  });
+
+  it('classifies a reason no rule knows as TX_REJECTED, with the reason in the message', async () => {
+    const reported = withNodeReason(await caught(refusal(new NodeClientError.SubmissionError({ message: 'Transaction submission failed', txData: TX_DATA, cause: new Error('1010: Invalid Transaction: Custom error: 199') }))));
+    expect(reported.message).toContain('Custom error: 199');
+    expect(classifyError(reported)).toEqual({ exitCode: 6, errorCode: 'TX_REJECTED' });
+  });
+
+  it('leaves any other error as it is, and a submission error with nothing under its wrapper', async () => {
+    const other = new Error('ECONNREFUSED');
+    expect(nodeRefusalOf(other)).toBeUndefined();
+    expect(withNodeReason(other)).toBe(other);
+    const bare = await caught(refusal(undefined));
+    expect(nodeRefusalOf(bare)).toBeUndefined();
+    expect(withNodeReason(bare)).toBe(bare);
   });
 });

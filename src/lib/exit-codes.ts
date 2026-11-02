@@ -156,13 +156,13 @@ export function classifyError(err: Error): ClassifiedError {
   }
 
   // Stale UTXO — match the specific error code from the Midnight node
-  if (msg.includes('stale utxo') || msg.includes('error code 115') || msg.includes('errorcode: 115')) {
+  if (msg.includes('stale utxo') || msg.includes('error code 115') || msg.includes('custom error: 115') || msg.includes('errorcode: 115')) {
     return { exitCode: EXIT_TX_REJECTED, errorCode: ERROR_CODES.STALE_UTXO };
   }
 
   // Invalid dust spend proof — substrate "Custom error 170". Distinct from
   // PROOF_FAILURE because the recovery is "clear cache" not "retry".
-  if (msg.includes('error 170') || msg.includes('errorcode: 170') || msg.includes('invaliddustspendproof')) {
+  if (msg.includes('error 170') || msg.includes('error: 170') || msg.includes('errorcode: 170') || msg.includes('invaliddustspendproof')) {
     return { exitCode: EXIT_TX_REJECTED, errorCode: ERROR_CODES.INVALID_DUST_PROOF };
   }
 
@@ -199,8 +199,8 @@ export function classifyError(err: Error): ClassifiedError {
     return { exitCode: EXIT_INSUFFICIENT_BALANCE, errorCode: ERROR_CODES.INSUFFICIENT_BALANCE };
   }
 
-  // Transaction rejected
-  if (msg.includes('rejected') || msg.includes('transaction failed')) {
+  // Transaction rejected: by the node (its words in the message, when no rule above knew them), or as the message says.
+  if ((err as { name?: unknown }).name === 'TransactionRefusedError' || msg.includes('rejected') || msg.includes('transaction failed')) {
     return { exitCode: EXIT_TX_REJECTED, errorCode: ERROR_CODES.TX_REJECTED };
   }
 

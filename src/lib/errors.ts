@@ -43,6 +43,22 @@ export class CancelledError extends Error {
 }
 
 /**
+ * The node refused a transaction, with what it said. The wallet SDK reports a
+ * refusal as "Transaction submission error" and keeps the node's words (the
+ * reason: an invalid Dust proof, a stale coin, …) only among its causes.
+ */
+export class TransactionRefusedError extends Error {
+  readonly reason: string;
+
+  constructor(reason: string, options?: { cause?: unknown }) {
+    super(`The node refused the transaction: ${reason}`, options);
+    this.name = 'TransactionRefusedError';
+    this.reason = reason;
+    Object.setPrototypeOf(this, TransactionRefusedError.prototype);
+  }
+}
+
+/**
  * A command that ended with a non-zero exit code without throwing (a test run
  * whose tests failed): the code, and the JSON result it wrote. A runner with no
  * process exit code to set, such as the MCP server, reports it as a failure.
