@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import balanceCommand from '../commands/balance.ts';
 import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveUnshieldedAddress, deriveAllAddresses } from '../engine/rc/derive-address.ts';
+import { deriveUnshieldedAddress, deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import * as fs from 'fs';

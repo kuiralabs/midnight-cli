@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 
-import { WalletDataRepository, defaultRepository } from '../src/engine/rc/wallet-data-repository.ts';
+import { WalletDataRepository, defaultRepository } from '@kuiralabs/midnight-engine-rc/wallet-data-repository';
 import { getNetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { unlockWallet, resolveWalletPath } from '../src/lib/wallet-config.ts';
 

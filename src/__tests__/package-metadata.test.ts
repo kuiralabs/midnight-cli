@@ -33,3 +33,30 @@ describe('repository links', () => {
     expect(manual).toContain(`Repository:        ${PKG_REPOSITORY_URL.replace(/^https:\/\//, '')}`);
   });
 });
+
+// One SDK set per engine package, and none at mn's root: with no SDK at the
+// root, an import of it outside an engine fails to resolve instead of loading
+// another copy beside the engine's.
+describe('the SDK in the manifests', () => {
+  const isSdk = (name: string) => /^@midnight(-ntwrk|ntwrk)\//.test(name);
+  const manifest = (dir: string) => JSON.parse(readFileSync(join('packages', dir, 'package.json'), 'utf8'));
+
+  it('is no dependency of mn itself', () => {
+    expect(Object.keys(root.dependencies ?? {}).filter(isSdk)).toStrictEqual([]);
+    expect(Object.keys(root.optionalDependencies ?? {}).filter(isSdk)).toStrictEqual([]);
+  });
+
+  it('is pinned exactly by each engine package, its ledger and onchain runtime directly', () => {
+    const engines = packageDirs.filter((dir) => dir.startsWith('engine-'));
+    expect(engines.length).toBeGreaterThan(0);
+    for (const dir of engines) {
+      const sdk = Object.entries<string>(manifest(dir).dependencies).filter(([name]) => isSdk(name));
+      for (const [name, range] of sdk) expect(range, `${dir} ${name}`).toMatch(/^\d+\.\d+\.\d+(-[\w.]+)?$/);
+      expect(sdk.map(([name]) => name), dir).toEqual(expect.arrayContaining(['@midnightntwrk/ledger-v9', '@midnightntwrk/onchain-runtime-v4']));
+    }
+  });
+
+  it('is no dependency of core or chain', () => {
+    for (const dir of ['cli-core', 'chain']) expect(Object.keys(manifest(dir).dependencies ?? {}).filter(isSdk), dir).toStrictEqual([]);
+  });
+});

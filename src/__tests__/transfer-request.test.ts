@@ -9,7 +9,7 @@ import * as path from 'path';
 import { resolveTransferRequest } from '../lib/transfer-request.ts';
 import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
-import { deriveAllAddresses, deriveAllShieldedAddresses } from '../engine/rc/derive-address.ts';
+import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { MIDNIGHT_DIR, WALLETS_DIR_NAME } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';

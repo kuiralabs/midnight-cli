@@ -9,7 +9,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { notice, setNoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 import { unlockWallet } from '../lib/wallet-config.ts';
-import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
+import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');

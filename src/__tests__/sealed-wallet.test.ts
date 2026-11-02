@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WrongPassphraseError } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { loadWalletConfig, protectAllWallets, sealWalletInPlace, unlockWallet, writeSealedWallet } from '../lib/wallet-config.ts';
-import { deriveAllAddresses, deriveAllShieldedAddresses } from '../engine/rc/derive-address.ts';
+import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { stateRootIn } from './helpers/state-root-in.ts';
 

@@ -55,11 +55,10 @@ export function resolveSidecarBinary(): string | null {
   if (fromEnv && existsSync(fromEnv)) return fromEnv;
 
   const exe = process.platform === 'win32' ? 'dust-sync.exe' : 'dust-sync';
-  // Dev build (repo checkout): sidecar/dust-sync/target/release/dust-sync.
-  // Try both nesting depths so it resolves from `src/lib` (tsx) AND the bundled
-  // `dist/` — import.meta.url differs between them.
+  // Dev build (repo checkout): sidecar/dust-sync/target/release/dust-sync,
+  // three levels up from the engine package's src/ (tsx) and from its dist/.
   const here = dirname(fileURLToPath(import.meta.url));
-  for (const up of [['..', '..'], ['..']]) {
+  for (const up of [['..', '..', '..']]) {
     const devBuild = join(here, ...up, 'sidecar', 'dust-sync', 'target', 'release', exe);
     if (existsSync(devBuild)) return devBuild;
   }

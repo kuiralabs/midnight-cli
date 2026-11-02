@@ -18,7 +18,7 @@ import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { setPrompter, type Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { establishPassphrase, isPassphraseSet } from '../lib/passphrase.ts';
-import { deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
+import { deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { getCachePath } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
 import { loadWalletConfig, protectAllWallets } from '../lib/wallet-config.ts';
 import { createWallet, walletSecretFrom } from '../lib/wallet-create.ts';

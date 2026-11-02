@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { BlockfrostProjectIdRequiredError, blockfrostEndpoints } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
 import { SCRIPT_PARTS, indexerEnvironment } from '../lib/contract/runner.ts';
-import * as rcScripts from '../engine/rc/contract-scripts.ts';
+import * as rcScripts from '@kuiralabs/midnight-engine-rc/contract-scripts';
 import type { CallScript, DeployScript, StateScript } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 // The rc engine's scripts, with the parts the runner gives every engine.

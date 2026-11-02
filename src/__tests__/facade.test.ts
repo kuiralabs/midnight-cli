@@ -7,7 +7,7 @@ import { WebSocketServer } from 'ws';
 import { SyncProgress } from '@midnightntwrk/wallet-sdk';
 import { SyncProgress as UnshieldedSyncProgress } from '@midnightntwrk/wallet-sdk/unshielded/v2';
 import type { FacadeState } from '@midnightntwrk/wallet-sdk/facade';
-import { isFacadeSynced, detectStaleCache } from '../engine/rc/facade.ts';
+import { isFacadeSynced, detectStaleCache } from '@kuiralabs/midnight-engine-rc/facade';
 
 type IndexProgress = ReturnType<typeof SyncProgress.createSyncProgress>;
 type TxProgress = ReturnType<typeof UnshieldedSyncProgress.createSyncProgress>;
@@ -157,7 +157,7 @@ describe('startAndSyncFacade: starting the wallets exactly once', () => {
   async function startWith(restoredFromCache: boolean) {
     const { vi } = await import('vitest');
     const rx = await import('rxjs');
-    const { startAndSyncFacade } = await import('../engine/rc/facade.ts');
+    const { startAndSyncFacade } = await import('@kuiralabs/midnight-engine-rc/facade');
     const seeds = { shielded: new Uint8Array([1]), unshielded: new Uint8Array([2]), dust: new Uint8Array([3]) };
     const calls = {
       facadeStart: vi.fn(async () => {}),
@@ -231,7 +231,7 @@ describe('startAndSyncFacade: a wallet that has heard nothing yet', () => {
 
   async function syncWith(indexerWsUrl: string) {
     const rx = await import('rxjs');
-    const { startAndSyncFacade } = await import('../engine/rc/facade.ts');
+    const { startAndSyncFacade } = await import('@kuiralabs/midnight-engine-rc/facade');
     const bundle: any = {
       facade: { start: async () => {}, state: () => rx.concat(rx.of(state({ shielded: indexed(0n, 0n, false) })), rx.NEVER) },
       seeds: {},
@@ -260,7 +260,7 @@ describe('startAndSyncFacade: a wallet that has heard nothing yet', () => {
   it('stops waiting with CancelledError when the call is cancelled, long before its timeout', async () => {
     const url = await indexerWith({ zswapLedgerEvents: { id: 0, maxId: 384 }, dustLedgerEvents: { id: 0, maxId: 385 } });
     const rx = await import('rxjs');
-    const { startAndSyncFacade } = await import('../engine/rc/facade.ts');
+    const { startAndSyncFacade } = await import('@kuiralabs/midnight-engine-rc/facade');
     const { CancelledError } = await import('@kuiralabs/midnight-cli-core/lib/errors');
     const bundle: any = {
       facade: { start: async () => {}, state: () => rx.concat(rx.of(state({ shielded: indexed(0n, 0n, false) })), rx.NEVER) },
@@ -281,7 +281,7 @@ describe('startAndSyncFacade: a wallet that has heard nothing yet', () => {
 describe('waitForDustAvailable', () => {
   it('stops waiting with CancelledError when the call is cancelled, long before its timeout', async () => {
     const rx = await import('rxjs');
-    const { waitForDustAvailable } = await import('../engine/rc/facade.ts');
+    const { waitForDustAvailable } = await import('@kuiralabs/midnight-engine-rc/facade');
     const { CancelledError } = await import('@kuiralabs/midnight-cli-core/lib/errors');
     // A wallet with no Dust, and no later state.
     const noDust = { ...state(), dust: { progress: SYNCED, availableCoins: [], balance: () => 0n } } as unknown as FacadeState;
@@ -293,7 +293,7 @@ describe('waitForDustAvailable', () => {
 
   it('returns the latest state when its timeout passes without Dust, as before', async () => {
     const rx = await import('rxjs');
-    const { waitForDustAvailable } = await import('../engine/rc/facade.ts');
+    const { waitForDustAvailable } = await import('@kuiralabs/midnight-engine-rc/facade');
     const noDust = { ...state(), dust: { progress: SYNCED, availableCoins: [], balance: () => 0n } } as unknown as FacadeState;
     const bundle: any = { facade: { state: () => rx.concat(rx.of(noDust), rx.NEVER) } };
     await expect(waitForDustAvailable(bundle, 50, new AbortController().signal)).resolves.toBe(noDust);

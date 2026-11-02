@@ -8,6 +8,6 @@ import type { Engine, SdkSet } from '@kuiralabs/midnight-cli-core/lib/engine';
 export async function loadInstalledEngine(set: SdkSet): Promise<Engine> {
   switch (set) {
     case 'rc':
-      return (await import('../engine/rc/index.ts')).rcEngine;
+      return (await import('@kuiralabs/midnight-engine-rc')).rcEngine;
   }
 }

@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import { mnemonicToSeedSync } from '@scure/bip39';
 import { createWallet, walletFilePath, walletSecretFrom } from '../lib/wallet-create.ts';
 import { getActiveWalletName, unlockWallet } from '../lib/wallet-config.ts';
-import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
+import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { PASSPHRASE_ENV, passphraseForNewSecret } from '../lib/passphrase.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 

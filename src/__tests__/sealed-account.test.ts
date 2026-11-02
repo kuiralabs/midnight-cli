@@ -7,7 +7,7 @@
 // node:test as that suite is written.
 
 import { execFileSync } from 'node:child_process';
-import { rcEngine } from '../engine/rc/index.ts';
+import { rcEngine } from '@kuiralabs/midnight-engine-rc';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';

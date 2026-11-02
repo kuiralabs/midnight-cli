@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveUnshieldedAddress, deriveAllShieldedAddresses } from '../engine/rc/derive-address.ts';
+import { deriveUnshieldedAddress, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
 
 const genesisSeedBuffer = Buffer.from(GENESIS_SEED, 'hex');

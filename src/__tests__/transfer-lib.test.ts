@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { validateRecipientAddress, isDustRelatedError } from '../engine/rc/transfer.ts';
+import { validateRecipientAddress, isDustRelatedError } from '@kuiralabs/midnight-engine-rc/transfer';
 import { nightToMicro, parseAmount } from '@kuiralabs/midnight-cli-core/lib/amount';
 import { getNetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
-import { deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
+import { deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { GENESIS_SEED, SYNC_ATTEMPT_TIMEOUT_MS, SYNC_ATTEMPT_REMOTE_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { ERROR_CODES, EXIT_INVALID_ARGS, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';

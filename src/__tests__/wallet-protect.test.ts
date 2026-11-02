@@ -13,7 +13,7 @@ import walletCommand from '../commands/wallet.ts';
 import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { PASSPHRASE_ENV, isPassphraseSet } from '../lib/passphrase.ts';
 import { loadWalletConfig } from '../lib/wallet-config.ts';
-import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
+import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 import { accountProtector } from '../lib/grant/account-protector.ts';

@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
+import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { serveEndpointMismatch, serveWalletMismatch } from '../lib/serve-manager.ts';
 import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';

@@ -23,8 +23,8 @@ import {
   type SignatureVerifyingKey,
 } from '@midnightntwrk/ledger-v9';
 import type { BalancingRecipe, WalletFacade } from '@midnightntwrk/wallet-sdk/facade';
-import { feeOnlyRefusals, readDAppTransaction } from '../engine/rc/fee-only-check.ts';
-import { signRecipe } from '../engine/rc/sign-recipe.ts';
+import { feeOnlyRefusals, readDAppTransaction } from '@kuiralabs/midnight-engine-rc/fee-only-check';
+import { signRecipe } from '@kuiralabs/midnight-engine-rc/sign-recipe';
 import {
   AGENT_SK, AGENT_VK, NETWORK, TTL, WALLET_SK, WALLET_VK,
   agentPaysMerchant, buildTx, pay, spend, unsealedBytes,
