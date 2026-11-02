@@ -2,7 +2,7 @@
 // Shows addresses for all networks + shielded, creation date, file path
 
 import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { loadWalletConfig, resolveWalletPath } from '../lib/wallet-config.ts';
+import { loadWalletConfig, resolveWalletPath, walletAddress } from '../lib/wallet-config.ts';
 import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { header, divider } from '@kuiralabs/midnight-cli-core/ui/format';
 import { formatAddress } from '@kuiralabs/midnight-cli-core/ui/format';
@@ -13,7 +13,7 @@ export default async function infoCommand(args: ParsedArgs, ctx: CallContext): P
   const resolvedPath = resolveWalletPath(getFlag(args, 'wallet'));
   const config = await loadWalletConfig(resolvedPath);
   const activeNetwork = resolveNetworkName({ args });
-  const activeAddress = config.addresses[activeNetwork];
+  const activeAddress = await walletAddress(resolvedPath, activeNetwork);
 
   // JSON mode
   if (hasFlag(args, 'json')) {

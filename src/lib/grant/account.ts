@@ -37,7 +37,8 @@ import {
   sealedPrivateStatePassword,
 } from './sealed-account.ts';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import { isValidNetworkName, sdkSetOfNetwork, type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import type { SdkSet } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
 
 /** Where the account package caches its proving artefacts, under ~/.midnight: each file is fetched the first time a command proves with it. */
@@ -67,8 +68,11 @@ export function privateStateLocationOf(recordsDir: string, password: () => strin
 
 /** A network the account package can't reach yet. */
 export class UnreachableByAccountError extends UsageError {
-  constructor(networkId: string) {
-    super(`mn grant runs on ledger 9, which only a local network (undeployed) runs so far; ${networkId} is not one.`);
+  constructor(networkId: string, sdkSet: SdkSet = 'rc') {
+    super(sdkSet === 'rc'
+      ? `mn grant runs on ledger 9, which only a local network (undeployed) runs so far; ${networkId} is not one.`
+      // The account package is built on the rc set: its contracts, proving files and providers.
+      : `mn grant runs on the rc SDK set, and ${networkId} runs on the ${sdkSet} set. The account package has no ${sdkSet} build yet (its contracts need recompiling and new proving files), so grant can't act on it for now.`);
     this.name = 'UnreachableByAccountError';
     Object.setPrototypeOf(this, UnreachableByAccountError.prototype);
   }
@@ -76,6 +80,9 @@ export class UnreachableByAccountError extends UsageError {
 
 /** Throws when the account package can't act on `networkConfig`'s network. */
 export function assertAccountNetwork(networkConfig: NetworkConfig): void {
+  const id = networkConfig.networkId.toLowerCase();
+  const sdkSet = isValidNetworkName(id) ? sdkSetOfNetwork(id) : 'rc';
+  if (sdkSet !== 'rc') throw new UnreachableByAccountError(networkConfig.networkId, sdkSet);
   if (networkConfig.networkId.toLowerCase() !== ACCOUNT_NETWORK_ID) throw new UnreachableByAccountError(networkConfig.networkId);
 }
 

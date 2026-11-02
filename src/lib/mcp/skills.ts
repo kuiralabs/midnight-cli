@@ -122,6 +122,7 @@ Act on the user's behalf on Midnight, through what the installed packages bring:
   - \`undeployed\` — local network. Use this for dev iteration. On this build it must be a ledger-9 stack the user runs (\`mn localnet up\` is refused, see the note at the top).
   - \`preprod\` — public testnet (ledger 8 today, so refused by this build). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod needs a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware.
   - \`preview\` — public preview testnet (ledger 8 today, so refused by this build). Same first-sync trade-off as preprod.
+  - \`stagenet\` — Sig Network's testnet, on the beta SDK set (mn loads its beta engine for it). No shielded faucet, so shielded sync is off by default; NIGHT from https://faucet.stagenet.shielded.tools. Its proof server must match its node (\`midnightntwrk/proof-server:9.0.0-rc.5_experimental\`). Grant is refused there for now.
 - **Proof server** — local HTTP service that generates ZK proofs for transactions. Default port 6300. Version must match the network's ledger version or writes fail with "Custom error 170".
 
 `,

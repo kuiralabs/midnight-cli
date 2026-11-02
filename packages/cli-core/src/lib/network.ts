@@ -1,11 +1,11 @@
 import { blockfrostEndpoints, usesBlockfrost } from './blockfrost.ts';
 import { execSync } from 'child_process';
-import { loadCliConfig, getEndpointOverridesForNetwork } from './cli-config.ts';
+import { loadCliConfig, getEndpointOverridesForNetwork, getSdkSetOverride } from './cli-config.ts';
 import { INDEXER_GRAPHQL_PATH, INDEXER_GRAPHQL_WS_PATH } from './constants.ts';
 import { settings } from './settings.ts';
 import type { SdkSet } from './engine.ts';
 
-export type NetworkName = 'preprod' | 'preview' | 'undeployed';
+export type NetworkName = 'preprod' | 'preview' | 'stagenet' | 'undeployed';
 
 /**
  * The protocol version ledger 9 starts at on the chains this build targets:
@@ -38,6 +38,14 @@ const NETWORK_CONFIGS: Record<NetworkName, NetworkConfig> = {
     proofServer: 'http://localhost:6300',
     networkId: 'Preview',
   },
+  // Sig Network's stagenet, which runs the beta SDK set.
+  stagenet: {
+    indexer: `https://indexer.stagenet.shielded.tools${INDEXER_GRAPHQL_PATH}`,
+    indexerWS: `wss://indexer.stagenet.shielded.tools${INDEXER_GRAPHQL_WS_PATH}`,
+    node: 'wss://rpc.stagenet.shielded.tools',
+    proofServer: 'http://localhost:6300',
+    networkId: 'StageNet',
+  },
   undeployed: {
     indexer: `http://localhost:8088${INDEXER_GRAPHQL_PATH}`,
     indexerWS: `ws://localhost:8088${INDEXER_GRAPHQL_WS_PATH}`,
@@ -51,15 +59,29 @@ const NETWORK_CONFIGS: Record<NetworkName, NetworkConfig> = {
 const NETWORK_SDK_SETS: Record<NetworkName, SdkSet> = {
   preprod: 'rc',
   preview: 'rc',
+  stagenet: 'beta',
   undeployed: 'rc',
 };
 
-/** The SDK set a network runs on. */
-export function sdkSetOfNetwork(name: NetworkName): SdkSet {
+/** Every SDK set mn has an engine for. */
+export const SDK_SETS: readonly SdkSet[] = ['rc', 'beta'];
+
+/** The SDK set the network table names for a network. */
+export function defaultSdkSetOf(name: NetworkName): SdkSet {
   return NETWORK_SDK_SETS[name];
 }
 
-const VALID_NETWORK_NAMES: readonly NetworkName[] = ['preprod', 'preview', 'undeployed'] as const;
+/** The networks that run on `set` now. */
+export function networksOnSdkSet(set: SdkSet): NetworkName[] {
+  return VALID_NETWORK_NAMES.filter((name) => sdkSetOfNetwork(name) === set);
+}
+
+/** The SDK set a network runs on: the one `midnight config set sdk-set` gave it, else the table's. */
+export function sdkSetOfNetwork(name: NetworkName): SdkSet {
+  return getSdkSetOverride(loadCliConfig(), name) ?? NETWORK_SDK_SETS[name];
+}
+
+const VALID_NETWORK_NAMES: readonly NetworkName[] = ['preprod', 'preview', 'stagenet', 'undeployed'] as const;
 
 export function isValidNetworkName(name: string): name is NetworkName {
   return VALID_NETWORK_NAMES.includes(name as NetworkName);
@@ -80,6 +102,7 @@ export function getValidNetworkNames(): readonly string[] {
 export function detectNetworkFromAddress(address: string): NetworkName | null {
   if (address.startsWith('mn_addr_preprod1')) return 'preprod';
   if (address.startsWith('mn_addr_preview1')) return 'preview';
+  if (address.startsWith('mn_addr_stagenet1')) return 'stagenet';
   if (address.startsWith('mn_addr_undeployed1')) return 'undeployed';
   return null;
 }

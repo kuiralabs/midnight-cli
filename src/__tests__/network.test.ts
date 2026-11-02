@@ -105,12 +105,13 @@ describe('getNetworkConfig', () => {
 });
 
 describe('getValidNetworkNames', () => {
-  it('returns all three networks', () => {
+  it('returns all four networks', () => {
     const names = getValidNetworkNames();
     expect(names).toContain('preprod');
     expect(names).toContain('preview');
+    expect(names).toContain('stagenet');
     expect(names).toContain('undeployed');
-    expect(names).toHaveLength(3);
+    expect(names).toHaveLength(4);
   });
 
   it('agrees with isValidNetworkName', () => {

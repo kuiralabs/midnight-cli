@@ -47,7 +47,7 @@ describe('a tool\'s schema, generated from its command\'s flags', () => {
       'to', 'amount', 'wallet', 'force-shielded', 'network', 'shielded', 'node', 'indexer-ws', 'proof-server',
     ]);
     expect(transfer.inputSchema.properties!.network).toStrictEqual({
-      type: 'string', enum: ['preprod', 'preview', 'undeployed'], description: 'Network to send on (default: the selected one)',
+      type: 'string', enum: ['preprod', 'preview', 'stagenet', 'undeployed'], description: 'Network to send on (default: the selected one)',
     });
     expect(transfer.inputSchema.required).toStrictEqual(['to', 'amount']);
   }, 60_000);
@@ -151,7 +151,7 @@ describe('a tool parameter of the wrong type', () => {
     expect(body).toMatchObject({
       error: true,
       code: 'INVALID_ARGS',
-      message: 'Invalid parameters for midnight_address: network must be one of preprod, preview, undeployed, not "mainnet"; index must be a string, not {"n":1}',
+      message: 'Invalid parameters for midnight_address: network must be one of preprod, preview, stagenet, undeployed, not "mainnet"; index must be a string, not {"n":1}',
     });
   }, 60_000);
 

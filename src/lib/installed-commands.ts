@@ -5,6 +5,7 @@
 // flag checks read it, and so do help, the manual and the intro, the MCP
 // server's tools, and the agent manual and skills.
 
+import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
 import { createPackageRegistry, type FlagDefinition, type GlobalFlagHelp } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 import { walletDefinition } from '../commands/wallet.definition.ts';
 import { generateDefinition } from '../commands/generate.definition.ts';
@@ -54,7 +55,7 @@ const GLOBAL_FLAGS: readonly FlagDefinition[] = [
 const GLOBAL_FLAGS_HELP: readonly GlobalFlagHelp[] = [
   { name: '--json', description: 'Output structured JSON to stdout (suppresses all stderr)' },
   { name: '--wallet <name|file>', description: 'Wallet name or path' },
-  { name: '--network <name>', description: 'Override network (preprod, preview, undeployed)' },
+  { name: '--network <name>', description: `Override network (${getValidNetworkNames().join(', ')})` },
   { name: '--version, -v', description: 'Print CLI version' },
   { name: '--help, -h', description: 'Show help' },
 ];

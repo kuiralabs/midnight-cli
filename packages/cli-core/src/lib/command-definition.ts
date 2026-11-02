@@ -10,6 +10,7 @@
 // from what it takes and its command's flags. A package is installed with its
 // commands and its agent guidance.
 
+import { getValidNetworkNames } from './network.ts';
 import { FULL_FLAG, type ParsedArgs } from './argv.ts';
 import { type PackageGuidance, type ToolsTableRow, assertDistinctPlaces } from './agent-guidance.ts';
 import type { CallContext, CommandOutcome } from './call-context.ts';
@@ -22,7 +23,7 @@ export interface ParamSchema {
 }
 
 /** A network as tools show it: one of the networks mn knows (a test keeps it equal to network.ts's). */
-export const NETWORK_PARAM: ParamSchema = { type: 'string', enum: ['preprod', 'preview', 'undeployed'] };
+export const NETWORK_PARAM: ParamSchema = { type: 'string', enum: [...getValidNetworkNames()] };
 
 /** The endpoint flags, as the tools that used to take them unseen describe them. */
 export const ENDPOINT_PARAMS = {

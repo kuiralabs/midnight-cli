@@ -77,8 +77,10 @@ blockchain. It manages wallets, balances, transfers (unshielded and
 shielded), dust fees, a DApp connector server, contract inspection,
 E2E testing, and a local devnet — all from the terminal.
 
-Wallets are network-agnostic: one seed derives addresses for all three
-networks (undeployed, preprod, preview). Network is chosen at runtime.
+Wallets are network-agnostic: one seed derives addresses for all four
+networks (undeployed, preprod, preview, stagenet). Network is chosen at
+runtime. Stagenet is Sig Network's chain on the beta SDK set; mn runs it
+through its own engine, picked by the network.
 
 Preprod's indexer and node are served by Blockfrost (Midnight shut its own
 preprod indexer down on 2026-10-09). Every request needs the user's own

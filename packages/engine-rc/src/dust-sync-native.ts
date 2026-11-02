@@ -20,7 +20,7 @@ import { type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { collapseForeignGenerations } from './dust-collapse.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
 import { settings } from '@kuiralabs/midnight-cli-core/lib/settings';
-import { cacheRootDir } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
+import { cacheRootDir, networkCacheFolder } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
 import { nativeCheckpointName } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
 
 /** Sidecar checkpoint JSON shape (snake_case — matches the Rust `Checkpoint`). */
@@ -126,7 +126,7 @@ function readCheckpointCursor(path: string): number {
 /** The sidecar's checkpoint file for a Dust key, beside the other Dust caches. */
 
 function nativeCheckpointPath(networkName: string, pubkeyHex: string, cacheDir?: string): string {
-  const dir = join(cacheRootDir(cacheDir), networkName);
+  const dir = join(cacheRootDir(cacheDir), networkCacheFolder(networkName));
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: DIR_MODE });
   return join(dir, nativeCheckpointName(pubkeyHex));
 }

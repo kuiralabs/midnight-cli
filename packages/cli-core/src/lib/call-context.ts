@@ -13,6 +13,8 @@
 
 import { isVerbose, type ParsedArgs } from './argv.ts';
 import { CancelledError } from './errors.ts';
+import { preferEngineOf } from './engine.ts';
+import { resolveNetworkName } from './resolve-network.ts';
 import type { Payer } from './payer.ts';
 import { settings, type Settings } from './settings.ts';
 import { hostPaths, type HostPaths } from './state-root.ts';
@@ -147,5 +149,8 @@ export function createCallContext<Protector = unknown>(parts: CallParts<Protecto
 /** Runs `handler` for the call; a call already cancelled never starts. */
 export async function runHandler<Protector>(handler: CommandHandler<Protector>, args: ParsedArgs, ctx: CallContext<Protector>): Promise<CommandOutcome | void> {
   if (ctx.signal.aborted) throw new CancelledError();
+  try {
+    preferEngineOf(resolveNetworkName({ args }));
+  } catch { /* an invalid --network: the command says so */ }
   return handler(args, ctx);
 }

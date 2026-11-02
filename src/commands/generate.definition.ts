@@ -1,5 +1,6 @@
 // The `generate` command, described once.
 
+import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { CommandDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 
 export const generateDefinition: CommandDefinition = {
@@ -19,7 +20,7 @@ export const generateDefinition: CommandDefinition = {
     {
       name: 'network',
       takesValue: true,
-      help: ['--network <name>    Network: preprod, preview, undeployed'],
+      help: [`--network <name>    Network: ${getValidNetworkNames().join(', ')}`],
     },
     {
       name: 'output',
@@ -46,7 +47,7 @@ export const generateDefinition: CommandDefinition = {
     ],
     examples: ['midnight generate --network preprod'],
     jsonFields: {
-      addresses: 'Per-network unshielded addresses { preprod, preview, undeployed }',
+      addresses: `Per-network unshielded addresses { ${getValidNetworkNames().join(', ')} }`,
       activeAddress: 'Unshielded address on the active network (bech32m)',
       activeNetwork: 'The active network',
       seed: 'Hex-encoded seed (32-byte raw, or 64-byte if mnemonic-derived)',

@@ -11,7 +11,7 @@
 
 import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { loadWalletConfig, resolveWalletPath, saveShieldedAddress } from '../lib/wallet-config.ts';
+import { resolveWalletPath, saveShieldedAddress, walletAddress, walletShieldedAddress } from '../lib/wallet-config.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
@@ -98,17 +98,17 @@ async function resolveDestination(
 
   // Fall back to wallet file (name, path, or active wallet)
   const walletPath = resolveWalletPath(walletFlag);
-  const config = await loadWalletConfig(walletPath);
 
   if (isShielded) {
-    // The wallet's own shielded address, as its file keeps it: receiving needs no passphrase.
-    const stored = config.shieldedAddresses?.[networkName];
+    // The wallet's own shielded address, as its file keeps it: receiving needs no passphrase
+    // (unless the network was added after the wallet was written).
+    const stored = await walletShieldedAddress(walletPath, networkName);
     if (stored === undefined) throw new Error(`Wallet ${walletPath} keeps no shielded address for ${networkName}.`);
     const decoded = await resolveAddressDestination(stored, networkName, true) as ShieldedDestination;
     return { kind: 'wallet', bech32m: decoded.bech32m, walletPath };
   }
 
-  return { kind: 'address', address: config.addresses[networkName] };
+  return { kind: 'address', address: await walletAddress(walletPath, networkName) };
 }
 
 async function resolveAddressDestination(

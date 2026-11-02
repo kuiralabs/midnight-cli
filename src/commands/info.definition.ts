@@ -1,5 +1,6 @@
 // The `info` command, described once.
 
+import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
 import { type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 
 export const infoDefinition: CommandDefinition = {
@@ -24,8 +25,8 @@ export const infoDefinition: CommandDefinition = {
     flags: [{ flag: 'wallet' }],
     examples: ['midnight info', 'midnight info --wallet my-wallet.json'],
     jsonFields: {
-      addresses: 'Per-network unshielded addresses { preprod, preview, undeployed }',
-      shieldedAddresses: 'Per-network shielded addresses { preprod, preview, undeployed }',
+      addresses: `Per-network unshielded addresses { ${getValidNetworkNames().join(', ')} }`,
+      shieldedAddresses: `Per-network shielded addresses { ${getValidNetworkNames().join(', ')} }`,
       activeNetwork: 'Currently active network',
       activeAddress: 'Unshielded address for active network (also written to stdout)',
       createdAt: 'ISO 8601 creation timestamp',

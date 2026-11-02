@@ -10,6 +10,7 @@ import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-net
 import { parseSeedHex } from '../lib/seed-resolver.ts';
 import {
   loadWalletConfig,
+  walletAddress,
   unlockWallet,
   protectAllWallets,
   setActiveWallet,
@@ -237,7 +238,7 @@ async function walletInfo(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const config = await loadWalletConfig(walletPath);
   const isActive = name === getActiveWalletName();
   const networkName = resolveNetworkName({ args });
-  const activeAddress = config.addresses[networkName];
+  const activeAddress = await walletAddress(walletPath, networkName);
 
   if (hasFlag(args, 'json')) {
     // Agent-slim shape: drops the per-network addresses map (3× repetition

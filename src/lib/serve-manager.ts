@@ -4,7 +4,7 @@
 // Always runs in approve-all mode.
 
 import { Socket } from 'node:net';
-import { loadWalletConfig, resolveWalletPath, unlockWallet } from './wallet-config.ts';
+import { resolveWalletPath, unlockWallet, walletAddress } from './wallet-config.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { engineFor, type DAppConnectorCallbacks, type OpenedConnector } from '@kuiralabs/midnight-cli-core/lib/engine';
@@ -192,7 +192,7 @@ export async function startServeOrReuse(options: ServeManagerOptions): Promise<S
 
     const runningAddress = await probeServeWallet(port);
     if (runningAddress !== null) {
-      const wanted = (await loadWalletConfig(resolveWalletPath(options.wallet))).addresses[actualNetwork as NetworkName];
+      const wanted = await walletAddress(resolveWalletPath(options.wallet), actualNetwork as NetworkName);
       const walletMismatch = serveWalletMismatch(runningAddress, { address: wanted, name: options.wallet ?? 'the active wallet' });
       if (walletMismatch) {
         throw new Error(

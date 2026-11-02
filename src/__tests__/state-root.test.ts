@@ -65,7 +65,10 @@ describe('the state root the host gives', () => {
     expect(fs.readFileSync(path.join(root, 'config.json'), 'utf8')).toBe(before.config);
     expect(fs.readFileSync(path.join(root, 'cache/undeployed/indexer.host'), 'utf8')).toBe(before.marker);
     expect(Object.keys(wallet)).toEqual(before.walletKeys);
-    expect(wallet.addresses).toEqual(before.walletAddresses);
+    // Every address the layout had, and stagenet's, which a new wallet has had since mn added stagenet.
+    const { stagenet, ...recorded } = wallet.addresses;
+    expect(recorded).toEqual(before.walletAddresses);
+    expect(stagenet).toMatch(/^mn_addr_stagenet1/);
     expect(Object.keys(JSON.parse(fs.readFileSync(path.join(root, 'keystore.json'), 'utf8')))).toEqual(before.keystoreKeys);
     expect({
       walletCache: rel(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed')),

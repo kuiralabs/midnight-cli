@@ -55,7 +55,7 @@ proofs. The CLI provides full shielded support:
   address is one of your wallets, it maps to that wallet's full sync;
   otherwise it errors and points you to --wallet <name> --shielded.
 
-  On preview/preprod, shielded sync is off by default (no faucet there).
+  On preview, preprod and stagenet, shielded sync is off by default (no faucet there).
   Pass --force-shielded to midnight balance or midnight transfer to force
   the shielded sync on for those networks.
 
@@ -146,6 +146,9 @@ starts with mn_addr_ or mn_shield-addr_, it's used as an address directly.
   4. midnight_dust_register        → Register for fees
   5. midnight_balance              → Check balance
   6. midnight_transfer → midnight_confirm_operation → transfer
+
+  Stagenet (Sig Network's testnet, on the beta SDK set): the same steps
+  with value "stagenet", funded at https://faucet.stagenet.shielded.tools/.
 
 `,
     },

@@ -4,7 +4,7 @@
 
 import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { loadWalletConfig, resolveWalletPath, type WalletConfig } from './wallet-config.ts';
+import { loadWalletConfig, resolveWalletPath, walletAddress, walletShieldedAddress, type WalletConfig } from './wallet-config.ts';
 import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { engineFor, type EngineKeys } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { shieldedSyncEnabled, shieldedDisabledReason } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
@@ -80,11 +80,11 @@ async function resolveRecipient(input: string, args: ParsedArgs, shielded: boole
     return input;
   }
 
-  const recipientConfig = await loadWalletConfig(resolveWalletPath(input));
+  const recipientPath = resolveWalletPath(input);
   const networkName = resolveNetworkName({ args });
 
   if (shielded) {
-    const shieldedAddr = recipientConfig.shieldedAddresses?.[networkName];
+    const shieldedAddr = await walletShieldedAddress(recipientPath, networkName);
     if (!shieldedAddr) {
       throw new Error(
         `Wallet "${input}" has no shielded address for network "${networkName}".\n` +
@@ -94,7 +94,7 @@ async function resolveRecipient(input: string, args: ParsedArgs, shielded: boole
     return shieldedAddr;
   }
 
-  const address = recipientConfig.addresses[networkName];
+  const address = await walletAddress(recipientPath, networkName);
   if (!address) {
     throw new Error(`Wallet "${input}" has no address for network "${networkName}". Regenerate the wallet to derive one.`);
   }

@@ -48,6 +48,10 @@ export const coreGuidance: PackageGuidance = {
   BLOCKFROST_LIMIT_REACHED 4    Blockfrost's plan or rate limit; wait and retry
   ENDPOINT_SHUT_DOWN      4     An endpoint set by flag or config was shut down
                                 by its operator; unset it
+  OTHER_SDK_SET           1     The process runs one SDK set's engine and the
+                                network runs on the other (an MCP server that
+                                served rc now asked for stagenet); start a
+                                server for that network
   CANCELLED               7     Operation cancelled (SIGINT)
   UNKNOWN                 1     Unclassified error
 `,

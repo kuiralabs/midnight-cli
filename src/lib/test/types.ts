@@ -2,6 +2,7 @@
 
 import type { ServeHandle } from '../serve-manager.ts';
 import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 
 // ── DApp Test Config (dapp.test.json in dApp root) ──
 
@@ -16,7 +17,7 @@ export interface DappTestConfig {
   prep: PrepStepId[];
 }
 
-export type NetworkName = 'undeployed' | 'preprod' | 'preview';
+export type { NetworkName };
 
 // Prep step identifiers — balance:<amount> is parametric, rest are fixed
 export type PrepStepId =

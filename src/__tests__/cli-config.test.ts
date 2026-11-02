@@ -10,7 +10,13 @@ import {
   unsetConfigValue,
   getValidConfigKeys,
   getBlockfrostProjectId,
+  getSdkSetOverride,
 } from '@kuiralabs/midnight-cli-core/lib/cli-config';
+import { sdkSetOfNetwork } from '@kuiralabs/midnight-cli-core/lib/network';
+import { getCachePath, networkCacheFolder } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
+import { getDustCachePath } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
+import { setHostPathsSource } from '@kuiralabs/midnight-cli-core/lib/state-root';
+import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-cli-config-test-${process.pid}`);
 
@@ -554,5 +560,52 @@ describe('endpoint keys for a network other than the selected one (--network)', 
   it('refuses --network on a key that is not per network', () => {
     expect(() => setConfigValue('wallet', 'alice', TEST_DIR, 'preprod')).toThrow('--network only applies to the endpoint keys');
     expect(() => getConfigValue('network', TEST_DIR, 'preprod')).toThrow('--network only applies to the endpoint keys');
+  });
+});
+
+describe('the sdk-set key', () => {
+  it('sets, reads and unsets a network\'s SDK set, the selected network\'s unless --network says', () => {
+    expect(getConfigValue('sdk-set', TEST_DIR)).toBe('(not set)');
+    setConfigValue('sdk-set', 'beta', TEST_DIR);
+    setConfigValue('sdk-set', 'rc', TEST_DIR, 'stagenet');
+    expect(getConfigValue('sdk-set', TEST_DIR)).toBe('beta');
+    expect(getConfigValue('sdk-set', TEST_DIR, 'stagenet')).toBe('rc');
+    expect(getSdkSetOverride(loadCliConfig(TEST_DIR), 'undeployed')).toBe('beta');
+    unsetConfigValue('sdk-set', TEST_DIR);
+    expect(getConfigValue('sdk-set', TEST_DIR)).toBe('(not set)');
+    expect(getConfigValue('sdk-set', TEST_DIR, 'stagenet')).toBe('rc');
+  });
+
+  it('refuses a set mn has no engine for', () => {
+    expect(() => setConfigValue('sdk-set', 'mainnet', TEST_DIR)).toThrow('Invalid SDK set: "mainnet"\nValid SDK sets: rc, beta');
+  });
+
+  it('drops a set it doesn\'t know from a hand-edited file', () => {
+    fs.writeFileSync(path.join(TEST_DIR, 'config.json'), JSON.stringify({ network: 'undeployed', networks: { undeployed: { 'sdk-set': 'gamma' } } }));
+    expect(getSdkSetOverride(loadCliConfig(TEST_DIR), 'undeployed')).toBeUndefined();
+  });
+});
+
+describe('the SDK set a network runs on', () => {
+  const root = path.join(TEST_DIR, 'state');
+  beforeEach(() => setHostPathsSource(() => ({ stateRoot: root, home: TEST_DIR })));
+  afterEach(() => setHostPathsSource(() => ({ stateRoot: path.join(os.homedir(), MIDNIGHT_DIR), home: os.homedir() })));
+
+  it('is the table\'s until config gives the network another, and the caches follow it to a folder of the set\'s own', () => {
+    expect(sdkSetOfNetwork('undeployed')).toBe('rc');
+    expect(networkCacheFolder('undeployed')).toBe('undeployed');
+    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed')).toBe(path.join(root, 'cache', 'undeployed', 'mn_addr_undeployed1a.json'));
+
+    setConfigValue('sdk-set', 'beta', undefined, 'undeployed');
+    expect(sdkSetOfNetwork('undeployed')).toBe('beta');
+    expect(networkCacheFolder('undeployed')).toBe('undeployed.beta');
+    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed')).toBe(path.join(root, 'cache', 'undeployed.beta', 'mn_addr_undeployed1a.json'));
+    expect(getDustCachePath('undeployed', 'ab'.repeat(32))).toBe(path.join(root, 'cache', 'undeployed.beta', `dust-${'ab'.repeat(10)}.json`));
+
+    // Back on the network's own set, the caches it kept there are the ones read.
+    unsetConfigValue('sdk-set', undefined, 'undeployed');
+    expect(networkCacheFolder('undeployed')).toBe('undeployed');
+    expect(sdkSetOfNetwork('stagenet')).toBe('beta');
+    expect(networkCacheFolder('stagenet')).toBe('stagenet');
   });
 });
