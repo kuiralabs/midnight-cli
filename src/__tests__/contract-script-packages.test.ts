@@ -30,8 +30,9 @@ const generateDeployScript = (opts: DeployScript & { dappDir?: string }): string
 const generateCallScript = (opts: CallScript & { dappDir?: string }): string => rcScripts.generateCallScript(opts, SCRIPT_PARTS);
 const generateStateScript = (opts: StateScript & { dappDir?: string }): string => rcScripts.generateStateScript(opts, SCRIPT_PARTS);
 // The overlay of the rc engine's packages.
-const overlayScriptPackages = (userNodeModules: string) => overlayScriptPackagesFor(userNodeModules, rcEngine.contracts.scripts);
-const acquireOverlay = (dir: string): void => acquireOverlayFor(dir, rcEngine.contracts.scripts);
+const RC_PACKAGES = { ...rcEngine.contracts.scripts, set: 'rc' };
+const overlayScriptPackages = (userNodeModules: string) => overlayScriptPackagesFor(userNodeModules, RC_PACKAGES);
+const acquireOverlay = (dir: string): void => acquireOverlayFor(dir, RC_PACKAGES);
 
 import { platformPackageBinary } from '@kuiralabs/midnight-engine-rc/dust-sync-native';
 
@@ -139,8 +140,37 @@ describe('a dApp laid out unlike ours', () => {
     expect(fs.readdirSync(dir)).toEqual([]);
   });
 
+  it('links nothing inside a scope it linked whole, which would write into the engine\'s install', () => {
+    // A tree holding @x/a, and @x/b found elsewhere: the dApp has no @x, so @x is linked whole to the tree.
+    const tree = path.join(dir, 'tree', '@x');
+    fs.mkdirSync(path.join(tree, 'a'), { recursive: true });
+    const elsewhere = path.join(dir, 'elsewhere', '@x', 'b');
+    fs.mkdirSync(elsewhere, { recursive: true });
+    const dapp = path.join(dir, 'dapp', 'node_modules');
+    fs.mkdirSync(dapp, { recursive: true });
+    const packages = { set: 'rc', packages: ['@x/a', '@x/b'], packageFolder: (name: string) => (name === '@x/a' ? path.join(tree, 'a') : elsewhere) };
+    const made = overlayScriptPackagesFor(dapp, packages);
+    expect(made.map((m) => path.relative(dir, m.path))).toEqual([path.join('dapp', 'node_modules', '@x')]);
+    expect(fs.readdirSync(tree)).toEqual(['a']);
+    undoOverlay(made);
+  });
+
+  it('refuses another SDK set\'s packages while a run uses its overlay, and replaces it once none does', () => {
+    acquireOverlay(dir);
+    const beta = { ...RC_PACKAGES, set: 'beta' };
+    expect(() => acquireOverlayFor(dir, beta)).toThrow('uses the rc SDK set\'s packages, and this one needs the beta set\'s');
+    // The rc run dies: its share is stale, so the beta run undoes the rc overlay and makes its own.
+    const record = path.join(dir, '.mn-overlay.json');
+    const held = JSON.parse(fs.readFileSync(record, 'utf8')) as { pids: number[]; made: unknown[]; set: string };
+    fs.writeFileSync(record, JSON.stringify({ ...held, pids: [2 ** 22 + 12345] }));
+    acquireOverlayFor(dir, beta);
+    expect(JSON.parse(fs.readFileSync(record, 'utf8'))).toMatchObject({ set: 'beta', pids: [process.pid] });
+    releaseOverlay(dir);
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
+
   it('with no Node to run under, refuses before writing anything to the dApp', async () => {
-    await expect(executeScript({ dir, script: 'console.log(1)', packages: rcEngine.contracts.scripts, findRuntime: () => { throw new NoNodeRuntimeError(); } })).rejects.toThrow(NoNodeRuntimeError);
+    await expect(executeScript({ dir, script: 'console.log(1)', packages: RC_PACKAGES, findRuntime: () => { throw new NoNodeRuntimeError(); } })).rejects.toThrow(NoNodeRuntimeError);
     expect(fs.readdirSync(dir)).toEqual([]);
   });
 });

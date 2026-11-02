@@ -112,7 +112,8 @@ export async function runState(options: StateOptions): Promise<StateResult> {
   // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
   throwIfCancelled(options.signal);
   await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network);
-  const { scripts } = (await engineFor(options.network)).contracts;
+  const engine = await engineFor(options.network);
+  const scripts = { ...engine.contracts.scripts, set: engine.set };
   const script = scripts.state(options, SCRIPT_PARTS);
   const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal });
   try {
@@ -126,7 +127,8 @@ export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
   // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
   throwIfCancelled(options.signal);
   await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network);
-  const { scripts } = (await engineFor(options.network)).contracts;
+  const engine = await engineFor(options.network);
+  const scripts = { ...engine.contracts.scripts, set: engine.set };
   const script = scripts.deploy(options, SCRIPT_PARTS);
   // The private-state secret goes to the subprocess via env (never the on-disk
   // script) so a caller-chosen owner is not written to the filesystem.
@@ -146,7 +148,8 @@ export async function runCall(options: CallOptions): Promise<CallResult> {
   // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
   throwIfCancelled(options.signal);
   await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network);
-  const { scripts } = (await engineFor(options.network)).contracts;
+  const engine = await engineFor(options.network);
+  const scripts = { ...engine.contracts.scripts, set: engine.set };
   const script = scripts.call(options, SCRIPT_PARTS);
   const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal });
   try {
@@ -283,8 +286,8 @@ export const SCRIPT_PARTS: ScriptParts = {
 /** What the overlay made, to undo afterwards newest first: a link, or a folder it created. */
 type Made = { path: string; kind: 'link' | 'folder' };
 
-/** The packages a script imports, and where the engine's install has each. */
-type ScriptPackages = Pick<EngineContractScripts, 'packages' | 'packageFolder'>;
+/** The packages a script imports, where the engine's install has each, and the SDK set they are. */
+type ScriptPackages = Pick<EngineContractScripts, 'packages' | 'packageFolder'> & { readonly set: string };
 
 /** The installed copy of each scope the script packages use (`@midnight-ntwrk`, …), and the node_modules holding them. */
 function installedTrees({ packages, packageFolder }: ScriptPackages): { root: string | null; scopes: Map<string, string> } {
@@ -326,11 +329,18 @@ export function overlayScriptPackages(userNodeModules: string, scriptPackages: S
     if (root !== null) link(root, userNodeModules);
     return made;
   }
+  // A scope linked whole is the engine's own folder: nothing is linked inside
+  // it, which would write into the engine's install.
+  const linkedWhole = new Set<string>();
   for (const [scope, folder] of scopes) {
     const at = join(userNodeModules, scope);
-    if (!existsSync(at)) link(folder, at);
+    if (!existsSync(at)) {
+      link(folder, at);
+      linkedWhole.add(scope);
+    }
   }
   for (const name of scriptPackages.packages) {
+    if (name.startsWith('@') && linkedWhole.has(name.slice(0, name.indexOf('/')))) continue;
     const at = join(userNodeModules, name);
     const target = existsSync(at) ? null : scriptPackages.packageFolder(name);
     if (target !== null) link(target, at);
@@ -350,7 +360,7 @@ export function undoOverlay(made: readonly Made[]): void {
 
 /** The record, in a dApp folder, of the overlay its running scripts share. */
 const OVERLAY_RECORD = '.mn-overlay.json';
-interface OverlayRecord { pids: number[]; made: Made[] }
+interface OverlayRecord { pids: number[]; made: Made[]; set?: string }
 
 const isAlive = (pid: number): boolean => {
   try { process.kill(pid, 0); return true; } catch { return false; }
@@ -367,8 +377,17 @@ export function acquireOverlay(dappDir: string, scriptPackages: ScriptPackages):
   let held: OverlayRecord | null = null;
   try { held = JSON.parse(readFileSync(record, 'utf8')) as OverlayRecord; } catch { /* none yet */ }
   const live = (held?.pids ?? []).filter(isAlive);
+  // An overlay of another SDK set's packages: refused while a run uses it,
+  // undone once none does (an older mn recorded no set: its packages are the rc set's).
+  if (held !== null && (held.set ?? 'rc') !== scriptPackages.set) {
+    if (live.length > 0) {
+      throw new Error(`Another contract run in ${dappDir} uses the ${held.set ?? 'rc'} SDK set's packages, and this one needs the ${scriptPackages.set} set's. Run it when that one has finished.`);
+    }
+    undoOverlay(held.made);
+    held = null;
+  }
   const made = held !== null ? held.made : overlayScriptPackages(join(dappDir, 'node_modules'), scriptPackages);
-  writeFileSync(record, JSON.stringify({ pids: [...live, process.pid], made } satisfies OverlayRecord));
+  writeFileSync(record, JSON.stringify({ pids: [...live, process.pid], made, set: scriptPackages.set } satisfies OverlayRecord));
 }
 
 /** Gives back this run's share; the last run out undoes the overlay and removes the record. */
@@ -379,7 +398,7 @@ export function releaseOverlay(dappDir: string): void {
   const mine = held.pids.indexOf(process.pid);
   const pids = held.pids.filter((pid, at) => at !== mine && isAlive(pid));
   if (pids.length > 0) {
-    writeFileSync(record, JSON.stringify({ pids, made: held.made } satisfies OverlayRecord));
+    writeFileSync(record, JSON.stringify({ pids, made: held.made, ...(held.set === undefined ? {} : { set: held.set }) } satisfies OverlayRecord));
     return;
   }
   undoOverlay(held.made);
