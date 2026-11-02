@@ -117,7 +117,7 @@ export const dustDefinition: CommandDefinition = {
           { flag: 'proof-server', schema: { type: 'string' } },
           { flag: 'node', schema: { type: 'string' } },
           { flag: 'indexer-ws', schema: { type: 'string' } },
-          { flag: 'no-cache', schema: { type: 'string' } },
+          { flag: 'no-cache' },
           {
             name: 'full',
             schema: {

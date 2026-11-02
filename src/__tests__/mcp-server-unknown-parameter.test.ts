@@ -126,3 +126,38 @@ describe('a tool parameter outside the tool\'s schema', () => {
     expect(body).toMatchObject({ action: 'get', key: 'network' });
   }, 60_000);
 });
+
+describe('a tool parameter of the wrong type', () => {
+  it('refuses "false" for an on/off parameter, which used to switch it on, and the tool does not run', async () => {
+    const { isError, body } = await call('midnight_airdrop', { amount: '10', shielded: 'false', network: 'undeployed', ...CLOSED });
+    expect(isError).toBe(true);
+    expect(body).toStrictEqual({
+      error: true,
+      code: 'INVALID_ARGS',
+      message: 'Invalid parameter for midnight_airdrop: shielded must be true or false, not "false"',
+      _serverVersion: expect.any(String),
+    });
+  }, 60_000);
+
+  it('refuses force as a string before a token is given', async () => {
+    const { body } = await call('midnight_wallet_generate', { name: 'alice', force: 'true' });
+    expect(body).toMatchObject({ error: true, code: 'INVALID_ARGS', message: 'Invalid parameter for midnight_wallet_generate: force must be true or false, not "true"' });
+    expect(body.token).toBeUndefined();
+    expect(fs.existsSync(path.join(home, '.midnight', 'wallets', 'alice.json'))).toBe(false);
+  }, 60_000);
+
+  it('names every mistyped parameter: a value outside its list, and an object for a string', async () => {
+    const { body } = await call('midnight_address', { seed: '01'.repeat(32), network: 'mainnet', index: { n: 1 } });
+    expect(body).toMatchObject({
+      error: true,
+      code: 'INVALID_ARGS',
+      message: 'Invalid parameters for midnight_address: network must be one of preprod, preview, undeployed, not "mainnet"; index must be a string, not {"n":1}',
+    });
+  }, 60_000);
+
+  it('takes a number for a string parameter as its digits', async () => {
+    const { isError, body } = await call('midnight_address', { seed: '01'.repeat(32), network: 'undeployed', index: 2 });
+    expect(isError).toBe(false);
+    expect(body).toMatchObject({ network: 'undeployed', index: 2 });
+  }, 60_000);
+});

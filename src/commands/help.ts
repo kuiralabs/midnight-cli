@@ -17,7 +17,6 @@ import { hasShownIntroThisSession, markIntroShown } from '../lib/intro-marker.ts
 import { UsageError } from '../lib/errors.ts';
 import type { CallContext, CallOutput } from '../lib/call-context.ts';
 import { PKG_NAME, PKG_VERSION, PKG_DESCRIPTION } from '../lib/pkg.ts';
-import { INDEXER_GRAPHQL_WS_PATH } from '../lib/constants.ts';
 
 type CommandSpec = CommandHelpSpec;
 

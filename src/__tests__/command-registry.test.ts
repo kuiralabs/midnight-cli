@@ -17,7 +17,7 @@ import {
   flagsSectionLines,
   introBriefs,
   toolArgv,
-  toolPassThroughFlags,
+  needsConfirmation,
   NETWORK_PARAM,
   type CommandDefinition,
   type ToolDefinition,
@@ -287,21 +287,32 @@ describe('the MCP tools, generated from the registry', () => {
     expect(registry.tools.filter((t) => t.confirmation !== undefined).map((t) => t.name).sort()).toStrictEqual([
       'midnight_contract_call', 'midnight_contract_deploy',
       'midnight_grant_deploy', 'midnight_grant_deposit', 'midnight_grant_issue', 'midnight_grant_revoke', 'midnight_grant_revoke_all',
-      'midnight_transfer', 'midnight_wallet_remove',
+      'midnight_transfer', 'midnight_wallet_generate', 'midnight_wallet_remove',
     ]);
+  });
+
+  it('confirms wallet generate only when it may replace a wallet: with force', () => {
+    const generate = registry.tools.find((t) => t.name === 'midnight_wallet_generate')!;
+    expect(needsConfirmation(generate, { name: 'alice', force: true })).toBe(true);
+    expect(needsConfirmation(generate, { name: 'alice', force: false })).toBe(false);
+    expect(needsConfirmation(generate, { name: 'alice' })).toBe(false);
+    // Every other confirmed tool confirms every call.
+    for (const tool of registry.tools.filter((t) => t.confirmation !== undefined && t !== generate)) expect(needsConfirmation(tool, {}), tool.name).toBe(true);
+  });
+
+  it('shows every switch flag an agent may pass as a boolean, so "false" can never switch it on', () => {
+    for (const tool of registry.tools) {
+      const flags = [...tool.command.flags, ...registry.globalFlags];
+      for (const [name, schema] of Object.entries(tool.inputSchema.properties)) {
+        const flag = flags.find((f) => f.name === name);
+        if (flag !== undefined && !flag.takesValue) expect(schema.type, `${tool.name} ${name}`).toBe('boolean');
+      }
+    }
   });
 
   it('describes removing a wallet as deleting its file and seed', () => {
     const remove = registry.tools.find((t) => t.name === NEWLY_CONFIRMED)!;
     expect(confirmationText(remove, { name: 'bob' })).toBe('Remove wallet bob: its file, and the seed in it, is deleted from this machine');
-  });
-
-  it('lets a tool pass on its command\'s flags beyond its schema only when its argv passes the rest on (the old pass-through rule, superseded by the schema)', () => {
-    expect(toolPassThroughFlags(registry, 'midnight_transfer')).toStrictEqual([
-      ...registry.find('transfer')!.flags.map((f) => f.name), 'help', 'h', 'json', 'version', 'v',
-    ]);
-    expect(toolPassThroughFlags(registry, 'midnight_config_get')).toStrictEqual([]);
-    expect(toolPassThroughFlags(registry, 'midnight_confirm_operation')).toStrictEqual([]);
   });
 
   it('maps only parameters its schema has onto argv', () => {
@@ -323,7 +334,7 @@ describe('the MCP tools, generated from the registry', () => {
   const args = (command: string, subcommand: string | undefined, positionals: string[], flags: Record<string, string | true>): ParsedArgs =>
     ({ command, subcommand, positionals, flags: { json: true, ...flags } });
   const ARGV_BEFORE_REGISTRY: [tool: string, params: Record<string, unknown>, argv: ParsedArgs][] = [
-    ['midnight_wallet_generate', { name: 'alice', network: 'preprod', seed: 'ab', force: 'true' }, args('wallet', 'generate', ['alice'], { network: 'preprod', seed: 'ab', force: true })],
+    ['midnight_wallet_generate', { name: 'alice', network: 'preprod', seed: 'ab', force: true }, args('wallet', 'generate', ['alice'], { network: 'preprod', seed: 'ab', force: true })],
     ['midnight_wallet_generate', { name: 'alice', mnemonic: 'w o r d s', force: true }, args('wallet', 'generate', ['alice'], { mnemonic: 'w o r d s', force: true })],
     ['midnight_wallet_list', {}, args('wallet', 'list', [], {})],
     ['midnight_wallet_list', { full: true }, args('wallet', 'list', [], { [FULL_FLAG]: true })],
@@ -340,11 +351,11 @@ describe('the MCP tools, generated from the registry', () => {
     ['midnight_genesis_address', { network: 'undeployed' }, args('genesis-address', undefined, [], { network: 'undeployed' })],
     ['midnight_inspect_cost', {}, args('inspect-cost', undefined, [], {})],
     ['midnight_inspect_cost', { network: 'preprod' }, args('inspect-cost', undefined, [], { network: 'preprod' })],
-    ['midnight_airdrop', { amount: '10', wallet: 'bob', shielded: 'true' }, args('airdrop', '10', [], { wallet: 'bob', shielded: 'true' })],
+    ['midnight_airdrop', { amount: '10', wallet: 'bob', shielded: true }, args('airdrop', '10', [], { wallet: 'bob', shielded: true })],
     ['midnight_transfer', { to: 'bob', amount: '1', wallet: 'alice', network: 'undeployed' }, args('transfer', 'bob', ['1'], { wallet: 'alice', network: 'undeployed' })],
     ['midnight_transfer', { to: 'bob' }, args('transfer', 'bob', [], {})],
     ['midnight_dust_register', { wallet: 'alice' }, args('dust', 'register', [], { wallet: 'alice' })],
-    ['midnight_dust_status', { 'no-cache': 'true', node: 'ws://n', full: true }, args('dust', 'status', [], { 'no-cache': 'true', node: 'ws://n', [FULL_FLAG]: true })],
+    ['midnight_dust_status', { 'no-cache': true, node: 'ws://n', full: true }, args('dust', 'status', [], { 'no-cache': true, node: 'ws://n', [FULL_FLAG]: true })],
     ['midnight_config_get', { key: 'node', network: 'preview' }, args('config', 'get', ['node'], { network: 'preview' })],
     ['midnight_config_get', { key: 'network', network: '' }, args('config', 'get', ['network'], {})],
     ['midnight_config_set', { key: 'node', value: 'ws://n', network: 'preview' }, args('config', 'set', ['node', 'ws://n'], { network: 'preview' })],

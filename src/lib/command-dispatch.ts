@@ -4,7 +4,7 @@
 // given and where a notice goes, and decides the heap and the exit.
 
 import type { ParsedArgs } from './argv.ts';
-import { createCallContext, runHandler, type CallContext, type CommandOutcome, type OutputSink } from './call-context.ts';
+import { createCallContext, runHandler, type CallContext, type CommandOutcome, type CallOutput } from './call-context.ts';
 import type { CommandDefinition, CommandRegistry } from './command-definition.ts';
 import { UsageError } from './errors.ts';
 import { writeJsonResult } from './json-output.ts';
@@ -16,7 +16,7 @@ import type { WalletProtector } from './wallet-protector.ts';
 export interface ShellProvisions {
   readonly signal: AbortSignal;
   /** Where the call's output goes; a definition's notice goes to its stderr, before the handler loads. */
-  readonly output: OutputSink;
+  readonly output: CallOutput;
   /** The host's calls: each call runs in one, with its own SDK warnings. */
   readonly sdkWarnings: SdkWarningCalls;
   readonly loadPayer: () => Promise<Payer>;
@@ -24,7 +24,7 @@ export interface ShellProvisions {
 }
 
 /** The CLI's output, written at once: the result as one line of JSON on stdout, text on stdout and stderr. */
-export const processOutput: OutputSink = {
+export const processOutput: CallOutput = {
   result: writeJsonResult,
   stdout: (text) => { process.stdout.write(text); },
   stderr: (text) => { process.stderr.write(text); },

@@ -20,8 +20,9 @@ import { classifyError } from './lib/exit-codes.ts';
 import { trimAgentMessage } from './lib/error-trim.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { createConfirmationStore } from './lib/mcp/confirmation.ts';
-import { assertKnownParams } from './lib/mcp/known-params.ts';
+import { assertKnownParams, assertParamTypes } from './lib/mcp/known-params.ts';
 import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from './lib/mcp/registry-tools.ts';
+import { needsConfirmation } from './lib/command-definition.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
@@ -96,13 +97,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   const params = (rawParams ?? {}) as Record<string, unknown>;
   const call = toolCall(request.params._meta?.progressToken, extra);
 
-  // A parameter outside the tool's schema is refused before anything runs or
-  // a token is given. An unknown tool is reported by executeTool.
+  // A parameter outside the tool's schema, or not of its type, is refused
+  // before anything runs or a token is given. An unknown tool is reported by
+  // executeTool.
   const tool = findTool(installedCommands, name);
   const schema = name === CONFIRM_TOOL.name ? CONFIRM_TOOL : tool;
   if (schema !== undefined) {
     try {
       assertKnownParams(schema, params);
+      assertParamTypes(schema, params);
     } catch (err) {
       return errorResponse(err instanceof Error ? err : new Error(String(err)));
     }
@@ -119,7 +122,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   }
 
   // Step 1 of confirmation: return a pending token instead of executing.
-  if (tool?.confirmation !== undefined) {
+  if (tool !== undefined && needsConfirmation(tool, params)) {
     let description: string;
     try {
       description = await confirmationFor(tool, params, call);

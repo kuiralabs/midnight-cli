@@ -3,7 +3,7 @@
 
 import { type ParsedArgs, MINIMAL_FLAG } from './argv.ts';
 import type { Payer } from './payer.ts';
-import { createCallContext, runHandler, type CommandHandler, type OutputSink } from './call-context.ts';
+import { createCallContext, runHandler, type CommandHandler, type CallOutput } from './call-context.ts';
 import type { SdkWarningCalls } from './sdk-warnings.ts';
 import { CommandFailedError } from './errors.ts';
 
@@ -57,7 +57,7 @@ export async function captureCommand(
   { signal, onProgress, payer, sdkWarnings }: CommandRun,
 ): Promise<Record<string, unknown>> {
   let result: Record<string, unknown> = {};
-  const output: OutputSink = {
+  const output: CallOutput = {
     // Read back as JSON, as the server sends it: what was written then, nothing the handler changes after.
     result: (data) => { result = JSON.parse(JSON.stringify(data)) as Record<string, unknown>; },
     stdout: serverStderr,
