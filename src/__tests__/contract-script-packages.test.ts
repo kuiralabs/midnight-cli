@@ -140,8 +140,10 @@ describe('a dApp laid out unlike ours', () => {
     expect(fs.readdirSync(dir)).toEqual([]);
   });
 
-  it('links nothing inside a scope it linked whole, which would write into the engine\'s install', () => {
-    // A tree holding @x/a, and @x/b found elsewhere: the dApp has no @x, so @x is linked whole to the tree.
+  it('links a scope whole only when one folder holds all its packages, and then nothing inside it', () => {
+    // A tree holding @x/a, and @x/b found elsewhere (an install that hoisted it):
+    // linking @x whole to the tree would leave @x/b out, so @x is a folder of the
+    // dApp's own with a link to each, and the engine's install is left as it was.
     const tree = path.join(dir, 'tree', '@x');
     fs.mkdirSync(path.join(tree, 'a'), { recursive: true });
     const elsewhere = path.join(dir, 'elsewhere', '@x', 'b');
@@ -150,9 +152,36 @@ describe('a dApp laid out unlike ours', () => {
     fs.mkdirSync(dapp, { recursive: true });
     const packages = { set: 'rc', packages: ['@x/a', '@x/b'], packageFolder: (name: string) => (name === '@x/a' ? path.join(tree, 'a') : elsewhere) };
     const made = overlayScriptPackagesFor(dapp, packages);
-    expect(made.map((m) => path.relative(dir, m.path))).toEqual([path.join('dapp', 'node_modules', '@x')]);
+    expect(made.map((m) => [path.relative(dir, m.path), m.kind])).toEqual([
+      [path.join('dapp', 'node_modules', '@x'), 'folder'],
+      [path.join('dapp', 'node_modules', '@x', 'a'), 'link'],
+      [path.join('dapp', 'node_modules', '@x', 'b'), 'link'],
+    ]);
+    expect(fs.realpathSync(path.join(dapp, '@x', 'b'))).toBe(fs.realpathSync(elsewhere));
     expect(fs.readdirSync(tree)).toEqual(['a']);
     undoOverlay(made);
+    expect(fs.readdirSync(dapp)).toEqual([]);
+  });
+
+  it('gives a dApp with no node_modules a folder of links when the packages sit in more than one tree', () => {
+    // As in a workspace: the engine's own copies nested under it, a package it shares hoisted to the root.
+    const nested = path.join(dir, 'engine', 'node_modules');
+    fs.mkdirSync(path.join(nested, '@x', 'a'), { recursive: true });
+    const hoisted = path.join(dir, 'root', 'node_modules', 'ws');
+    fs.mkdirSync(hoisted, { recursive: true });
+    const dapp = path.join(dir, 'dapp', 'node_modules');
+    fs.mkdirSync(path.dirname(dapp), { recursive: true });
+    const packages = { set: 'beta', packages: ['@x/a', 'ws'], packageFolder: (name: string) => (name === 'ws' ? hoisted : path.join(nested, '@x', 'a')) };
+    const made = overlayScriptPackagesFor(dapp, packages);
+    expect(made.map((m) => [path.relative(dir, m.path), m.kind])).toEqual([
+      [path.join('dapp', 'node_modules'), 'folder'],
+      [path.join('dapp', 'node_modules', '@x'), 'link'],
+      [path.join('dapp', 'node_modules', 'ws'), 'link'],
+    ]);
+    expect(fs.realpathSync(path.join(dapp, 'ws'))).toBe(fs.realpathSync(hoisted));
+    expect(fs.readdirSync(nested)).toEqual(['@x']);
+    undoOverlay(made);
+    expect(fs.readdirSync(path.dirname(dapp))).toEqual([]);
   });
 
   it('refuses another SDK set\'s packages while a run uses its overlay, and replaces it once none does', () => {
