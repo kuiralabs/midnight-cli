@@ -14,6 +14,7 @@ Act on the user's behalf on Midnight, through what the installed packages bring:
 - Deploy, call, inspect and read Compact smart contracts, and read the chain's block limits.
 - Serve a wallet to a dApp over the DApp connector, including as a fee wallet for an agent's transactions (`mn serve --approve-fees`).
 - Scaffold and run a dApp's end-to-end tests, and manage a local Midnight network.
+- Swap one shielded token for another privately with another wallet, through an offer file: make it, inspect it, take it at the agreed terms.
 - Deploy the wallet's account, fund it, and issue and revoke the grants that let an agent spend from it.
 
 Most commands are MCP tools (`tools/list` shows each, and what it takes). These have none, and the user runs them in their own terminal: `mn generate`, `mn serve`, `mn dev`, `mn help`, `mn manual`; some subcommands have none either.
@@ -134,7 +135,7 @@ Running a suite is a CLI command, not an MCP tool: `mn test run --suite <name>` 
 - **Open-world tools** (`openWorldHint: true`) — touch the network/chain/Docker. Can fail non-deterministically; retry is usually safe for reads, risky for writes.
 - **Never** auto-execute a fund-moving operation. Always describe amount + recipient + network first.
 - **Never** invent a mnemonic, seed, or private key. If the user needs one, call `midnight_wallet_generate`.
-- **Some tools use a two-step confirmation token**: `midnight_wallet_generate`, `midnight_wallet_remove`, `midnight_transfer`, `midnight_contract_deploy`, `midnight_contract_call`, `midnight_grant_deploy`, `midnight_grant_deposit`, `midnight_grant_issue`, `midnight_grant_revoke`, `midnight_grant_revoke_all`. The first call returns a pending token + description and does nothing else; show the description verbatim, and call `midnight_confirm_operation({ token })` only after the user explicitly says yes. (`midnight_wallet_generate` asks only with `force: true`, which replaces a wallet.)
+- **Some tools use a two-step confirmation token**: `midnight_wallet_generate`, `midnight_wallet_remove`, `midnight_transfer`, `midnight_contract_deploy`, `midnight_contract_call`, `midnight_grant_deploy`, `midnight_grant_deposit`, `midnight_grant_issue`, `midnight_grant_revoke`, `midnight_grant_revoke_all`, `midnight_swap_make`, `midnight_swap_take`, `midnight_swap_cancel`. The first call returns a pending token + description and does nothing else; show the description verbatim, and call `midnight_confirm_operation({ token })` only after the user explicitly says yes. (`midnight_wallet_generate` asks only with `force: true`, which replaces a wallet.)
 
 ## Error recovery recipes
 

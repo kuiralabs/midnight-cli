@@ -169,8 +169,10 @@ describe('createPackageRegistry', () => {
 
 describe('the installed packages\' guidance', () => {
   it('names, in every piece, a section its text has', () => {
+    // A text's own sections, and the ones packages add to it (swap adds its own to the manual).
+    const added = installedCommands.packages.flatMap((pkg) => pkg.guidance.sections ?? []);
     const unplaced = installedCommands.packages.flatMap((pkg) => pkg.guidance.pieces
-      .filter((p) => !SECTIONS[p.text].includes(p.section))
+      .filter((p) => !sectionsWithAdded(p.text, SECTIONS[p.text], added).includes(p.section))
       .map((p) => `${pkg.name}: ${p.text} ${p.section}`));
     expect(unplaced).toStrictEqual([]);
   });
@@ -205,7 +207,7 @@ describe('the texts, assembled from the installed packages', () => {
     const shown = [...section.matchAll(/^ {2}(midnight_\w+)/gm)].map((m) => m[1]);
     expect([...shown].sort()).toStrictEqual([...listed].sort());
     expect(section.startsWith(` (${listed.length})\n`)).toBe(true);
-    expect(listed.length).toBe(38);
+    expect(listed.length).toBe(43);
   });
 
   it('lists the grant tools under Grants (experimental), last', () => {
@@ -223,7 +225,7 @@ describe('the texts, assembled from the installed packages', () => {
     const section = toolsSection(agentManual(registry));
     expect(section).not.toContain('Grants (experimental)');
     expect(section).toContain('  Other\n  midnight_grant_status        The wallet\'s account: address, owner key, what it holds, number of grants (see skill).');
-    expect(section.startsWith(' (38)\n')).toBe(true);
+    expect(section.startsWith(' (43)\n')).toBe(true);
   });
 
   it('leaves out a package that is not installed: its sections, its rows and its tools', () => {
@@ -232,7 +234,7 @@ describe('the texts, assembled from the installed packages', () => {
     expect(manual).not.toContain('GRANTS (experimental)');
     expect(manual).not.toContain('NO_ACCOUNT');
     expect(manual).not.toContain('midnight_grant_');
-    expect(toolsSection(manual).startsWith(' (30)\n')).toBe(true);
+    expect(toolsSection(manual).startsWith(' (35)\n')).toBe(true);
     expect(skillCore(registry)).not.toContain('midnight_grant_');
     const full = skillFull(registry);
     expect(full).not.toContain('allowance (experimental)');
