@@ -91,12 +91,12 @@ export function startLocalRegistry(dir, port = 0) {
 
 /**
  * The same registry in a process of its own, for a caller that runs npm
- * synchronously (and so can't answer npm's requests itself); resolves to its
- * URL and a close function.
+ * synchronously (and so can't answer npm's requests itself), on `port` (0: any
+ * free one); resolves to its URL and a close function.
  */
-export function startLocalRegistryProcess(dir) {
+export function startLocalRegistryProcess(dir, port = 0) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), dir, '0'], { stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), dir, String(port)], { stdio: ['ignore', 'pipe', 'inherit'] });
     child.on('error', reject);
     child.on('exit', (code) => reject(new Error(`the local registry exited (${code}) before it was ready`)));
     child.stdout.on('data', (chunk) => {
