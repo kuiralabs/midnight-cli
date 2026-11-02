@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync, mkdirSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { shieldedCoinPublicKeyHexFromSeed, loadShieldedCache, saveShieldedCache } from '../engine/rc/shielded-direct-cache.ts';
+import { shieldedCoinPublicKeyHexFromSeed, loadShieldedCache, saveShieldedCache } from '@kuiralabs/midnight-engine-rc/shielded-direct-cache';
 import { getShieldedCachePath, clearShieldedDirectCache } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
 
 const PUBKEY = 'aabbccddeeff00112233445566778899aabbccddeeff001122334455667788ff';

@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { WebSocketServer, type WebSocket as WsSocket } from 'ws';
 import type { AddressInfo } from 'node:net';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { readShieldedBalanceDirect } from '../engine/rc/shielded-direct.ts';
-import { deriveShieldedSeed } from '../engine/rc/derivation.ts';
+import { readShieldedBalanceDirect } from '@kuiralabs/midnight-engine-rc/shielded-direct';
+import { deriveShieldedSeed } from '@kuiralabs/midnight-engine-rc/derivation';
 import zswapEvents from './fixtures/zswap-events-localnet.json';
 
 // Real zswap ledger events (ledger 9, event[v14]) captured from a fresh localnet chain. Seeds 0x01 and

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { computeForeignRanges, collapseForeignGenerations } from '../engine/rc/dust-collapse.ts';
+import { computeForeignRanges, collapseForeignGenerations } from '@kuiralabs/midnight-engine-rc/dust-collapse';
 import { DUST_STATE_OWNED_HEX } from './fixtures/dust-state-owned.ts';
 
 // Same initial dust params the sync path uses (dust-direct.ts).

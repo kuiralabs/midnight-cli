@@ -110,6 +110,8 @@ const IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+)(['"])([^'"]+)\1/gm;
 export const WORKSPACE_PACKAGES = [
   { name: '@kuiralabs/midnight-cli-core', dir: join(ROOT, 'packages', 'cli-core', 'src') },
   { name: '@kuiralabs/midnight-chain', dir: join(ROOT, 'packages', 'chain', 'src') },
+  // The rc engine: its files read as engine/rc/<file>, its index the package itself.
+  { name: '@kuiralabs/midnight-engine-rc', dir: join(ROOT, 'packages', 'engine-rc', 'src'), prefix: 'engine/rc/' },
 ];
 
 /** The package source folder a file is in, or undefined for one under src/. */
@@ -117,7 +119,8 @@ const packageOf = (file) => WORKSPACE_PACKAGES.find((pkg) => file.startsWith(pkg
 
 /** A file's path as the homes read it: under its package's source folder, or under src/. */
 export function relOf(file) {
-  return relative(packageOf(file)?.dir ?? SRC, file);
+  const pkg = packageOf(file);
+  return (pkg?.prefix ?? '') + relative(pkg?.dir ?? SRC, file);
 }
 
 /** Where a file is, for a report: from the repository's root. */
@@ -203,14 +206,14 @@ export function findLayeringProblems() {
     }
     for (const { specifier, line } of importsOf(file)) {
       const where = `${shown(file)}:${line}`;
-      const pkg = WORKSPACE_PACKAGES.find((p) => specifier.startsWith(p.name + '/'));
+      const pkg = WORKSPACE_PACKAGES.find((p) => specifier === p.name || specifier.startsWith(p.name + '/'));
       const from = packageOf(file);
       if (specifier.startsWith('.') && from !== undefined && packageOf(resolve(dirname(file), specifier)) !== from) {
         violations.push({ home, rule: `${home} package → outside it (a package imports another only by name)`, where, specifier });
         continue;
       }
       if (specifier.startsWith('.') || pkg !== undefined) {
-        const target = pkg !== undefined ? `${specifier.slice(pkg.name.length + 1)}.ts` : relOf(resolve(dirname(file), specifier));
+        const target = pkg !== undefined ? `${pkg.prefix ?? ''}${specifier === pkg.name ? 'index' : specifier.slice(pkg.name.length + 1)}.ts` : relOf(resolve(dirname(file), specifier));
         const rule = importRule(rel, target);
         if (rule !== undefined) violations.push({ home, rule, where, specifier });
       } else if (MIDNIGHT_SDK.test(specifier) && home !== 'engine') {

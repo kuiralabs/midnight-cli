@@ -6,6 +6,6 @@ export function importRule(fromRel: string, toRel: string): string | undefined;
 export function findLayeringProblems(): { unhomed: string[]; violations: { home: string; rule: string; where: string; specifier: string }[] };
 
 /** The workspace packages carved out of src/: their names and source folders. */
-export const WORKSPACE_PACKAGES: readonly { name: string; dir: string }[];
+export const WORKSPACE_PACKAGES: readonly { name: string; dir: string; prefix?: string }[];
 /** A file's path as the homes read it: under its package's source folder, or under src/. */
 export function relOf(file: string): string;

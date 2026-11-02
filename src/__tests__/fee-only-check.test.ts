@@ -14,7 +14,7 @@ import {
   shieldedToken,
   signData,
 } from '@midnightntwrk/ledger-v9';
-import { expiredIntents, feeOnlyRefusals, readDAppTransaction } from '../engine/rc/fee-only-check.ts';
+import { expiredIntents, feeOnlyRefusals, readDAppTransaction } from '@kuiralabs/midnight-engine-rc/fee-only-check';
 import {
   AGENT_SK, AGENT_VK, NETWORK, NIGHT, TTL, WALLET_SK, WALLET_VK,
   agentPaysMerchant, buildTx, pay, sealedBytes, spend, unsealedBytes,

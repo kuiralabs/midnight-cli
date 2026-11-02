@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { anyEngine, engineFor, sdkSetOf } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { getValidNetworkNames, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { rcEngine } from '../engine/rc/index.ts';
+import { rcEngine } from '@kuiralabs/midnight-engine-rc';
 
 describe('the engine for a network', () => {
   it('is the rc engine for every network mn knows today', async () => {

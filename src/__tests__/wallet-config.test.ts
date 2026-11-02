@@ -6,7 +6,7 @@ import { loadWalletConfig, matchWalletAddress, unlockWallet, writeSealedWallet, 
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
 import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { deriveAllAddresses, deriveAllShieldedAddresses } from '../engine/rc/derive-address.ts';
+import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { stateRootIn } from './helpers/state-root-in.ts';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-wallet-test-${process.pid}`);

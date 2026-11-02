@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { overlayDustDirectSnapshot } from '../engine/rc/facade.ts';
-import type { DustCacheEntry } from '../engine/rc/dust-direct-cache.ts';
+import { overlayDustDirectSnapshot } from '@kuiralabs/midnight-engine-rc/facade';
+import type { DustCacheEntry } from '@kuiralabs/midnight-engine-rc/dust-direct-cache';
 import { DUST_STATE_OWNED_HEX } from './fixtures/dust-state-owned.ts';
 
 // overlayDustDirectSnapshot is the seam behind `dust export` (and the write-command
@@ -96,10 +96,10 @@ import { beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { exportDustSnapshot } from '../engine/rc/dust-export.ts';
-import { WalletDataRepository } from '../engine/rc/wallet-data-repository.ts';
+import { exportDustSnapshot } from '@kuiralabs/midnight-engine-rc/dust-export';
+import { WalletDataRepository } from '@kuiralabs/midnight-engine-rc/wallet-data-repository';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
-import type { DustDirectResult } from '../engine/rc/dust-direct.ts';
+import type { DustDirectResult } from '@kuiralabs/midnight-engine-rc/dust-direct';
 
 const EXPORT_NETWORK: NetworkConfig = {
   indexer: 'http://test/indexer', indexerWS: 'ws://test/indexer/ws',

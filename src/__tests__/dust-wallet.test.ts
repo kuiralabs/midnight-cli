@@ -10,8 +10,8 @@ import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk';
 import { Transacting } from '@midnightntwrk/wallet-sdk/dust/v2';
 import { WalletEntrySchema, mergeWalletEntries } from '@midnightntwrk/wallet-sdk/facade';
 import { EitherOps } from '@midnightntwrk/wallet-sdk/utilities';
-import { ConvergingDustTransacting, DustWallet } from '../engine/rc/dust-wallet.ts';
-import { FORK_SCHEDULE } from '../engine/rc/fork-schedule.ts';
+import { ConvergingDustTransacting, DustWallet } from '@kuiralabs/midnight-engine-rc/dust-wallet';
+import { FORK_SCHEDULE } from '@kuiralabs/midnight-engine-rc/fork-schedule';
 import { dustShortfallOf, isDustShortage } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import {
   CAPTURED_AT, type FeeRange, coinsAt, computeArguments, feeRange, paymentToBalance, timeWhenSmallestReaches, transacting,

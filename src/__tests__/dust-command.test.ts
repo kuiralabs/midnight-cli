@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import dustCommand from '../commands/dust.ts';
 import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
+import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';

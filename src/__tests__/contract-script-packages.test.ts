@@ -20,9 +20,9 @@ import {
   scriptRuntime,
   undoOverlay,
 } from '../lib/contract/runner.ts';
-import * as rcScripts from '../engine/rc/contract-scripts.ts';
-import { SCRIPT_PACKAGES, packageFolder } from '../engine/rc/contract-scripts.ts';
-import { rcEngine } from '../engine/rc/index.ts';
+import * as rcScripts from '@kuiralabs/midnight-engine-rc/contract-scripts';
+import { SCRIPT_PACKAGES, packageFolder } from '@kuiralabs/midnight-engine-rc/contract-scripts';
+import { rcEngine } from '@kuiralabs/midnight-engine-rc';
 import type { CallScript, DeployScript, StateScript } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 // The rc engine's scripts, with the parts the runner gives every engine.
@@ -33,7 +33,7 @@ const generateStateScript = (opts: StateScript & { dappDir?: string }): string =
 const overlayScriptPackages = (userNodeModules: string) => overlayScriptPackagesFor(userNodeModules, rcEngine.contracts.scripts);
 const acquireOverlay = (dir: string): void => acquireOverlayFor(dir, rcEngine.contracts.scripts);
 
-import { platformPackageBinary } from '../engine/rc/dust-sync-native.ts';
+import { platformPackageBinary } from '@kuiralabs/midnight-engine-rc/dust-sync-native';
 
 const NETWORK = { indexer: 'http://localhost:28088/api/v4/graphql', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws', node: 'ws://localhost:29944', proofServer: 'http://localhost:26300', networkId: 'Undeployed' };
 let dir: string;

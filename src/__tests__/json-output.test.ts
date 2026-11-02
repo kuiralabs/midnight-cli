@@ -16,7 +16,7 @@ import inspectCostCommand from '../commands/inspect-cost.ts';
 import configCommand from '@kuiralabs/midnight-cli-core/commands/config';
 import helpCommand from '../commands/help.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
+import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { loadCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
 import { localIndexerFlags } from './helpers/local-indexer.ts';
 import { cliCall } from './helpers/cli-call.ts';

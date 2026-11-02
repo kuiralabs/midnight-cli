@@ -10,11 +10,11 @@ import { join } from 'node:path';
 import { Buffer } from 'node:buffer';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import { WalletDataRepository, type DustView, type UnshieldedView, type RepoDeps } from '../engine/rc/wallet-data-repository.ts';
+import { WalletDataRepository, type DustView, type UnshieldedView, type RepoDeps } from '@kuiralabs/midnight-engine-rc/wallet-data-repository';
 import { UnsupportedLedgerError } from '@kuiralabs/midnight-chain/lib/ledger-guard';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { BalanceSummary } from '@kuiralabs/midnight-chain/lib/balance-subscription';
-import type { DustDirectResult } from '../engine/rc/dust-direct.ts';
+import type { DustDirectResult } from '@kuiralabs/midnight-engine-rc/dust-direct';
 
 // ── Test fixtures ─────────────────────────────────────────
 

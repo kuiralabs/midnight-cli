@@ -26,7 +26,7 @@ import {
   FILE_MODE,
   isValidWalletName,
 } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
+import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 
 // Use a temp dir that simulates ~/.midnight
 const TEST_HOME = path.join(os.tmpdir(), `midnight-multi-wallet-test-${process.pid}`);

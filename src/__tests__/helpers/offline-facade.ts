@@ -7,11 +7,11 @@
 // loopback port.
 
 import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk';
-import { DustWallet } from '../../engine/rc/dust-wallet.ts';
+import { DustWallet } from '@kuiralabs/midnight-engine-rc/dust-wallet';
 import { WalletFacade, WalletEntrySchema, mergeWalletEntries } from '@midnightntwrk/wallet-sdk/facade';
 import { ShieldedWallet } from '@midnightntwrk/wallet-sdk/shielded';
 import { PublicKey, UnshieldedWallet, createKeystore } from '@midnightntwrk/wallet-sdk/unshielded';
-import { FORK_SCHEDULE } from '../../engine/rc/fork-schedule.ts';
+import { FORK_SCHEDULE } from '@kuiralabs/midnight-engine-rc/fork-schedule';
 import { DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { NETWORK } from './ledger-tx.ts';
 

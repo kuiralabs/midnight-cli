@@ -7,7 +7,7 @@
 // passphrase it was made with.
 
 import * as fs from 'node:fs';
-import { rcEngine } from '../engine/rc/index.ts';
+import { rcEngine } from '@kuiralabs/midnight-engine-rc';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

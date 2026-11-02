@@ -17,7 +17,7 @@ import { waitForFirstBlock } from '@kuiralabs/midnight-chain/lib/node-ready';
 import { waitForAddressFunded } from '@kuiralabs/midnight-chain/lib/indexer-ready';
 import { waitForProofServerReady } from '@kuiralabs/midnight-chain/lib/proof-server-ready';
 import { sleep } from '@kuiralabs/midnight-cli-core/lib/sleep';
-import { WalletDataRepository } from '../engine/rc/wallet-data-repository.ts';
+import { WalletDataRepository } from '@kuiralabs/midnight-engine-rc/wallet-data-repository';
 import { getNetworkConfig, type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { BalanceSummary } from '@kuiralabs/midnight-chain/lib/balance-subscription';
 
