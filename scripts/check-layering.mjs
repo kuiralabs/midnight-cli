@@ -107,19 +107,14 @@ export const PENDING_ENGINE = new Set([
   'commands/balance.ts',
   'commands/dust.ts',
   'commands/transfer.ts',
-  'lib/contract/providers.ts',
   'lib/contract/runner.ts',
   'lib/dapp-connector.ts',
   'lib/dust-wallet.ts',
   'lib/facade.ts',
   'lib/fork-schedule.ts',
-  'lib/grant/sealed-account.ts',
   'lib/sign-recipe.ts',
-  'lib/test/prep-runner.ts',
-  'lib/transfer-request.ts',
   'lib/transfer.ts',
   'lib/wallet-data-repository.ts',
-  'lib/ws-rpc.ts',
 ]);
 const ACCOUNT_CHAIN = /^@kuiralabs\/midnight-account/;
 const SDK_FREE = new Set(['core', 'chain']);

@@ -13,6 +13,7 @@
 // never opened under the public password its private state has left.
 
 import * as fs from 'node:fs';
+import { anyEngine } from '../engine.ts';
 import * as path from 'node:path';
 import type { Arm } from '@kuiralabs/midnight-account';
 import { changePrivateStatePassword, directoryOwnerStore, ownerDeviceFromSecret } from '@kuiralabs/midnight-account-chain/owner';
@@ -72,7 +73,7 @@ export async function protectAccount(dir: string, passphrase: string, coinPublic
   if (device !== undefined && keys.read() === undefined) keys.keep(device);
 
   // 3
-  const password = sealedPrivateStatePassword(dir, key);
+  const password = sealedPrivateStatePassword(dir, key, (await anyEngine()).contracts.acceptsPrivateStatePassword);
   const location = privateStateLocationOf(dir, () => LEGACY_STORE_PASSWORD);
   if (record !== undefined && fs.existsSync(location.database)) {
     await changePrivateStatePassword({ getCoinPublicKey: () => coinPublicKey }, record.contractAddress, location, () => password);

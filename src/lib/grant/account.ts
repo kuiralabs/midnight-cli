@@ -9,6 +9,7 @@
 // midnight-level-db under the store name and password it was first made with.
 
 import { notice } from '../notices.ts';
+import { anyEngine } from '../engine.ts';
 import { join } from 'node:path';
 import { artefactCache } from '@kuiralabs/midnight-account-chain/artefacts';
 import { type AccountContext, type ProgressEvent, accountContext, describeProgress, networkOf } from '@kuiralabs/midnight-account-chain/context';
@@ -139,12 +140,14 @@ export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir:
   const network = networkOf({ networkId: ACCOUNT_NETWORK_ID, node: httpOf(networkConfig.node), indexer: networkConfig.indexer, proofServer: networkConfig.proofServer });
   const context = accountContext({ network, artefacts: artefactCache(accountArtifactsDir(root), { progress }), progress });
   const database = join(recordsDir, PRIVATE_STATE_DATABASE);
+  // The account's private state is midnight-js's, which the engine's policy checks a new password against.
+  const { contracts } = await anyEngine();
 
   const sealed = (key: Buffer): GrantAccount => ({
     context,
     store: sealedOwnerStore(recordsDir, key),
     keys: sealedDeviceKeys(recordsDir, key),
-    location: { database, store: PRIVATE_STATE_STORE, password: () => sealedPrivateStatePassword(recordsDir, key) },
+    location: { database, store: PRIVATE_STATE_STORE, password: () => sealedPrivateStatePassword(recordsDir, key, contracts.acceptsPrivateStatePassword) },
     protection: 'sealed',
     deviceReadSecret: () => sealedDeviceReadSecret(recordsDir, key),
     ownCode: () => {

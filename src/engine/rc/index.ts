@@ -2,7 +2,11 @@
 // release candidates, ledger 9 and midnight-js 5 as mn pins them.
 
 import type { Engine } from '../../lib/engine.ts';
+import * as ledger from '@midnightntwrk/ledger-v9';
+import { validatePassword } from '@midnight-ntwrk/midnight-js-utils';
 import { blockLimitsOf } from './ledger-parameters.ts';
+import { rawContractState } from './contract-providers.ts';
+import { assertAddress } from './addresses.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
 import { shieldedCoinPublicKeyHexFromSeed } from './shielded-direct-cache.ts';
 import { deriveAllAddresses, deriveAllShieldedAddresses, deriveShieldedAddressString, deriveUnshieldedAddress } from './derive-address.ts';
@@ -16,8 +20,21 @@ export const rcEngine: Engine = {
     shieldedAddresses: deriveAllShieldedAddresses,
     dustPublicKeyHex: dustPublicKeyHexFromSeed,
     shieldedCoinPublicKeyHex: shieldedCoinPublicKeyHexFromSeed,
+    assertAddress,
   },
   ledger: {
     blockLimits: blockLimitsOf,
+    nightTokenId: () => ledger.unshieldedToken().raw,
+  },
+  contracts: {
+    rawState: rawContractState,
+    acceptsPrivateStatePassword(password) {
+      try {
+        validatePassword(password);
+        return true;
+      } catch {
+        return false;
+      }
+    },
   },
 };

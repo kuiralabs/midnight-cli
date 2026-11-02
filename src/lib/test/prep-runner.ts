@@ -1,6 +1,5 @@
 // Prep runner — execute prep steps defined in dapp.test.json by calling existing lib functions.
 
-import * as ledger from '@midnightntwrk/ledger-v9';
 import { join } from 'node:path';
 
 import { bindCachesToIndexer } from '../cache-indexer.ts';
@@ -19,6 +18,7 @@ import { startServeOrReuse } from '../serve-manager.ts';
 import { OWN_COMMAND_DUST_WAIT_MS } from '../dust-wait.ts';
 import { startBuild } from './build-manager.ts';
 import { throwIfCancelled } from '../errors.ts';
+import { engineFor } from '../engine.ts';
 
 /**
  * Run all prep steps defined in the config, in order.
@@ -141,7 +141,7 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
         callbacks.onMessage(`Syncing wallet... (${detail})`);
       },
     });
-    const nightToken = ledger.unshieldedToken().raw;
+    const nightToken = (await engineFor(network)).ledger.nightTokenId();
     const balance = state.unshielded.balances[nightToken] ?? 0n;
 
     if (balance > 0n) {

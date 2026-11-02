@@ -3,7 +3,20 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import { notice } from './notices.ts';
-import type { ErrorCode, APIError } from '@midnightntwrk/dapp-connector-api';
+
+/**
+ * The DApp Connector API's error codes, as its specification names them
+ * (dapp-connector-api's ErrorCodes; a test keeps the two equal). The wire
+ * protocol is the same whatever SDK set serves it, so the transport owns it.
+ */
+export type ErrorCode = 'InternalError' | 'Rejected' | 'InvalidRequest' | 'PermissionRejected' | 'Disconnected';
+
+/** The DApp Connector API's error: an Error with its code and reason, told apart by `type` (the specification's APIError). */
+export type APIError = Error & {
+  type: 'DAppConnectorAPIError';
+  code: ErrorCode;
+  reason: string;
+};
 
 // ── JSON-RPC 2.0 types ──
 

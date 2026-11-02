@@ -4,7 +4,7 @@
 // candidates (rc). The interface grows area by area as code moves behind it.
 // Loading an engine loads its SDK, so the loader imports it only when asked.
 
-import type { NetworkName } from './network.ts';
+import type { NetworkConfig, NetworkName } from './network.ts';
 
 /** An SDK set mn runs on. */
 export type SdkSet = 'rc';
@@ -23,6 +23,8 @@ export interface EngineKeys {
   dustPublicKeyHex(seed: Buffer): string;
   /** The shielded coin public key, hex: what the shielded reader's cache is named by. */
   shieldedCoinPublicKeyHex(seed: Buffer): string;
+  /** Throws, saying why, unless `address` is a bech32m address of that kind on `network`. */
+  assertAddress(address: string, kind: 'shielded' | 'unshielded', network: NetworkName): void;
 }
 
 /** A line of what a transaction is, as an approval prompt shows it. */
@@ -44,6 +46,24 @@ export interface BlockLimits {
 export interface EngineLedger {
   /** The block limits in serialized ledger parameters (hex), as the indexer serves them. Throws when the bytes aren't this set's ledger parameters. */
   blockLimits(parametersHex: string): BlockLimits;
+  /** The raw id of the unshielded NIGHT token, as wallet balances are keyed. */
+  nightTokenId(): string;
+}
+
+/** A contract's ledger state read without its compiled contract: cells as their field-aligned bytes in hex, maps by size. */
+export type RawStateValue =
+  | { type: 'null' }
+  | { type: 'cell'; value: string[] }
+  | { type: 'array'; items: RawStateValue[] }
+  | { type: 'map'; size: number }
+  | { type: 'boundedMerkleTree'; height: number; root: string[] | null };
+
+/** What an engine does with contracts in mn's own process. */
+export interface EngineContracts {
+  /** A deployed contract's raw ledger state from the indexer; null when no contract is at `address`. */
+  rawState(networkConfig: NetworkConfig, address: string): Promise<RawStateValue | null>;
+  /** Whether midnight-js accepts a private-state password (its own policy, which a random draw can miss). */
+  acceptsPrivateStatePassword(password: string): boolean;
 }
 
 /** One SDK set, as mn uses it. */
@@ -51,6 +71,7 @@ export interface Engine {
   readonly set: SdkSet;
   readonly keys: EngineKeys;
   readonly ledger: EngineLedger;
+  readonly contracts: EngineContracts;
 }
 
 /** The SDK set a network runs on. */

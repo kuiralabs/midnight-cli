@@ -12,7 +12,7 @@ import { type Payer, payerFor, resolvePayingTarget } from '../lib/payer.ts';
 import { deployContract } from '../lib/contract/deploy.ts';
 import { callContract } from '../lib/contract/call.ts';
 import { validateContractAddress } from '../lib/contract/validate.ts';
-import type { RawStateValue } from '../lib/contract/raw-state.ts';
+import { engineFor, type RawStateValue } from '../lib/engine.ts';
 import { resolveContractCallRequest, resolveContractDeployRequest, resolveScanDir } from '../lib/contract/request.ts';
 import {
   findContractInfo,
@@ -293,17 +293,12 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
     // If runner fails (no compiled contract in cwd), fall back to raw state
     spinner.stop(yellow('⚠') + ' Parsed state unavailable, showing raw');
 
-    const { buildStateProvider } = await import('../lib/contract/providers.ts');
-    const publicDataProvider = buildStateProvider(networkConfig);
-    // The provider's query takes no signal: the call stops waiting for it when cancelled.
-    const contractState = await untilCancelled(publicDataProvider.queryContractState(address), ctx.signal);
+    // The engine's query takes no signal: the call stops waiting for it when cancelled.
+    const raw = await untilCancelled((await engineFor(network)).contracts.rawState(networkConfig, address), ctx.signal);
 
-    if (!contractState) {
+    if (!raw) {
       throw new Error(`No contract found at address ${address} on ${network}`);
     }
-
-    const { describeRawState } = await import('../lib/contract/raw-state.ts');
-    const raw = describeRawState(contractState.data.state);
 
     if (jsonMode) {
       ctx.output.result({ subcommand: 'state', address, network, raw });

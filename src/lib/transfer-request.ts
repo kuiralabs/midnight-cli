@@ -2,12 +2,11 @@
 // before syncing, the MCP server before it issues a confirmation token, so a
 // typo in the amount or the recipient is refused up front.
 
-import { MidnightBech32m, ShieldedAddress, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { type ParsedArgs, getFlag, hasFlag } from './argv.ts';
 import { UsageError } from './errors.ts';
 import { loadWalletConfig, resolveWalletPath, type WalletConfig } from './wallet-config.ts';
 import { resolveNetworkName } from './resolve-network.ts';
-import { networkIdForName } from './network-id.ts';
+import { engineFor, type EngineKeys } from './engine.ts';
 import { shieldedSyncEnabled, shieldedDisabledReason } from './shielded-policy.ts';
 import { parseAmount } from './amount.ts';
 import type { NetworkName } from './network.ts';
@@ -55,33 +54,20 @@ export async function resolveTransferRequest(args: ParsedArgs): Promise<Transfer
     if (!shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded'))) {
       throw new Error(shieldedDisabledReason(networkName));
     }
-    decodeShieldedRecipient(recipientAddress, networkName);
-  } else {
-    decodeUnshieldedRecipient(recipientAddress, networkName);
   }
+  assertRecipient((await engineFor(networkName)).keys, recipientAddress, shielded, networkName);
 
   return { walletPath, walletConfig, networkName, recipientAddress, amountNight, shielded };
 }
 
-export function decodeShieldedRecipient(address: string, networkName: NetworkName): ShieldedAddress {
+/** Refuses, as a usage mistake, a recipient that is not an address of that kind on the network. */
+function assertRecipient(keys: EngineKeys, address: string, shielded: boolean, networkName: NetworkName): void {
   try {
-    return MidnightBech32m.parse(address).decode(ShieldedAddress, networkIdForName(networkName));
+    keys.assertAddress(address, shielded ? 'shielded' : 'unshielded', networkName);
   } catch (err: any) {
-    throw new UsageError(
-      `Invalid shielded address: ${err.message}\n` +
-      `Expected a shielded address (mn_shield-addr_...) for network "${networkName}"`
-    );
-  }
-}
-
-function decodeUnshieldedRecipient(address: string, networkName: NetworkName): UnshieldedAddress {
-  try {
-    return MidnightBech32m.parse(address).decode(UnshieldedAddress, networkIdForName(networkName));
-  } catch (err: any) {
-    throw new UsageError(
-      `Invalid recipient address: ${err.message}\n` +
-      `Expected a bech32m address (mn_addr_...) for network "${networkName}"`
-    );
+    throw new UsageError(shielded
+      ? `Invalid shielded address: ${err.message}\nExpected a shielded address (mn_shield-addr_...) for network "${networkName}"`
+      : `Invalid recipient address: ${err.message}\nExpected a bech32m address (mn_addr_...) for network "${networkName}"`);
   }
 }
 
