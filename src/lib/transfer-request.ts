@@ -7,7 +7,7 @@ import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { loadWalletConfig, resolveWalletPath, type WalletConfig } from './wallet-config.ts';
 import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { engineFor, type EngineKeys } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { shieldedSyncEnabled, shieldedDisabledReason } from './shielded-policy.ts';
+import { shieldedSyncEnabled, shieldedDisabledReason } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
 import { parseAmount } from '@kuiralabs/midnight-cli-core/lib/amount';
 import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 

@@ -8,6 +8,7 @@ import { validatePassword } from '@midnight-ntwrk/midnight-js-utils';
 import { blockLimitsOf } from './ledger-parameters.ts';
 import { rawContractState } from './contract-providers.ts';
 import { assertAddress } from './addresses.ts';
+import { inspectTxHex } from './tx-inspect.ts';
 import { rcWallet } from './wallet.ts';
 import { SCRIPT_PACKAGES, generateCallScript, generateDeployScript, generateStateScript, packageFolder } from './contract-scripts.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
@@ -28,6 +29,7 @@ export const rcEngine: Engine = {
   ledger: {
     blockLimits: blockLimitsOf,
     nightTokenId: () => ledger.unshieldedToken().raw,
+    readTransaction: inspectTxHex,
   },
   contracts: {
     rawState: rawContractState,

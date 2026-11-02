@@ -6,13 +6,12 @@
 import { Socket } from 'node:net';
 import { loadWalletConfig, resolveWalletPath, unlockWallet } from './wallet-config.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import { assertLedgerSupported } from '@kuiralabs/midnight-chain/lib/ledger-guard';
 import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { engineFor, type DAppConnectorCallbacks, type OpenedConnector } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { createRpcServer, type RpcServer } from './ws-rpc.ts';
 import { DEFAULT_SERVE_PORT } from '@kuiralabs/midnight-cli-core/lib/constants';
 import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import { shieldedSyncEnabled } from './shielded-policy.ts';
+import { shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
 import { CancelledError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 /** A running mn serve, and how to stop it. */
@@ -232,8 +231,6 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
   const seedBuffer = Buffer.from(config.seed, 'hex');
 
   const { networkName, networkConfig } = resolveServeTarget(options);
-  // On a ledger-8 chain the SDK's sync would retry forever.
-  await assertLedgerSupported(networkName, networkConfig);
   const address = config.addresses[networkName];
 
   // The SDK's transient warnings, as progress, until the connector is stopped

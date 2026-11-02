@@ -11,19 +11,18 @@ import { Effect } from 'effect';
 // Stub SDK address encoding — MidnightBech32m.encode returns a mock
 
 import { createDAppConnector, signatureScheme, toHistoryEntry, type DAppConnector } from '@kuiralabs/midnight-engine-rc/dapp-connector';
+import { HISTORY, TEST_NETWORK_CONFIG, WALLET_DUST, WALLET_SHIELDED, WALLET_UNSHIELDED, createBundleStub, createConnector, finalizedTx, mockState } from './helpers/connector-stub.ts';
 import { startLocalIndexer, type LocalIndexer } from './helpers/local-indexer.ts';
 import { PartlySignedTransactionError } from '@kuiralabs/midnight-engine-rc/sign-recipe';
 import { signedMessageBytes } from '@kuiralabs/midnight-cli-core/lib/sign-data';
 import { createKeystore } from '@midnightntwrk/wallet-sdk/unshielded';
 import { Intent, UnshieldedOffer, verifySignature } from '@midnightntwrk/ledger-v9';
-import type { FacadeBundle } from '@kuiralabs/midnight-engine-rc/facade';
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { RpcHandlerContext } from '../lib/ws-rpc.ts';
 import { PROOF_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { withDustShortfall } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { FORK_SCHEDULE } from '@kuiralabs/midnight-engine-rc/fork-schedule';
-import { deriveUnshieldedAddress, deriveAllShieldedAddresses, deriveShieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { deriveUnshieldedAddress, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { DustAddress, MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import type { FeeLimits } from '@kuiralabs/midnight-cli-core/lib/fee-limits';
@@ -33,118 +32,15 @@ import {
   AGENT_SK, NIGHT, WALLET_SK, WALLET_VK, agentPaysMerchant, buildTx, pay, sealedBytes, spend, unsealedBytes,
 } from './helpers/ledger-tx.ts';
 
-/** The wallet's own addresses, as SDK address objects in its state. */
-const WALLET_SHIELDED = deriveShieldedAddress(Buffer.from('00'.repeat(31) + '07', 'hex'));
-const WALLET_UNSHIELDED = new UnshieldedAddress(Buffer.alloc(32, 7));
-const WALLET_DUST = new DustAddress(7n);
 
 /** Real undeployed addresses for a fixed seed, so outputs decode as they would from a dApp. */
 const RECIPIENT_SEED = Buffer.from('00'.repeat(31) + '42', 'hex');
 const UNSHIELDED_RECIPIENT = deriveUnshieldedAddress(RECIPIENT_SEED, 'undeployed');
 const SHIELDED_RECIPIENT = deriveAllShieldedAddresses(RECIPIENT_SEED).undeployed;
 
-/** A finalized transaction handle as the SDK returns it: it serializes to these bytes. */
-const finalizedTx = (...bytes: number[]) => ({ serialize: () => new Uint8Array(bytes) });
 
 /** Mock handler context with no-op notify */
 const ctx = (connectionId = 'conn_test'): RpcHandlerContext => ({ notify: vi.fn(), connectionId, requestId: 1, metadata: {} });
-
-// ── Helpers ──────────────────────────────────────────────────────────
-
-const TEST_NETWORK_CONFIG: NetworkConfig = {
-  indexer: 'http://localhost:8088/api/v4/graphql',
-  indexerWS: 'ws://localhost:8088/api/v4/graphql/ws',
-  node: 'ws://localhost:9944',
-  proofServer: 'http://localhost:6300',
-  networkId: 'Undeployed',
-};
-
-/** Create a minimal mock FacadeState. */
-function mockState(overrides?: {
-  unshieldedBalances?: Record<string, bigint>;
-  shieldedBalances?: Record<string, bigint>;
-  dustBalance?: bigint;
-  protocolVersion?: { shielded: bigint; unshielded: bigint; dust: bigint };
-  isSynced?: boolean;
-}) {
-  return {
-    isSynced: overrides?.isSynced ?? true,
-    // Each wallet's protocol version, as FacadeState reports it: on ledger 9 unless a test says otherwise.
-    protocolVersion: overrides?.protocolVersion ?? { shielded: FORK_SCHEDULE.v9, unshielded: FORK_SCHEDULE.v9, dust: FORK_SCHEDULE.v9 },
-    unshielded: {
-      balances: overrides?.unshieldedBalances ?? { '0000000000000000000000000000000000000000000000000000000000000000': 5000000n },
-      address: WALLET_UNSHIELDED,
-      progress: { appliedId: 1n, highestTransactionId: 1n },
-    },
-    shielded: {
-      balances: overrides?.shieldedBalances ?? {},
-      address: WALLET_SHIELDED,
-    },
-    dust: {
-      balance: (_time: Date) => overrides?.dustBalance ?? 1000n,
-      availableCoins: [],
-      address: WALLET_DUST,
-    },
-  };
-}
-
-/** Wallet history as the SDK records it: one finalized, one rejected, one pending. */
-const HISTORY = [
-  { hash: 'tx-hash-001', identifiers: [], status: 'SUCCESS', lifecycle: { status: 'finalized', finalizedBlock: { hash: 'b1', height: 1, timestamp: new Date(0) } } },
-  { hash: 'tx-hash-002', identifiers: [], lifecycle: { status: 'rejected', rejectedAt: new Date(0) } },
-  { hash: 'tx-hash-003', identifiers: [], lifecycle: { status: 'pending', submittedAt: new Date(0) } },
-];
-
-/** Create a minimal FacadeBundle stub. */
-function createBundleStub(overrides?: {
-  stateFn?: () => rx.Observable<any>;
-  transferTransaction?: () => Promise<any>;
-  signRecipe?: () => Promise<any>;
-  finalizeRecipe?: () => Promise<any>;
-  submitTransaction?: () => Promise<string>;
-  balanceUnboundTransaction?: () => Promise<any>;
-  balanceFinalizedTransaction?: () => Promise<any>;
-  initSwap?: () => Promise<any>;
-  getAllFromTxHistory?: () => Promise<any[]>;
-  estimateTransactionFee?: (...args: any[]) => Promise<bigint>;
-}): FacadeBundle {
-  const defaultStateFn = () => rx.of(mockState());
-
-  return {
-    facade: {
-      state: overrides?.stateFn ?? defaultStateFn,
-      start: vi.fn().mockResolvedValue(undefined),
-      stop: vi.fn().mockResolvedValue(undefined),
-      transferTransaction: overrides?.transferTransaction ?? vi.fn().mockResolvedValue({ type: 'UNPROVEN_TRANSACTION' }),
-      signRecipe: overrides?.signRecipe ?? vi.fn().mockResolvedValue({ type: 'SIGNED' }),
-      finalizeRecipe: overrides?.finalizeRecipe ?? vi.fn().mockResolvedValue(finalizedTx(0xab, 0xcd)),
-      submitTransaction: overrides?.submitTransaction ?? vi.fn().mockResolvedValue('mock-tx-hash'),
-      balanceUnboundTransaction: overrides?.balanceUnboundTransaction ?? vi.fn().mockResolvedValue({ type: 'UNBOUND' }),
-      balanceFinalizedTransaction: overrides?.balanceFinalizedTransaction ?? vi.fn().mockResolvedValue({ type: 'FINALIZED' }),
-      initSwap: overrides?.initSwap ?? vi.fn().mockResolvedValue({ type: 'SWAP' }),
-      registerNightUtxosForDustGeneration: vi.fn(),
-      adoptTransaction: vi.fn((bytes: Uint8Array, stage: string) => ({ stage, hex: Buffer.from(bytes).toString('hex') })),
-      estimateTransactionFee: overrides?.estimateTransactionFee ?? vi.fn().mockResolvedValue(1_000n),
-      getAllFromTxHistory: overrides?.getAllFromTxHistory ?? vi.fn().mockResolvedValue(HISTORY),
-    },
-    keystore: {
-      signDataAsync: vi.fn().mockResolvedValue({ tag: 'schnorr', value: 'abcd1234signature' }),
-      getPublicKey: vi.fn().mockReturnValue({ tag: 'schnorr', value: '5678efghpubkey' }),
-    },
-  } as unknown as FacadeBundle;
-}
-
-function createConnector(overrides?: {
-  bundleOverrides?: Parameters<typeof createBundleStub>[0];
-  networkConfig?: NetworkConfig;
-  approvalOptions?: ApprovalOptions;
-}): DAppConnector {
-  return createDAppConnector({
-    bundle: createBundleStub(overrides?.bundleOverrides),
-    networkConfig: overrides?.networkConfig ?? TEST_NETWORK_CONFIG,
-    approvalOptions: overrides?.approvalOptions ?? { approveAll: true },
-  });
-}
 
 // ── Tests ────────────────────────────────────────────────────────────
 

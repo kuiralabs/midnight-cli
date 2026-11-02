@@ -8,6 +8,7 @@ import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type Net
 import { resolveNetwork } from './resolve-network.ts';
 import type { Spinner } from '../ui/spinner.ts';
 import type { CallSdkWarnings } from './sdk-warnings.ts';
+import type { WalletSession } from './wallet-session.ts';
 
 /** The network a command acts on, with its endpoints resolved. */
 export interface PayingTarget {
@@ -44,16 +45,6 @@ export interface ServedWallet {
   stop: () => Promise<void>;
 }
 
-/** The DApp connector methods a command calls on the wallet that pays. */
-export type PayingMethod = 'getShieldedAddresses' | 'getShieldedBalances' | 'balanceUnsealedTransaction' | 'submitTransaction';
-
-/** A wallet's DApp connector in this process, called by method name. */
-export interface WalletConnection {
-  call: (method: PayingMethod, params: Record<string, unknown>) => Promise<unknown>;
-  /** Reverts what was balanced but never submitted, then stops the wallet. */
-  stop: () => Promise<void>;
-}
-
 /**
  * Opens the wallet that pays, for the target network. `wallet` is the --wallet
  * flag; without it the active wallet pays. Progress goes to `progress`.
@@ -78,8 +69,8 @@ export interface Payer {
   assertCanPay: (target: PayingTarget, wallet: string | undefined, progress: Spinner, signal: AbortSignal | undefined) => Promise<PayingFunds>;
   /** Serves the wallet; one that runs in this process keeps the SDK's warnings to the paying call's `sdkWarnings`. */
   serve: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined) => Promise<ServedWallet>;
-  /** Opens the wallet in this process, keeping the SDK's warnings to the paying call's `sdkWarnings`. */
-  connect: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined) => Promise<WalletConnection>;
+  /** Opens the wallet in this process as a session, keeping the SDK's warnings to the paying call's `sdkWarnings`. */
+  connect: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined) => Promise<WalletSession>;
 }
 
 /** What a command's caller gives it for one call. */
