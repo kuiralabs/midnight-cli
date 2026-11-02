@@ -1,0 +1,53 @@
+// Registering a wallet's NIGHT for Dust generation and waiting until it has
+// Dust to spend. `mn dust register` and `mn dev` both register through here.
+
+import { waitForLiteSyncedState } from './facade.ts';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { ensureDust } from './transfer.ts';
+import { defaultRepository } from './wallet-data-repository.ts';
+import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
+import type { DustRegisterOptions, DustRegistration } from '@kuiralabs/midnight-cli-core/lib/engine';
+export type { DustRegisterOptions, DustRegistration } from '@kuiralabs/midnight-cli-core/lib/engine';
+
+
+
+export async function registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions): Promise<DustRegistration> {
+  const { signal, onStatus, onSyncProgress, onSyncDetail, onSyncWarning, sdkWarnings, log } = options;
+  const stopListening = sdkWarnings.listen(onSyncWarning);
+  try {
+    const { result, dustBalance } = await defaultRepository().withFacade(
+      seed,
+      networkConfig,
+      async ({ bundle, state }) => {
+        throwIfCancelled(signal);
+        onStatus?.('Checking dust status...');
+
+        // ensureDust handles: early return if dust exists, registration
+        // of unregistered UTXOs, waiting for dust coins.
+        const result = await ensureDust(bundle, (status: string) => onStatus?.(status), state);
+
+        throwIfCancelled(signal);
+
+        // Wait for dust data to be fully populated before reading balance.
+        const finalState = await waitForLiteSyncedState(bundle);
+        return { result, dustBalance: finalState.dust.balance(new Date()) };
+      },
+      {
+        syncMode: 'lite',
+        requireStrictSync: true,
+        signal,
+        onStatus,
+        onSyncProgress,
+        onSyncDetail,
+        log,
+      },
+    );
+    const registration: DustRegistration = { alreadyAvailable: result.alreadyAvailable, dustBalance };
+    if (result.txHash) registration.txHash = result.txHash;
+    return registration;
+  } finally {
+    stopListening();
+  }
+}

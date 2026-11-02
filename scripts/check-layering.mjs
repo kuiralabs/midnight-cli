@@ -112,6 +112,7 @@ export const WORKSPACE_PACKAGES = [
   { name: '@kuiralabs/midnight-chain', dir: join(ROOT, 'packages', 'chain', 'src') },
   // The rc engine: its files read as engine/rc/<file>, its index the package itself.
   { name: '@kuiralabs/midnight-engine-rc', dir: join(ROOT, 'packages', 'engine-rc', 'src'), prefix: 'engine/rc/' },
+  { name: '@kuiralabs/midnight-engine-beta', dir: join(ROOT, 'packages', 'engine-beta', 'src'), prefix: 'engine/beta/' },
 ];
 
 /** The package source folder a file is in, or undefined for one under src/. */

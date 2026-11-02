@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import { notice } from '@kuiralabs/midnight-cli-core/lib/notices';
 import * as path from 'path';
 import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, isValidWalletName } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import { getValidNetworkNames, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { loadCliConfig, saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
 import { getDefaultWalletPath, getWalletsDir } from './wallet-paths.ts';
 import { anyEngine, type EngineKeys } from '@kuiralabs/midnight-cli-core/lib/engine';
@@ -74,6 +74,41 @@ export function saveShieldedAddress(
  */
 export function getAddress(config: WalletConfig, network: NetworkName): string {
   return config.addresses[network];
+}
+
+/**
+ * A wallet's unshielded address on `network`. A sealed wallet written before
+ * that network existed has none saved yet: it is unlocked, which derives and
+ * saves it.
+ */
+export async function walletAddress(walletPath: string, network: NetworkName): Promise<string> {
+  const config = await loadWalletConfig(walletPath);
+  return config.addresses[network] ?? (await unlockWallet(walletPath)).addresses[network];
+}
+
+/** A wallet's shielded address on `network`, unlocking a sealed wallet that has none saved yet (see walletAddress); undefined when the wallet keeps no shielded addresses. */
+export async function walletShieldedAddress(walletPath: string, network: NetworkName): Promise<string | undefined> {
+  const config = await loadWalletConfig(walletPath);
+  if (config.shieldedAddresses === undefined || config.shieldedAddresses[network] !== undefined) return config.shieldedAddresses?.[network];
+  return (await unlockWallet(walletPath)).shieldedAddresses?.[network];
+}
+
+/** The networks an address map has no address for: a wallet written before they existed. */
+function missingNetworks(map: Partial<Record<NetworkName, string>> | undefined): NetworkName[] {
+  return (getValidNetworkNames() as NetworkName[]).filter((network) => typeof map?.[network] !== 'string' || map[network] === '');
+}
+
+/** The wallet's address maps with every network's address, derived from its seed where missing; null when none was missing. */
+async function completedAddresses(config: WalletConfig, seed: Buffer): Promise<Pick<WalletConfig, 'addresses' | 'shieldedAddresses'> | null> {
+  const lacksUnshielded = missingNetworks(config.addresses).length > 0;
+  const lacksShielded = config.shieldedAddresses !== undefined && missingNetworks(config.shieldedAddresses).length > 0;
+  if (!lacksUnshielded && !lacksShielded) return null;
+  const { keys } = await anyEngine();
+  return {
+    // Saved addresses win: they are what the wallet has shown so far.
+    addresses: { ...keys.unshieldedAddresses(seed), ...config.addresses },
+    ...(config.shieldedAddresses !== undefined ? { shieldedAddresses: { ...keys.shieldedAddresses(seed), ...config.shieldedAddresses } } : {}),
+  };
 }
 
 /**
@@ -379,13 +414,22 @@ export async function loadWalletConfig(walletPath?: string): Promise<WalletConfi
     );
   }
 
+  const seedBuffer = Buffer.from(raw.seed, 'hex');
   const config: WalletConfig = {
     addresses: raw.addresses,
     createdAt: raw.createdAt,
     isSealed: false,
   };
+  // A network added since the wallet was written: derive its address and save it.
+  const completed = await completedAddresses(config, seedBuffer);
+  if (completed) {
+    config.addresses = completed.addresses;
+    try {
+      fs.writeFileSync(resolvedPath, JSON.stringify({ ...raw, addresses: completed.addresses }, null, 2) + '\n', { mode: FILE_MODE });
+      raw.addresses = completed.addresses;
+    } catch { /* best-effort */ }
+  }
 
-  const seedBuffer = Buffer.from(raw.seed, 'hex');
   const shieldedAddresses = await resolveShieldedAddresses(raw, seedBuffer);
   if (shieldedAddresses) config.shieldedAddresses = shieldedAddresses;
 
@@ -537,5 +581,14 @@ export async function unlockWallet(walletPath: string, options: UnlockOptions = 
   }
   const passphrase = await unlockPassphrase(options.root ?? stateRoot(), options.source);
   const secrets = JSON.parse(openSecret(raw.sealed, passphrase, 'wallet').toString('utf8')) as WalletSecrets;
+  // A network added since the wallet was written: now that its seed is open,
+  // derive that network's addresses and save them beside the sealed secrets.
+  const completed = await completedAddresses(config, Buffer.from(secrets.seed, 'hex'));
+  if (completed) {
+    Object.assign(config, completed);
+    try {
+      writeFileAtomically(resolvedPath, { ...raw, ...completed });
+    } catch { /* best-effort: the addresses are derived again next time */ }
+  }
   return { ...config, ...secrets };
 }

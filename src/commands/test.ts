@@ -2,6 +2,7 @@
 // Usage: midnight test <run|list|results> [options]
 // Discovers dapp.test.json in the current directory and executes test suites.
 
+import { isValidNetworkName, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { StringDecoder } from 'node:string_decoder';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
@@ -59,7 +60,7 @@ export default async function testCommand(args: ParsedArgs, ctx: CallContext): P
 
 import type { CreateStrategy, BrowserOptions } from '../lib/test/create.ts';
 
-type NetworkOpt = 'preprod' | 'preview' | 'undeployed';
+type NetworkOpt = NetworkName;
 
 /** Allow either canonical strategy names or the friendlier "ui" alias. */
 function parseStrategyFlag(flag: string | undefined): CreateStrategy | undefined {
@@ -72,7 +73,7 @@ function parseStrategyFlag(flag: string | undefined): CreateStrategy | undefined
 
 /** Narrow a free-form network flag down to the supported set, or undefined. */
 function parseNetworkFlag(flag: string | undefined): NetworkOpt | undefined {
-  return flag === 'preprod' || flag === 'preview' || flag === 'undeployed' ? flag : undefined;
+  return flag !== undefined && isValidNetworkName(flag) ? flag : undefined;
 }
 
 /** Collect browser-specific flags into a partial; throws on bad port or browser-mode. */

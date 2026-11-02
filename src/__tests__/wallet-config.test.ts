@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { loadWalletConfig, matchWalletAddress, unlockWallet, writeSealedWallet, type WalletInfo } from '../lib/wallet-config.ts';
+import { loadWalletConfig, matchWalletAddress, unlockWallet, walletAddress, writeSealedWallet, type WalletInfo } from '../lib/wallet-config.ts';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
 import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
@@ -222,5 +222,38 @@ describe('matchWalletAddress', () => {
 
   it('returns undefined against an empty wallet list', () => {
     expect(matchWalletAddress([], VALID_ADDRESSES.undeployed)).toBeUndefined();
+  });
+});
+
+describe('a wallet written before stagenet', () => {
+  // The addresses an earlier mn wrote: every network but stagenet.
+  const { stagenet: stagenetAddress, ...earlierAddresses } = VALID_ADDRESSES;
+  const { stagenet: stagenetShielded, ...earlierShielded } = deriveAllShieldedAddresses(Buffer.from(VALID_SEED, 'hex'));
+
+  it('gets its stagenet address derived and saved when a plain-text wallet is read', async () => {
+    const filePath = path.join(TEST_DIR, 'plain.json');
+    fs.writeFileSync(filePath, JSON.stringify({ seed: VALID_SEED, addresses: earlierAddresses, createdAt: VALID_CONFIG.createdAt }));
+    const config = await loadWalletConfig(filePath);
+    expect(config.addresses.stagenet).toBe(stagenetAddress);
+    expect(JSON.parse(fs.readFileSync(filePath, 'utf-8')).addresses).toEqual(VALID_ADDRESSES);
+    expect(await walletAddress(filePath, 'stagenet')).toBe(stagenetAddress);
+  });
+
+  it('keeps a sealed wallet as written until it is unlocked, then derives and saves its stagenet addresses beside the sealed secret', async () => {
+    const filePath = path.join(TEST_DIR, 'sealed.json');
+    writeSealedWallet(filePath, { addresses: earlierAddresses as typeof VALID_ADDRESSES, shieldedAddresses: earlierShielded as typeof VALID_ADDRESSES, createdAt: VALID_CONFIG.createdAt }, { seed: VALID_SEED }, PASSPHRASE);
+    const sealedBefore = JSON.parse(fs.readFileSync(filePath, 'utf-8')).sealed;
+
+    expect((await loadWalletConfig(filePath)).addresses.stagenet).toBeUndefined();
+
+    const unlocked = await unlockWallet(filePath, UNLOCK);
+    expect(unlocked.addresses.stagenet).toBe(stagenetAddress);
+    expect(unlocked.shieldedAddresses?.stagenet).toBe(stagenetShielded);
+    const saved = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(saved.addresses).toEqual(VALID_ADDRESSES);
+    expect(saved.shieldedAddresses.stagenet).toBe(stagenetShielded);
+    expect(saved.sealed).toEqual(sealedBefore);
+    expect(saved.seed).toBeUndefined();
+    expect((await loadWalletConfig(filePath)).addresses.stagenet).toBe(stagenetAddress);
   });
 });

@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DIR_MODE, FILE_MODE } from './constants.ts';
-import { cacheRootDir } from './wallet-cache.ts';
+import { cacheRootDir, networkCacheFolder } from './wallet-cache.ts';
 
 const MARKER = 'indexer.host';
 
@@ -49,7 +49,7 @@ export interface IndexerChange {
  */
 export function bindCachesToIndexer(network: string, indexerUrl: string, cacheDir?: string): IndexerChange | undefined {
   const current = indexerIdentity(indexerUrl);
-  const dir = join(cacheRootDir(cacheDir), network);
+  const dir = join(cacheRootDir(cacheDir), networkCacheFolder(network));
   const marker = join(dir, MARKER);
 
   const recorded = existsSync(marker) ? readFileSync(marker, 'utf-8').trim() : undefined;

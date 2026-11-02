@@ -18,6 +18,7 @@ import type { CommandRun } from './lib/run-command.ts';
 import { servePayer } from './lib/serve-payer.ts';
 import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { withNodeReason } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { withServerAdvice } from './lib/mcp/server-advice.ts';
 import { trimAgentMessage } from '@kuiralabs/midnight-cli-core/lib/error-trim';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { createConfirmationStore } from './lib/mcp/confirmation.ts';
@@ -201,7 +202,7 @@ async function executeTool(name: string, params: Record<string, unknown>, call: 
 
 function errorResponse(thrown: Error) {
   // A node's refusal is reported with the node's words, which the wallet SDK keeps only among its causes.
-  const error = withNodeReason(thrown);
+  const error = withServerAdvice(withNodeReason(thrown));
   const { errorCode } = classifyError(error);
   return {
     content: [{

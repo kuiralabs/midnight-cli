@@ -1,5 +1,6 @@
 // The `wallet` command, described once.
 
+import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
 import { type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 
 export const walletDefinition: CommandDefinition = {
@@ -38,7 +39,7 @@ export const walletDefinition: CommandDefinition = {
       takesValue: true,
       // list and info show the addresses for it.
       subcommands: ['generate', 'list', 'info'],
-      help: ['--network <name>    Network: preprod, preview, undeployed'],
+      help: [`--network <name>    Network: ${getValidNetworkNames().join(', ')}`],
       agent: NETWORK_PARAM,
     },
     {
@@ -92,8 +93,8 @@ export const walletDefinition: CommandDefinition = {
       network: 'Network the address is for (info, slim output over MCP)',
       address: 'Unshielded address on that network (info, slim output over MCP)',
       shieldedAddress: 'Shielded address on that network, or null before the first sync (info, slim output over MCP)',
-      addresses: 'Per-network unshielded addresses { preprod, preview, undeployed } (generate, info)',
-      shieldedAddresses: 'Per-network shielded addresses { preprod, preview, undeployed } (generate, info)',
+      addresses: `Per-network unshielded addresses { ${getValidNetworkNames().join(', ')} } (generate, info)`,
+      shieldedAddresses: `Per-network shielded addresses { ${getValidNetworkNames().join(', ')} } (generate, info)`,
       activeAddress: 'Unshielded address on the active network (generate, info)',
       activeNetwork: 'The active network (generate, list, info)',
       createdAt: 'ISO 8601 creation timestamp (generate, info)',

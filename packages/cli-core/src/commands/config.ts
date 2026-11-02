@@ -3,7 +3,7 @@
 // config set <key> <value> → success message on stderr
 
 import { type ParsedArgs, getFlag, hasFlag } from '../lib/argv.ts';
-import { isValidNetworkName, type NetworkName } from '../lib/network.ts';
+import { getValidNetworkNames, isValidNetworkName, type NetworkName } from '../lib/network.ts';
 import { UsageError } from '../lib/errors.ts';
 import { getConfigValue, setConfigValue, unsetConfigValue, getValidConfigKeys } from '../lib/cli-config.ts';
 import { green } from '../ui/colors.ts';
@@ -30,7 +30,7 @@ export default async function configCommand(args: ParsedArgs, ctx: CallContext):
   // An endpoint key can be read or written for a network other than the selected one.
   const networkFlag = getFlag(args, 'network');
   if (networkFlag !== undefined && !isValidNetworkName(networkFlag)) {
-    throw new UsageError(`Invalid network: "${networkFlag}"\nValid networks: preprod, preview, undeployed`);
+    throw new UsageError(`Invalid network: "${networkFlag}"\nValid networks: ${getValidNetworkNames().join(', ')}`);
   }
   const scope = networkFlag as NetworkName | undefined;
 

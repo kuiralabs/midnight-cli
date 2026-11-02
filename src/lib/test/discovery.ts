@@ -1,5 +1,6 @@
 // Test discovery — find and validate dapp.test.json and suite configs from the dApp root.
 
+import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -131,7 +132,7 @@ export function loadPrompt(suiteDir: string): string | null {
 
 // ── Validation ──
 
-const VALID_NETWORKS: readonly NetworkName[] = ['undeployed', 'preprod', 'preview'];
+const VALID_NETWORKS: readonly string[] = getValidNetworkNames();
 const VALID_STRATEGIES = ['browser', 'cli', 'hybrid'] as const;
 const VALID_BROWSER_MODES: readonly BrowserMode[] = ['dom', 'script', 'vision', 'auto'];
 

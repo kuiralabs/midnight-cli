@@ -13,8 +13,8 @@ import type { FeeLimits } from './fee-limits.ts';
 import type { RpcHandler } from './connector-api.ts';
 import type { Spinner } from '../ui/spinner.ts';
 
-/** An SDK set mn runs on. */
-export type SdkSet = 'rc';
+/** An SDK set mn runs on: the SDK's release candidates, or the beta set stagenet runs. */
+export type SdkSet = 'rc' | 'beta';
 
 /** A wallet's keys and addresses, derived from its seed. Every set derives the same ones. */
 export interface EngineKeys {
@@ -440,6 +440,27 @@ let loader: EngineLoader | undefined;
 // WASM ledgers can't share one.
 let loaded: Promise<Engine> | undefined;
 
+// The set work every set does alike loads while nothing is loaded: the set of
+// the network the call is for, so it doesn't commit the process to another.
+let preferred: SdkSet | undefined;
+
+/** A call on a network whose SDK set isn't the one this process has loaded. */
+export class OtherSdkSetError extends Error {
+  readonly code = 'OTHER_SDK_SET';
+  readonly loadedSet: SdkSet;
+  readonly wantedSet: SdkSet;
+  constructor(
+    loadedSet: SdkSet,
+    wantedSet: SdkSet,
+    message = `This process runs the ${loadedSet} SDK set and can't load the ${wantedSet} one beside it: two sets' ledgers can't share a process. Run the call in a process of its own.`,
+  ) {
+    super(message);
+    this.name = 'OtherSdkSetError';
+    this.loadedSet = loadedSet;
+    this.wantedSet = wantedSet;
+  }
+}
+
 /** The host's loader of engines, set once at start; a new loader forgets the engine an old one loaded. */
 export function setEngineLoader(next: EngineLoader): void {
   loader = next;
@@ -450,7 +471,7 @@ function loadEngine(set: SdkSet): Promise<Engine> {
   if (loader === undefined) throw new Error('No SDK engine is installed: the host sets an engine loader at start (setEngineLoader)');
   loaded ??= loader(set);
   return loaded.then((engine) => {
-    if (engine.set !== set) throw new Error(`This process runs the ${engine.set} SDK set and can't load the ${set} one`);
+    if (engine.set !== set) throw new OtherSdkSetError(engine.set, set);
     return engine;
   });
 }
@@ -460,10 +481,16 @@ export function engineFor(network: NetworkName): Promise<Engine> {
   return loadEngine(sdkSetOf(network));
 }
 
+/** The network a call is for, whose set work every set does alike loads while no engine is loaded. */
+export function preferEngineOf(network: NetworkName): void {
+  preferred = sdkSetOf(network);
+}
+
 /**
  * An engine for work every set does alike, such as deriving addresses: the
- * one this process has loaded, else the rc set's.
+ * one this process has loaded, else the set of the network the call is for
+ * (the rc set's when none was said).
  */
 export function anyEngine(): Promise<Engine> {
-  return loaded ?? loadEngine('rc');
+  return loaded ?? loadEngine(preferred ?? 'rc');
 }

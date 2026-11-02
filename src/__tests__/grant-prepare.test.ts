@@ -52,6 +52,13 @@ describe('prepareGrant', () => {
     expect(fs.existsSync(accounts())).toBe(false);
   });
 
+  it('refuses stagenet, which runs the beta SDK set the account package has no build for, saying so', async () => {
+    const refusal = asAlice('status', '--network', 'stagenet');
+    await expect(refusal).rejects.toThrow(UnreachableByAccountError);
+    await expect(refusal).rejects.toThrow('mn grant runs on the rc SDK set, and StageNet runs on the beta set');
+    expect(fs.existsSync(accounts())).toBe(false);
+  });
+
   it('prepares the deploy of a new account: records under the wallet\'s name, readable by their owner only', async () => {
     aliceWallet();
     const prepared = await asAlice('deploy');

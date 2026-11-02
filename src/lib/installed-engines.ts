@@ -9,5 +9,7 @@ export async function loadInstalledEngine(set: SdkSet): Promise<Engine> {
   switch (set) {
     case 'rc':
       return (await import('@kuiralabs/midnight-engine-rc')).rcEngine;
+    case 'beta':
+      return (await import('@kuiralabs/midnight-engine-beta')).betaEngine;
   }
 }

@@ -59,7 +59,7 @@ DApp developers connect via the midnight-wallet-connector npm package:
   import { createWalletClient } from 'midnight-wallet-connector';
   const wallet = await createWalletClient({
     url: 'ws://localhost:9932',
-    networkId: 'undeployed',  // or 'preprod', 'preview' — lowercase per @midnightntwrk/wallet-sdk
+    networkId: 'undeployed',  // or 'preprod', 'preview', 'stagenet' — lowercase per @midnightntwrk/wallet-sdk
   });
   const balances = await wallet.getUnshieldedBalances();
 

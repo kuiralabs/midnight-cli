@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
 
 import { CACHE_VERSION, CACHE_DIR_NAME, DIR_MODE, FILE_MODE } from './constants.ts';
 import { stateRoot } from './state-root.ts';
+import { defaultSdkSetOf, isValidNetworkName, sdkSetOfNetwork } from './network.ts';
 
 export interface WalletCacheData {
   shielded: string;
@@ -34,6 +35,17 @@ export function cacheRootDir(cacheDir?: string): string {
   return cacheDir ?? join(stateRoot(), CACHE_DIR_NAME);
 }
 
+/**
+ * A network's folder under the cache folder: the network's name, or
+ * `<network>.<set>` while `midnight config set sdk-set` runs it on another SDK
+ * set, so one set never reads the state the other wrote.
+ */
+export function networkCacheFolder(network: string): string {
+  if (!isValidNetworkName(network)) return network;
+  const set = sdkSetOfNetwork(network);
+  return set === defaultSdkSetOf(network) ? network : `${network}.${set}`;
+}
+
 /** How much of an address or key names its cache file: enough to keep them apart, short enough for any filesystem. */
 export const CACHE_KEY_PREFIX_LENGTH = 20;
 
@@ -49,7 +61,7 @@ export function cacheKeyOf(addressOrKey: string): string {
 export function getCachePath(address: string, network: string, cacheDir?: string): string {
   const base = cacheRootDir(cacheDir);
   const prefix = cacheKeyOf(address);
-  return join(base, network, `${prefix}.json`);
+  return join(base, networkCacheFolder(network), `${prefix}.json`);
 }
 
 /**
@@ -160,7 +172,7 @@ export function validateWalletCacheChainId(
   if (!currentChainId) return []; // node unreachable — skip validation
 
   const base = cacheRootDir(cacheDir);
-  const dir = join(base, network);
+  const dir = join(base, networkCacheFolder(network));
   if (!existsSync(dir)) return [];
 
   const wiped: string[] = [];
@@ -201,7 +213,7 @@ export function clearWalletCache(address?: string, network?: string, cacheDir?: 
 
   if (network) {
     // Delete all caches for a network
-    const dir = join(base, network);
+    const dir = join(base, networkCacheFolder(network));
     if (!existsSync(dir)) return;
     try {
       for (const file of readdirSync(dir)) {

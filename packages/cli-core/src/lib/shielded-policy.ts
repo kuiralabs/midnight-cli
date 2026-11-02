@@ -1,5 +1,5 @@
 // Shielded-sync policy. Shielded (zswap) sync is the slow part of a facade sync,
-// and on preview/preprod it is pointless: there is no shielded faucet, so a
+// and on preview, preprod and stagenet it is pointless: there is no shielded faucet, so a
 // wallet can never hold shielded funds there. Skipping it makes those networks
 // fast (unshielded is GraphQL, dust is already optimized) without hiding
 // anything real. `undeployed` (localnet genesis) and any future funded network
@@ -9,7 +9,7 @@
 import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 
 /** Networks with no shielded faucet — shielded sync is skipped by default. */
-const NO_SHIELDED_FAUCET: readonly NetworkName[] = ['preview', 'preprod'];
+const NO_SHIELDED_FAUCET: readonly NetworkName[] = ['preview', 'preprod', 'stagenet'];
 
 /** True when shielded funds are actually reachable on this network. */
 export function networkHasShielded(network: NetworkName): boolean {

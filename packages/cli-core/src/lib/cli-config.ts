@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DEFAULT_CONFIG_FILENAME, DIR_MODE, FILE_MODE, isValidWalletName } from './constants.ts';
 import { blockfrostNetworks, checkProjectId, maskProjectId, networkOfProjectId } from './blockfrost.ts';
-import { type NetworkName, isValidNetworkName } from './network.ts';
+import { type NetworkName, SDK_SETS, getValidNetworkNames, isValidNetworkName } from './network.ts';
+import type { SdkSet } from './engine.ts';
 import { UsageError } from './errors.ts';
 import { stateRoot } from './state-root.ts';
 
@@ -13,12 +14,16 @@ export interface NetworkEndpointOverrides {
   'indexer-ws'?: string;
 }
 
-/** What is kept per network: endpoint overrides, and the Blockfrost project id of a network Blockfrost serves. */
+/** What is kept per network: endpoint overrides, the Blockfrost project id of a network Blockfrost serves, and the SDK set it runs on when not the network's own. */
 export interface NetworkSettings extends NetworkEndpointOverrides {
   'blockfrost-project-id'?: string;
+  'sdk-set'?: SdkSet;
 }
 
 const PROJECT_ID_KEY = 'blockfrost-project-id';
+const SDK_SET_KEY = 'sdk-set';
+
+const isSdkSet = (value: unknown): value is SdkSet => typeof value === 'string' && (SDK_SETS as readonly string[]).includes(value);
 
 export interface CliConfig {
   network: NetworkName;
@@ -44,7 +49,7 @@ const DEFAULT_CLI_CONFIG: CliConfig = {
   network: 'undeployed',
 };
 
-const VALID_CONFIG_KEYS: readonly string[] = ['network', 'proof-server', 'node', 'indexer-ws', 'wallet', PROJECT_ID_KEY] as const;
+const VALID_CONFIG_KEYS: readonly string[] = ['network', 'proof-server', 'node', 'indexer-ws', 'wallet', PROJECT_ID_KEY, SDK_SET_KEY] as const;
 
 /**
  * Aliases mapped to canonical config keys. Keeps integrations that learned
@@ -144,6 +149,8 @@ export function loadCliConfig(configDir?: string): CliConfig {
       // A project id is kept only under the network its prefix names.
       const projectId = (overrides as Record<string, unknown>)[PROJECT_ID_KEY];
       if (typeof projectId === 'string' && networkOfProjectId(projectId) === name) scoped[PROJECT_ID_KEY] = projectId;
+      const sdkSet = (overrides as Record<string, unknown>)[SDK_SET_KEY];
+      if (isSdkSet(sdkSet)) scoped[SDK_SET_KEY] = sdkSet;
       if (Object.keys(scoped).length > 0) networks[name] = scoped;
     }
     if (Object.keys(networks).length > 0) config.networks = networks;
@@ -170,6 +177,11 @@ export function getEndpointOverridesForNetwork(
     node: scoped.node ?? (flatApplies ? config.node : undefined),
     'indexer-ws': scoped['indexer-ws'] ?? (flatApplies ? config['indexer-ws'] : undefined),
   };
+}
+
+/** The SDK set `midnight config set sdk-set` gave `networkName`, if any. */
+export function getSdkSetOverride(config: CliConfig, networkName: NetworkName): SdkSet | undefined {
+  return config.networks?.[networkName]?.[SDK_SET_KEY];
 }
 
 /** The Blockfrost project id set for `networkName`, if any. */
@@ -207,6 +219,7 @@ export function getConfigValue(key: string, configDir?: string, scope?: NetworkN
     });
     return set.length > 0 ? set.join(', ') : '(not set)';
   }
+  if (canonical === SDK_SET_KEY) return getSdkSetOverride(config, scope ?? config.network) ?? '(not set)';
   if (ENDPOINT_KEYS.has(canonical)) {
     const overrides = getEndpointOverridesForNetwork(config, scope ?? config.network);
     const value = overrides[canonical as keyof NetworkEndpointOverrides];
@@ -256,7 +269,7 @@ export function setConfigValue(key: string, value: string, configDir?: string, s
   if (canonical === 'network') {
     if (!isValidNetworkName(value)) {
       throw new Error(
-        `Invalid network: "${value}"\nValid networks: preprod, preview, undeployed`
+        `Invalid network: "${value}"\nValid networks: ${getValidNetworkNames().join(', ')}`
       );
     }
     migrateFlatEndpointsToScope(config, config.network);
@@ -273,6 +286,10 @@ export function setConfigValue(key: string, value: string, configDir?: string, s
     const { projectId, network } = checkProjectId(value);
     if (scope !== undefined && scope !== network) throw new UsageError(`That is a ${network} project id, and --network says ${scope}.`);
     config.networks = { ...(config.networks ?? {}), [network]: { ...(config.networks?.[network] ?? {}), [PROJECT_ID_KEY]: projectId } };
+  } else if (canonical === SDK_SET_KEY) {
+    if (!isSdkSet(value)) throw new UsageError(`Invalid SDK set: "${value}"\nValid SDK sets: ${SDK_SETS.join(', ')}`);
+    const target = scope ?? config.network;
+    config.networks = { ...(config.networks ?? {}), [target]: { ...(config.networks?.[target] ?? {}), [SDK_SET_KEY]: value } };
   } else if (ENDPOINT_KEYS.has(canonical)) {
     if (!isValidUrl(value)) {
       throw new Error(
@@ -320,6 +337,14 @@ export function unsetConfigValue(key: string, configDir?: string, scope?: Networ
       if (Object.keys(scoped).length === 0) delete config.networks![network];
     }
     if (config.networks && Object.keys(config.networks).length === 0) delete config.networks;
+  } else if (canonical === SDK_SET_KEY) {
+    const target = scope ?? config.network;
+    const scoped = config.networks?.[target];
+    if (scoped) {
+      delete scoped[SDK_SET_KEY];
+      if (Object.keys(scoped).length === 0) delete config.networks![target];
+      if (Object.keys(config.networks!).length === 0) delete config.networks;
+    }
   } else if (ENDPOINT_KEYS.has(canonical)) {
     const k = canonical as keyof NetworkEndpointOverrides;
     const target = scope ?? config.network;
@@ -343,8 +368,8 @@ export function unsetConfigValue(key: string, configDir?: string, scope?: Networ
 
 /** A network scope (`--network`) only means something for the keys kept per network. */
 function assertScopeApplies(canonical: string, scope: NetworkName | undefined): void {
-  if (scope !== undefined && !ENDPOINT_KEYS.has(canonical) && canonical !== PROJECT_ID_KEY) {
-    throw new UsageError(`--network only applies to the endpoint keys (${[...ENDPOINT_KEYS].join(', ')}) and ${PROJECT_ID_KEY}, not "${canonical}".`);
+  if (scope !== undefined && !ENDPOINT_KEYS.has(canonical) && canonical !== PROJECT_ID_KEY && canonical !== SDK_SET_KEY) {
+    throw new UsageError(`--network only applies to the endpoint keys (${[...ENDPOINT_KEYS].join(', ')}), ${PROJECT_ID_KEY} and ${SDK_SET_KEY}, not "${canonical}".`);
   }
 }
 
