@@ -41,6 +41,12 @@ describe('the unknown-flag refusal, through the shell', () => {
     expect(run.stderr).toContain('Unknown flags for "midnight info": --bogus, --other');
   });
 
+  it('refuses a flag of another subcommand with exit 2 and INVALID_ARGS, before the command runs', () => {
+    const run = mn('dust', 'register', '--seed', 'ab', '--json');
+    expect(run.status).toBe(2);
+    expect(JSON.parse(run.stdout)).toMatchObject({ error: true, code: 'INVALID_ARGS', message: expect.stringContaining('--seed (only for export)') });
+  });
+
   it('runs the command when its flags are known: here it finds no wallet', () => {
     const run = mn('info', '--network', 'undeployed', '--json');
     expect(run.status).toBe(3);

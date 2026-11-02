@@ -6,6 +6,7 @@ export const walletDefinition: CommandDefinition = {
   name: 'wallet',
   order: 10,
   subcommands: ['generate', 'list', 'use', 'info', 'remove', 'seed', 'protect'],
+  subcommandAliases: { ls: 'list', rm: 'remove' },
   flags: [
     {
       name: 'entropy',
@@ -35,7 +36,8 @@ export const walletDefinition: CommandDefinition = {
     {
       name: 'network',
       takesValue: true,
-      subcommands: ['generate'],
+      // list and info show the addresses for it.
+      subcommands: ['generate', 'list', 'info'],
       help: ['--network <name>    Network: preprod, preview, undeployed'],
       agent: NETWORK_PARAM,
     },

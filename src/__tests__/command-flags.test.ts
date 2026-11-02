@@ -9,7 +9,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from '../lib/argv.ts';
 import { UsageError } from '../lib/errors.ts';
-import { findUnknownFlags as findUnknownFlagsIn, assertKnownFlags as assertKnownFlagsIn } from '../lib/command-flags.ts';
+import { findUnknownFlags as findUnknownFlagsIn, findMisplacedFlags as findMisplacedFlagsIn, assertKnownFlags as assertKnownFlagsIn } from '../lib/command-flags.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
 import type { ParsedArgs } from '../lib/argv.ts';
 
@@ -53,6 +53,38 @@ describe('assertKnownFlags', () => {
 
   it('leaves an unknown command to the dispatcher, which reports it by name', () => {
     expect(findUnknownFlags(parseArgs(['no-such-command', '--anything']))).toEqual([]);
+  });
+});
+
+describe('a flag that belongs to another subcommand', () => {
+  const misplaced = (...argv: string[]) => findMisplacedFlagsIn(parseArgs(argv), installedCommands);
+
+  it('is refused, naming the subcommands it is for, before the command runs', () => {
+    const args = parseArgs(['dust', 'register', '--seed', 'ab']);
+    expect(findMisplacedFlagsIn(args, installedCommands)).toEqual([{ flag: 'seed', subcommands: ['export'] }]);
+    expect(() => assertKnownFlags(args)).toThrow(new UsageError('Not a flag of "midnight dust register": --seed (only for export)\nRun "midnight help dust" for the flags each subcommand takes.'));
+  });
+
+  it('names every one', () => {
+    expect(misplaced('wallet', 'use', 'alice', '--force', '--entropy')).toEqual([{ flag: 'force', subcommands: ['generate'] }, { flag: 'entropy', subcommands: ['seed'] }]);
+  });
+
+  it('reads an alias as its subcommand', () => {
+    expect(misplaced('wallet', 'ls', '--network', 'preprod')).toEqual([]);
+    expect(misplaced('wallet', 'rm', 'bob', '--force')).toEqual([{ flag: 'force', subcommands: ['generate'] }]);
+  });
+
+  it('lets through a flag its subcommand reads, and every flag of a command without subcommands', () => {
+    expect(misplaced('wallet', 'list', '--network', 'preprod')).toEqual([]);
+    expect(misplaced('wallet', 'info', 'bob', '--network', 'preprod')).toEqual([]);
+    expect(misplaced('test', 'results', '--suite', 'e2e')).toEqual([]);
+    expect(misplaced('dust', 'status', '--no-cache')).toEqual([]);
+    expect(misplaced('balance', 'mn_addr_undeployed1x', '--shielded')).toEqual([]);
+  });
+
+  it('leaves a missing or unknown subcommand to the handler', () => {
+    expect(misplaced('dust', '--seed', 'ab')).toEqual([]);
+    expect(misplaced('dust', 'regster', '--seed', 'ab')).toEqual([]);
   });
 });
 
