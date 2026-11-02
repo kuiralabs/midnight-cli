@@ -18,18 +18,18 @@ export interface PayingWallet {
 /** The payer's wallet for `target`, as the account package's fee wallet, keeping the SDK's warnings to the paying call's `sdkWarnings`. Stopping it stops the wallet. */
 export async function openPayingWallet(payer: Payer, target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<PayingWallet> {
   const { feeWalletOver } = await import('@kuiralabs/midnight-account-chain/connector');
-  const connection = await payer.connect(target, wallet, progress, sdkWarnings, signal);
+  const session = await payer.connect(target, wallet, progress, sdkWarnings, signal);
   try {
     const feeWallet = await feeWalletOver({
-      getShieldedAddresses: async () => (await connection.call('getShieldedAddresses', {})) as { shieldedCoinPublicKey: string; shieldedEncryptionPublicKey: string },
-      balanceUnsealedTransaction: async (tx) => (await connection.call('balanceUnsealedTransaction', { tx })) as { tx: string },
-      submitTransaction: (tx) => connection.call('submitTransaction', { tx }),
+      getShieldedAddresses: () => session.addresses(),
+      balanceUnsealedTransaction: async (tx) => ({ tx: await session.balanceTransaction(tx) }),
+      submitTransaction: (tx) => session.submit(tx),
     });
-    const shieldedNight = async (): Promise<bigint> => BigInt(((await connection.call('getShieldedBalances', {})) as Record<string, bigint | undefined>)[NATIVE_TOKEN_TYPE] ?? 0n);
+    const shieldedNight = async (): Promise<bigint> => (await session.balances()).shielded[NATIVE_TOKEN_TYPE] ?? 0n;
     progress.stop('Wallet ready');
-    return { feeWallet, shieldedNight, stop: connection.stop };
+    return { feeWallet, shieldedNight, stop: () => session.close() };
   } catch (err) {
-    await connection.stop();
+    await session.close();
     throw err;
   }
 }

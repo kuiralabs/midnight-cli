@@ -55,6 +55,8 @@ export interface EngineLedger {
   blockLimits(parametersHex: string): BlockLimits;
   /** The raw id of the unshielded NIGHT token, as wallet balances are keyed. */
   nightTokenId(): string;
+  /** What a serialized transaction (hex) is, as an approval prompt shows it; never throws. */
+  readTransaction(txHex: string, stage: 'unsealed' | 'sealed'): TransactionDetail[];
 }
 
 /** A contract's ledger state read without its compiled contract: cells as their field-aligned bytes in hex, maps by size. */

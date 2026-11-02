@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { networkHasShielded, shieldedSyncEnabled, shieldedDisabledReason } from '../lib/shielded-policy.ts';
+import { networkHasShielded, shieldedSyncEnabled, shieldedDisabledReason } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
 
 describe('shielded-policy', () => {
   it('marks localnet (undeployed) as having shielded, hosted testnets as not', () => {

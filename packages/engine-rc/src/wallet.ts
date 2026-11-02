@@ -18,6 +18,7 @@ import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
 import { bindCachesToIndexer, describeIndexerChange } from '@kuiralabs/midnight-cli-core/lib/cache-indexer';
 import { loadWalletCache, saveWalletCache } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
 import { DUST_SHORT_WAIT_MS, payWhenDustCovers } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
+import { assertLedgerSupported } from '@kuiralabs/midnight-chain/lib/ledger-guard';
 import { trackElapsed } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import { decodeShieldedAddress } from './addresses.ts';
 import { buildFacade, hasDustAvailable, isFacadeSynced, startAndSyncFacade, stopFacade, waitForDustAvailable } from './facade.ts';
@@ -162,6 +163,8 @@ async function prepDust(wallet: PrepWallet, waitMs: number): Promise<{ alreadyAv
 
 const openConnector: EngineWallet['openConnector'] = async (options): Promise<OpenedConnector> => {
   const { seed, network, networkConfig, address, syncMode, signal, onMessage } = options;
+  // On a ledger-8 chain the SDK's sync would retry forever.
+  await assertLedgerSupported(network, networkConfig, undefined, signal);
   // A failure before the connector is handed back stops what was started, so
   // the facade doesn't keep syncing.
   let bundle: Awaited<ReturnType<typeof buildFacade>> | undefined;

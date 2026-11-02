@@ -7,13 +7,12 @@
 
 import { DEFAULT_SERVE_PORT } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { OWN_COMMAND_DUST_WAIT_MS } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
-import type { Payer, PayingMethod, PayingTarget, ServedWallet, WalletConnection } from '@kuiralabs/midnight-cli-core/lib/payer';
+import type { Payer, PayingTarget, ServedWallet } from '@kuiralabs/midnight-cli-core/lib/payer';
+import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { sessionOver, type WalletSession } from '@kuiralabs/midnight-cli-core/lib/wallet-session';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import { assertWalletCanPay } from './wallet-can-pay.ts';
-
-/** The connection name the command's own calls are made under, for the connector's pending transactions. */
-const OWN_CONNECTION = 'mn-own-command';
 
 /**
  * An mn serve on `port` for the command's network and wallet: one already
@@ -37,25 +36,16 @@ async function serveWallet(port: number, { network, endpoints }: PayingTarget, w
 }
 
 /**
- * The command's wallet in this process: the same DApp connector mn serve
- * runs, its handlers called directly, so no port is taken and no server that
- * is running already is reused. Stopping it reverts what it balanced but
- * never submitted.
+ * The command's wallet in this process, as a session: the same DApp connector
+ * mn serve runs, its handlers called directly, so no port is taken and no
+ * server that is running already is reused. Closing it reverts what it
+ * balanced but never submitted.
  */
-async function connectWallet({ network, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<WalletConnection> {
+async function connectWallet({ network, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<WalletSession> {
   const { openConnector } = await import('./serve-manager.ts');
+  const engine = await engineFor(network);
   const opened = await openConnector({ network, endpoints, wallet, onMessage: (msg) => progress.update(msg), dustWaitMs: OWN_COMMAND_DUST_WAIT_MS, sdkWarnings, signal });
-  let requestId = 0;
-  const call = (method: PayingMethod, params: Record<string, unknown>): Promise<unknown> => {
-    const handler = opened.connector.handlers[method];
-    if (handler === undefined) throw new Error(`The wallet's connector has no ${method}`);
-    return handler(params, { notify: () => {}, connectionId: OWN_CONNECTION, requestId: ++requestId, metadata: {} });
-  };
-  const stop = async (): Promise<void> => {
-    await opened.connector.revertPendingTxs(OWN_CONNECTION).catch(() => { /* best-effort: the connector is stopping */ });
-    await opened.stop();
-  };
-  return { call, stop };
+  return sessionOver(network, opened, (tx, stage) => engine.ledger.readTransaction(tx, stage));
 }
 
 /** The payer whose served wallet is the mn serve on `port`. */

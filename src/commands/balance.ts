@@ -7,7 +7,7 @@ import { saveShieldedAddress, findWalletByAddress } from '../lib/wallet-config.t
 import { resolveSeedSource } from '../lib/seed-resolver.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { applyEndpointOverrides } from '@kuiralabs/midnight-cli-core/lib/network';
-import { shieldedSyncEnabled, shieldedDisabledReason } from '../lib/shielded-policy.ts';
+import { shieldedSyncEnabled, shieldedDisabledReason } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
 import { isNativeToken } from '@kuiralabs/midnight-chain/lib/balance-subscription';
 import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { assertLedgerSupported, fetchProtocolVersion } from '@kuiralabs/midnight-chain/lib/ledger-guard';

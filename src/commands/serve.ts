@@ -11,7 +11,7 @@ import { OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core/lib/conn
 import type { PhaseTiming } from '@kuiralabs/midnight-cli-core/lib/phase-tracker';
 import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
 import { DEFAULT_SERVE_PORT } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { shieldedSyncEnabled } from '../lib/shielded-policy.ts';
+import { shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
 import { header, keyValue, divider, formatAddress, toDust } from '@kuiralabs/midnight-cli-core/ui/format';
 import { parseFeeLimits } from '@kuiralabs/midnight-cli-core/lib/fee-limits';
 import { describeApprovalPolicy } from '@kuiralabs/midnight-cli-core/lib/approval';
