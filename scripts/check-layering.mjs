@@ -29,7 +29,7 @@ const HOMES = [
   ['shell', /^wallet\.ts$/],
   // help plays the shell's intro, and manual builds the full manual; both render the installed registry.
   ['shell', /^commands\/(help|manual)(\.definition)?\.ts$/],
-  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host|installed-commands|command-dispatch|agent-manual)\.ts$/],
+  ['shell', /^lib\/(heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host|installed-commands|command-dispatch|agent-manual|readme-commands)\.ts$/],
   ['shell', /^ui\/(animate|art)\.ts$/],
   ['mcp', /^mcp-server\.ts$/],
   ['mcp', /^lib\/mcp\//],
