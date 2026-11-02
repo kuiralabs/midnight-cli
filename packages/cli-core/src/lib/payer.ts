@@ -70,7 +70,13 @@ export interface Payer {
   /** Serves the wallet; one that runs in this process keeps the SDK's warnings to the paying call's `sdkWarnings`. */
   serve: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined) => Promise<ServedWallet>;
   /** Opens the wallet in this process as a session, keeping the SDK's warnings to the paying call's `sdkWarnings`. */
-  connect: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined) => Promise<WalletSession>;
+  connect: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined, options?: ConnectOptions) => Promise<WalletSession>;
+}
+
+/** What a session opened by a payer needs beyond paying. */
+export interface ConnectOptions {
+  /** Sync the shielded wallet even where the network has no shielded faucet: the call spends shielded coins. */
+  shielded?: boolean;
 }
 
 /** What a command's caller gives it for one call. */

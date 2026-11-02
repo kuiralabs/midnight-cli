@@ -249,6 +249,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
     let shieldedBalance = 0n;
     let shieldedCoins = 0;
     let pendingCoins = 0;
+    let shieldedTokens: ReadonlyMap<string, bigint> = new Map();
 
     if (shieldedEnabled) {
       if (!isJson) activeSpinner = ctx.progress.start('Syncing shielded...');
@@ -284,6 +285,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
       );
       shieldedBalance = shieldedResult.balance;
       shieldedCoins = shieldedResult.availableCoins;
+      shieldedTokens = shieldedResult.tokens;
       pendingCoins = 0; // confirmed chain state from events; no in-flight coins
 
       if (activeSpinner) {
@@ -292,7 +294,12 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
         if (shieldedBalance > 0n) {
           ctx.output.stderr(keyValue('  NIGHT', bold(formatNight(shieldedBalance))) + '\n');
           ctx.output.stderr(keyValue('  Coins', `${shieldedCoins} available, ${pendingCoins} pending`) + '\n');
-        } else {
+        }
+        // Other tokens by their full raw type: what `mn swap` and transfers take.
+        for (const [tokenType, amount] of shieldedTokens) {
+          ctx.output.stderr(keyValue('  Token', `${bold(amount.toString())} ${dim(tokenType)}`) + '\n');
+        }
+        if (shieldedBalance === 0n && shieldedTokens.size === 0) {
           ctx.output.stderr(`    ${dim('No shielded balance')}\n`);
         }
       }
@@ -301,6 +308,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
     }
 
     if (isJson) {
+      const tokens = Object.fromEntries([...shieldedTokens].map(([tokenType, amount]) => [tokenType, amount.toString()]));
       // Slim drops the unshielded + shielded address strings (~220 chars
       // combined). Agents already know which wallet they queried.
       // shieldedSynced=false means shielded was skipped (not a confirmed zero) —
@@ -309,7 +317,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
         ctx.output.result({
           network: networkName,
           unshielded: { NIGHT: toNight(unshieldedBalance), utxoCount: unshieldedUtxos },
-          shielded: { NIGHT: toNight(shieldedBalance), availableCoins: shieldedCoins, pendingCoins },
+          shielded: { NIGHT: toNight(shieldedBalance), availableCoins: shieldedCoins, pendingCoins, tokens },
           shieldedSynced: shieldedEnabled,
         });
         return;
@@ -319,7 +327,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
         shieldedAddress: liveShieldedAddrStr,
         network: networkName,
         unshielded: { NIGHT: toNight(unshieldedBalance), utxoCount: unshieldedUtxos },
-        shielded: { NIGHT: toNight(shieldedBalance), availableCoins: shieldedCoins, pendingCoins },
+        shielded: { NIGHT: toNight(shieldedBalance), availableCoins: shieldedCoins, pendingCoins, tokens },
         shieldedSynced: shieldedEnabled,
       });
       return;
@@ -328,6 +336,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
     // When shielded was skipped, say so on stdout too — `=0` would read as a
     // confirmed zero to a script parsing the pipeable output.
     ctx.output.stdout(`SHIELDED_NIGHT=${shieldedEnabled ? shieldedBalance : 'skipped'}\n`);
+    for (const [tokenType, amount] of shieldedTokens) ctx.output.stdout(`SHIELDED_${tokenType}=${amount}\n`);
     ctx.output.stderr('\n' + divider() + '\n\n');
   } catch (err) {
     activeSpinner?.fail('Failed');

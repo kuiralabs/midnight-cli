@@ -142,12 +142,14 @@ export interface EngineContracts {
   readonly scripts: EngineContractScripts;
 }
 
-/** A wallet's shielded NIGHT, from mn's own reader of the indexer's events. */
+/** A wallet's shielded balances, from mn's own reader of the indexer's events. */
 export interface ShieldedBalanceResult {
   /** Native (NIGHT) shielded balance in atomic units. */
   balance: bigint;
   /** Number of spendable NIGHT coins. */
   availableCoins: number;
+  /** Shielded tokens other than NIGHT, by raw type (sorted), with their balances. */
+  tokens: ReadonlyMap<string, bigint>;
   /** Events applied in this run (delta since last cache save). */
   eventCount: number;
   /** Latest event id in the saved cache (carried from prior cache if no new events). */

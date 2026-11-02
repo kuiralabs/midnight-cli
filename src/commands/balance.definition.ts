@@ -71,7 +71,7 @@ export const balanceDefinition: CommandDefinition = {
       shieldedAddress: 'Shielded address',
       network: 'Network name',
       unshielded: '{ NIGHT, utxoCount }',
-      shielded: '{ NIGHT, availableCoins, pendingCoins }',
+      shielded: '{ NIGHT, availableCoins, pendingCoins, tokens: { <raw token type>: amount } }',
     },
   },
   intro: { brief: 'Check balance', order: 3 },
@@ -82,7 +82,7 @@ export const balanceDefinition: CommandDefinition = {
     tools: [
       {
         name: 'midnight_balance',
-        description: 'NIGHT balance. Default: { network, unshielded, shielded } — no echoed addresses. Pass { full: true } for the human shape including address + shieldedAddress.',
+        description: 'NIGHT balance, and any other shielded tokens by raw type (shielded.tokens). Default: { network, unshielded, shielded } — no echoed addresses. Pass { full: true } for the human shape including address + shieldedAddress.',
         annotations: { readOnlyHint: true, openWorldHint: true },
         params: [
           { name: 'address', schema: { type: 'string' } },

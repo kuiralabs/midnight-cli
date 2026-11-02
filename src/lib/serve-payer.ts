@@ -7,7 +7,7 @@
 
 import { DEFAULT_SERVE_PORT } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { OWN_COMMAND_DUST_WAIT_MS } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
-import type { Payer, PayingTarget, ServedWallet } from '@kuiralabs/midnight-cli-core/lib/payer';
+import type { ConnectOptions, Payer, PayingTarget, ServedWallet } from '@kuiralabs/midnight-cli-core/lib/payer';
 import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { sessionOver, type WalletSession } from '@kuiralabs/midnight-cli-core/lib/wallet-session';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
@@ -41,10 +41,10 @@ async function serveWallet(port: number, { network, endpoints }: PayingTarget, w
  * server that is running already is reused. Closing it reverts what it
  * balanced but never submitted.
  */
-async function connectWallet({ network, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<WalletSession> {
+async function connectWallet({ network, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined, options: ConnectOptions = {}): Promise<WalletSession> {
   const { openConnector } = await import('./serve-manager.ts');
   const engine = await engineFor(network);
-  const open = () => openConnector({ network, endpoints, wallet, onMessage: (msg) => progress.update(msg), dustWaitMs: OWN_COMMAND_DUST_WAIT_MS, sdkWarnings, signal });
+  const open = () => openConnector({ network, endpoints, wallet, onMessage: (msg) => progress.update(msg), dustWaitMs: OWN_COMMAND_DUST_WAIT_MS, sdkWarnings, forceShielded: options.shielded, signal });
   return sessionOver(network, await open(), (tx, stage) => engine.ledger.readTransaction(tx, stage), { reopen: open, onMessage: (msg) => progress.update(msg) });
 }
 
