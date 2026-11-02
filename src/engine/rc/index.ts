@@ -2,6 +2,7 @@
 // release candidates, ledger 9 and midnight-js 5 as mn pins them.
 
 import type { Engine } from '../../lib/engine.ts';
+import { blockLimitsOf } from './ledger-parameters.ts';
 import { deriveAllAddresses, deriveAllShieldedAddresses, deriveShieldedAddressString, deriveUnshieldedAddress } from './derive-address.ts';
 
 export const rcEngine: Engine = {
@@ -11,5 +12,8 @@ export const rcEngine: Engine = {
     unshieldedAddresses: deriveAllAddresses,
     shieldedAddress: deriveShieldedAddressString,
     shieldedAddresses: deriveAllShieldedAddresses,
+  },
+  ledger: {
+    blockLimits: blockLimitsOf,
   },
 };

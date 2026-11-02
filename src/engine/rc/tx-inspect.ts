@@ -2,15 +2,15 @@
 // Used by the DApp Connector approval prompt to show Lace-style transaction summaries
 
 import { Transaction } from '@midnightntwrk/ledger-v9';
-import type { ApprovalDetail } from './approval.ts';
+import type { TransactionDetail } from '../../lib/engine.ts';
 
 /**
  * Try to extract structured details from a transaction hex string.
  * Returns an array of label/value pairs for the approval prompt.
  * Falls back gracefully — never throws.
  */
-export function inspectTxHex(txHex: string, stage: 'unsealed' | 'sealed'): ApprovalDetail[] {
-  const details: ApprovalDetail[] = [];
+export function inspectTxHex(txHex: string, stage: 'unsealed' | 'sealed'): TransactionDetail[] {
+  const details: TransactionDetail[] = [];
   details.push({ label: 'Tx size', value: formatBytes(txHex.length / 2) });
 
   const summary = tryDeserializeAndSummarize(txHex, stage);
