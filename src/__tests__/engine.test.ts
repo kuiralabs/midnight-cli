@@ -2,8 +2,9 @@
 // same for work every set does alike.
 
 import { describe, expect, it } from 'vitest';
-import { anyEngine, engineFor, sdkSetOf } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { getValidNetworkNames, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import { anyEngine, engineFor, sdkSetOf, setEngineLoader } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { getValidNetworkNames, sdkSetOfNetwork, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { rcEngine } from '@kuiralabs/midnight-engine-rc';
 
 describe('the engine for a network', () => {
@@ -30,4 +31,30 @@ describe('the engine for a network', () => {
       expect(shielded[network]).toMatch(new RegExp(`^mn_shield-addr_${network}1`));
     }
   });
+});
+
+describe('the network picks the engine', () => {
+  it('asks the host\'s loader for the set the network table names, once a process', async () => {
+    const asked: string[] = [];
+    setEngineLoader(async (set) => { asked.push(set); return rcEngine; });
+    try {
+      expect(await engineFor('preview')).toBe(rcEngine);
+      expect(await engineFor('undeployed')).toBe(rcEngine);
+      expect(asked).toStrictEqual(['rc']);
+      for (const network of getValidNetworkNames() as NetworkName[]) expect(sdkSetOf(network)).toBe(sdkSetOfNetwork(network));
+    } finally {
+      setEngineLoader(loadInstalledEngine);
+    }
+  });
+
+  it('refuses a second set in a process that has loaded one', async () => {
+    const other = { ...rcEngine, set: 'beta' } as unknown as typeof rcEngine;
+    setEngineLoader(async () => other);
+    try {
+      await expect(engineFor('undeployed')).rejects.toThrow("This process runs the beta SDK set and can't load the rc one");
+    } finally {
+      setEngineLoader(loadInstalledEngine);
+    }
+  });
+
 });
