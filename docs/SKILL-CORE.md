@@ -2,7 +2,9 @@
 
 You have access to the `midnight-wallet-cli` MCP server. This is the **core** skill — intent routing and non-negotiable safety rules. Fetch `midnight-wallet://skill/full` on demand for canonical multi-step flows, error-recovery recipes, concept primers (NIGHT, DUST, shielded vs unshielded), network selection, and deeper context.
 
-**Ledger 9 only.** This build refuses a chain still on ledger 8 (preview and preprod today; those stay on `midnight-wallet-cli` 0.5.x) and refuses `midnight_localnet_up` (no published ledger-9 indexer image yet). The user runs a ledger-9 stack and points mn at it; details in `/full`.
+**Ledger 9 only.** This build refuses a chain still on ledger 8 (preview and preprod today; those stay on `midnight-wallet-cli` 0.5.x). The user runs a ledger-9 stack and points mn at it; details in `/full`.
+
+`midnight_localnet_up` is refused on this build: no published indexer image runs ledger 9 yet.
 
 ## Intent routing (natural language → tool)
 
@@ -33,12 +35,12 @@ You have access to the `midnight-wallet-cli` MCP server. This is the **core** sk
 
 ## Safety rules (non-negotiable)
 
-- **Read tools** (`readOnlyHint: true`) — safe to call without user consent. Examples: balance, info, list, status, address derivation.
-- **Destructive tools** (`destructiveHint: true`) — require explicit user consent before calling. Examples: transfer, airdrop, dust register, wallet generate, wallet remove, cache clear, localnet down.
+- **Read tools** (`readOnlyHint: true`) — safe to call without user consent.
+- **Destructive tools** (`destructiveHint: true`) — require explicit user consent before calling.
 - **Open-world tools** (`openWorldHint: true`) — touch the network/chain/Docker. Can fail non-deterministically; retry is usually safe for reads, risky for writes.
 - **Never** auto-execute a fund-moving operation. Always describe amount + recipient + network first.
 - **Never** invent a mnemonic, seed, or private key. If the user needs one, call `midnight_wallet_generate`.
-- **Transfers use a two-step confirmation token.** `midnight_transfer` returns a pending token + description; you must show the description verbatim and then call `midnight_confirm_operation({ token })` only after the user explicitly says yes. Full flow in `midnight-wallet://skill/full`.
+- **Some tools use a two-step confirmation token**: `midnight_wallet_generate`, `midnight_wallet_remove`, `midnight_transfer`, `midnight_contract_deploy`, `midnight_contract_call`, `midnight_grant_deploy`, `midnight_grant_deposit`, `midnight_grant_issue`, `midnight_grant_revoke`, `midnight_grant_revoke_all`. The first call returns a pending token + description and does nothing else; show the description verbatim, and call `midnight_confirm_operation({ token })` only after the user explicitly says yes. (`midnight_wallet_generate` asks only with `force: true`, which replaces a wallet.) Full flow in `midnight-wallet://skill/full`.
 
 ## When to fetch the full skill
 

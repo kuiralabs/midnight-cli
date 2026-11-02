@@ -7,6 +7,29 @@ import type { PackageGuidance } from '../lib/agent-guidance.ts';
 export const devGuidance: PackageGuidance = {
   pieces: [
     {
+      text: 'skill-full',
+      section: 'what-you-can-do',
+      order: 40,
+      body: `- Scaffold and run a dApp's end-to-end tests, and manage a local Midnight network.
+`,
+    },
+    {
+      text: 'skill-core',
+      section: 'title',
+      order: 10,
+      body: `\`midnight_localnet_up\` is refused on this build: no published indexer image runs ledger 9 yet.
+
+`,
+    },
+    {
+      text: 'skill-full',
+      section: 'title',
+      order: 10,
+      body: `> \`midnight_localnet_up\` is refused on this build, because no published indexer image runs ledger 9 yet.
+
+`,
+    },
+    {
       text: 'agent-manual',
       section: 'e2e-testing',
       order: 10,

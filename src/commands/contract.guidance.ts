@@ -7,6 +7,13 @@ import type { PackageGuidance } from '../lib/agent-guidance.ts';
 export const contractGuidance: PackageGuidance = {
   pieces: [
     {
+      text: 'skill-full',
+      section: 'what-you-can-do',
+      order: 20,
+      body: `- Deploy, call, inspect and read Compact smart contracts, and read the chain's block limits.
+`,
+    },
+    {
       text: 'agent-manual',
       section: 'smart-contracts',
       order: 10,
