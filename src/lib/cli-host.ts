@@ -12,13 +12,13 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { installSdkNoiseFilters } from './sdk-noise.ts';
-import { setNoticeSink } from './notices.ts';
-import { setSettingsSource, settingsFromEnvironment } from './settings.ts';
-import { setHostPathsSource } from './state-root.ts';
-import { MIDNIGHT_DIR } from './constants.ts';
-import { setEngineLoader } from './engine.ts';
+import { setNoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
+import { setSettingsSource, settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
+import { setHostPathsSource } from '@kuiralabs/midnight-cli-core/lib/state-root';
+import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { setEngineLoader } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { loadInstalledEngine } from './installed-engines.ts';
-import type { SdkWarningCalls } from './sdk-warnings.ts';
+import type { SdkWarningCalls } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 
 /** What the host gives its runners. */
 export interface CliHost {

@@ -25,8 +25,8 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 
-import { WalletDataRepository, defaultRepository } from '../src/lib/wallet-data-repository.ts';
-import { getNetworkConfig, type NetworkName } from '../src/lib/network.ts';
+import { WalletDataRepository, defaultRepository } from '../src/engine/rc/wallet-data-repository.ts';
+import { getNetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { unlockWallet, resolveWalletPath } from '../src/lib/wallet-config.ts';
 
 const WALLET = (process.env.WALLET ?? 'alice') as string;
@@ -62,7 +62,7 @@ async function main() {
   // memo doesn't leak. Disk cache from #1 still present.
   const disk = Number(execSync(
     `npx tsx -e "
-      import('./src/lib/wallet-data-repository.ts').then(async (repo) => {
+      import('./src/engine/rc/wallet-data-repository.ts').then(async (repo) => {
         const { Buffer } = await import('node:buffer');
         const { getNetworkConfig } = await import('./src/lib/network.ts');
         const { unlockWallet, resolveWalletPath } = await import('./src/lib/wallet-config.ts');

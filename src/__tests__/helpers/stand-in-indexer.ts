@@ -11,7 +11,7 @@
 import { createServer, type Server, type Socket } from 'node:net';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { NATIVE_TOKEN_TYPE } from '../../lib/constants.ts';
+import { NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core/lib/constants';
 
 /** One subscription the stand-in indexer took. */
 export interface Subscription {

@@ -3,13 +3,13 @@
 // shell (src/wallet.ts) owns the process: it passes in what a handler may be
 // given and where a notice goes, and decides the heap and the exit.
 
-import type { ParsedArgs } from './argv.ts';
-import { createCallContext, runHandler, type CallContext, type CommandOutcome, type CallOutput } from './call-context.ts';
-import type { CommandDefinition, CommandRegistry } from './command-definition.ts';
-import { UsageError } from './errors.ts';
-import { writeJsonResult } from './json-output.ts';
-import type { Payer } from './payer.ts';
-import type { CallSdkWarnings, SdkWarningCalls } from './sdk-warnings.ts';
+import type { ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { createCallContext, runHandler, type CallContext, type CommandOutcome, type CallOutput } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import type { CommandDefinition, CommandRegistry } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { writeJsonResult } from '@kuiralabs/midnight-cli-core/lib/json-output';
+import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
+import type { CallSdkWarnings, SdkWarningCalls } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import type { WalletProtector } from './wallet-protector.ts';
 
 /** What the shell can give a handler: its call's signal and output, and, as its definition's `shell` field asks, the payer or protectors, loaded only then. */

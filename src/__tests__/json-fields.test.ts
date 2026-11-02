@@ -7,10 +7,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { parseArgs } from '../lib/argv.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { captureCommand } from '../lib/run-command.ts';
-import type { CommandHandler } from '../lib/call-context.ts';
+import type { CommandHandler } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { ownCall } from './helpers/own-call.ts';
 
 const PASSPHRASE = 'correct horse battery staple';

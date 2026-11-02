@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildManual } from '../commands/manual.ts';
-import { getConfigValue } from '../lib/cli-config.ts';
+import { getConfigValue } from '@kuiralabs/midnight-cli-core/lib/cli-config';
 import { installedCommands } from '../lib/installed-commands.ts';
 
 function stripAnsi(s: string): string {

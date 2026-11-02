@@ -22,7 +22,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { JSONRPCMessage, Progress } from '@modelcontextprotocol/sdk/types.js';
 import { deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
-import { toNight } from '../ui/format.ts';
+import { toNight } from '@kuiralabs/midnight-cli-core/ui/format';
 import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from './helpers/stand-in-indexer.ts';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));

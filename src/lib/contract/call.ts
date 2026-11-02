@@ -1,10 +1,10 @@
 // Calling a circuit of a deployed contract: the call script, run against the
 // wallet the payer serves (served-wallet.ts). `mn contract call` calls through here.
 
-import type { Payer, PayingTarget } from '../payer.ts';
+import type { Payer, PayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
 import { withServedWallet } from './served-wallet.ts';
-import type { Spinner } from '../../ui/spinner.ts';
-import type { CallSdkWarnings } from '../sdk-warnings.ts';
+import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import type { ContractCallRequest } from './request.ts';
 
 export interface CallContractParams {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createPhaseTracker } from '../lib/phase-tracker.ts';
+import { createPhaseTracker } from '@kuiralabs/midnight-cli-core/lib/phase-tracker';
 
 describe('createPhaseTracker', () => {
   beforeEach(() => {

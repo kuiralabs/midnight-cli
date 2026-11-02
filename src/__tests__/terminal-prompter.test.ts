@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
-import { createTerminalPrompter } from '../ui/terminal-prompter.ts';
-import { PromptBusyError } from '../lib/prompter.ts';
+import { createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui/terminal-prompter';
+import { PromptBusyError } from '@kuiralabs/midnight-cli-core/lib/prompter';
 
 const ROOT = resolve(import.meta.dirname, '..', '..');
 
@@ -17,7 +17,7 @@ describe('the terminal prompter', () => {
       let touched = 0;
       const own = Object.getOwnPropertyDescriptor(process, 'stdin');
       Object.defineProperty(process, 'stdin', { configurable: true, get() { touched++; return own.get.call(process); } });
-      const { createTerminalPrompter } = await import(${JSON.stringify(resolve(ROOT, 'src/ui/terminal-prompter.ts'))});
+      const { createTerminalPrompter } = await import(${JSON.stringify(resolve(ROOT, 'packages/cli-core/src/ui/terminal-prompter.ts'))});
       const prompter = createTerminalPrompter();
       const atCreation = touched;
       prompter.isInteractive();

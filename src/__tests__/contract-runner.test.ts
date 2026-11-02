@@ -3,7 +3,7 @@
 // mn serve RPC (`rpcCall`) is stubbed.
 
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
-import { CancelledError } from '../lib/errors.ts';
+import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -34,7 +34,7 @@ import {
 } from '../lib/contract/runner.ts';
 import * as rcScripts from '../engine/rc/contract-scripts.ts';
 import { PROVIDER_IMPORTS, walletProviderCode } from '../engine/rc/contract-scripts.ts';
-import type { CallScript, DeployScript, StateScript } from '../lib/engine.ts';
+import type { CallScript, DeployScript, StateScript } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 // The rc engine's scripts, with the parts the runner gives every engine.
 const generateDeployScript = (opts: DeployScript & { dappDir?: string }): string => rcScripts.generateDeployScript(opts, SCRIPT_PARTS);
@@ -42,7 +42,7 @@ const generateCallScript = (opts: CallScript & { dappDir?: string }): string => 
 const generateStateScript = (opts: StateScript & { dappDir?: string }): string => rcScripts.generateStateScript(opts, SCRIPT_PARTS);
 const providerSetupCode = (networkConfig: Parameters<typeof rcScripts.providerSetupCode>[0], key: string): string => rcScripts.providerSetupCode(networkConfig, key, SCRIPT_PARTS);
 
-import type { NetworkConfig } from '../lib/network.ts';
+import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
   ...params: string[]

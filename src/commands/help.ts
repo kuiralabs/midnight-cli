@@ -5,17 +5,17 @@
 // Every list of commands it shows comes from the command registry, and the
 // agent manual from the installed packages' guidance.
 
-import { type ParsedArgs, hasFlag } from '../lib/argv.ts';
-import { bold, teal, gray, dim } from '../ui/colors.ts';
-import { header } from '../ui/format.ts';
+import { type ParsedArgs, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { bold, teal, gray, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
+import { header } from '@kuiralabs/midnight-cli-core/ui/format';
 import { animateMaterialize } from '../ui/animate.ts';
 import { WORDMARK_BIG } from '../ui/art.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { agentManual } from '../lib/agent-manual.ts';
-import { commandHelpSpecs, introBriefs, type CommandHelpSpec } from '../lib/command-definition.ts';
+import { commandHelpSpecs, introBriefs, type CommandHelpSpec } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 import { hasShownIntroThisSession, markIntroShown } from '../lib/intro-marker.ts';
-import { UsageError } from '../lib/errors.ts';
-import type { CallContext, CallOutput } from '../lib/call-context.ts';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import type { CallContext, CallOutput } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { PKG_NAME, PKG_VERSION, PKG_DESCRIPTION } from '../lib/pkg.ts';
 
 type CommandSpec = CommandHelpSpec;

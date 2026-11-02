@@ -8,7 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
 import { serveEndpointMismatch, serveWalletMismatch } from '../lib/serve-manager.ts';
-import { createSdkWarningRouter } from '../lib/sdk-warnings.ts';
+import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 
 const scratch = { node: 'ws://localhost:29944', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws' };

@@ -5,7 +5,7 @@
 // machine than mn's own parameters do.
 
 import { describe, expect, it } from 'vitest';
-import { MalformedSecretError, WrongPassphraseError, freshDataKey, openSecret, openWithKey, sealSecret, sealWithKey } from '../lib/keystore.ts';
+import { MalformedSecretError, WrongPassphraseError, freshDataKey, openSecret, openWithKey, sealSecret, sealWithKey } from '@kuiralabs/midnight-cli-core/lib/keystore';
 
 const SEED = Buffer.from('aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233', 'hex');
 const PASSPHRASE = 'correct horse battery staple';

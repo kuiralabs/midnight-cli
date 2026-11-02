@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { captureCommand } from '../lib/run-command.ts';
-import { SecondResultError, type CommandHandler } from '../lib/call-context.ts';
-import { CancelledError, CommandFailedError } from '../lib/errors.ts';
-import { classifyError } from '../lib/exit-codes.ts';
-import type { Spinner } from '../ui/spinner.ts';
-import { parseArgs, type ParsedArgs } from '../lib/argv.ts';
+import { SecondResultError, type CommandHandler } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { CancelledError, CommandFailedError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import { parseArgs, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';

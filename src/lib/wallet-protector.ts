@@ -2,7 +2,7 @@
 // secrets for a wallet (grant's accounts) provides a protector, and the
 // caller passes it in the call context: wallet never imports that domain.
 
-import type { CallContext } from './call-context.ts';
+import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { resolveWalletPath, unlockWallet } from './wallet-config.ts';
 
 /** What protecting one item did: sealed now, already sealed, or why it could not be. */
@@ -33,6 +33,6 @@ export type WalletCommandContext = CallContext<WalletProtector>;
 /** The shielded coin public key of the wallet `name`, unlocked with mn's passphrase. */
 export async function coinKeyOfWallet(name: string): Promise<string> {
   // The engine loads the SDK, which the other wallet subcommands don't need: loaded here, not up front.
-  const { anyEngine } = await import('./engine.ts');
+  const { anyEngine } = await import('@kuiralabs/midnight-cli-core/lib/engine');
   return (await anyEngine()).keys.shieldedCoinPublicKeyHex(Buffer.from((await unlockWallet(resolveWalletPath(name))).seed, 'hex'));
 }

@@ -13,7 +13,7 @@ import { pathToFileURL } from 'node:url';
 // has no docker in it.
 
 const localnet = pathToFileURL(resolve(import.meta.dirname, '../lib/localnet.ts')).href;
-const execProgram = pathToFileURL(resolve(import.meta.dirname, '../lib/exec-program.ts')).href;
+const execProgram = pathToFileURL(resolve(import.meta.dirname, '../../packages/cli-core/src/lib/exec-program.ts')).href;
 const tsxLoader = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
 
 describe('checkDockerAvailable on a machine without Docker', () => {

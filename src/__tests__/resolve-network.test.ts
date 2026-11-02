@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { resolveBlockfrostProjectId, resolveNetworkName, resolveNetwork, type NetworkResolutionContext } from '../lib/resolve-network.ts';
-import { saveCliConfig, setConfigValue } from '../lib/cli-config.ts';
-import { parseArgs, type ParsedArgs } from '../lib/argv.ts';
+import { resolveBlockfrostProjectId, resolveNetworkName, resolveNetwork, type NetworkResolutionContext } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
+import { saveCliConfig, setConfigValue } from '@kuiralabs/midnight-cli-core/lib/cli-config';
+import { parseArgs, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 
 // Use a temp config dir to avoid polluting the real ~/.midnight/
 const TEST_DIR = path.join(os.tmpdir(), `midnight-resolve-network-test-${process.pid}`);

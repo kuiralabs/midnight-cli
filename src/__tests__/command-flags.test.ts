@@ -5,13 +5,15 @@
 // accepted flags in lockstep with the flags each command's code really reads.
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
+import { sourceFiles } from '../../scripts/check-layering.mjs';
 import { join } from 'node:path';
-import { parseArgs } from '../lib/argv.ts';
-import { UsageError } from '../lib/errors.ts';
-import { findUnknownFlags as findUnknownFlagsIn, findMisplacedFlags as findMisplacedFlagsIn, assertKnownFlags as assertKnownFlagsIn } from '../lib/command-flags.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { findUnknownFlags as findUnknownFlagsIn, findMisplacedFlags as findMisplacedFlagsIn, assertKnownFlags as assertKnownFlagsIn } from '@kuiralabs/midnight-cli-core/lib/command-flags';
 import { installedCommands } from '../lib/installed-commands.ts';
-import type { ParsedArgs } from '../lib/argv.ts';
+import type { ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 
 // The refusal reads the installed commands' registry, as the CLI's does.
 const findUnknownFlags = (args: ParsedArgs) => findUnknownFlagsIn(args, installedCommands);
@@ -93,7 +95,6 @@ describe('the accepted flags match the code', () => {
   // though it works; a registry entry no code reads would be accepted and
   // silently ignored (the bug this guards against). Derive each command's
   // flags from its source and require equality.
-  const COMMANDS_DIR = join(import.meta.dirname, '..', 'commands');
   const LITERAL_READ = /(?:getFlag|hasFlag|requireFlag)\(\s*\w+\s*,\s*['"]([a-z0-9-]+)['"]/g;
   // Shared helpers that read flags on the command's behalf.
   const HELPER_FLAGS: Record<string, string[]> = {
@@ -127,14 +128,18 @@ describe('the accepted flags match the code', () => {
 
   // A command's definition (<name>.definition.ts) sits beside it and is not a
   // command, nor is a package's agent guidance (<package>.guidance.ts).
-  const commandFiles = readdirSync(COMMANDS_DIR).filter((f) => f.endsWith('.ts') && !f.endsWith('.definition.ts') && !f.endsWith('.guidance.ts'));
+  // Commands sit in commands/ under src/ or a workspace package.
+  const commandPaths = new Map(sourceFiles()
+    .filter((f) => /\/commands\/[^/]+\.ts$/.test(f) && !f.endsWith('.definition.ts') && !f.endsWith('.guidance.ts'))
+    .map((f) => [basename(f), f]));
+  const commandFiles = [...commandPaths.keys()];
 
   it('has an entry for every command file, and no entry without one', () => {
     expect(installedCommands.commands.map((c) => c.name).sort()).toEqual(commandFiles.map((f) => f.replace(/\.ts$/, '')).sort());
   });
 
   it.each(commandFiles.map((f) => f.replace(/\.ts$/, '')))('%s: registry equals the flags its code reads', (command) => {
-    const source = readFileSync(join(COMMANDS_DIR, `${command}.ts`), 'utf-8');
+    const source = readFileSync(commandPaths.get(`${command}.ts`)!, 'utf-8');
     expect(installedCommands.find(command)!.flags.map((f) => f.name).sort()).toEqual([...flagsReadBy(source)].sort());
   });
 });

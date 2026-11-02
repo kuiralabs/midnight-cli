@@ -2,11 +2,11 @@
 // Transport layer for the DApp Connector — dispatches RPC calls to handler functions
 
 import { WebSocketServer, WebSocket } from 'ws';
-import { notice } from './notices.ts';
-import type { APIError, RpcHandler, RpcHandlerContext } from './connector-api.ts';
+import { notice } from '@kuiralabs/midnight-cli-core/lib/notices';
+import type { APIError, RpcHandler, RpcHandlerContext } from '@kuiralabs/midnight-cli-core/lib/connector-api';
 
 // The wire types the connector's handlers use, from where every package can reach them.
-export { createApiError, type APIError, type ErrorCode, type RpcHandler, type RpcHandlerContext } from './connector-api.ts';
+export { createApiError, type APIError, type ErrorCode, type RpcHandler, type RpcHandlerContext } from '@kuiralabs/midnight-cli-core/lib/connector-api';
 
 // ── JSON-RPC 2.0 types ──
 

@@ -1,7 +1,7 @@
 // One GraphQL query to the indexer's HTTP endpoint.
 
-import { assertEndpointUsable, endpointRefusal } from './blockfrost.ts';
-import { throwIfCancelled } from './errors.ts';
+import { assertEndpointUsable, endpointRefusal } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 /** The indexer could not answer a query: unreachable, an HTTP error, a non-JSON body, or GraphQL errors. */
 export class IndexerQueryError extends Error {

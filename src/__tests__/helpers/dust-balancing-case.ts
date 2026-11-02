@@ -5,7 +5,7 @@
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { CoinsAndBalances, CoreWallet, Keys, Transacting } from '@midnightntwrk/wallet-sdk/dust/v2';
-import { DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN } from '../../lib/constants.ts';
+import { DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { TWO_COIN_DUST_CAPTURED_AT, TWO_COIN_DUST_SEED_HEX, TWO_COIN_DUST_STATE_HEX } from '../fixtures/dust-state-two-coins.ts';
 import { LEDGER9_PARAMETERS_HEX } from '../fixtures/ledger9-parameters.ts';
 import { NETWORK, TTL, agentPaysMerchant, unsealedBytes } from './ledger-tx.ts';

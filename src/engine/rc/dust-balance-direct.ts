@@ -24,7 +24,7 @@ import {
   INITIAL_NIGHT_DUST_RATIO,
   INITIAL_GENERATION_DECAY_RATE,
   INITIAL_DUST_GRACE_PERIOD_SECONDS,
-} from '../../lib/constants.ts';
+} from '@kuiralabs/midnight-cli-core/lib/constants';
 import { subscribeGraphqlWs } from '../../lib/graphql-ws-subscription.ts';
 
 const SUBSCRIPTION_QUERY = `

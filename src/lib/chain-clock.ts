@@ -6,7 +6,7 @@
 // built on them is refused with a bare "Transaction submission error".
 
 import { queryIndexer } from './indexer-graphql.ts';
-import { formatWait } from './duration.ts';
+import { formatWait } from '@kuiralabs/midnight-cli-core/lib/duration';
 
 /** How far behind this computer's clock the chain may be before mn says so. */
 export const CHAIN_CLOCK_TOLERANCE_MS = 2 * 60_000;

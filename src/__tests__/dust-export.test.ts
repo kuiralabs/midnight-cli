@@ -98,7 +98,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { exportDustSnapshot } from '../engine/rc/dust-export.ts';
 import { WalletDataRepository } from '../engine/rc/wallet-data-repository.ts';
-import type { NetworkConfig } from '../lib/network.ts';
+import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { DustDirectResult } from '../engine/rc/dust-direct.ts';
 
 const EXPORT_NETWORK: NetworkConfig = {

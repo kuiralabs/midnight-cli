@@ -9,17 +9,17 @@
 //      file required, useful for funding externally-generated addresses.
 //      A shielded address implies --shielded; the flag is optional there.
 
-import { throwIfCancelled } from '../lib/errors.ts';
-import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '../lib/argv.ts';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { loadWalletConfig, resolveWalletPath, saveShieldedAddress } from '../lib/wallet-config.ts';
-import { resolveNetwork } from '../lib/resolve-network.ts';
-import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '../lib/network.ts';
-import { GENESIS_SEED } from '../lib/constants.ts';
-import { engineFor } from '../lib/engine.ts';
-import { parseAmount, nightToMicro } from '../lib/amount.ts';
-import { header, keyValue, divider, formatAddress, successMessage } from '../ui/format.ts';
-import { bold, dim } from '../ui/colors.ts';
-import type { CallContext } from '../lib/call-context.ts';
+import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
+import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { parseAmount, nightToMicro } from '@kuiralabs/midnight-cli-core/lib/amount';
+import { header, keyValue, divider, formatAddress, successMessage } from '@kuiralabs/midnight-cli-core/ui/format';
+import { bold, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
+import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 
 export default async function airdropCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);

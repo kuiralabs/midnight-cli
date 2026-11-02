@@ -2,14 +2,14 @@
 // Dust to spend. `mn dust register` and `mn dev` both register through here.
 
 import { waitForLiteSyncedState } from './facade.ts';
-import { throwIfCancelled } from '../../lib/errors.ts';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { ensureDust } from './transfer.ts';
 import { defaultRepository } from './wallet-data-repository.ts';
-import type { NetworkConfig } from '../../lib/network.ts';
-import type { CallSdkWarnings } from '../../lib/sdk-warnings.ts';
-import type { VerboseLog } from '../../lib/verbose.ts';
-import type { DustRegisterOptions, DustRegistration } from '../../lib/engine.ts';
-export type { DustRegisterOptions, DustRegistration } from '../../lib/engine.ts';
+import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
+import type { DustRegisterOptions, DustRegistration } from '@kuiralabs/midnight-cli-core/lib/engine';
+export type { DustRegisterOptions, DustRegistration } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 
 

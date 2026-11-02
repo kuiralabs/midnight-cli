@@ -14,8 +14,8 @@ import {
   type CommandDefinition,
   type CommandPackage,
   type CommandRegistry,
-} from '../lib/command-definition.ts';
-import { GuidanceError, assembleGuidance, sectionsWithAdded, type GuidancePiece, type GuidanceText } from '../lib/agent-guidance.ts';
+} from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { GuidanceError, assembleGuidance, sectionsWithAdded, type GuidancePiece, type GuidanceText } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
 import { AGENT_MANUAL_SECTIONS, TOOL_GROUPS, agentManual } from '../lib/agent-manual.ts';
 import { SKILL_CORE_SECTIONS, SKILL_FULL_SECTIONS, skillCore, skillFull } from '../lib/mcp/skills.ts';
 import { listedTools } from '../lib/mcp/registry-tools.ts';

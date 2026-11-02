@@ -2,18 +2,18 @@
 
 import { join } from 'node:path';
 
-import { clearWalletCache } from '../wallet-cache.ts';
+import { clearWalletCache } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
 import { resolveWalletPath, unlockWallet } from '../wallet-config.ts';
-import { resolveNetwork } from '../resolve-network.ts';
-import type { NetworkConfig, NetworkName } from '../network.ts';
+import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
+import type { NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { assertLedger9StackReachable, assertLedgerSupported } from '../ledger-guard.ts';
 
 import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallbacks } from './types.ts';
 import { startServeOrReuse } from '../serve-manager.ts';
-import { OWN_COMMAND_DUST_WAIT_MS } from '../dust-wait.ts';
+import { OWN_COMMAND_DUST_WAIT_MS } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
 import { startBuild } from './build-manager.ts';
-import { throwIfCancelled } from '../errors.ts';
-import { engineFor } from '../engine.ts';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 /**
  * Run all prep steps defined in the config, in order.

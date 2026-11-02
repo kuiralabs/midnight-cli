@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type FeeWallet, accountProviders, ownerDeviceFromSecret } from '@kuiralabs/midnight-account-chain/owner';
 import { PRIVATE_STATE_ID } from '@kuiralabs/midnight-account-chain/contract';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
-import { getNetworkConfig } from '../lib/network.ts';
+import { getNetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { LEGACY_STORE_PASSWORD, openGrantAccount, privateStateLocationOf } from '../lib/grant/account.ts';
 import { AccountMigrationInterruptedError, protectAccount } from '../lib/grant/protect-account.ts';
 import { isSealedAccount } from '../lib/grant/sealed-account.ts';

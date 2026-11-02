@@ -1,11 +1,11 @@
 // Run a command handler and capture its JSON output
 // Used by the MCP server to invoke CLI commands programmatically
 
-import { type ParsedArgs, MINIMAL_FLAG } from './argv.ts';
-import type { Payer } from './payer.ts';
-import { createCallContext, runHandler, type CommandHandler, type CallOutput } from './call-context.ts';
-import type { SdkWarningCalls } from './sdk-warnings.ts';
-import { CommandFailedError } from './errors.ts';
+import { type ParsedArgs, MINIMAL_FLAG } from '@kuiralabs/midnight-cli-core/lib/argv';
+import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
+import { createCallContext, runHandler, type CommandHandler, type CallOutput } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import type { SdkWarningCalls } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import { CommandFailedError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export interface CommandRun {
   /** Cancels the command; a call already cancelled never starts. None: it runs to the end. */

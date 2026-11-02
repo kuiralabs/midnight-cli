@@ -8,12 +8,12 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DIR_MODE, FILE_MODE } from './constants.ts';
-import { throwIfCancelled, UsageError } from './errors.ts';
-import { openSecret, sealSecret } from './keystore.ts';
-import { currentPrompter, type Prompter } from './prompter.ts';
-import { PASSPHRASE_ENV, settings } from './settings.ts';
-import { stateRoot } from './state-root.ts';
+import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { throwIfCancelled, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { openSecret, sealSecret } from '@kuiralabs/midnight-cli-core/lib/keystore';
+import { currentPrompter, type Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
+import { PASSPHRASE_ENV, settings } from '@kuiralabs/midnight-cli-core/lib/settings';
+import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
 
 /** The variable a non-interactive run sets the passphrase in (named in settings.ts). */
 export { PASSPHRASE_ENV };

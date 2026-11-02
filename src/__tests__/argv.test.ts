@@ -1,6 +1,6 @@
-import { UsageError } from '../lib/errors.ts';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { describe, it, expect } from 'vitest';
-import { parseArgs, getFlag, hasFlag, isVerbose, requireFlag, type ParsedArgs } from '../lib/argv.ts';
+import { parseArgs, getFlag, hasFlag, isVerbose, requireFlag, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 
 describe('parseArgs', () => {
   it('parses command from first positional', () => {

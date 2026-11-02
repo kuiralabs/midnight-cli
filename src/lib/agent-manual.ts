@@ -5,8 +5,8 @@
 // registry's tools, each in the topic group its package's row names.
 
 import { PKG_VERSION } from './pkg.ts';
-import { GuidanceError, assembleGuidance, sectionsWithAdded, type GuidancePiece, type ToolsTableRow } from './agent-guidance.ts';
-import { commandHelpSpecs, type CommandRegistry, type RegisteredTool } from './command-definition.ts';
+import { GuidanceError, assembleGuidance, sectionsWithAdded, type GuidancePiece, type ToolsTableRow } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { commandHelpSpecs, type CommandRegistry, type RegisteredTool } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 
 /** The manual's sections, in order. */
 export const AGENT_MANUAL_SECTIONS = [

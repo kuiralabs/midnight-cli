@@ -3,7 +3,7 @@
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { NATIVE_TOKEN_TYPE } from '../lib/constants.ts';
+import { NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core/lib/constants';
 
 type FakeWs = EventEmitter & {
   send: ReturnType<typeof vi.fn>;

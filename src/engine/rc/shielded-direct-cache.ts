@@ -9,18 +9,18 @@
 // Security: the cached state contains owned coins but NOT the secret keys. Same
 // sensitivity as the wallet file (mode 0o600).
 
-import { bindCachesToIndexer } from '../../lib/cache-indexer.ts';
+import { bindCachesToIndexer } from '@kuiralabs/midnight-cli-core/lib/cache-indexer';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, readdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import { DIR_MODE, FILE_MODE } from '../../lib/constants.ts';
+import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { deriveShieldedSeed } from './derivation.ts';
 import { readShieldedBalanceDirect, type ShieldedDirectOptions } from './shielded-direct.ts';
 import { fetchEventTip, isCursorBeyondTip } from '../../lib/event-tip.ts';
-import { clearShieldedDirectCache, getShieldedCachePath } from '../../lib/reader-cache-files.ts';
+import { clearShieldedDirectCache, getShieldedCachePath } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
 
 // v2: ledger-9 states replace ledger-8 ones. Dev-preset localnets share a genesis
 // hash, so the chain-id guard can't keep a ledger-8 cache off a ledger-9 chain.
@@ -123,8 +123,8 @@ export function saveShieldedCache(
 }
 
 
-export type { ShieldedBalanceResult, ShieldedCachedOptions } from '../../lib/engine.ts';
-import type { ShieldedBalanceResult, ShieldedCachedOptions } from '../../lib/engine.ts';
+export type { ShieldedBalanceResult, ShieldedCachedOptions } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { ShieldedBalanceResult, ShieldedCachedOptions } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 /**
  * Read the shielded NIGHT balance for a wallet seed, using (and refreshing) the

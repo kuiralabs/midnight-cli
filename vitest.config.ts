@@ -1,13 +1,16 @@
 import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // Inside this repository the workspace packages run from their source:
+  // here, and in every process a test starts (NODE_OPTIONS).
+  resolve: { conditions: ['midnight-cli-source'] },
   test: {
     // Tests must never spawn the native dust-sync sidecar (it would make real
     // network calls / behave differently by machine). Force the WASM path; the
     // native bridge is covered directly by dust-sync-native.test.ts.
     // Likewise, local stack detection must not depend on what docker runs on
     // the machine; it's covered with captured docker output in local-stacks.test.ts.
-    env: { MN_DISABLE_NATIVE_DUST: '1', MN_NO_LOCAL_DETECT: '1' },
+    env: { MN_DISABLE_NATIVE_DUST: '1', MN_NO_LOCAL_DETECT: '1', NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --conditions=midnight-cli-source`.trim() },
     // Libraries read those variables, and the ones tests set, as settings the shell gives them.
     setupFiles: ['src/__tests__/helpers/shell-settings.ts'],
     // Tests seal and open wallets and accounts at their real cost (scrypt at

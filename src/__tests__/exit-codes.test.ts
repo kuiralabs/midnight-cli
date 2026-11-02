@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { classifyError, humanizeNetworkError, ERROR_CODES, EXIT_GENERAL_ERROR, EXIT_NETWORK_ERROR, EXIT_INVALID_ARGS } from '../lib/exit-codes.ts';
+import { classifyError, humanizeNetworkError, ERROR_CODES, EXIT_GENERAL_ERROR, EXIT_NETWORK_ERROR, EXIT_INVALID_ARGS } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { NodeTooOldForAccountError, UnreachableByAccountError } from '../lib/grant/account.ts';
 import { NoAccountError } from '../lib/grant/prepare.ts';
-import { WrongPassphraseError } from '../lib/keystore.ts';
+import { WrongPassphraseError } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import { NoPassphraseError } from '../lib/passphrase.ts';
 
 describe('humanizeNetworkError', () => {
@@ -61,7 +61,7 @@ describe('classifyError: typed setup errors keep their own code', () => {
     ['UNSUPPORTED_LEDGER', async () => new (await import('../lib/ledger-guard.ts')).UnsupportedLedgerError('preview', 1000300n)],
     ['LOCAL_STACK_UNREACHABLE', async () => new (await import('../lib/ledger-guard.ts')).LocalStackUnreachableError('indexer', 'http://localhost:8088/api/v4/graphql')],
     ['LOCALNET_UNAVAILABLE', async () => new (await import('../lib/localnet.ts')).LocalnetUnavailableError()],
-    ['AMBIGUOUS_LOCAL_STACKS', async () => new (await import('../lib/network.ts')).AmbiguousLocalStacksError({ node: [9944, 29944], indexer: [8088, 28088], proofServer: [6300] })],
+    ['AMBIGUOUS_LOCAL_STACKS', async () => new (await import('@kuiralabs/midnight-cli-core/lib/network')).AmbiguousLocalStacksError({ node: [9944, 29944], indexer: [8088, 28088], proofServer: [6300] })],
   ])('%s', async (code, make) => {
     const result = classifyError(await make());
     expect(result.errorCode).toBe(code);
@@ -96,7 +96,7 @@ describe('classifyError: mn grant', () => {
 
 describe('classifyError: usage errors', () => {
   it('classifies any UsageError as INVALID_ARGS (exit 2), whatever its text, so MCP agents get INVALID_ARGS too', async () => {
-    const { UsageError } = await import('../lib/errors.ts');
+    const { UsageError } = await import('@kuiralabs/midnight-cli-core/lib/errors');
     expect(classifyError(new UsageError('A contract address is 64 hex characters (32 bytes); got "deadbeef" (8 characters).')))
       .toEqual({ exitCode: 2, errorCode: 'INVALID_ARGS' });
     expect(classifyError(new UsageError('increment takes 0 arguments; --args gave 3.')))

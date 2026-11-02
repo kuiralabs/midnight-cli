@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MIN_NODE_MAJOR, UnsupportedNodeError, assertNodeSupported } from '../lib/node-version.ts';
-import { classifyError } from '../lib/exit-codes.ts';
+import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 
 describe('assertNodeSupported', () => {
   it('accepts Node.js 22 and newer', () => {

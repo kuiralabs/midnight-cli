@@ -4,7 +4,7 @@
 // closed-early / initial-silence / error / abort) is exercised end-to-end.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { CancelledError } from '../lib/errors.ts';
+import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { WebSocketServer, type WebSocket as WsSocket } from 'ws';
 
 import { subscribeGraphqlWs } from '../lib/graphql-ws-subscription.ts';

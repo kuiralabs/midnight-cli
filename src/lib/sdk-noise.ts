@@ -25,7 +25,7 @@
 // one call listening, or to none.
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { createSdkWarningRouter, sdkTransientWarning, type SdkWarningCalls } from './sdk-warnings.ts';
+import { createSdkWarningRouter, sdkTransientWarning, type SdkWarningCalls } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 
 let installed: SdkWarningCalls | null = null;
 

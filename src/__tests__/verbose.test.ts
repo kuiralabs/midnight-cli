@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { verboseLine } from '../lib/verbose.ts';
+import { verboseLine } from '@kuiralabs/midnight-cli-core/lib/verbose';
 
 // The verbose line's format. Whether a call shows it is the call's own
 // (verbose-per-call.test.ts, call-context.test.ts).

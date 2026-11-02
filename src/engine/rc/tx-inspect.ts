@@ -2,7 +2,7 @@
 // Used by the DApp Connector approval prompt to show Lace-style transaction summaries
 
 import { Transaction } from '@midnightntwrk/ledger-v9';
-import type { TransactionDetail } from '../../lib/engine.ts';
+import type { TransactionDetail } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 /**
  * Try to extract structured details from a transaction hex string.

@@ -10,8 +10,8 @@ import {
   pendingLimitRefusal,
   DEFAULT_FEE_LIMITS,
   SPECKS_PER_DUST,
-} from '../lib/fee-limits.ts';
-import { UsageError } from '../lib/errors.ts';
+} from '@kuiralabs/midnight-cli-core/lib/fee-limits';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 describe('parseDustAmount', () => {
   it.each([

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { validateCallRequest, validateContractAddress } from '../lib/contract/validate.ts';
-import { UsageError } from '../lib/errors.ts';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import type { ContractInfo } from '../lib/contract/inspect.ts';
 
 const UINT = { 'type-name': 'Uint', maxval: 255 } as never;

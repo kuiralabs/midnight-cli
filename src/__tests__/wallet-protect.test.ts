@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import walletCommand from '../commands/wallet.ts';
-import { parseArgs } from '../lib/argv.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { PASSPHRASE_ENV, isPassphraseSet } from '../lib/passphrase.ts';
 import { loadWalletConfig } from '../lib/wallet-config.ts';
 import { deriveAllAddresses } from '../engine/rc/derive-address.ts';

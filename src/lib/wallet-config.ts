@@ -1,16 +1,16 @@
 import * as fs from 'fs';
-import { notice } from './notices.ts';
+import { notice } from '@kuiralabs/midnight-cli-core/lib/notices';
 import * as path from 'path';
-import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, isValidWalletName } from './constants.ts';
-import { type NetworkName } from './network.ts';
-import { loadCliConfig, saveCliConfig } from './cli-config.ts';
+import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, isValidWalletName } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import { loadCliConfig, saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
 import { getDefaultWalletPath, getWalletsDir } from './wallet-paths.ts';
-import { anyEngine, type EngineKeys } from './engine.ts';
-import { isSealedSecret, openSecret, sealSecret } from './keystore.ts';
-import { FileExistsError, writeJsonDurably } from './durable-file.ts';
+import { anyEngine, type EngineKeys } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { isSealedSecret, openSecret, sealSecret } from '@kuiralabs/midnight-cli-core/lib/keystore';
+import { FileExistsError, writeJsonDurably } from '@kuiralabs/midnight-cli-core/lib/durable-file';
 import { type PassphraseSource, unlockPassphrase } from './passphrase.ts';
-import { stateRoot } from './state-root.ts';
-import { throwIfCancelled } from './errors.ts';
+import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 /** What anyone may read of a wallet: its addresses, and whether its secrets are sealed. No secret. */
 export interface WalletConfig {

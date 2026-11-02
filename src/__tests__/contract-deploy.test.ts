@@ -6,14 +6,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { parseArgs } from '../lib/argv.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { resolveContractDeployRequest } from '../lib/contract/request.ts';
 import { deployContract } from '../lib/contract/deploy.ts';
-import { resolvePayingTarget } from '../lib/payer.ts';
+import { resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
 import { servePayerAt } from '../lib/serve-payer.ts';
-import { silentSpinner } from '../ui/spinner.ts';
-import { createSdkWarningRouter } from '../lib/sdk-warnings.ts';
-import { CancelledError } from '../lib/errors.ts';
+import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 const ENDPOINTS = ['--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
 

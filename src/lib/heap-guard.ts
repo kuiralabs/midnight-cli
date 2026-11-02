@@ -22,7 +22,7 @@ import {
   SYNC_HEAP_TARGET_MB,
   SYNC_HEAP_RAM_FRACTION,
   SYNC_HEAP_MIN_GAIN_MB,
-} from './constants.ts';
+} from '@kuiralabs/midnight-cli-core/lib/constants';
 
 /** Set on the re-exec'd child so it doesn't recurse. */
 const BUMP_ENV = 'MN_HEAP_BUMPED';

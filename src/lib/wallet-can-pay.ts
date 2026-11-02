@@ -2,13 +2,13 @@
 // the fee. Read through the wallet repository, so no facade, no proof server
 // and no strict sync is needed.
 
-import { NATIVE_TOKEN_TYPE } from './constants.ts';
-import { throwIfCancelled } from './errors.ts';
-import type { NetworkName } from './network.ts';
-import type { PayingTarget } from './payer.ts';
+import { NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import type { PayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
 import { resolveWalletPath, unlockWallet } from './wallet-config.ts';
-import { formatNight } from '../ui/format.ts';
-import type { Spinner } from '../ui/spinner.ts';
+import { formatNight } from '@kuiralabs/midnight-cli-core/ui/format';
+import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
 
 /**
  * The wallet holds NIGHT and has Dust to pay a fee with. Throws, saying what
@@ -21,7 +21,7 @@ export async function assertWalletCanPay({ network, networkConfig }: PayingTarge
   const walletConfig = await unlockWallet(resolveWalletPath(wallet));
   const seedBuffer = Buffer.from(walletConfig.seed, 'hex');
   const address = walletConfig.addresses[network as NetworkName];
-  const { engineFor } = await import('./engine.ts');
+  const { engineFor } = await import('@kuiralabs/midnight-cli-core/lib/engine');
   const { wallet: repo } = await engineFor(network);
 
   try {

@@ -2,35 +2,35 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import { notice } from '../../lib/notices.ts';
+import { notice } from '@kuiralabs/midnight-cli-core/lib/notices';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
 import type { FacadeState, WalletEntry } from '@midnightntwrk/wallet-sdk/facade';
 import type { FinalizedTx } from '@midnightntwrk/wallet-sdk';
 
 import { type FacadeBundle, hasDustAvailable } from './facade.ts';
-import { LEDGER_9_FORK_VERSION, type NetworkConfig } from '../../lib/network.ts';
-import type { ApprovalOptions } from '../../lib/approval.ts';
-import { promptApproval } from '../../lib/approval.ts';
-import { createApiError, type RpcHandler, type RpcHandlerContext } from '../../lib/connector-api.ts';
-import { createPhaseTracker, type PhaseTracker } from '../../lib/phase-tracker.ts';
-import { toHex, fromHex } from '../../lib/tx-serde.ts';
-import { getNetworkId } from '../../lib/network-id.ts';
-import { isDustShortage } from '../../lib/sdk-errors.ts';
-import { DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits } from '../../lib/fee-limits.ts';
+import { LEDGER_9_FORK_VERSION, type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import type { ApprovalOptions } from '@kuiralabs/midnight-cli-core/lib/approval';
+import { promptApproval } from '@kuiralabs/midnight-cli-core/lib/approval';
+import { createApiError, type RpcHandler, type RpcHandlerContext } from '@kuiralabs/midnight-cli-core/lib/connector-api';
+import { createPhaseTracker, type PhaseTracker } from '@kuiralabs/midnight-cli-core/lib/phase-tracker';
+import { toHex, fromHex } from '@kuiralabs/midnight-cli-core/lib/tx-serde';
+import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
+import { isDustShortage } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits } from '@kuiralabs/midnight-cli-core/lib/fee-limits';
 import { inspectTxHex } from './tx-inspect.ts';
 import { expiredIntents, feeOnlyRefusals, readDAppTransaction, type DAppTxStage, type FeeCheckTransaction } from './fee-only-check.ts';
 import { PartlySignedTransactionError, assertSignable, signRecipe } from './sign-recipe.ts';
-import { decodeSignPayload, signedMessageBytes } from '../../lib/sign-data.ts';
-import { DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan } from '../../lib/dust-wait.ts';
-import { formatWait } from '../../lib/duration.ts';
+import { decodeSignPayload, signedMessageBytes } from '@kuiralabs/midnight-cli-core/lib/sign-data';
+import { DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
+import { formatWait } from '@kuiralabs/midnight-cli-core/lib/duration';
 import { fetchPartialSuccessSegments, type SegmentResult } from '../../lib/tx-segments.ts';
 import { walletsBelowLedger9 } from '../../lib/ledger-guard.ts';
-import { TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS } from '../../lib/constants.ts';
-import { dim } from '../../ui/colors.ts';
-import { roughDust, toDust } from '../../ui/format.ts';
-import type { DAppConnector, DAppConnectorCallbacks } from '../../lib/engine.ts';
-export type { DAppConnector, DAppConnectorCallbacks } from '../../lib/engine.ts';
+import { TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
+import { roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui/format';
+import type { DAppConnector, DAppConnectorCallbacks } from '@kuiralabs/midnight-cli-core/lib/engine';
+export type { DAppConnector, DAppConnectorCallbacks } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 // ── Types ──
 
@@ -139,8 +139,8 @@ function extractErrorDetail(err: unknown): string {
   return deduped.join(' → ') || 'Unknown error';
 }
 
-export { OPERATOR_REJECTED_MESSAGE } from '../../lib/connector-api.ts';
-import { OPERATOR_REJECTED_MESSAGE } from '../../lib/connector-api.ts';
+export { OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core/lib/connector-api';
+import { OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core/lib/connector-api';
 
 /** The connector API's history entry for one wallet history entry. */
 export type HistoryEntry = {

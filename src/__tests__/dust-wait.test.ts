@@ -3,8 +3,8 @@
 // NIGHT generates it (1000 NIGHT: ~0.0083 DUST/s on a ledger-9 localnet).
 
 import { describe, it, expect, vi } from 'vitest';
-import { DUST_SHORT_WAIT_MS, awaitDustForFee, dustShortError, msUntilDust, payWhenDustCovers, planDustWait, sleep } from '../lib/dust-wait.ts';
-import { withDustShortfall } from '../lib/sdk-errors.ts';
+import { DUST_SHORT_WAIT_MS, awaitDustForFee, dustShortError, msUntilDust, payWhenDustCovers, planDustWait, sleep } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
+import { withDustShortfall } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 
 const DUST = 10n ** 15n;
 const NOW = new Date('2026-10-05T05:00:00Z');

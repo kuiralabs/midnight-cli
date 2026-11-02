@@ -2,17 +2,17 @@
 // Handles: facade lifecycle, sync, balance check, dust, tx build/sign/prove/submit, retries
 
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { throwIfCancelled } from '../../lib/errors.ts';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { MidnightBech32m, UnshieldedAddress, type DustAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { type FacadeState, type UtxoWithMeta } from '@midnightntwrk/wallet-sdk/facade';
 import * as rx from 'rxjs';
 
-import { type NetworkConfig } from '../../lib/network.ts';
-import { getNetworkId } from '../../lib/network-id.ts';
+import { type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
 import { type FacadeBundle, hasDustAvailable, quickSync } from './facade.ts';
 import { defaultRepository } from './wallet-data-repository.ts';
-import type { VerboseLog } from '../../lib/verbose.ts';
-import { nightToMicro } from '../../lib/amount.ts';
+import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
+import { nightToMicro } from '@kuiralabs/midnight-cli-core/lib/amount';
 import {
   NATIVE_TOKEN_TYPE,
   TOKEN_MULTIPLIER,
@@ -26,7 +26,7 @@ import {
   SYNC_ATTEMPT_TIMEOUT_MS,
   DUST_COST_OVERHEAD,
   MIN_DUST_FOR_TRANSFER,
-} from '../../lib/constants.ts';
+} from '@kuiralabs/midnight-cli-core/lib/constants';
 
 
 
@@ -53,19 +53,19 @@ export function validateRecipientAddress(address: string, networkConfig: Network
 // SDK error classifiers moved to ./sdk-errors.ts so wallet-data-repository
 // can import them without a circular dependency. Re-exported for callers
 // that still import from this module.
-export { isDustRelatedError, isSdkInsufficientFundsError } from '../../lib/sdk-errors.ts';
-import { isColdStartRace, isDustRelatedError } from '../../lib/sdk-errors.ts';
-import { DustFeeNotGeneratedError, planRegistration } from '../../lib/dust-registration-plan.ts';
-import { formatWait } from '../../lib/duration.ts';
+export { isDustRelatedError, isSdkInsufficientFundsError } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { isColdStartRace, isDustRelatedError } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { DustFeeNotGeneratedError, planRegistration } from '@kuiralabs/midnight-cli-core/lib/dust-registration-plan';
+import { formatWait } from '@kuiralabs/midnight-cli-core/lib/duration';
 import { assertChainClockCurrent, fetchChainTime } from '../../lib/chain-clock.ts';
-import { awaitDustForFee, sleep } from '../../lib/dust-wait.ts';
+import { awaitDustForFee, sleep } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
 
 /** How long the transfer retry waits for Dust to grow when the fee is above the pre-flight threshold. */
 const DUST_GROW_WAIT_MS = 10_000;
-import { toDust } from '../../ui/format.ts';
-import type { CallSdkWarnings } from '../../lib/sdk-warnings.ts';
-import type { EnsureDustResult, TransferParams, TransferResult } from '../../lib/engine.ts';
-export type { EnsureDustResult, TransferParams, TransferResult } from '../../lib/engine.ts';
+import { toDust } from '@kuiralabs/midnight-cli-core/ui/format';
+import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import type { EnsureDustResult, TransferParams, TransferResult } from '@kuiralabs/midnight-cli-core/lib/engine';
+export type { EnsureDustResult, TransferParams, TransferResult } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 
 /** Format milliseconds as "Xs" or "Xm Ys" for human-friendly elapsed display. */

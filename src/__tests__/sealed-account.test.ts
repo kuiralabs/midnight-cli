@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { freshOwnerDevice } from '@kuiralabs/midnight-account-chain/owner';
 import { validatePassword } from '@midnight-ntwrk/midnight-js-utils';
-import { WrongPassphraseError } from '../lib/keystore.ts';
+import { WrongPassphraseError } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import {
   contractAddressOnRecord,
   createAccountKey,

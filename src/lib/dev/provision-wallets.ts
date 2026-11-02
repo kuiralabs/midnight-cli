@@ -7,12 +7,12 @@ import { existsSync } from 'node:fs';
 import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet } from '../wallet-config.ts';
 import { createWallet, walletFilePath, walletSecretFrom } from '../wallet-create.ts';
 import { passphraseForNewSecret } from '../passphrase.ts';
-import { engineFor } from '../engine.ts';
+import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { checkBalance } from '../balance-subscription.ts';
-import { resolveNetwork } from '../resolve-network.ts';
-import type { NetworkConfig } from '../network.ts';
-import type { CallSdkWarnings } from '../sdk-warnings.ts';
-import { throwIfCancelled } from '../errors.ts';
+import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
+import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 /** Default dev wallet names — one per common test persona. */
 export const DEFAULT_DEV_WALLET_NAMES = ['dev-alice', 'dev-bob', 'dev-carol'] as const;

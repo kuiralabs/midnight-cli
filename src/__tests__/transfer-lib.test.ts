@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { validateRecipientAddress, isDustRelatedError } from '../engine/rc/transfer.ts';
-import { nightToMicro, parseAmount } from '../lib/amount.ts';
-import { getNetworkConfig } from '../lib/network.ts';
+import { nightToMicro, parseAmount } from '@kuiralabs/midnight-cli-core/lib/amount';
+import { getNetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
-import { GENESIS_SEED, SYNC_ATTEMPT_TIMEOUT_MS, SYNC_ATTEMPT_REMOTE_TIMEOUT_MS } from '../lib/constants.ts';
-import { UsageError } from '../lib/errors.ts';
-import { ERROR_CODES, EXIT_INVALID_ARGS, classifyError } from '../lib/exit-codes.ts';
+import { GENESIS_SEED, SYNC_ATTEMPT_TIMEOUT_MS, SYNC_ATTEMPT_REMOTE_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { ERROR_CODES, EXIT_INVALID_ARGS, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 
 describe('nightToMicro', () => {
   it('converts whole NIGHT to micro-NIGHT', () => {

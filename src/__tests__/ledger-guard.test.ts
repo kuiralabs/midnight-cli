@@ -12,7 +12,7 @@ import {
   LocalStackUnreachableError,
   walletsBelowLedger9,
 } from '../lib/ledger-guard.ts';
-import type { NetworkConfig } from '../lib/network.ts';
+import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 
 const PREVIEW = 1000300n;
 const LEDGER9_LOCALNET = 2001000n;

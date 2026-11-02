@@ -3,7 +3,7 @@ import { mnemonicToSeedSync } from '@scure/bip39';
 import generateCommand from '../commands/generate.ts';
 import { unlockWallet } from '../lib/wallet-config.ts';
 import { PASSPHRASE_ENV } from '../lib/passphrase.ts';
-import { parseArgs } from '../lib/argv.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';

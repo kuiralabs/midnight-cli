@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { untilCancelled } from '../lib/sleep.ts';
-import { CancelledError } from '../lib/errors.ts';
+import { untilCancelled } from '@kuiralabs/midnight-cli-core/lib/sleep';
+import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 describe('untilCancelled', () => {
   it('gives what the work gives, and its error', async () => {

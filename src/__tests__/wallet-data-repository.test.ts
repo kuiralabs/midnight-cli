@@ -12,7 +12,7 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { WalletDataRepository, type DustView, type UnshieldedView, type RepoDeps } from '../engine/rc/wallet-data-repository.ts';
 import { UnsupportedLedgerError } from '../lib/ledger-guard.ts';
-import type { NetworkConfig } from '../lib/network.ts';
+import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { BalanceSummary } from '../lib/balance-subscription.ts';
 import type { DustDirectResult } from '../engine/rc/dust-direct.ts';
 

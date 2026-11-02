@@ -10,7 +10,7 @@ import {
   resolveNetworkConfig,
   applyEndpointOverrides,
   indexerHttpFromWs,
-} from '../lib/network.ts';
+} from '@kuiralabs/midnight-cli-core/lib/network';
 
 describe('detectNetworkFromAddress', () => {
   it('detects preprod from address prefix', () => {

@@ -5,8 +5,8 @@
 // until a non-zero block number appears.
 
 import { callNodeRpc } from './node-rpc.ts';
-import { throwIfCancelled } from './errors.ts';
-import { sleep } from './sleep.ts';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { sleep } from '@kuiralabs/midnight-cli-core/lib/sleep';
 
 export interface WaitForFirstBlockOptions {
   /** Overall deadline for the wait. Default 30s. */

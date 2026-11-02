@@ -12,7 +12,7 @@ import { WalletFacade, WalletEntrySchema, mergeWalletEntries } from '@midnightnt
 import { ShieldedWallet } from '@midnightntwrk/wallet-sdk/shielded';
 import { PublicKey, UnshieldedWallet, createKeystore } from '@midnightntwrk/wallet-sdk/unshielded';
 import { FORK_SCHEDULE } from '../../engine/rc/fork-schedule.ts';
-import { DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN } from '../../lib/constants.ts';
+import { DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { NETWORK } from './ledger-tx.ts';
 
 /** The secret behind ledger-tx's WALLET_SK, as mn's schnorr keystore takes it. */

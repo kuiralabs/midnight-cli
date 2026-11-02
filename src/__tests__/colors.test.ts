@@ -6,7 +6,7 @@ import {
   midnightBlue, white, gray,
   TEAL, PURPLE, RED_CODE, GREEN_CODE, YELLOW_CODE,
   MIDNIGHT_BLUE, WHITE_CODE, DIM_GRAY,
-} from '../ui/colors.ts';
+} from '@kuiralabs/midnight-cli-core/ui/colors';
 
 const ESC = '\x1b[';
 const RESET = '\x1b[0m';

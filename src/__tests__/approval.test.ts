@@ -1,6 +1,6 @@
-import { createTerminalPrompter } from '../ui/terminal-prompter.ts';
-import { setPrompter } from '../lib/prompter.ts';
-import { setNoticeSink } from '../lib/notices.ts';
+import { createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui/terminal-prompter';
+import { setPrompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
+import { setNoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 import { PassThrough } from 'node:stream';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
@@ -11,7 +11,7 @@ import {
   promptApproval,
   type ApprovalOptions,
   type ApprovalRequest,
-} from '../lib/approval.ts';
+} from '@kuiralabs/midnight-cli-core/lib/approval';
 
 // Strip ANSI codes for content assertions
 const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');

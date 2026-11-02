@@ -1,22 +1,22 @@
 // balance command — check unshielded + shielded balance via full wallet sync
 // For positional address: unshielded only (GraphQL, no facade needed)
 
-import { type ParsedArgs, getFlag, hasFlag, isMinimalMode } from '../lib/argv.ts';
-import { type NetworkName, isValidNetworkName } from '../lib/network.ts';
+import { type ParsedArgs, getFlag, hasFlag, isMinimalMode } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { type NetworkName, isValidNetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { saveShieldedAddress, findWalletByAddress } from '../lib/wallet-config.ts';
 import { resolveSeedSource } from '../lib/seed-resolver.ts';
-import { resolveNetwork } from '../lib/resolve-network.ts';
-import { applyEndpointOverrides } from '../lib/network.ts';
+import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
+import { applyEndpointOverrides } from '@kuiralabs/midnight-cli-core/lib/network';
 import { shieldedSyncEnabled, shieldedDisabledReason } from '../lib/shielded-policy.ts';
 import { isNativeToken } from '../lib/balance-subscription.ts';
-import { engineFor } from '../lib/engine.ts';
+import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { assertLedgerSupported, fetchProtocolVersion } from '../lib/ledger-guard.ts';
 import { getChainGenesisHash } from '../lib/chain-id.ts';
 import { createEtaEstimator, formatSyncStatus } from '../lib/sync-eta.ts';
-import { header, keyValue, divider, formatNight, formatAddress, toNight } from '../ui/format.ts';
-import { bold, dim } from '../ui/colors.ts';
-import type { Spinner } from '../ui/spinner.ts';
-import type { CallContext } from '../lib/call-context.ts';
+import { header, keyValue, divider, formatNight, formatAddress, toNight } from '@kuiralabs/midnight-cli-core/ui/format';
+import { bold, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
+import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 
 export default async function balanceCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // Positional address → unshielded only (lightweight, no facade)

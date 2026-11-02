@@ -4,7 +4,7 @@
 
 import { existsSync, statSync } from 'node:fs';
 import * as readline from 'node:readline';
-import { teal, dim, yellow } from './colors.ts';
+import { teal, dim, yellow } from '@kuiralabs/midnight-cli-core/ui/colors';
 import type { CreateStrategy, BrowserOptions } from '../lib/test/create.ts';
 import type { CircuitInfo } from '../lib/contract/inspect.ts';
 import type { BrowserMode } from '../lib/test/types.ts';

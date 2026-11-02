@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { trimAgentMessage } from '../lib/error-trim.ts';
+import { trimAgentMessage } from '@kuiralabs/midnight-cli-core/lib/error-trim';
 
 describe('trimAgentMessage', () => {
   it('returns the input unchanged when there are no suggestions or paragraphs', () => {

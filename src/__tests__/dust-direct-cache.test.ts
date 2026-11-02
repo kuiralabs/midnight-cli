@@ -8,7 +8,7 @@ import * as os from 'os';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { loadDustCache, saveDustCache, dustPublicKeyHex } from '../engine/rc/dust-direct-cache.ts';
-import { clearDustDirectCache, getDustCachePath } from '../lib/reader-cache-files.ts';
+import { clearDustDirectCache, getDustCachePath } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
 
 const CACHE_DIR = path.join(os.tmpdir(), `midnight-dust-cache-test-${process.pid}-${Date.now()}`);
 const NETWORK = 'undeployed';

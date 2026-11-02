@@ -3,12 +3,12 @@
 // wallets on the local network. What its steps say goes to `progress`; the
 // SDK's warnings go to the deploying call's `sdkWarnings`.
 
-import type { ParsedArgs } from '../argv.ts';
+import type { ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { deployContract, type DeployedContract } from '../contract/deploy.ts';
 import { resolveContractDeployRequest } from '../contract/request.ts';
-import { resolvePayingTarget, type Payer } from '../payer.ts';
-import type { Spinner } from '../../ui/spinner.ts';
-import type { CallSdkWarnings } from '../sdk-warnings.ts';
+import { resolvePayingTarget, type Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
+import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 
 export async function deployDevContract(projectRoot: string, wallet: string, network: string, payer: Payer, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<DeployedContract> {
   // The deploy as `mn contract deploy --path <projectRoot> --wallet <wallet> --network <network>` reads it.

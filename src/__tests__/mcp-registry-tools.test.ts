@@ -3,10 +3,10 @@
 // their JSON result through their call's context, as a command does.
 
 import { describe, expect, it } from 'vitest';
-import { createCommandRegistry, type CommandDefinition, type ToolDefinition } from '../lib/command-definition.ts';
+import { createCommandRegistry, type CommandDefinition, type ToolDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from '../lib/mcp/registry-tools.ts';
-import type { CallContext } from '../lib/call-context.ts';
-import { MINIMAL_FLAG, type ParsedArgs } from '../lib/argv.ts';
+import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { MINIMAL_FLAG, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { ownCall } from './helpers/own-call.ts';
 
 const received: ParsedArgs[] = [];

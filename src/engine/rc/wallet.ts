@@ -12,13 +12,13 @@ import type {
   PrepWallet,
   ServedWalletSession,
   ShieldedTransferParams,
-} from '../../lib/engine.ts';
-import { throwIfCancelled } from '../../lib/errors.ts';
-import { getNetworkId } from '../../lib/network-id.ts';
-import { bindCachesToIndexer, describeIndexerChange } from '../../lib/cache-indexer.ts';
-import { loadWalletCache, saveWalletCache } from '../../lib/wallet-cache.ts';
-import { DUST_SHORT_WAIT_MS, payWhenDustCovers } from '../../lib/dust-wait.ts';
-import { trackElapsed } from '../../ui/spinner.ts';
+} from '@kuiralabs/midnight-cli-core/lib/engine';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
+import { bindCachesToIndexer, describeIndexerChange } from '@kuiralabs/midnight-cli-core/lib/cache-indexer';
+import { loadWalletCache, saveWalletCache } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
+import { DUST_SHORT_WAIT_MS, payWhenDustCovers } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
+import { trackElapsed } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import { decodeShieldedAddress } from './addresses.ts';
 import { buildFacade, hasDustAvailable, isFacadeSynced, startAndSyncFacade, stopFacade, waitForDustAvailable } from './facade.ts';
 import { ensureDust, executeTransfer } from './transfer.ts';

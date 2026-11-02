@@ -3,9 +3,9 @@
 // wallet airdropped 20 NIGHT 34 minutes earlier.
 
 import { describe, it, expect } from 'vitest';
-import { DustFeeNotGeneratedError, planRegistration } from '../lib/dust-registration-plan.ts';
-import { formatWait } from '../lib/duration.ts';
-import { classifyError, EXIT_INSUFFICIENT_BALANCE } from '../lib/exit-codes.ts';
+import { DustFeeNotGeneratedError, planRegistration } from '@kuiralabs/midnight-cli-core/lib/dust-registration-plan';
+import { formatWait } from '@kuiralabs/midnight-cli-core/lib/duration';
+import { classifyError, EXIT_INSUFFICIENT_BALANCE } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 
 const FEE = 526_587_115_818_352n;
 const TWENTY_NIGHT = { dust: { generatedNow: 337_954_960_000_000n, rate: 165_340_000_000n, maxCap: 100_000_000_000_000_000n } };

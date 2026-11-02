@@ -2,9 +2,9 @@
 // Subcommands: up, down, status, logs
 
 import { spawn } from 'child_process';
-import { type ParsedArgs, hasFlag, getFlag } from '../lib/argv.ts';
-import { CancelledError, UsageError } from '../lib/errors.ts';
-import { execProgram, ProgramFailedError, type ExecRunner } from '../lib/exec-program.ts';
+import { type ParsedArgs, hasFlag, getFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { CancelledError, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { execProgram, ProgramFailedError, type ExecRunner } from '@kuiralabs/midnight-cli-core/lib/exec-program';
 import {
   assertLocalnetCanStart,
   checkDockerAvailable,
@@ -18,10 +18,10 @@ import {
   type DockerCall,
   type ServiceStatus,
 } from '../lib/localnet.ts';
-import { header, divider } from '../ui/format.ts';
-import { bold, green, red, dim, yellow } from '../ui/colors.ts';
+import { header, divider } from '@kuiralabs/midnight-cli-core/ui/format';
+import { bold, green, red, dim, yellow } from '@kuiralabs/midnight-cli-core/ui/colors';
 
-import type { CallContext } from '../lib/call-context.ts';
+import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 
 const VALID_SUBCOMMANDS = ['up', 'stop', 'down', 'status', 'logs', 'clean'] as const;
 type Subcommand = typeof VALID_SUBCOMMANDS[number];
@@ -71,9 +71,9 @@ async function handleUp(jsonMode: boolean, ctx: CallContext, docker: DockerCall)
         const { waitForFirstBlock } = await import('../lib/node-ready.ts');
         const { waitForAddressFunded } = await import('../lib/indexer-ready.ts');
         const { waitForProofServerReady } = await import('../lib/proof-server-ready.ts');
-        const { getNetworkConfig } = await import('../lib/network.ts');
-        const { engineFor } = await import('../lib/engine.ts');
-        const { GENESIS_SEED } = await import('../lib/constants.ts');
+        const { getNetworkConfig } = await import('@kuiralabs/midnight-cli-core/lib/network');
+        const { engineFor } = await import('@kuiralabs/midnight-cli-core/lib/engine');
+        const { GENESIS_SEED } = await import('@kuiralabs/midnight-cli-core/lib/constants');
 
         const netCfg = getNetworkConfig('undeployed');
         await waitForFirstBlock(netCfg.node, { timeoutMs: 30_000, signal: ctx.signal });

@@ -29,11 +29,11 @@ import {
   freshOwnerDevice,
   ownerDeviceFromSecret,
 } from '@kuiralabs/midnight-account-chain/owner';
-import { FILE_MODE } from '../constants.ts';
+import { FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { deviceCodeOf, joinCodeOf } from './device-code.ts';
-import { UsageError } from '../errors.ts';
-import { FileExistsError, readJsonIfPresent, writeJsonDurably } from '../durable-file.ts';
-import { type KeyedSecret, freshDataKey, openSecret, openWithKey, sealSecret, sealWithKey } from '../keystore.ts';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { FileExistsError, readJsonIfPresent, writeJsonDurably } from '@kuiralabs/midnight-cli-core/lib/durable-file';
+import { type KeyedSecret, freshDataKey, openSecret, openWithKey, sealSecret, sealWithKey } from '@kuiralabs/midnight-cli-core/lib/keystore';
 
 const ACCOUNT_KEY_FILE = 'account-key.json';
 // The data key while a plain-text account is being sealed: the account is
