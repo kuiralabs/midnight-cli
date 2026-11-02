@@ -14,6 +14,7 @@ import { callContract } from '../lib/contract/call.ts';
 import { validateContractAddress } from '../lib/contract/validate.ts';
 import { engineFor, type RawStateValue } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { resolveContractCallRequest, resolveContractDeployRequest, resolveScanDir } from '../lib/contract/request.ts';
+import { assertContractRunsOn } from '../lib/contract/runtime-check.ts';
 import {
   findContractInfo,
   formatCircuitSignature,
@@ -119,6 +120,7 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
 
   const target = resolvePayingTarget(args, 'contract', 'deploy');
   const { network } = target;
+  await assertContractRunsOn(info, network);
 
   if (!jsonMode) {
     ctx.output.stderr(keyValue('Contract', info.name) + '\n');
@@ -192,6 +194,7 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
 
   const target = resolvePayingTarget(args, 'contract', 'call');
   const { network } = target;
+  await assertContractRunsOn(info, network);
 
   if (!jsonMode) {
     ctx.output.stderr(keyValue('Contract', info.name) + '\n');

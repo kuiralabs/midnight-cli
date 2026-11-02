@@ -3,6 +3,7 @@
 
 import type { Engine } from '@kuiralabs/midnight-cli-core/lib/engine';
 import * as ledger from '@midnightntwrk/ledger-v9';
+import { checkRuntimeVersion, versionString as compactRuntimeVersion } from '@midnight-ntwrk/compact-runtime';
 import { validatePassword } from '@midnight-ntwrk/midnight-js-utils';
 import { blockLimitsOf } from './ledger-parameters.ts';
 import { rawContractState } from './contract-providers.ts';
@@ -41,6 +42,17 @@ export const rcEngine: Engine = {
     scripts: {
       packages: SCRIPT_PACKAGES,
       packageFolder,
+      compactRuntimeVersion,
+      // The compiler release whose contracts compact-runtime 0.20 runs (compactc 0.35.0 writes runtime-version 0.20.0).
+      compiler: 'compactc 0.35',
+      acceptsRuntime(runtimeVersion) {
+        try {
+          checkRuntimeVersion(runtimeVersion);
+          return true;
+        } catch {
+          return false;
+        }
+      },
       deploy: generateDeployScript,
       call: generateCallScript,
       state: generateStateScript,
