@@ -39,3 +39,4 @@ packages/dust-sync-*/dust-sync.exe
 
 # Written by the release job just before publishing (scripts/make-shrinkwrap.mjs), never kept.
 /npm-shrinkwrap.json
+/packages/*/npm-shrinkwrap.json

@@ -1,7 +1,7 @@
 // mn as a release publishes it, packed into a folder: the workspace packages
-// mn depends on, and mn with the shrinkwrap the release job writes, its
-// workspace packages' tarballs and integrity as a local registry on `port`
-// serves them (scripts/local-registry.mjs). Until those packages are on npm, a
+// mn depends on (each engine with its shrinkwrap), and mn with the shrinkwrap
+// the release job writes, its workspace packages' tarballs and integrity as a
+// local registry on `port` serves them (scripts/local-registry.mjs). Until those packages are on npm, a
 // consumer's npm finds them nowhere else, and npm honours mn's shrinkwrap only
 // when its registry says the package has one; so the folder is installed
 // through a local registry on the same port, wherever that runs:
@@ -30,9 +30,21 @@ export async function packRelease(dir, port = 0) {
   mkdirSync(dir, { recursive: true });
   const manifest = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8'));
   const workspaces = manifest.workspaces
-    .map((folder) => ({ folder, name: JSON.parse(readFileSync(join(repo, folder, 'package.json'), 'utf-8')).name }))
+    .map((folder) => {
+      const { name, version } = JSON.parse(readFileSync(join(repo, folder, 'package.json'), 'utf-8'));
+      return { folder, name, version };
+    })
     .filter(({ name }) => manifest.dependencies[name] !== undefined);
-  for (const { folder } of workspaces) run('npm', ['pack', '--pack-destination', dir], join(repo, folder));
+  // Each engine with the shrinkwrap the release job writes for it.
+  for (const { folder, name } of workspaces) {
+    const engine = name.startsWith('@kuiralabs/midnight-engine-');
+    if (engine) makeShrinkwrap({ dir: folder });
+    try {
+      run('npm', ['pack', '--pack-destination', dir], join(repo, folder));
+    } finally {
+      if (engine) rmSync(join(repo, folder, 'npm-shrinkwrap.json'), { force: true });
+    }
+  }
   const registry = await startLocalRegistryProcess(dir, port);
 
   const shrinkwrapPath = join(repo, 'npm-shrinkwrap.json');

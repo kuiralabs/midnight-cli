@@ -16,7 +16,7 @@
 //   node scripts/fresh-install-check.mjs      (after `npm run build`)
 
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { packRelease } from './pack-release.mjs';
@@ -215,6 +215,36 @@ try {
     const named = [...new Set([...text.matchAll(/\b(midnight_[a-z_]+)\(/g)].map((match) => match[1]))];
     const unknown = named.filter((name) => !tools.includes(name));
     check(`${uri} names only tools the server has`, unknown.length === 0, unknown.length > 0 ? `not a tool: ${unknown.join(', ')}` : `${named.length} of ${tools.length} tools named`);
+  }
+
+  // A program that loads an engine without mn: it installs core, chain and the
+  // engines from the registry, each engine with the shrinkwrap it ships, and
+  // gets each engine's SDK set once beside one core and one chain it shares.
+  const outside = join(work, 'outside');
+  mkdirSync(outside);
+  writeFileSync(join(outside, 'package.json'), JSON.stringify({ name: 'outside', private: true, type: 'module' }));
+  run('npm', ['install', '--cache', join(work, 'npm-cache'), '--registry', registry.url, '--no-audit', '--no-fund', ...workspaces.map(({ name, version }) => `${name}@${version}`)], outside);
+  for (const { name } of workspaces.filter(({ name }) => !name.startsWith('@kuiralabs/midnight-engine-'))) {
+    const copies = copiesOf(outside, name);
+    check(`a program outside mn: one copy of ${name}`, copies.length === 1, copies.join(', '));
+  }
+  for (const { name } of workspaces.filter(({ name }) => name.startsWith('@kuiralabs/midnight-engine-'))) {
+    const engine = join(outside, 'node_modules', name);
+    for (const sdk of ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4']) {
+      const copies = resolvedCopies(engine, sdk);
+      check(`a program outside mn: ${name} resolves one copy of ${sdk}`, copies.length === 1, copies.map((c) => `${c.version} ${c.dir.slice(realpathSync(outside).length)}`).join(', '));
+    }
+  }
+  writeFileSync(join(outside, 'load.mjs'), `
+    import { engineFor, setEngineLoader } from '@kuiralabs/midnight-cli-core/lib/engine';
+    import { setHostPathsSource } from '@kuiralabs/midnight-cli-core/lib/state-root';
+    setHostPathsSource(() => ({ stateRoot: ${JSON.stringify(join(outside, 'state'))}, home: ${JSON.stringify(outside)} }));
+    setEngineLoader(async (set) => set === 'beta' ? (await import('@kuiralabs/midnight-engine-beta')).betaEngine : (await import('@kuiralabs/midnight-engine-rc')).rcEngine);
+    try { console.log((await engineFor(process.argv[2])).set); } catch (error) { console.log(error.code ?? error.message); }
+  `);
+  for (const [network, set] of [['undeployed', 'rc'], ['stagenet', 'beta']]) {
+    const loaded = run(process.execPath, ['load.mjs', network], outside).trim();
+    check(`a program outside mn loads the ${set} engine for ${network}`, loaded === set, loaded);
   }
 } catch (error) {
   check('the fresh install and its checks ran', false, String(error.stderr || error.message).trim().split('\n').slice(-3).join(' | '));
