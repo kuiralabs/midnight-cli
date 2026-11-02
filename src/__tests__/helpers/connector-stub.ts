@@ -14,6 +14,10 @@ export interface StubConnector {
   handlers: Record<string, (params: any, ctx: RpcHandlerContext) => Promise<unknown>>;
   dispose(): void;
   revertPendingTxs(connectionId: string): Promise<void>;
+  handOffPendingTx(connectionId: string, txHex: string): boolean;
+  takeOffer(connectionId: string, txHex: string): Promise<string>;
+  cancelOffers(connectionId: string, offers: readonly unknown[]): Promise<string>;
+  hasPendingTxs(): boolean;
 }
 
 /** What the stub takes from an engine. */
@@ -59,6 +63,7 @@ export interface BundleOverrides {
   initSwap?: (...args: any[]) => Promise<any>;
   getAllFromTxHistory?: () => Promise<any[]>;
   estimateTransactionFee?: (...args: any[]) => Promise<bigint>;
+  validateTransaction?: (...args: any[]) => Promise<void>;
 }
 
 /** The facade stub and connector over `engine`'s pieces. */
@@ -120,6 +125,7 @@ export function connectorStub(engine: StubEngine) {
         adoptTransaction: vi.fn((bytes: Uint8Array, stage: string) => ({ stage, hex: Buffer.from(bytes).toString('hex') })),
         estimateTransactionFee: overrides?.estimateTransactionFee ?? vi.fn().mockResolvedValue(1_000n),
         getAllFromTxHistory: overrides?.getAllFromTxHistory ?? vi.fn().mockResolvedValue(HISTORY),
+        validateTransaction: overrides?.validateTransaction ?? vi.fn().mockResolvedValue(undefined),
       },
       keystore: {
         signDataAsync: vi.fn().mockResolvedValue({ tag: 'schnorr', value: 'abcd1234signature' }),

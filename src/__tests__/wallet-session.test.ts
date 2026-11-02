@@ -87,6 +87,24 @@ describe('wallet session', () => {
     await session.close();
   });
 
+  it('makes an offer the taker pays for, paid to its own shielded address, which closing does not cancel', async () => {
+    const initSwap = vi.fn().mockResolvedValue({ type: 'SWAP' });
+    const { session, revert } = openSession({ bundleOverrides: { initSwap } });
+    const give = { token: '00'.repeat(31) + '01', amount: 10n };
+    const want = { token: '00'.repeat(31) + '02', amount: 7n };
+
+    expect(await session.makeOffer(give, want)).toBe('abcd');
+    const [inputs, outputs, options] = initSwap.mock.calls[0]!;
+    expect(inputs).toEqual({ shielded: { [give.token]: 10n } });
+    expect(outputs).toHaveLength(1);
+    expect(outputs[0].type).toBe('shielded');
+    expect(outputs[0].outputs[0]).toMatchObject({ type: want.token, amount: 7n });
+    expect(outputs[0].outputs[0].receiverAddress.coinPublicKeyString()).toBe(WALLET_SHIELDED.coinPublicKeyString());
+    expect(options.payFees).toBe(false);
+    await session.close();
+    expect(revert).not.toHaveBeenCalled();
+  });
+
   it('signs data with the wallet\'s unshielded key', async () => {
     const { session } = openSession();
     expect(await session.sign('68656c6c6f', 'hex')).toEqual({ data: '68656c6c6f', signature: 'abcd1234signature', verifyingKey: '5678efghpubkey', scheme: 'schnorr_bip340' });

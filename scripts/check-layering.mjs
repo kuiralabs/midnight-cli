@@ -21,7 +21,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'src');
 
 // The packages of the split, in the layering's order.
-const PACKAGES = ['core', 'chain', 'wallet', 'contract', 'connect', 'dev', 'grant'];
+const PACKAGES = ['core', 'chain', 'wallet', 'contract', 'connect', 'swap', 'dev', 'grant'];
 
 // Which package a file belongs to: the first pattern that matches its path
 // under src/ wins. A file that matches nothing fails the check.
@@ -42,7 +42,7 @@ const HOMES = [
   // The SDK engines: each is the only code that imports its SDK set.
   ['engine', /^engine\//],
 
-  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|wallet-cache|cache-indexer|reader-cache-files|connector-api|dust-wait|fee-limits|tx-serde|sign-data|approval|dust-balancing-plan|dust-registration-plan|shielded-policy|wallet-session|sdk-layout)\.ts$/],
+  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|wallet-cache|cache-indexer|reader-cache-files|connector-api|dust-wait|fee-limits|tx-serde|sign-data|approval|dust-balancing-plan|dust-registration-plan|shielded-policy|wallet-session|sdk-layout|swap-offer|offer-envelope|open-offers)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
   ['dev', /^ui\/(test-create-prompt|dev-keys)\.ts$/],
 
@@ -60,6 +60,9 @@ const HOMES = [
   ['connect', /^commands\/serve(\.definition)?\.ts$/],
   ['connect', /^lib\/(dapp-connector|ws-rpc|sign-recipe|serve-manager|serve-payer)\.ts$/],
 
+  ['swap', /^commands\/swap(\.definition)?\.ts$/],
+  ['swap', /^lib\/swap\//],
+
   ['dev', /^commands\/(dev|test|localnet)(\.definition)?\.ts$/],
   ['dev', /^lib\/localnet\.ts$/],
   ['dev', /^lib\/(dev|test)\//],
@@ -70,7 +73,7 @@ const HOMES = [
 
 // The packages each package may import, its own included. Dependencies point
 // one way: core, chain, wallet, then contract and connect side by side, then
-// dev, then grant. An engine sits beside chain: it uses core and chain, and
+// swap (on connect's wallet session), then dev, then grant. An engine sits beside chain: it uses core and chain, and
 // nothing imports it but core's loader.
 const MAY_IMPORT = {
   engine: ['core', 'chain', 'engine'],
@@ -79,6 +82,7 @@ const MAY_IMPORT = {
   wallet: ['core', 'chain', 'wallet'],
   contract: ['core', 'chain', 'wallet', 'contract'],
   connect: ['core', 'chain', 'wallet', 'connect'],
+  swap: ['core', 'chain', 'wallet', 'connect', 'swap'],
   dev: ['core', 'chain', 'wallet', 'contract', 'connect', 'dev'],
   grant: ['core', 'chain', 'wallet', 'contract', 'connect', 'dev', 'grant'],
   // The shell installs every package's commands and guidance, picks the payer

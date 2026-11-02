@@ -14,6 +14,7 @@ import { blockLimitsOf } from './ledger-parameters.ts';
 import { rawContractState } from './contract-providers.ts';
 import { assertAddress } from './addresses.ts';
 import { inspectTxHex } from './tx-inspect.ts';
+import { readOffer, spentNullifiers } from './offer-reader.ts';
 import { betaWallet } from './wallet.ts';
 import { SCRIPT_PACKAGES, generateCallScript, generateDeployScript, generateStateScript, packageFolder } from './contract-scripts.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
@@ -42,6 +43,8 @@ export const betaEngine: Engine = {
     blockLimits: blockLimitsOf,
     nightTokenId: () => ledger.unshieldedToken().raw,
     readTransaction: inspectTxHex,
+    readOffer,
+    spentNullifiers,
   },
   contracts: {
     rawState: rawContractState,

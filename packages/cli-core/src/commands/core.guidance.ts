@@ -54,6 +54,14 @@ export const coreGuidance: PackageGuidance = {
                                 server for that network
   MIXED_SDK_LAYOUT        1     mn was installed without its shrinkwrap (bun's
                                 installer): install it with npm
+  NOT_AN_OFFER            2     The bytes given as a swap offer are not one;
+                                ask the maker for it again
+  TERMS_MISMATCH          2     A swap offer's own terms differ from the agreed
+                                ones; don't take it
+  OFFER_EXPIRED           2     A swap offer is past the expiry its maker set;
+                                ask the maker for a new one
+  OFFER_COINS_IN_USE      2     A spend would use coins an open swap offer of
+                                this wallet's holds; cancel the offer first
   CANCELLED               7     Operation cancelled (SIGINT)
   UNKNOWN                 1     Unclassified error
 `,
