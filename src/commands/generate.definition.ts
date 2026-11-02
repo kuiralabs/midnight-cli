@@ -46,8 +46,9 @@ export const generateDefinition: CommandDefinition = {
     ],
     examples: ['midnight generate --network preprod'],
     jsonFields: {
-      address: 'Generated wallet address (bech32m)',
-      network: 'Network name',
+      addresses: 'Per-network unshielded addresses { preprod, preview, undeployed }',
+      activeAddress: 'Unshielded address on the active network (bech32m)',
+      activeNetwork: 'The active network',
       seed: 'Hex-encoded seed (32-byte raw, or 64-byte if mnemonic-derived)',
       mnemonic: 'BIP-39 mnemonic (24 words, only if generated or provided)',
       file: 'Path where wallet file was saved',
