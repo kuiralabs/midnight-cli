@@ -41,7 +41,8 @@
     "dist",
     "docs/SKILL.md",
     "docs/SKILL-CORE.md",
-    "NOTICE"
+    "NOTICE",
+    "npm-shrinkwrap.json"
   ],
   "engines": {
     "node": ">=22",
@@ -54,6 +55,8 @@
     "link": "bun link",
     "prepublishOnly": "npm run build && npm run test",
     "test": "vitest run",
+    "test:rc": "vitest run --exclude 'src/__tests__/engine-beta*.test.ts'",
+    "test:beta": "vitest run src/__tests__/engine-beta",
     "test:live": "vitest run --config vitest.live.config.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

@@ -36,3 +36,6 @@ tasks/
 # Native sidecar binaries — built fresh by CI into the platform packages, never committed
 packages/dust-sync-*/dust-sync
 packages/dust-sync-*/dust-sync.exe
+
+# Written by the release job just before publishing (scripts/make-shrinkwrap.mjs), never kept.
+/npm-shrinkwrap.json

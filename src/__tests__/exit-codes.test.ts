@@ -4,6 +4,8 @@ import { NodeTooOldForAccountError, UnreachableByAccountError } from '../lib/gra
 import { NoAccountError } from '../lib/grant/prepare.ts';
 import { WrongPassphraseError } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import { NoPassphraseError } from '../lib/passphrase.ts';
+import { OtherSdkSetError } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { MixedSdkLayoutError } from '@kuiralabs/midnight-cli-core/lib/sdk-layout';
 
 describe('humanizeNetworkError', () => {
   it('rewrites the empty-reason node-fetch tail with URL + cause hint', () => {
@@ -82,6 +84,11 @@ describe('classifyError: mn grant', () => {
 
   it('counts a network the account package can\'t reach as the caller\'s to fix', () => {
     expect(classifyError(new UnreachableByAccountError('PreProd'))).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.INVALID_ARGS });
+  });
+
+  it('names a call on the other SDK set\'s network, and an install that mixes an engine\'s SDK copies', () => {
+    expect(classifyError(new OtherSdkSetError('rc', 'beta'))).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.OTHER_SDK_SET });
+    expect(classifyError(new MixedSdkLayoutError("mn's beta engine", '@midnightntwrk/ledger-v9', ['/a', '/b']))).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.MIXED_SDK_LAYOUT });
   });
 
   it('says a Node.js too old for the account package is an unsupported Node.js', () => {

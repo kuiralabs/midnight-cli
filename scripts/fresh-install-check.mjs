@@ -1,6 +1,9 @@
-// What a user gets from npm, checked: packs this package, installs the tarball
-// into an empty directory (no lockfile there, as for any consumer), and checks
-// that the dependency tree npm resolves today still works.
+// What a user gets from npm, checked: packs mn and the workspace packages it
+// depends on, serves them from a local registry as npm serves published
+// packages, installs mn globally from it into an empty prefix, and checks the
+// tree the install holds still works: one copy of each WASM package per SDK
+// engine (the shrinkwrap mn ships keeps each engine's set apart), each engine
+// loading, and the files the code reads at run time.
 //
 // The test suite runs on the lockfile's tree, which a consumer never sees. Two
 // features broke that way without a test noticing: a newer @scure/base refused
@@ -13,9 +16,11 @@
 //   node scripts/fresh-install-check.mjs      (after `npm run build`)
 
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { startLocalRegistryProcess } from './local-registry.mjs';
+import { makeShrinkwrap, registryDist } from './make-shrinkwrap.mjs';
 
 const repo = new URL('..', import.meta.url).pathname;
 const run = (command, args, cwd) => execFileSync(command, args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -36,6 +41,37 @@ function copiesOf(root, name) {
   };
   walk(root);
   return found;
+}
+
+/**
+ * Every copy of `name` that the package in `dir` reaches through its
+ * dependencies, by Node's resolution from each package's folder: the copies a
+ * process that loads it can load.
+ */
+function resolvedCopies(dir, name) {
+  const found = new Map();
+  const seen = new Set();
+  const resolveFrom = (from, dep) => {
+    for (let at = from; ; at = dirname(at)) {
+      const manifest = join(at, 'node_modules', dep, 'package.json');
+      if (existsSync(manifest)) return realpathSync(dirname(manifest));
+      if (dirname(at) === at) return null;
+    }
+  };
+  // By the name code imports it under: an npm alias of the same package under another name is another package to its importers.
+  const walk = (pkgDir) => {
+    if (seen.has(pkgDir)) return;
+    seen.add(pkgDir);
+    const manifest = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf-8'));
+    for (const dep of Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies })) {
+      const resolved = resolveFrom(pkgDir, dep);
+      if (resolved === null) continue;
+      if (dep === name) found.set(resolved, JSON.parse(readFileSync(join(resolved, 'package.json'), 'utf-8')).version);
+      walk(resolved);
+    }
+  };
+  walk(realpathSync(dir));
+  return [...found].map(([at, version]) => ({ dir: at, version }));
 }
 
 /**
@@ -90,33 +126,50 @@ const check = (what, ok, detail = '') => {
 };
 
 const work = mkdtempSync(join(tmpdir(), 'mn-fresh-install-'));
+const shrinkwrapPath = join(repo, 'npm-shrinkwrap.json');
+let registry;
 try {
-  const tarball = run('npm', ['pack', '--pack-destination', work], repo).trim().split('\n').pop();
-  // The workspace packages mn depends on, packed from this checkout too (until
-  // they are published, a consumer's npm finds them nowhere else), and
-  // installed beside it so they satisfy its dependencies.
+  // The workspace packages mn depends on, packed from this checkout (until they
+  // are published, a consumer's npm finds them nowhere else), served with mn by
+  // a local registry, as npm installs a published package: npm honours mn's
+  // shrinkwrap only when its registry says the package has one.
+  const tarballs = join(work, 'registry');
+  mkdirSync(tarballs);
   const manifest = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8'));
-  const workspaceTarballs = manifest.workspaces
+  const workspaces = manifest.workspaces
     .map((dir) => ({ dir, name: JSON.parse(readFileSync(join(repo, dir, 'package.json'), 'utf-8')).name }))
-    .filter(({ name }) => manifest.dependencies[name] !== undefined)
-    .map(({ dir }) => run('npm', ['pack', '--pack-destination', work], join(repo, dir)).trim().split('\n').pop());
-  writeFileSync(join(work, 'package.json'), JSON.stringify({ name: 'fresh-install-check', private: true }));
-  run('npm', ['install', '--no-audit', '--no-fund', ...workspaceTarballs.map((t) => join(work, t)), join(work, tarball)], work);
+    .filter(({ name }) => manifest.dependencies[name] !== undefined);
+  for (const { dir } of workspaces) run('npm', ['pack', '--pack-destination', tarballs], join(repo, dir));
+  registry = await startLocalRegistryProcess(tarballs);
 
-  const version = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8')).version;
-  const mn = join(work, 'node_modules', '.bin', 'mn');
+  // mn, packed with the shrinkwrap the release job writes.
+  makeShrinkwrap({ dist: registryDist(registry.url), out: shrinkwrapPath });
+  try {
+    run('npm', ['pack', '--pack-destination', tarballs], repo);
+  } finally {
+    rmSync(shrinkwrapPath, { force: true });
+  }
+
+  const version = manifest.version;
+  const prefix = join(work, 'prefix');
+  run('npm', ['install', '-g', '--prefix', prefix, '--cache', join(work, 'npm-cache'), '--registry', registry.url, '--no-audit', '--no-fund', `${manifest.name}@${version}`], work);
+  const installed = join(prefix, 'lib', 'node_modules', manifest.name);
+  const mn = join(prefix, 'bin', 'mn');
   check('the installed mn runs', run(mn, ['--version'], work).trim() === version, version);
+  check('the package shipped its shrinkwrap', existsSync(join(installed, 'npm-shrinkwrap.json')));
 
   // One copy of each workspace package: a second copy of core's module state (its settings, its typed errors) splits the process.
-  for (const tarball of workspaceTarballs) {
-    const name = JSON.parse(run('tar', ['-xOzf', join(work, tarball), 'package/package.json'], work)).name;
-    const copies = copiesOf(work, name);
+  for (const { name } of workspaces) {
+    const copies = copiesOf(installed, name);
     check(`one copy of ${name}`, copies.length === 1, copies.join(', '));
   }
-  // One copy each: an object made by one copy of a WASM package is refused by another.
-  for (const name of ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/ledger-v8', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4']) {
-    const copies = copiesOf(work, name);
-    check(`one copy of ${name}`, copies.length === 1, copies.join(', '));
+  // Each engine resolves one copy of each WASM package: an object made by one copy is refused by another.
+  for (const { name } of workspaces.filter(({ name }) => name.startsWith('@kuiralabs/midnight-engine-'))) {
+    const engine = join(installed, 'node_modules', name);
+    for (const sdk of ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4']) {
+      const copies = resolvedCopies(engine, sdk);
+      check(`${name} resolves one copy of ${sdk}`, copies.length === 1, copies.map((c) => `${c.version} ${c.dir.slice(installed.length)}`).join(', '));
+    }
   }
 
   // A shielded address is longer than bech32's 90 characters; the address
@@ -137,8 +190,19 @@ try {
     } catch (error) {
       console.log(error.message);
     }
-  `], join(work, 'node_modules', 'midnight-wallet-cli'));
+  `], join(installed, 'node_modules', '@kuiralabs', 'midnight-engine-rc'));
   check('a shielded address parses', parsed.trim() === 'parsed' && address.length > 90, `${address.length} characters${parsed.trim() === 'parsed' ? '' : `, ${parsed.trim()}`}`);
+
+  // Each engine loads from the install: deriving a network's address loads the engine of its set.
+  for (const [network, prefixOf] of [['undeployed', 'mn_addr_undeployed1'], ['stagenet', 'mn_addr_stagenet1']]) {
+    let derived = '';
+    try {
+      derived = JSON.parse(execFileSync(mn, ['address', '--wallet', 'check', '--network', network, '--json'], { cwd: work, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], env })).address ?? '';
+    } catch (error) {
+      derived = String(error.stderr ?? error.message).trim().split('\n').pop();
+    }
+    check(`the ${network === 'stagenet' ? 'beta' : 'rc'} engine derives a ${network} address`, derived.startsWith(prefixOf), derived.slice(0, 40));
+  }
 
   // mn grant drives the account package it installed: its owner records load
   // from the installed tree and answer that the new wallet has no account.
@@ -155,11 +219,11 @@ try {
   }
   check('mn grant drives the installed account package', /Wallet "check" has no account on undeployed yet/.test(grant), grant.includes('has no account') ? 'no account yet, as for a new wallet' : grant.trim().split('\n').slice(-2).join(' | '));
   check('it opens no proving-artefact cache', !existsSync(join(home, '.midnight', 'account-artifacts')), 'none under ~/.midnight');
-  const chains = copiesOf(work, '@kuiralabs/midnight-account-chain');
+  const chains = copiesOf(installed, '@kuiralabs/midnight-account-chain');
   check('one copy of @kuiralabs/midnight-account-chain', chains.length === 1, chains.join(', '));
 
   // The MCP server reads its skill documents from the installed package.
-  const { tools, resources } = await askMcpServer(join(work, 'node_modules', '.bin', 'midnight-wallet-mcp'), env);
+  const { tools, resources } = await askMcpServer(join(prefix, 'bin', 'midnight-wallet-mcp'), env);
   check('the MCP server lists its skill resources', resources.length >= 2, `${resources.length}`);
   for (const { uri, text, error } of resources) {
     check(`the MCP server serves ${uri}`, error === undefined && text.length > 0, error ? error.replace(work, '<install>') : `${text.length} characters`);
@@ -171,6 +235,7 @@ try {
 } catch (error) {
   check('the fresh install and its checks ran', false, String(error.stderr || error.message).trim().split('\n').slice(-3).join(' | '));
 } finally {
+  await registry?.close();
   rmSync(work, { recursive: true, force: true });
 }
 
