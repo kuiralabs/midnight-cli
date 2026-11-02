@@ -1,8 +1,6 @@
 // balance command — check unshielded + shielded balance via full wallet sync
 // For positional address: unshielded only (GraphQL, no facade needed)
 
-import * as ledger from '@midnightntwrk/ledger-v9';
-import { MidnightBech32m } from '@midnightntwrk/wallet-sdk/address-format';
 import { type ParsedArgs, getFlag, hasFlag, isMinimalMode } from '../lib/argv.ts';
 import { type NetworkName, isValidNetworkName } from '../lib/network.ts';
 import { saveShieldedAddress, findWalletByAddress } from '../lib/wallet-config.ts';
@@ -10,12 +8,10 @@ import { resolveSeedSource } from '../lib/seed-resolver.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides } from '../lib/network.ts';
 import { shieldedSyncEnabled, shieldedDisabledReason } from '../lib/shielded-policy.ts';
-import { getNetworkId } from '../lib/network-id.ts';
 import { isNativeToken } from '../lib/balance-subscription.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
-import { readShieldedBalanceCached } from '../engine/rc/shielded-direct-cache.ts';
+import { engineFor } from '../lib/engine.ts';
 import { assertLedgerSupported, fetchProtocolVersion } from '../lib/ledger-guard.ts';
-import { deriveShieldedAddress, deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
 import { getChainGenesisHash } from '../lib/chain-id.ts';
 import { createEtaEstimator, formatSyncStatus } from '../lib/sync-eta.ts';
 import { header, keyValue, divider, formatNight, formatAddress, toNight } from '../ui/format.ts';
@@ -183,7 +179,8 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
   ctx.diagnostics.line('balance', `wallet path=${walletPath ?? '(from --seed/MN_SEED)'}`);
   // Derive the unshielded address from the seed so a --seed/MN_SEED caller (no wallet
   // file) behaves identically to a named wallet — for a wallet this equals the stored one.
-  const address = config?.addresses[networkName] ?? deriveUnshieldedAddress(seedBuffer, networkName);
+  const engine = await engineFor(networkName);
+  const address = config?.addresses[networkName] ?? engine.keys.unshieldedAddress(seedBuffer, networkName);
   const shieldedAddrStr = config?.shieldedAddresses?.[networkName] ?? '';
 
   applyEndpointOverrides(networkConfig, {
@@ -196,7 +193,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
   const stopListening = ctx.sdkWarnings.listen(undefined);
   const noCache = hasFlag(args, 'no-cache');
   const isJson = hasFlag(args, 'json');
-  const nightToken = ledger.unshieldedToken().raw;
+  const nightToken = engine.ledger.nightTokenId();
 
   let activeSpinner: Spinner | null = null;
 
@@ -257,10 +254,9 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
     if (shieldedEnabled) {
       if (!isJson) activeSpinner = ctx.progress.start('Syncing shielded...');
       const eta = createEtaEstimator();
-      const networkId = getNetworkId(networkConfig.networkId);
 
       // Live shielded address is pure key derivation — no facade sync needed.
-      liveShieldedAddrStr = MidnightBech32m.encode(networkId, deriveShieldedAddress(seedBuffer)).asString();
+      liveShieldedAddrStr = engine.keys.shieldedAddress(seedBuffer, networkName);
       // Cache the shielded address only when there's a backing wallet file (skip for --seed/MN_SEED).
       if (walletPath) saveShieldedAddress(walletPath, networkName, liveShieldedAddrStr);
 
@@ -272,7 +268,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
       await assertLedgerSupported(networkName, networkConfig, fetchProtocolVersion, ctx.signal);
       // Null when the node can't say (the cache check is then skipped); a cancelled call stops here.
       const chainId = (await getChainGenesisHash(networkConfig.node, ctx.signal)) ?? undefined;
-      const shieldedResult = await readShieldedBalanceCached(
+      const shieldedResult = await engine.readers.shieldedBalance(
         seedBuffer,
         networkName,
         networkConfig.indexerWS,

@@ -121,12 +121,48 @@ export interface EngineContracts {
   readonly scripts: EngineContractScripts;
 }
 
+/** A wallet's shielded NIGHT, from mn's own reader of the indexer's events. */
+export interface ShieldedBalanceResult {
+  /** Native (NIGHT) shielded balance in atomic units. */
+  balance: bigint;
+  /** Number of spendable NIGHT coins. */
+  availableCoins: number;
+  /** Events applied in this run (delta since last cache save). */
+  eventCount: number;
+  /** Latest event id in the saved cache (carried from prior cache if no new events). */
+  lastAppliedEventId: number;
+  /** True if an existing cache was loaded and extended; false if synced from scratch. */
+  fromCache: boolean;
+  /** True if the sync stopped before catching up (timeout/abort) — resume next call. */
+  partial: boolean;
+}
+
+export interface ShieldedCachedOptions {
+  /** Called with (eventsApplied, maxIdSeen) whenever a new event arrives. */
+  onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
+  /** Stops the read; what was applied is kept for the next. */
+  signal?: AbortSignal;
+  /** Soft ceiling for the whole read, after which it returns what it has (partial). */
+  timeoutMs?: number;
+  /** Ignore any cached state and re-sync from the beginning (honours --no-cache). */
+  forceFresh?: boolean;
+  /** Current chain genesis hash — stored on save and checked on load (chain-reset guard). */
+  chainId?: string;
+}
+
+/** mn's own readers of a wallet's chain state, beside the SDK's wallet. */
+export interface EngineReaders {
+  /** The shielded NIGHT balance of a seed on a network, reading (and extending) its cache. */
+  shieldedBalance(seed: Buffer, network: NetworkName, indexerWS: string, options?: ShieldedCachedOptions): Promise<ShieldedBalanceResult>;
+}
+
 /** One SDK set, as mn uses it. */
 export interface Engine {
   readonly set: SdkSet;
   readonly keys: EngineKeys;
   readonly ledger: EngineLedger;
   readonly contracts: EngineContracts;
+  readonly readers: EngineReaders;
 }
 
 /** The SDK set a network runs on. */
