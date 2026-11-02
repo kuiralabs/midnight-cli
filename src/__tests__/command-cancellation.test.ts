@@ -18,7 +18,7 @@ import { parseArgs } from '../lib/argv.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { setPrompter, type Prompter } from '../lib/prompter.ts';
 import { establishPassphrase, isPassphraseSet } from '../lib/passphrase.ts';
-import { deriveUnshieldedAddress } from '../lib/derive-address.ts';
+import { deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
 import { getCachePath } from '../lib/wallet-cache.ts';
 import { loadWalletConfig, protectAllWallets } from '../lib/wallet-config.ts';
 import { createWallet, walletSecretFrom } from '../lib/wallet-create.ts';
@@ -264,7 +264,7 @@ describe('commands that write check the call before each whole write', () => {
         createdAt: '2026-10-31T00:00:00.000Z',
       }, path.join(stateRootIn(home), 'wallets', `${name}.json`));
     };
-    const isSealed = (file: string): boolean => loadWalletConfig(file).isSealed === true;
+    const isSealed = async (file: string): Promise<boolean> => (await loadWalletConfig(file)).isSealed === true;
 
     it('cancelled while the passphrase is asked for: no wallet is sealed', async () => {
       const files = [plainWallet('alice', 'a1'), plainWallet('bob', 'b2')];
@@ -273,7 +273,7 @@ describe('commands that write check the call before each whole write', () => {
 
       await expect(cliCall(walletCommand, parseArgs(['wallet', 'protect', '--json']), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
 
-      expect(files.map(isSealed)).toEqual([false, false]);
+      expect(await Promise.all(files.map(isSealed))).toEqual([false, false]);
       expect(io.stdout()).toBe('');
       expect(isPassphraseSet(stateRootIn(home)), 'no new passphrase saved').toBe(false);
     });
@@ -287,7 +287,7 @@ describe('commands that write check the call before each whole write', () => {
       setImmediate(() => call.abort());
 
       await expect(protecting).rejects.toMatchObject({ code: 'CANCELLED' });
-      expect(files.map(isSealed)).toEqual([true, false, false]);
+      expect(await Promise.all(files.map(isSealed))).toEqual([true, false, false]);
     });
 
     it('cancelled by a protector: the protectors after it do not run', async () => {
@@ -316,7 +316,7 @@ describe('commands that write check the call before each whole write', () => {
 
   it('cache clear --wallet: cancelled while the wallet is unlocked, it clears no cache', async () => {
     establishPassphrase(stateRootIn(home), PASSPHRASE);
-    const created = createWallet('alice', walletSecretFrom(), PASSPHRASE);
+    const created = await createWallet('alice', walletSecretFrom(), PASSPHRASE);
     const cache = getCachePath(created.addresses.undeployed, 'undeployed');
     fs.mkdirSync(path.dirname(cache), { recursive: true });
     fs.writeFileSync(cache, '{}');

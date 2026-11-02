@@ -13,7 +13,7 @@ import walletCommand from '../commands/wallet.ts';
 import { parseArgs } from '../lib/argv.ts';
 import { PASSPHRASE_ENV, isPassphraseSet } from '../lib/passphrase.ts';
 import { loadWalletConfig } from '../lib/wallet-config.ts';
-import { deriveAllAddresses } from '../lib/derive-address.ts';
+import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 import { accountProtector } from '../lib/grant/account-protector.ts';
@@ -58,7 +58,7 @@ describe('wallet protect', () => {
     const result = await protect();
     expect(isPassphraseSet(stateRootIn(home))).toBe(true);
     expect(result).toMatchObject({ sealed: ['alice', 'bob'], alreadySealed: [] });
-    expect(loadWalletConfig(alice).isSealed).toBe(true);
+    expect((await loadWalletConfig(alice)).isSealed).toBe(true);
     expect(fs.readFileSync(alice, 'utf8')).not.toContain(SEED);
   });
 
@@ -74,7 +74,7 @@ describe('wallet protect', () => {
     const bob = plainWallet('bob');
     process.env[PASSPHRASE_ENV] = 'another passphrase entirely';
     await expect(protect()).rejects.toThrow(/Wrong passphrase/);
-    expect(loadWalletConfig(bob).isSealed).toBe(false);
+    expect((await loadWalletConfig(bob)).isSealed).toBe(false);
   });
 
   it("seals each wallet's plain-text account too, and names one whose wallet is gone", async () => {

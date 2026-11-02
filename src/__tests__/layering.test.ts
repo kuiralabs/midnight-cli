@@ -2,7 +2,7 @@
 // has a package, and no import crosses the layering the planned split needs.
 
 import { describe, expect, it } from 'vitest';
-import { findLayeringProblems, importRule } from '../../scripts/check-layering.mjs';
+import { PENDING_ENGINE, findLayeringProblems, importRule } from '../../scripts/check-layering.mjs';
 
 describe('the layering', () => {
   it('holds across src/', () => {
@@ -36,5 +36,49 @@ describe('the layering', () => {
   it('lets no library or other package call a command', () => {
     expect(importRule('lib/dev/deploy.ts', 'commands/contract.ts')).toBe('library → contract command');
     expect(importRule('commands/dev.ts', 'commands/contract.ts')).toBe('command → contract command');
+  });
+
+  it('lets only core\'s loader reach an engine, and an engine reach only core and chain', () => {
+    expect(importRule('lib/engine.ts', 'engine/rc/index.ts')).toBeUndefined();
+    expect(importRule('commands/address.ts', 'engine/rc/derive-address.ts')).toBe('wallet → engine (reach it through lib/engine.ts)');
+    expect(importRule('lib/wallet-create.ts', 'engine/rc/index.ts')).toBe('wallet → engine (reach it through lib/engine.ts)');
+    expect(importRule('engine/rc/derive-address.ts', 'lib/network.ts')).toBeUndefined();
+    expect(importRule('engine/rc/index.ts', 'lib/facade.ts')).toBe('engine → wallet');
+  });
+
+  // Each module here still imports the SDK itself. Taking one off is the
+  // point of moving it behind the engine; adding one is refused.
+  it('has no module importing the SDK outside the engine but those still waiting to move', () => {
+    expect([...PENDING_ENGINE].sort()).toStrictEqual([
+      'commands/airdrop.ts',
+      'commands/balance.ts',
+      'commands/dust.ts',
+      'commands/inspect-cost.ts',
+      'commands/transfer.ts',
+      'lib/chain-params.ts',
+      'lib/contract/providers.ts',
+      'lib/contract/runner.ts',
+      'lib/dapp-connector.ts',
+      'lib/dust-balance-direct.ts',
+      'lib/dust-collapse.ts',
+      'lib/dust-direct-cache.ts',
+      'lib/dust-direct.ts',
+      'lib/dust-sync-native.ts',
+      'lib/dust-wallet.ts',
+      'lib/facade.ts',
+      'lib/fee-only-check.ts',
+      'lib/fork-schedule.ts',
+      'lib/grant/sealed-account.ts',
+      'lib/shielded-direct-cache.ts',
+      'lib/shielded-direct.ts',
+      'lib/sign-recipe.ts',
+      'lib/test/prep-runner.ts',
+      'lib/transfer-request.ts',
+      'lib/transfer.ts',
+      'lib/tx-inspect.ts',
+      'lib/wallet-data-repository.ts',
+      'lib/ws-rpc.ts',
+    ]);
+    expect(importRule('lib/wallet-create.ts', 'engine/rc/derivation.ts')).toBe('wallet → engine (reach it through lib/engine.ts)');
   });
 });

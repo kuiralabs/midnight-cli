@@ -11,7 +11,7 @@ import type { CallContext } from '../lib/call-context.ts';
 
 export default async function infoCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const resolvedPath = resolveWalletPath(getFlag(args, 'wallet'));
-  const config = loadWalletConfig(resolvedPath);
+  const config = await loadWalletConfig(resolvedPath);
   const activeNetwork = resolveNetworkName({ args });
   const activeAddress = config.addresses[activeNetwork];
 

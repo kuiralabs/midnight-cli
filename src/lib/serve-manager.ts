@@ -198,7 +198,7 @@ export async function startServeOrReuse(options: ServeManagerOptions): Promise<S
 
     const runningAddress = await probeServeWallet(port);
     if (runningAddress !== null) {
-      const wanted = loadWalletConfig(resolveWalletPath(options.wallet)).addresses[actualNetwork as NetworkName];
+      const wanted = (await loadWalletConfig(resolveWalletPath(options.wallet))).addresses[actualNetwork as NetworkName];
       const walletMismatch = serveWalletMismatch(runningAddress, { address: wanted, name: options.wallet ?? 'the active wallet' });
       if (walletMismatch) {
         throw new Error(

@@ -10,9 +10,9 @@ import {
   ShieldedEncryptionPublicKey,
 } from '@midnightntwrk/wallet-sdk/address-format';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { type NetworkName, getValidNetworkNames } from './network.ts';
+import { type NetworkName, getValidNetworkNames } from '../../lib/network.ts';
 import { deriveShieldedSeed } from './derivation.ts';
-import { networkIdForName } from './network-id.ts';
+import { networkIdForName } from '../../lib/network-id.ts';
 
 /**
  * Derive an unshielded address from a seed buffer, network, and optional key index.
@@ -78,6 +78,11 @@ export function deriveAllShieldedAddresses(
     out[name as NetworkName] = MidnightBech32m.encode(networkId, address).asString();
   }
   return out;
+}
+
+/** The shielded address on one network, as its bech32m string. */
+export function deriveShieldedAddressString(seedBuffer: Buffer, networkName: NetworkName): string {
+  return MidnightBech32m.encode(networkIdForName(networkName), deriveShieldedAddress(seedBuffer)).asString();
 }
 
 /**

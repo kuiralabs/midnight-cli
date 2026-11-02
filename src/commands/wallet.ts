@@ -86,7 +86,7 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
   // Cancelled while the passphrase was asked for: no wallet is written, and no new passphrase saved.
   throwIfCancelled(ctx.signal);
   // Checked above: an existing wallet is replaced only with --force.
-  const created = createWallet(name, secret, passphrase, { overwrite: hasFlag(args, 'force') });
+  const created = await createWallet(name, secret, passphrase, { overwrite: hasFlag(args, 'force') });
   const { addresses, shieldedAddresses, mnemonic, file: savedPath } = created;
   const seedBuffer = created.seed;
   const activeAddress = addresses[networkName];
@@ -139,7 +139,7 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
 }
 
 async function walletList(args: ParsedArgs, ctx: CallContext): Promise<void> {
-  const wallets = listWallets();
+  const wallets = await listWallets();
   const networkName = resolveNetworkName({ args });
 
   if (hasFlag(args, 'json')) {
@@ -234,7 +234,7 @@ async function walletInfo(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // (flag, consistent with balance/dust/transfer); fall back to the active wallet.
   const name = getFlag(args, 'wallet') ?? args.positionals[0] ?? getActiveWalletName();
   const walletPath = resolveWalletPath(name);
-  const config = loadWalletConfig(walletPath);
+  const config = await loadWalletConfig(walletPath);
   const isActive = name === getActiveWalletName();
   const networkName = resolveNetworkName({ args });
   const activeAddress = config.addresses[networkName];

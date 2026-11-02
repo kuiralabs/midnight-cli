@@ -21,7 +21,7 @@ import { DUST_SHORT_WAIT_MS, payWhenDustCovers } from '../lib/dust-wait.ts';
 
 export default async function transferCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
-  const request = resolveTransferRequest(args);
+  const request = await resolveTransferRequest(args);
   return request.shielded ? shieldedTransfer(args, request, ctx) : unshieldedTransfer(args, request, ctx);
 }
 

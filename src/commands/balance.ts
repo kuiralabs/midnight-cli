@@ -15,7 +15,7 @@ import { isNativeToken } from '../lib/balance-subscription.ts';
 import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { readShieldedBalanceCached } from '../lib/shielded-direct-cache.ts';
 import { assertLedgerSupported, fetchProtocolVersion } from '../lib/ledger-guard.ts';
-import { deriveShieldedAddress, deriveUnshieldedAddress } from '../lib/derive-address.ts';
+import { deriveShieldedAddress, deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
 import { getChainGenesisHash } from '../lib/chain-id.ts';
 import { createEtaEstimator, formatSyncStatus } from '../lib/sync-eta.ts';
 import { header, keyValue, divider, formatNight, formatAddress, toNight } from '../ui/format.ts';
@@ -77,7 +77,7 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
   // wallets we have the seed → run the full wallet sync (which shows shielded).
   // Otherwise there's nothing to decrypt with → fail with a clear, actionable error.
   if (hasFlag(args, 'shielded')) {
-    const owned = findWalletByAddress(address);
+    const owned = await findWalletByAddress(address);
     if (owned) {
       ctx.diagnostics.line('balance', `shielded positional → wallet ${owned.wallet.name} on ${owned.network}`);
       const delegated: ParsedArgs = {

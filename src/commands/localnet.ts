@@ -72,14 +72,14 @@ async function handleUp(jsonMode: boolean, ctx: CallContext, docker: DockerCall)
         const { waitForAddressFunded } = await import('../lib/indexer-ready.ts');
         const { waitForProofServerReady } = await import('../lib/proof-server-ready.ts');
         const { getNetworkConfig } = await import('../lib/network.ts');
-        const { deriveUnshieldedAddress } = await import('../lib/derive-address.ts');
+        const { engineFor } = await import('../lib/engine.ts');
         const { GENESIS_SEED } = await import('../lib/constants.ts');
 
         const netCfg = getNetworkConfig('undeployed');
         await waitForFirstBlock(netCfg.node, { timeoutMs: 30_000, signal: ctx.signal });
 
         spinner.update('Waiting for indexer to ingest genesis state...');
-        const genesisAddress = deriveUnshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
+        const genesisAddress = (await engineFor('undeployed')).keys.unshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
         await waitForAddressFunded(netCfg.indexerWS, genesisAddress, { timeoutMs: 30_000, signal: ctx.signal });
 
         spinner.update('Waiting for proof server...');

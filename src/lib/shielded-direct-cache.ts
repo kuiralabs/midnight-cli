@@ -17,7 +17,7 @@ import { randomBytes } from 'node:crypto';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { DIR_MODE, FILE_MODE } from './constants.ts';
-import { deriveShieldedSeed } from './derivation.ts';
+import { deriveShieldedSeed } from '../engine/rc/derivation.ts';
 import { readShieldedBalanceDirect, type ShieldedDirectOptions } from './shielded-direct.ts';
 import { fetchEventTip, isCursorBeyondTip } from './event-tip.ts';
 import { cacheKeyOf, cacheRootDir } from './wallet-cache.ts';

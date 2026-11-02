@@ -7,7 +7,7 @@ async function checkGrant(params: Readonly<Record<string, unknown>>, call: ToolC
   const { prepareGrant } = await import('../lib/grant/prepare.ts');
   const prepared = await prepareGrant(call.argv());
   const { loadWalletConfig, resolveWalletPath } = await import('../lib/wallet-config.ts');
-  loadWalletConfig(resolveWalletPath(params.wallet as string | undefined));
+  await loadWalletConfig(resolveWalletPath(params.wallet as string | undefined));
   return prepared;
 }
 

@@ -9,7 +9,7 @@ import * as path from 'path';
 import { resolveTransferRequest } from '../lib/transfer-request.ts';
 import { parseArgs } from '../lib/argv.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
-import { deriveAllAddresses, deriveAllShieldedAddresses } from '../lib/derive-address.ts';
+import { deriveAllAddresses, deriveAllShieldedAddresses } from '../engine/rc/derive-address.ts';
 import { MIDNIGHT_DIR, WALLETS_DIR_NAME } from '../lib/constants.ts';
 import { UsageError } from '../lib/errors.ts';
 import { classifyError } from '../lib/exit-codes.ts';
@@ -49,18 +49,18 @@ afterEach(() => {
 });
 
 describe('resolveTransferRequest', () => {
-  it('takes an address and an amount, on the network asked for', () => {
-    const r = request(RECIPIENT.preprod, '1.5', '--wallet', 'sender', '--network', 'preprod');
+  it('takes an address and an amount, on the network asked for', async () => {
+    const r = await request(RECIPIENT.preprod, '1.5', '--wallet', 'sender', '--network', 'preprod');
     expect(r).toMatchObject({ recipientAddress: RECIPIENT.preprod, amountNight: 1.5, shielded: false, networkName: 'preprod' });
     expect(r.walletPath).toBe(path.join(WALLETS, 'sender.json'));
     // The request is checked without the passphrase: it carries the wallet's addresses, never its seed.
     expect(r.walletConfig).not.toHaveProperty('seed');
   });
 
-  it('resolves a wallet name given as the recipient to that wallet\'s address on the network', () => {
+  it('resolves a wallet name given as the recipient to that wallet\'s address on the network', async () => {
     saveWallet('bob', RECIPIENT_SEED, true);
-    expect(request('bob', '2', '--wallet', 'sender').recipientAddress).toBe(RECIPIENT.undeployed);
-    expect(request('bob', '2', '--wallet', 'sender', '--shielded').recipientAddress).toBe(RECIPIENT_SHIELDED.undeployed);
+    expect((await request('bob', '2', '--wallet', 'sender')).recipientAddress).toBe(RECIPIENT.undeployed);
+    expect((await request('bob', '2', '--wallet', 'sender', '--shielded')).recipientAddress).toBe(RECIPIENT_SHIELDED.undeployed);
   });
 
   it.each([
@@ -75,8 +75,8 @@ describe('resolveTransferRequest', () => {
     [[RECIPIENT_SHIELDED.undeployed, '1'], 'Invalid recipient address'],
     [[RECIPIENT.undeployed, '1', '--shielded'], 'Invalid shielded address'],
     [[RECIPIENT.undeployed, '1', '--wallet', 'nosuchsender'], 'Wallet file not found'],
-  ])('refuses %j', (argv, message) => {
-    expect(() => request(...argv, ...(argv.includes('--wallet') ? [] : ['--wallet', 'sender']))).toThrow(message);
+  ])('refuses %j', async (argv, message) => {
+    await expect(request(...argv, ...(argv.includes('--wallet') ? [] : ['--wallet', 'sender']))).rejects.toThrow(message);
   });
 
   it.each([
@@ -84,15 +84,15 @@ describe('resolveTransferRequest', () => {
     [[RECIPIENT.undeployed, 'ten']],
     [['mn_addr_undeployed1notanaddress', '1']],
     [[RECIPIENT.preprod, '1']],
-  ])('refuses %j as a usage mistake, which an agent sees as INVALID_ARGS', (argv) => {
+  ])('refuses %j as a usage mistake, which an agent sees as INVALID_ARGS', async (argv) => {
     let err: unknown;
-    try { request(...argv, '--wallet', 'sender'); } catch (e) { err = e; }
+    try { await request(...argv, '--wallet', 'sender'); } catch (e) { err = e; }
     expect(err).toBeInstanceOf(UsageError);
     expect(classifyError(err as Error).errorCode).toBe('INVALID_ARGS');
   });
 
-  it('refuses a shielded transfer where shielded is off before reading the address', () => {
-    expect(() => request('mn_shield-addr_preprod1garbage', '1', '--wallet', 'sender', '--shielded', '--network', 'preprod'))
-      .toThrow(/Shielded is unavailable on preprod/);
+  it('refuses a shielded transfer where shielded is off before reading the address', async () => {
+    await expect(request('mn_shield-addr_preprod1garbage', '1', '--wallet', 'sender', '--shielded', '--network', 'preprod'))
+      .rejects.toThrow(/Shielded is unavailable on preprod/);
   });
 });

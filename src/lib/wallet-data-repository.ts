@@ -56,8 +56,8 @@ import { bindCachesToIndexer, describeIndexerChange } from './cache-indexer.ts';
 import { nativeDustSyncAvailable, runDustSyncNative } from './dust-sync-native.ts';
 import type { VerboseLog } from './verbose.ts';
 import { callNodeRpc } from './node-rpc.ts';
-import { deriveDustSeed } from './derivation.ts';
-import { deriveUnshieldedAddress } from './derive-address.ts';
+import { deriveDustSeed } from '../engine/rc/derivation.ts';
+import { deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
 import { fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from './event-tip.ts';
 
 // ── Public types ──────────────────────────────────────────

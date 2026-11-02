@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { JSONRPCMessage, Progress } from '@modelcontextprotocol/sdk/types.js';
-import { deriveUnshieldedAddress } from '../lib/derive-address.ts';
+import { deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
 import { toNight } from '../ui/format.ts';
 import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from './helpers/stand-in-indexer.ts';
 

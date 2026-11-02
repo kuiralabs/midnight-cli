@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { DIR_MODE, FILE_MODE } from './constants.ts';
-import { deriveDustSeed } from './derivation.ts';
+import { deriveDustSeed } from '../engine/rc/derivation.ts';
 import type { NetworkConfig } from './network.ts';
 import { type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { collapseForeignGenerations } from './dust-collapse.ts';
