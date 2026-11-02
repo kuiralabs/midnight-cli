@@ -17,6 +17,7 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import type { CommandRun } from './lib/run-command.ts';
 import { servePayer } from './lib/serve-payer.ts';
 import { classifyError } from './lib/exit-codes.ts';
+import { withNodeReason } from './lib/sdk-errors.ts';
 import { trimAgentMessage } from './lib/error-trim.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { createConfirmationStore } from './lib/mcp/confirmation.ts';
@@ -198,7 +199,9 @@ async function executeTool(name: string, params: Record<string, unknown>, call: 
   }
 }
 
-function errorResponse(error: Error) {
+function errorResponse(thrown: Error) {
+  // A node's refusal is reported with the node's words, which the wallet SDK keeps only among its causes.
+  const error = withNodeReason(thrown);
   const { errorCode } = classifyError(error);
   return {
     content: [{

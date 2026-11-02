@@ -6,6 +6,7 @@
 import { parseArgs, hasFlag } from './lib/argv.ts';
 import { errorMessage, usageMessage } from './ui/format.ts';
 import { assertKnownFlags } from './lib/command-flags.ts';
+import { withNodeReason } from './lib/sdk-errors.ts';
 import { installedCommands } from './lib/installed-commands.ts';
 import { commandNeedsWalletSdk, dispatchCommand, processOutput } from './lib/command-dispatch.ts';
 import type { CommandOutcome } from './lib/call-context.ts';
@@ -116,7 +117,9 @@ run().then((outcome) => {
   if (needsWalletSdk) {
     process.exit(process.exitCode ?? 0);
   }
-}).catch((err: Error) => {
+}).catch((thrown: Error) => {
+  // A node's refusal is reported with the node's words, which the wallet SDK keeps only among its causes.
+  const err = withNodeReason(thrown);
   // Usage errors (missing/unknown subcommand, bad args) render in yellow
   // with a softer "Usage" framing. They are the user's prompt to fix and
   // retry, not a system failure. Exit code 2 (INVALID_ARGS).

@@ -3,6 +3,8 @@
 // side effects, no I/O. Lives in its own file so both transfer.ts and
 // wallet-data-repository.ts can import without a circular dependency.
 
+import { TransactionRefusedError } from './errors.ts';
+
 /**
  * The chain rejected the transaction outright. Most commonly: balance check
  * failed because the dust capacity wasn't sufficient at submission time
@@ -126,4 +128,48 @@ export function isSdkInsufficientFundsError(err: any): boolean {
  */
 export function isColdStartRace(err: unknown): boolean {
   return isSdkInsufficientFundsError(err) && !isDustShortage(err);
+}
+
+/** The wallet SDK's message on the error it wraps a node's refusal in, at each level. */
+const SUBMISSION_WRAPPERS: readonly string[] = ['Transaction submission error', 'Transaction submission failed'];
+
+/**
+ * What the node said when it refused a transaction, from the wallet SDK's
+ * SubmissionError wherever it is among the error's causes (a FiberFailure's
+ * included): the messages under the SDK's own wrappers, outermost first.
+ * Undefined for any other error, and for a submission error that carries
+ * nothing more than the wrapper.
+ */
+export function nodeRefusalOf(err: unknown): string | undefined {
+  const next = (current: Record<PropertyKey, unknown>): unknown => {
+    const failure = current[FIBER_FAILURE_CAUSE] as { _tag?: string; error?: unknown; defect?: unknown } | undefined;
+    if (failure?._tag === 'Fail') return failure.error;
+    if (failure?._tag === 'Die') return failure.defect;
+    return current.cause;
+  };
+  const seen = new Set<unknown>();
+  let current: unknown = err;
+  let found = false;
+  const said: string[] = [];
+  while (current !== null && current !== undefined && !seen.has(current)) {
+    seen.add(current);
+    if (typeof current === 'string') {
+      if (found) said.push(current);
+      break;
+    }
+    if (typeof current !== 'object') break;
+    const e = current as Record<PropertyKey, unknown>;
+    if (e._tag === 'SubmissionError') found = true;
+    const message = typeof e.message === 'string' ? e.message.trim() : '';
+    if (found && message !== '' && !SUBMISSION_WRAPPERS.includes(message) && said.at(-1) !== message) said.push(message);
+    current = next(e);
+  }
+  return found && said.length > 0 ? said.join(': ') : undefined;
+}
+
+/** The error as it is reported: a node's refusal as a TransactionRefusedError carrying the node's words; any other error as it is. */
+export function withNodeReason(err: Error): Error {
+  if (err instanceof TransactionRefusedError) return err;
+  const reason = nodeRefusalOf(err);
+  return reason === undefined ? err : new TransactionRefusedError(reason, { cause: err });
 }
