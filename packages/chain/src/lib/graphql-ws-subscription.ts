@@ -9,6 +9,7 @@
 //
 // Settle semantics (uniform across readers):
 //   - onNext returns true (caught up to tip)         → resolve, partial=false
+//   - the server completes the subscription          → resolve, partial=false  (a bounded query's end)
 //   - idle window elapses                            → resolve, partial=false
 //   - initial-silence elapses (resume only)          → resolve, partial=false
 //   - the stream closes with no events               → resolve, partial=false
@@ -24,6 +25,7 @@ import { assertEndpointUsable, endpointRefusalFromWsError } from '@kuiralabs/mid
 /** Why the subscription settled. `timeout`/`closed-early` are the partial cases. */
 export type WsFinishReason =
   | 'caught-up'
+  | 'complete'
   | 'idle'
   | 'initial-silence'
   | 'graceful-close'
@@ -147,6 +149,12 @@ export function subscribeGraphqlWs<TResult>(
 
       if (msg.type === 'error') {
         finishErr(new Error(`GraphQL subscription error: ${JSON.stringify(msg.payload)?.slice(0, 300)}`));
+        return;
+      }
+
+      // A bounded query (one with an end, such as a block range) ends with complete.
+      if (msg.type === 'complete') {
+        finishOk('complete', false);
         return;
       }
 
