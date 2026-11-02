@@ -185,6 +185,8 @@ export interface CommandDefinition {
   /** Its place among the installed commands, which help lists in this order; a plugin takes one no other command has. */
   readonly order: number;
   readonly subcommands?: readonly string[];
+  /** Other spellings its handler takes for a subcommand: `ls` for `list`. */
+  readonly subcommandAliases?: Readonly<Record<string, string>>;
   readonly flags: readonly FlagDefinition[];
   /** Absent: help does not list the command. */
   readonly help?: CommandHelp;
@@ -259,6 +261,9 @@ function checkDefinition(command: CommandDefinition): void {
     if (flag?.help === undefined) throw new CommandDefinitionError(`${command.name}: help shows --${entry.flag}, which has no help lines`);
     if (shown.has(entry.flag)) throw new CommandDefinitionError(`${command.name}: help shows --${entry.flag} twice`);
     shown.add(entry.flag);
+  }
+  for (const [alias, sub] of Object.entries(command.subcommandAliases ?? {})) {
+    if (!command.subcommands?.includes(sub)) throw new CommandDefinitionError(`${command.name}: "${alias}" stands for "${sub}", not one of its subcommands`);
   }
   for (const flag of command.flags) {
     if (flag.help !== undefined && !shown.has(flag.name)) throw new CommandDefinitionError(`${command.name}: --${flag.name} has help lines that help never shows`);

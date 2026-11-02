@@ -63,7 +63,9 @@ export const testDefinition: CommandDefinition = {
     {
       name: 'network',
       takesValue: true,
-      help: ['--network <name>              Network for the generated suite (default: undeployed)'],
+      // run takes its network from dapp.test.json.
+      subcommands: ['create'],
+      help: ['--network <name>              Network for the generated suite (create; default: undeployed)'],
       agent: NETWORK_PARAM,
     },
     {
@@ -75,7 +77,9 @@ export const testDefinition: CommandDefinition = {
     {
       name: 'path',
       takesValue: true,
-      help: ['--path <dir>                  dApp directory (default: cwd)'],
+      // run and results find the dApp from the working directory.
+      subcommands: ['create'],
+      help: ['--path <dir>                  dApp directory (create; default: cwd)'],
       agent: { type: 'string', description: 'dApp directory (defaults to cwd)' },
     },
     {
@@ -106,8 +110,8 @@ export const testDefinition: CommandDefinition = {
     {
       name: 'suite',
       takesValue: true,
-      subcommands: ['run', 'create'],
-      help: ['--suite <name>                Select a specific test suite (run, create)'],
+      subcommands: ['run', 'create', 'results'],
+      help: ['--suite <name>                Select a specific test suite (run, create, results)'],
       agent: { type: 'string', description: 'Suite directory name under tests/suites/ (auto-derived from circuit/screen when AI scaffolds)' },
     },
     {
