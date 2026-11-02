@@ -82,6 +82,26 @@ describe('balance command — reads address from wallet file', () => {
     expect(err).toContain('Unshielded');
     expect(err).toContain('Shielded');
   });
+
+  it('lists the shielded test tokens genesis holds, by raw type, in the text and in --json', async () => {
+    // Every dev chain's genesis wallet holds two shielded test tokens beside NIGHT.
+    const tokens = ['00'.repeat(31) + '01', '00'.repeat(31) + '02'];
+    const walletFile = path.join(TEST_DIR, 'wallet.json');
+    saveWalletConfig({ seed: GENESIS_SEED, addresses: deriveAllAddresses(genesisSeedBuffer), createdAt: '2026-01-01T00:00:00.000Z' }, walletFile);
+
+    await cliCall(balanceCommand, parseArgs(['balance', '--wallet', walletFile, '--network', 'undeployed']));
+    for (const token of tokens) {
+      expect(io.stdout()).toMatch(new RegExp(`^SHIELDED_${token}=[1-9]\\d*$`, 'm'));
+      expect(io.stderr()).toContain(token);
+    }
+
+    io.restore();
+    io = captureOutput();
+    await cliCall(balanceCommand, parseArgs(['balance', '--wallet', walletFile, '--network', 'undeployed', '--json']));
+    const data = JSON.parse(io.stdout().trim());
+    for (const token of tokens) expect(data.shielded.tokens[token]).toMatch(/^[1-9]\d*$/);
+    expect(data.shielded.tokens).not.toHaveProperty('NIGHT');
+  });
 });
 
 

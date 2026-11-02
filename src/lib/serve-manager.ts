@@ -31,6 +31,8 @@ export interface ServeManagerOptions {
   dustWaitMs?: number;
   /** The SDK warnings of the call that serves, listened to while its wallet runs. */
   sdkWarnings: CallSdkWarnings;
+  /** Sync the shielded wallet even where the network has no shielded faucet. */
+  forceShielded?: boolean;
   /** Cancels the start: what was started is stopped, and the start fails with CancelledError. */
   signal?: AbortSignal;
 }
@@ -246,8 +248,8 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
       network: networkName,
       networkConfig,
       address,
-      // As `mn serve` does: skip the slow shielded sync where shielded is unusable (no faucet).
-      syncMode: shieldedSyncEnabled(networkName) ? 'full' : 'lite',
+      // As `mn serve` does: skip the slow shielded sync where shielded is unusable (no faucet), unless forced.
+      syncMode: shieldedSyncEnabled(networkName, options.forceShielded) ? 'full' : 'lite',
       dustWaitMs: options.dustWaitMs,
       signal,
       onMessage,

@@ -7,7 +7,7 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { type ParsedArgs, hasFlag, getFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { payerFor, resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
+import { type ConnectOptions, payerFor, resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import type { SwapLeg, SwapTerms } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
 import { header, keyValue } from '@kuiralabs/midnight-cli-core/ui/format';
@@ -20,6 +20,8 @@ import { prepareMake, prepareTake, readOfferArg } from '../lib/swap/request.ts';
 const legJson = ({ token, amount }: SwapLeg) => ({ token, amount: amount.toString() });
 const termsJson = ({ give, want }: SwapTerms) => ({ give: legJson(give), want: legJson(want) });
 const legText = ({ token, amount }: SwapLeg) => `${amount} of ${token}`;
+// A swap spends shielded coins only: its wallet syncs the shielded side on every network, stagenet included.
+const SHIELDED: ConnectOptions = { shielded: true };
 
 export default async function swapCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
@@ -38,7 +40,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
         ctx.output.stderr(keyValue('Wants', legText(terms.want)) + '\n\n');
       }
       const address = await walletAddress(resolveWalletPath(walletFlag), target.network);
-      const session = await payerFor('swap make', ctx).connect(target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal);
+      const session = await payerFor('swap make', ctx).connect(target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal, SHIELDED);
       try {
         const spinner = spinnerFor('Making the offer (proving its half)...');
         const made = await makeOffer(session, address, terms, expiresAt, now);
@@ -89,7 +91,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
         ctx.output.stderr(keyValue('You pay', legText(agreed.want)) + '\n');
         ctx.output.stderr(keyValue('You get', legText(agreed.give)) + '\n\n');
       }
-      const session = await payerFor('swap take', ctx).connect(target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal);
+      const session = await payerFor('swap take', ctx).connect(target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal, SHIELDED);
       try {
         const spinner = spinnerFor('Checking the offer, adding this half and proving the swap...');
         const txHash = await takeOffer(session, offer, agreed, target.networkConfig, now, ctx.signal);
@@ -111,7 +113,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
       if (id === undefined) throw new UsageError('swap cancel needs the offer\'s id (8 characters of it at least): midnight swap cancel <id>');
       const target = resolvePayingTarget(args, 'swap', 'cancel');
       const address = await walletAddress(resolveWalletPath(walletFlag), target.network);
-      const session = await payerFor('swap cancel', ctx).connect(target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal);
+      const session = await payerFor('swap cancel', ctx).connect(target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal, SHIELDED);
       try {
         const spinner = spinnerFor('Spending the offer\'s coins back to this wallet...');
         const outcome = await cancelOffer(session, target.networkConfig, address, id, ctx.signal);

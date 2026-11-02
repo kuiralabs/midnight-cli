@@ -37,6 +37,8 @@ export interface ShieldedDirectResult {
   balance: bigint;
   /** Number of spendable NIGHT coins tracked. */
   availableCoins: number;
+  /** Shielded tokens other than NIGHT, by raw type, with their balances. */
+  tokens: ReadonlyMap<string, bigint>;
   /** Events applied in this run. */
   eventCount: number;
   /** Final ZswapLocalState — callers serialize this for caching. */
@@ -84,25 +86,28 @@ export interface ShieldedDirectOptions {
   startFromId?: number;
 }
 
-/** Sum spendable native-token (NIGHT) coins in a state. */
-function nativeBalance(state: ledger.ZswapLocalState): { balance: bigint; count: number } {
+/** Sum a state's spendable coins: NIGHT apart, and every other token by its raw type. */
+function balancesOf(state: ledger.ZswapLocalState): { balance: bigint; count: number; tokens: Map<string, bigint> } {
   // Shielded NIGHT coins carry the unshielded raw token type (matches balance.ts / facade).
   const night = ledger.unshieldedToken().raw;
   let balance = 0n;
   let count = 0;
+  const tokens = new Map<string, bigint>();
   for (const coin of state.coins) {
     if (coin.type === night) {
       balance += coin.value;
       count++;
+    } else {
+      tokens.set(coin.type, (tokens.get(coin.type) ?? 0n) + coin.value);
     }
   }
-  return { balance, count };
+  return { balance, count, tokens: new Map([...tokens].sort(([a], [b]) => a.localeCompare(b))) };
 }
 
 /**
  * Subscribe to zswap ledger events from `startFromId`, deserialize, replay into a
  * `ZswapLocalState` with the full secret keys (reconciling receives AND spends),
- * and return the NIGHT balance plus the state + resume cursor.
+ * and return the balances plus the state + resume cursor.
  *
  * "Caught up" is detected when the latest `id` received equals `maxId`.
  */
@@ -180,10 +185,11 @@ export function readShieldedBalanceDirect(
     buildResult: (partial) => {
       try {
         flushPending();
-        const { balance, count } = nativeBalance(state);
+        const { balance, count, tokens } = balancesOf(state);
         return {
           balance,
           availableCoins: count,
+          tokens,
           eventCount: eventsAppliedCount,
           state,
           lastAppliedEventId: lastEventId,

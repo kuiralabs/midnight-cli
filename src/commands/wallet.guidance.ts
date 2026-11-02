@@ -35,7 +35,8 @@ proofs. The CLI provides full shielded support:
     midnight balance --json
     → { address, shieldedAddress, network,
         unshielded: { NIGHT, utxoCount },
-        shielded: { NIGHT, availableCoins, pendingCoins } }
+        shielded: { NIGHT, availableCoins, pendingCoins,
+                    tokens: { <raw token type>: amount } } }
 
   Shielded airdrop (localnet only — genesis has 250M shielded NIGHT):
     midnight airdrop 100 --shielded --json

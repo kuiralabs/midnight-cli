@@ -127,7 +127,7 @@ export type { ShieldedBalanceResult, ShieldedCachedOptions } from '@kuiralabs/mi
 import type { ShieldedBalanceResult, ShieldedCachedOptions } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 /**
- * Read the shielded NIGHT balance for a wallet seed, using (and refreshing) the
+ * Read a wallet seed's shielded balances, using (and refreshing) the
  * indexer-direct cache. Loads any cached ZswapLocalState, resumes the
  * `zswapLedgerEvents` subscription from the last applied event, and persists the
  * extended state. First sync walks the full history (~50-70s on hosted nets);
@@ -176,6 +176,7 @@ export async function readShieldedBalanceCached(
   return {
     balance: result.balance,
     availableCoins: result.availableCoins,
+    tokens: result.tokens,
     eventCount: result.eventCount,
     lastAppliedEventId: result.lastAppliedEventId >= 0
       ? result.lastAppliedEventId
