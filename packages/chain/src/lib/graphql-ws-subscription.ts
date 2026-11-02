@@ -1,5 +1,5 @@
 // Shared graphql-transport-ws subscription driver for the direct-from-indexer
-// readers (shielded-direct, dust-direct, dust-balance-direct). Each reader used
+// readers (shielded-direct, dust-direct). Each reader used
 // to hand-maintain the same connection_init → connection_ack → subscribe →
 // next/error/close handshake plus the settle-once / cleanup / idle-timer /
 // timeout / abort scaffolding; the guards drifted between copies. This centralizes
