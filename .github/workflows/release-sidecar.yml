@@ -158,6 +158,29 @@ jobs:
               echo "skipping $pkg — no binary"
             fi
           done
+      # mn depends on its workspace packages (core, chain, one engine per SDK
+      # set) at exact versions: each publishes first, unless that version is
+      # on npm already, under the same dist-tag as mn.
+      - run: npm run build
+      - name: Publish the workspace packages mn depends on
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in packages/cli-core packages/chain packages/engine-rc packages/engine-beta; do
+            name="$(node -p "require('./$dir/package.json').name")"
+            version="$(node -p "require('./$dir/package.json').version")"
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is published already"
+            else
+              ( cd "$dir" && npm publish --access public ${{ env.PRERELEASE == 'true' && '--tag next' || '' }} )
+            fi
+          done
+      # The tree the tests ran on, shipped with mn so a user's npm installs it
+      # (each engine's SDK set kept apart). Written only here, never committed.
+      - name: Write the shrinkwrap mn ships
+        run: node scripts/make-shrinkwrap.mjs
       - name: Publish main package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

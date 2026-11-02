@@ -52,6 +52,8 @@ export const coreGuidance: PackageGuidance = {
                                 network runs on the other (an MCP server that
                                 served rc now asked for stagenet); start a
                                 server for that network
+  MIXED_SDK_LAYOUT        1     mn was installed without its shrinkwrap (bun's
+                                installer): install it with npm
   CANCELLED               7     Operation cancelled (SIGINT)
   UNKNOWN                 1     Unclassified error
 `,

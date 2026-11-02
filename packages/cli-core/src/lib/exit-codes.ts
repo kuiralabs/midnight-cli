@@ -57,6 +57,8 @@ export const ERROR_CODES = {
   ENDPOINT_SHUT_DOWN: 'ENDPOINT_SHUT_DOWN',
   /** The process has loaded one SDK set's engine and the call's network runs on the other. Recovery: run the call in a process of its own (for MCP, a server for that network). */
   OTHER_SDK_SET: 'OTHER_SDK_SET',
+  /** An engine's SDK packages reach more than one copy of its ledger: mn was installed without its shrinkwrap (bun's installer). Recovery: install mn with npm. */
+  MIXED_SDK_LAYOUT: 'MIXED_SDK_LAYOUT',
   /** mn's passphrase was wrong, or a sealed secret was changed. Recovery: run it again with the passphrase mn was protected with. */
   WRONG_PASSPHRASE: 'WRONG_PASSPHRASE',
   /** A secret was needed and no passphrase could be had. Recovery: set MN_PASSPHRASE, or run at a terminal. */
@@ -106,6 +108,9 @@ export function classifyError(err: Error): ClassifiedError {
   }
   if (code === ERROR_CODES.UNSUPPORTED_NODE) {
     return { exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.UNSUPPORTED_NODE };
+  }
+  if (code === ERROR_CODES.MIXED_SDK_LAYOUT) {
+    return { exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.MIXED_SDK_LAYOUT };
   }
   if (code === ERROR_CODES.OTHER_SDK_SET) {
     return { exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.OTHER_SDK_SET };
