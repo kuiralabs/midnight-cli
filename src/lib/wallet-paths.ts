@@ -4,9 +4,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE } from './constants.ts';
-import { loadCliConfig, saveCliConfig } from './cli-config.ts';
-import { stateRoot } from './state-root.ts';
+import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { loadCliConfig, saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
+import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
 
 function getMidnightDir(): string {
   return stateRoot();

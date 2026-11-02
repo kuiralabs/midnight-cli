@@ -8,9 +8,9 @@ import {
   BlockfrostLimitError, BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, EndpointShutDownError,
   assertEndpointUsable, blockfrostEndpoints, checkProjectId, endpointRefusal, endpointRefusalFromWsError, isBlockfrostUrl,
   maskProjectId, mayHoldProjectId, networkOfProjectId, redactProjectId, usesBlockfrost,
-} from '../lib/blockfrost.ts';
-import { UsageError } from '../lib/errors.ts';
-import { ERROR_CODES, EXIT_NETWORK_ERROR, classifyError } from '../lib/exit-codes.ts';
+} from '@kuiralabs/midnight-cli-core/lib/blockfrost';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { ERROR_CODES, EXIT_NETWORK_ERROR, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 
 const ID = 'nightpreprodAbCdEfGhIjKlMnOpQrStUv0123';
 const WITH_ID = blockfrostEndpoints('preprod', ID);

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import helpCommand from '../commands/help.ts';
-import { parseArgs } from '../lib/argv.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 
@@ -32,7 +32,7 @@ describe('help --agent', () => {
   });
 
   it('lists every error code mn can return', async () => {
-    const { ERROR_CODES } = await import('../lib/exit-codes.ts');
+    const { ERROR_CODES } = await import('@kuiralabs/midnight-cli-core/lib/exit-codes');
     await cliCall(helpCommand, parseArgs(['help', '--agent']));
     const table = io.stdout().split('ERROR CODES')[1]!.split('MCP SERVER')[0]!;
     const missing = Object.values(ERROR_CODES).filter((code) => !new RegExp(`^  ${code}\\s+\\d`, 'm').test(table));

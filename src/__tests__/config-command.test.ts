@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import configCommand from '../commands/config.ts';
-import { parseArgs } from '../lib/argv.ts';
-import { loadCliConfig } from '../lib/cli-config.ts';
+import configCommand from '@kuiralabs/midnight-cli-core/commands/config';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { loadCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 

@@ -8,8 +8,8 @@
 // owner key) and roster.json, with the private state in the directory's
 // midnight-level-db under the store name and password it was first made with.
 
-import { notice } from '../notices.ts';
-import { anyEngine } from '../engine.ts';
+import { notice } from '@kuiralabs/midnight-cli-core/lib/notices';
+import { anyEngine } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { join } from 'node:path';
 import { artefactCache } from '@kuiralabs/midnight-account-chain/artefacts';
 import { type AccountContext, type ProgressEvent, accountContext, describeProgress, networkOf } from '@kuiralabs/midnight-account-chain/context';
@@ -36,9 +36,9 @@ import {
   sealedOwnerStore,
   sealedPrivateStatePassword,
 } from './sealed-account.ts';
-import { UsageError } from '../errors.ts';
-import type { NetworkConfig } from '../network.ts';
-import { stateRoot } from '../state-root.ts';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
 
 /** Where the account package caches its proving artefacts, under ~/.midnight: each file is fetched the first time a command proves with it. */
 const ACCOUNT_ARTIFACTS_DIR_NAME = 'account-artifacts';

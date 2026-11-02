@@ -1,6 +1,6 @@
 // The `dev` command, described once.
 
-import type { CommandDefinition } from '../lib/command-definition.ts';
+import type { CommandDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 
 export const devDefinition: CommandDefinition = {
   name: 'dev',

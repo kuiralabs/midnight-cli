@@ -1,8 +1,8 @@
 // What `mn grant` is asked to do, checked from its arguments alone.
 
 import { describe, expect, it } from 'vitest';
-import { parseArgs } from '../lib/argv.ts';
-import { UsageError } from '../lib/errors.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { describeGrantTerms, paysAFee, resolveGrantRequest } from '../lib/grant/request.ts';
 
 const request = (...argv: string[]) => resolveGrantRequest(parseArgs(['grant', ...argv]));

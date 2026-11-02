@@ -162,7 +162,7 @@ function sdkLoads(home) {
     "import { appendFileSync } from 'node:fs';",
     `const log = ${JSON.stringify(log)};`,
     'export async function resolve(specifier, context, next) {',
-    '  const m = specifier.match(/^(@midnight(?:-ntwrk|ntwrk)\\/[^/]+|@kuiralabs\\/[^/]+)/);',
+    '  const m = specifier.match(/^(@midnight(?:-ntwrk|ntwrk)\\/[^/]+|@kuiralabs\\/midnight-account[^/]*)/);',
     "  if (m) appendFileSync(log, m[1] + '\\n');",
     '  return next(specifier, context);',
     '}',

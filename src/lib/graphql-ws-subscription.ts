@@ -18,8 +18,8 @@
 // `partial=true` means "state is valid but not caught up — persist and resume".
 
 import WebSocket from 'ws';
-import { CancelledError } from './errors.ts';
-import { assertEndpointUsable, endpointRefusalFromWsError } from './blockfrost.ts';
+import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { assertEndpointUsable, endpointRefusalFromWsError } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
 
 /** Why the subscription settled. `timeout`/`closed-early` are the partial cases. */
 export type WsFinishReason =

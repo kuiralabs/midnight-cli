@@ -1,7 +1,7 @@
 // What is asked of a network's endpoints before a wallet sync starts.
 
 import { describe, expect, it } from 'vitest';
-import { BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, EndpointShutDownError, blockfrostEndpoints } from '../lib/blockfrost.ts';
+import { BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, EndpointShutDownError, blockfrostEndpoints } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
 import { assertNetworkAnswers } from '../lib/endpoint-check.ts';
 
 const ID = 'nightpreprodAbCdEfGhIjKlMnOpQrStUv0123';

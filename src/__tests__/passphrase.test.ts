@@ -8,7 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { WrongPassphraseError } from '../lib/keystore.ts';
+import { WrongPassphraseError } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import {
   NoPassphraseError,
   PASSPHRASE_ENV,
@@ -19,8 +19,8 @@ import {
   readPassphrase,
   unlockPassphrase,
 } from '../lib/passphrase.ts';
-import { FILE_MODE } from '../lib/constants.ts';
-import { createTerminalPrompter } from '../ui/terminal-prompter.ts';
+import { FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui/terminal-prompter';
 import { stateRootIn } from './helpers/state-root-in.ts';
 
 const PASSPHRASE = 'correct horse battery staple';

@@ -1,18 +1,18 @@
 // Contract commands — inspect, deploy, call, and query state for compiled Midnight contracts.
 
 import { resolve } from 'node:path';
-import { type ParsedArgs, getFlag, hasFlag, requireFlag } from '../lib/argv.ts';
-import { CancelledError, UsageError, throwIfCancelled } from '../lib/errors.ts';
-import { untilCancelled } from '../lib/sleep.ts';
-import type { CallContext, CallOutput } from '../lib/call-context.ts';
-import { header, keyValue } from '../ui/format.ts';
-import { bold, dim, teal, yellow, green } from '../ui/colors.ts';
+import { type ParsedArgs, getFlag, hasFlag, requireFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { CancelledError, UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { untilCancelled } from '@kuiralabs/midnight-cli-core/lib/sleep';
+import type { CallContext, CallOutput } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { header, keyValue } from '@kuiralabs/midnight-cli-core/ui/format';
+import { bold, dim, teal, yellow, green } from '@kuiralabs/midnight-cli-core/ui/colors';
 
-import { type Payer, payerFor, resolvePayingTarget } from '../lib/payer.ts';
+import { type Payer, payerFor, resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
 import { deployContract } from '../lib/contract/deploy.ts';
 import { callContract } from '../lib/contract/call.ts';
 import { validateContractAddress } from '../lib/contract/validate.ts';
-import { engineFor, type RawStateValue } from '../lib/engine.ts';
+import { engineFor, type RawStateValue } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { resolveContractCallRequest, resolveContractDeployRequest, resolveScanDir } from '../lib/contract/request.ts';
 import {
   findContractInfo,

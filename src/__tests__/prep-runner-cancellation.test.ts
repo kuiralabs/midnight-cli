@@ -4,8 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { runPrepSteps } from '../lib/test/prep-runner.ts';
 import { createPrepContext, type DappTestConfig } from '../lib/test/types.ts';
-import { createSdkWarningRouter } from '../lib/sdk-warnings.ts';
-import { CancelledError } from '../lib/errors.ts';
+import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 const config = { network: 'undeployed', prep: ['dust', 'mn-serve'] } as unknown as DappTestConfig;
 

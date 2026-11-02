@@ -1,5 +1,5 @@
 import { ShieldedWallet } from '@midnightntwrk/wallet-sdk/shielded';
-import { notice } from '../../lib/notices.ts';
+import { notice } from '@kuiralabs/midnight-cli-core/lib/notices';
 import {
   UnshieldedWallet,
   createKeystore,
@@ -18,22 +18,22 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk';
 import * as rx from 'rxjs';
 
-import { type NetworkConfig } from '../../lib/network.ts';
+import { type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { FORK_SCHEDULE } from './fork-schedule.ts';
-import { getNetworkId } from '../../lib/network-id.ts';
+import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
 import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from './derivation.ts';
-import { type WalletCacheData } from '../../lib/wallet-cache.ts';
+import { type WalletCacheData } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
 import { loadDustCache, dustPublicKeyHex, type DustCacheEntry } from './dust-direct-cache.ts';
 import {
   DUST_COST_OVERHEAD,
   DUST_FEE_BLOCKS_MARGIN,
   SYNC_TIMEOUT_MS,
   PRE_SEND_SYNC_TIMEOUT_MS,
-} from '../../lib/constants.ts';
-import type { VerboseLog } from '../../lib/verbose.ts';
+} from '@kuiralabs/midnight-cli-core/lib/constants';
+import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
 import { assertNetworkAnswers } from '../../lib/endpoint-check.ts';
 import { isStreamEmpty } from '../../lib/event-tip.ts';
-import { CancelledError, throwIfCancelled } from '../../lib/errors.ts';
+import { CancelledError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export type SyncMode = 'full' | 'lite' | 'no-dust';
 // full    = shielded + unshielded + dust

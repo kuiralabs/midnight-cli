@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { shieldedCoinPublicKeyHexFromSeed, loadShieldedCache, saveShieldedCache } from '../engine/rc/shielded-direct-cache.ts';
-import { getShieldedCachePath, clearShieldedDirectCache } from '../lib/reader-cache-files.ts';
+import { getShieldedCachePath, clearShieldedDirectCache } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
 
 const PUBKEY = 'aabbccddeeff00112233445566778899aabbccddeeff001122334455667788ff';
 const OTHER_PUBKEY = '1122334455667788112233445566778811223344556677881122334455667788';

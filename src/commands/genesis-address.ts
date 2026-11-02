@@ -1,12 +1,12 @@
 // genesis-address command — display the genesis wallet address (seed 0x01)
 
-import { type ParsedArgs, hasFlag } from '../lib/argv.ts';
-import { GENESIS_SEED } from '../lib/constants.ts';
-import { engineFor } from '../lib/engine.ts';
-import { resolveNetworkName } from '../lib/resolve-network.ts';
-import { keyValue, divider, formatAddress } from '../ui/format.ts';
-import { dim } from '../ui/colors.ts';
-import type { CallContext } from '../lib/call-context.ts';
+import { type ParsedArgs, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
+import { keyValue, divider, formatAddress } from '@kuiralabs/midnight-cli-core/ui/format';
+import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
+import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 
 export default async function genesisAddressCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const networkName = resolveNetworkName({ args });

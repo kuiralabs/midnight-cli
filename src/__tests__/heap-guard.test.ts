@@ -4,7 +4,7 @@ import {
   SYNC_HEAP_TARGET_MB,
   SYNC_HEAP_RAM_FRACTION,
   SYNC_HEAP_MIN_GAIN_MB,
-} from '../lib/constants.ts';
+} from '@kuiralabs/midnight-cli-core/lib/constants';
 
 describe('computeHeapTargetMb', () => {
   // The OOM repro: a 128 GB box with Node's default ~4.3 GB old-space cap.

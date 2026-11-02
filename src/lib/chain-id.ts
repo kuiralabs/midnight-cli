@@ -5,7 +5,7 @@
 // preprod reset that advanced the chain past our cache).
 
 import { callNodeRpc } from './node-rpc.ts';
-import { throwIfCancelled } from './errors.ts';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 /** Memoise genesis-hash lookups so back-to-back commands don't re-fetch. */
 const CHAIN_ID_MEMO = new Map<string, { hash: string; fetchedAt: number }>();

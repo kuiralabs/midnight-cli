@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { notice, setNoticeSink } from '../lib/notices.ts';
+import { notice, setNoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 import { unlockWallet } from '../lib/wallet-config.ts';
 import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';

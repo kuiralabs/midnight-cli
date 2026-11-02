@@ -13,7 +13,7 @@
 // never opened under the public password its private state has left.
 
 import * as fs from 'node:fs';
-import { anyEngine } from '../engine.ts';
+import { anyEngine } from '@kuiralabs/midnight-cli-core/lib/engine';
 import * as path from 'node:path';
 import type { Arm } from '@kuiralabs/midnight-account';
 import { changePrivateStatePassword, directoryOwnerStore, ownerDeviceFromSecret } from '@kuiralabs/midnight-account-chain/owner';

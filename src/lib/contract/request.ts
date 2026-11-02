@@ -3,8 +3,8 @@
 // wallet syncs, the MCP server before it issues a confirmation token.
 
 import { resolve } from 'node:path';
-import { type ParsedArgs, getFlag, requireFlag } from '../argv.ts';
-import { UsageError } from '../errors.ts';
+import { type ParsedArgs, getFlag, requireFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { findContractInfo, type ContractInfo } from './inspect.ts';
 import { findWitnessFile, buildMissingWitnessError } from './witness-discovery.ts';
 import { validateCallRequest, validateContractAddress } from './validate.ts';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toHex, fromHex } from '../lib/tx-serde.ts';
+import { toHex, fromHex } from '@kuiralabs/midnight-cli-core/lib/tx-serde';
 
 describe('tx-serde', () => {
   describe('toHex', () => {

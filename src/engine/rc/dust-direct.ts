@@ -16,9 +16,9 @@ import {
   INITIAL_NIGHT_DUST_RATIO,
   INITIAL_GENERATION_DECAY_RATE,
   INITIAL_DUST_GRACE_PERIOD_SECONDS,
-} from '../../lib/constants.ts';
+} from '@kuiralabs/midnight-cli-core/lib/constants';
 import { subscribeGraphqlWs } from '../../lib/graphql-ws-subscription.ts';
-import { settings } from '../../lib/settings.ts';
+import { settings } from '@kuiralabs/midnight-cli-core/lib/settings';
 
 // MN_DISABLE_DUST_COLLAPSE=1 disables the dust generation-tree collapse (debugging / safety valve): settings().isDustCollapseOff.
 

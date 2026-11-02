@@ -2,9 +2,9 @@
 // Deploy/call use the runner (generated scripts in dApp context) which build their own providers.
 
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
-import { assertEndpointUsable } from '../../lib/blockfrost.ts';
-import type { NetworkConfig } from '../../lib/network.ts';
-import type { RawStateValue } from '../../lib/engine.ts';
+import { assertEndpointUsable } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
+import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import type { RawStateValue } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { describeRawState } from './raw-state.ts';
 
 /**

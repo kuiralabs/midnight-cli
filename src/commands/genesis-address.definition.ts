@@ -1,6 +1,6 @@
 // The `genesis-address` command, described once.
 
-import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition.ts';
+import { type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 
 export const genesisAddressDefinition: CommandDefinition = {
   name: 'genesis-address',

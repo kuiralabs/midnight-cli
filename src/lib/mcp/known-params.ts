@@ -2,7 +2,7 @@
 // parameter outside the tool's schema is refused, and so is one whose value
 // is not the type its schema says.
 
-import { UsageError } from '../errors.ts';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 /** A parameter's schema as the server checks it. */
 interface ParamCheck {

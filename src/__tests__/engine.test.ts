@@ -2,8 +2,8 @@
 // same for work every set does alike.
 
 import { describe, expect, it } from 'vitest';
-import { anyEngine, engineFor, sdkSetOf } from '../lib/engine.ts';
-import { getValidNetworkNames, type NetworkName } from '../lib/network.ts';
+import { anyEngine, engineFor, sdkSetOf } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { getValidNetworkNames, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { rcEngine } from '../engine/rc/index.ts';
 
 describe('the engine for a network', () => {

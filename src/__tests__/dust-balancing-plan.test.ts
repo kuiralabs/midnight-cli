@@ -4,7 +4,7 @@
 // combines them: the smallest first, until they cover what is owed.
 
 import { describe, expect, it } from 'vitest';
-import { type DustInput, chooseDustCoins, planDustInputs, spreadFeeAcrossInputs } from '../lib/dust-balancing-plan.ts';
+import { type DustInput, chooseDustCoins, planDustInputs, spreadFeeAcrossInputs } from '@kuiralabs/midnight-cli-core/lib/dust-balancing-plan';
 
 type Coin = DustInput<string>;
 const coin = (token: string, value: bigint): Coin => ({ token, value });

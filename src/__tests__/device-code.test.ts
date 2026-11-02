@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { freshOwnerDevice } from '@kuiralabs/midnight-account-chain/owner';
-import { UsageError } from '../lib/errors.ts';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { verifyReadKeyAttestation } from '@kuiralabs/midnight-account';
 import { deviceCodeOf, deviceKeyOf, identityCodeOf, joinCodeOf, parseDeviceCode } from '../lib/grant/device-code.ts';
 

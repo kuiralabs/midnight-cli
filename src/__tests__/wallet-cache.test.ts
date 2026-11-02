@@ -9,8 +9,8 @@ import {
   saveWalletCache,
   clearWalletCache,
   getCachePath,
-} from '../lib/wallet-cache.ts';
-import { CACHE_VERSION } from '../lib/constants.ts';
+} from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
+import { CACHE_VERSION } from '@kuiralabs/midnight-cli-core/lib/constants';
 
 const TEST_ADDRESS = 'mn_addr_preprod1mp06mtx1234567890abcdef';
 const TEST_NETWORK = 'preprod';

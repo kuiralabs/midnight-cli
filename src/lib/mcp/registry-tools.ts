@@ -5,8 +5,8 @@
 // the confirmation flow gives.
 
 import { type CommandRun, captureCommand } from '../run-command.ts';
-import { getEndpointOverridesForNetwork, loadCliConfig } from '../cli-config.ts';
-import { resolveNetworkName } from '../resolve-network.ts';
+import { getEndpointOverridesForNetwork, loadCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
+import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import {
   type CommandRegistry,
   type RegisteredTool,
@@ -14,7 +14,7 @@ import {
   type ToolInputSchema,
   confirmationText,
   toolArgv,
-} from '../command-definition.ts';
+} from '@kuiralabs/midnight-cli-core/lib/command-definition';
 
 /** A tool as tools/list sends it. */
 export interface ListedTool {

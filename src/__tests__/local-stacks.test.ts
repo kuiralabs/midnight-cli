@@ -11,7 +11,7 @@ import {
   pickLocalStack,
   resolveNetworkConfig,
   AmbiguousLocalStacksError,
-} from '../lib/network.ts';
+} from '@kuiralabs/midnight-cli-core/lib/network';
 
 const SCRATCH = [
   'midnightntwrk/indexer-standalone:4.4.0-rc.5|0.0.0.0:28088->8088/tcp, [::]:28088->8088/tcp',
@@ -142,8 +142,8 @@ describe('resolveNetwork', () => {
   }
 
   it('applies endpoints saved with `midnight config set`, for commands with no endpoint flags', async () => {
-    const { resolveNetwork } = await import('../lib/resolve-network.ts');
-    const { parseArgs } = await import('../lib/argv.ts');
+    const { resolveNetwork } = await import('@kuiralabs/midnight-cli-core/lib/resolve-network');
+    const { parseArgs } = await import('@kuiralabs/midnight-cli-core/lib/argv');
     await withConfig({
       network: 'undeployed',
       networks: { undeployed: { node: 'ws://localhost:29944', 'indexer-ws': 'ws://localhost:28088/api/v4/graphql/ws', 'proof-server': 'http://localhost:26300' } },
@@ -157,8 +157,8 @@ describe('resolveNetwork', () => {
   });
 
   it('lets a flag win over the saved config', async () => {
-    const { resolveNetwork } = await import('../lib/resolve-network.ts');
-    const { parseArgs } = await import('../lib/argv.ts');
+    const { resolveNetwork } = await import('@kuiralabs/midnight-cli-core/lib/resolve-network');
+    const { parseArgs } = await import('@kuiralabs/midnight-cli-core/lib/argv');
     await withConfig({ network: 'undeployed', networks: { undeployed: { node: 'ws://localhost:29944' } } }, (configDir) => {
       const { config } = resolveNetwork({ args: parseArgs(['balance', '--node', 'ws://localhost:39944']), configDir });
       expect(config.node).toBe('ws://localhost:39944');
@@ -166,8 +166,8 @@ describe('resolveNetwork', () => {
   });
 
   it('keeps one network\'s saved endpoints away from another', async () => {
-    const { resolveNetwork } = await import('../lib/resolve-network.ts');
-    const { parseArgs } = await import('../lib/argv.ts');
+    const { resolveNetwork } = await import('@kuiralabs/midnight-cli-core/lib/resolve-network');
+    const { parseArgs } = await import('@kuiralabs/midnight-cli-core/lib/argv');
     await withConfig({ network: 'preview', networks: { preview: { 'proof-server': 'http://preview-prover:6300' } } }, (configDir) => {
       const { config } = resolveNetwork({ args: parseArgs(['balance', '--network', 'preprod']), configDir });
       expect(config.proofServer).toBe('http://localhost:6300');
@@ -175,8 +175,8 @@ describe('resolveNetwork', () => {
   });
 
   it('with every endpoint given by flag, works whatever docker runs', async () => {
-    const { resolveNetwork } = await import('../lib/resolve-network.ts');
-    const { parseArgs } = await import('../lib/argv.ts');
+    const { resolveNetwork } = await import('@kuiralabs/midnight-cli-core/lib/resolve-network');
+    const { parseArgs } = await import('@kuiralabs/midnight-cli-core/lib/argv');
     await withConfig(null, (configDir) => {
       const { name, config } = resolveNetwork({
         args: parseArgs(['balance', '--network', 'undeployed', '--node', 'ws://localhost:29944',

@@ -21,7 +21,7 @@ import {
   sealedResponseLink,
   termsFor,
 } from '@kuiralabs/midnight-account-chain/owner';
-import { UsageError } from '../errors.ts';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import type { GrantLimits as RequestedLimits } from './request.ts';
 
 /** What a command gives: its result, and the lines a person reads. */

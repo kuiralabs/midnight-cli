@@ -23,7 +23,7 @@ import {
 import * as rcScripts from '../engine/rc/contract-scripts.ts';
 import { SCRIPT_PACKAGES, packageFolder } from '../engine/rc/contract-scripts.ts';
 import { rcEngine } from '../engine/rc/index.ts';
-import type { CallScript, DeployScript, StateScript } from '../lib/engine.ts';
+import type { CallScript, DeployScript, StateScript } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 // The rc engine's scripts, with the parts the runner gives every engine.
 const generateDeployScript = (opts: DeployScript & { dappDir?: string }): string => rcScripts.generateDeployScript(opts, SCRIPT_PARTS);

@@ -5,8 +5,8 @@
 // polls the proof-server's `/` status endpoint until it returns a 2xx with
 // `{"status":"ok",...}` before `mn localnet up` claims readiness.
 
-import { throwIfCancelled } from './errors.ts';
-import { sleep } from './sleep.ts';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { sleep } from '@kuiralabs/midnight-cli-core/lib/sleep';
 
 export interface WaitForProofServerOptions {
   /** Overall deadline for the wait. Default 30s. */

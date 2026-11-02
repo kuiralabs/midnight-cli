@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { ChainClockBehindError, CHAIN_CLOCK_TOLERANCE_MS, assertChainClockCurrent, fetchChainTime } from '../lib/chain-clock.ts';
-import { classifyError, EXIT_NETWORK_ERROR } from '../lib/exit-codes.ts';
+import { classifyError, EXIT_NETWORK_ERROR } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { startLocalIndexer, type LocalIndexer } from './helpers/local-indexer.ts';
 
 const LAGGING_BLOCK = 1_791_116_964_002; // 2026-10-04T12:29:24.002Z

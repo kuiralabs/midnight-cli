@@ -3,8 +3,8 @@
 // processes (this Node, running a short script), never on Docker.
 
 import { describe, expect, it } from 'vitest';
-import { CancelledError } from '../lib/errors.ts';
-import { execProgram, ProgramFailedError, ProgramTimedOutError } from '../lib/exec-program.ts';
+import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { execProgram, ProgramFailedError, ProgramTimedOutError } from '@kuiralabs/midnight-cli-core/lib/exec-program';
 
 /** Whether a process with this id is still alive. */
 function isAlive(pid: number): boolean {

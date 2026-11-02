@@ -5,10 +5,10 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { setSettingsSource, settingsFromEnvironment } from '../../lib/settings.ts';
-import { setHostPathsSource } from '../../lib/state-root.ts';
-import { MIDNIGHT_DIR } from '../../lib/constants.ts';
-import { setEngineLoader } from '../../lib/engine.ts';
+import { setSettingsSource, settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
+import { setHostPathsSource } from '@kuiralabs/midnight-cli-core/lib/state-root';
+import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { setEngineLoader } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { loadInstalledEngine } from '../../lib/installed-engines.ts';
 
 setSettingsSource(() => settingsFromEnvironment(process.env));

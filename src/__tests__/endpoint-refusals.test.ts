@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { checkBalance } from '../lib/balance-subscription.ts';
-import { BlockfrostProjectIdRequiredError, EndpointShutDownError, blockfrostEndpoints } from '../lib/blockfrost.ts';
+import { BlockfrostProjectIdRequiredError, EndpointShutDownError, blockfrostEndpoints } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
 import { subscribeGraphqlWs } from '../lib/graphql-ws-subscription.ts';
 import { callNodeRpc } from '../lib/node-rpc.ts';
 

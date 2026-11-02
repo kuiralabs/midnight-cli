@@ -3,9 +3,9 @@
 // settings source behaves as if none were set, whatever the environment says.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { setSettingsSource, settings, settingsFromEnvironment } from '../lib/settings.ts';
-import { resolveBlockfrostProjectId } from '../lib/resolve-network.ts';
-import { detectLocalStacks } from '../lib/network.ts';
+import { setSettingsSource, settings, settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
+import { resolveBlockfrostProjectId } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
+import { detectLocalStacks } from '@kuiralabs/midnight-cli-core/lib/network';
 import { readPassphrase, NoPassphraseError } from '../lib/passphrase.ts';
 
 afterEach(() => {

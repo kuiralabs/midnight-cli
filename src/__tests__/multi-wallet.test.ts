@@ -16,7 +16,7 @@ import {
   loadCliConfig,
   saveCliConfig,
   type CliConfig,
-} from '../lib/cli-config.ts';
+} from '@kuiralabs/midnight-cli-core/lib/cli-config';
 import {
   MIDNIGHT_DIR,
   WALLETS_DIR_NAME,
@@ -25,7 +25,7 @@ import {
   DIR_MODE,
   FILE_MODE,
   isValidWalletName,
-} from '../lib/constants.ts';
+} from '@kuiralabs/midnight-cli-core/lib/constants';
 import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
 
 // Use a temp dir that simulates ~/.midnight

@@ -10,9 +10,9 @@ import {
   ShieldedEncryptionPublicKey,
 } from '@midnightntwrk/wallet-sdk/address-format';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { type NetworkName, getValidNetworkNames } from '../../lib/network.ts';
+import { type NetworkName, getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
 import { deriveShieldedSeed } from './derivation.ts';
-import { networkIdForName } from '../../lib/network-id.ts';
+import { networkIdForName } from '@kuiralabs/midnight-cli-core/lib/network-id';
 
 /**
  * Derive an unshielded address from a seed buffer, network, and optional key index.

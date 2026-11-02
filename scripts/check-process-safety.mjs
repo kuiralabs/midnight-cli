@@ -27,7 +27,7 @@
 import { readFileSync } from 'node:fs';
 import { relative, resolve, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { homeOf, sourceFiles } from './check-layering.mjs';
+import { homeOf, relOf, sourceFiles } from './check-layering.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'src');
@@ -262,7 +262,7 @@ const isCommand = (rel) => rel.startsWith('commands/');
 export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowedState = ALLOWED_STATE, src = SRC) {
   const found = [];
   for (const file of files) {
-    const rel = relative(src, file);
+    const rel = src === SRC ? relOf(file) : relative(src, file);
     const source = readFileSync(file, 'utf8');
     const code = codeOnly(source);
     const lines = code.split('\n');

@@ -2,18 +2,18 @@
 // Usage: midnight dust register | midnight dust status | midnight dust export
 
 
-import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, rejectNoCacheForWrites } from '../lib/argv.ts';
-import { UsageError, throwIfCancelled } from '../lib/errors.ts';
+import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, rejectNoCacheForWrites } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveSeed } from '../lib/seed-resolver.ts';
-import { resolveNetwork } from '../lib/resolve-network.ts';
-import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '../lib/network.ts';
+import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
+import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { checkBalance } from '../lib/balance-subscription.ts';
-import { engineFor } from '../lib/engine.ts';
-import { header, keyValue, divider, formatDust, successMessage, toDust } from '../ui/format.ts';
-import { bold, dim, yellow } from '../ui/colors.ts';
+import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { header, keyValue, divider, formatDust, successMessage, toDust } from '@kuiralabs/midnight-cli-core/ui/format';
+import { bold, dim, yellow } from '@kuiralabs/midnight-cli-core/ui/colors';
 
-import type { CallContext } from '../lib/call-context.ts';
+import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 
 export default async function dustCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const subcommand = args.subcommand;

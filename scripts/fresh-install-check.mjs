@@ -92,13 +92,27 @@ const check = (what, ok, detail = '') => {
 const work = mkdtempSync(join(tmpdir(), 'mn-fresh-install-'));
 try {
   const tarball = run('npm', ['pack', '--pack-destination', work], repo).trim().split('\n').pop();
+  // The workspace packages mn depends on, packed from this checkout too (until
+  // they are published, a consumer's npm finds them nowhere else), and
+  // installed beside it so they satisfy its dependencies.
+  const manifest = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8'));
+  const workspaceTarballs = manifest.workspaces
+    .map((dir) => ({ dir, name: JSON.parse(readFileSync(join(repo, dir, 'package.json'), 'utf-8')).name }))
+    .filter(({ name }) => manifest.dependencies[name] !== undefined)
+    .map(({ dir }) => run('npm', ['pack', '--pack-destination', work], join(repo, dir)).trim().split('\n').pop());
   writeFileSync(join(work, 'package.json'), JSON.stringify({ name: 'fresh-install-check', private: true }));
-  run('npm', ['install', '--no-audit', '--no-fund', join(work, tarball)], work);
+  run('npm', ['install', '--no-audit', '--no-fund', ...workspaceTarballs.map((t) => join(work, t)), join(work, tarball)], work);
 
   const version = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8')).version;
   const mn = join(work, 'node_modules', '.bin', 'mn');
   check('the installed mn runs', run(mn, ['--version'], work).trim() === version, version);
 
+  // One copy of each workspace package: a second copy of core's module state (its settings, its typed errors) splits the process.
+  for (const tarball of workspaceTarballs) {
+    const name = JSON.parse(run('tar', ['-xOzf', join(work, tarball), 'package/package.json'], work)).name;
+    const copies = copiesOf(work, name);
+    check(`one copy of ${name}`, copies.length === 1, copies.join(', '));
+  }
   // One copy each: an object made by one copy of a WASM package is refused by another.
   for (const name of ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/ledger-v8', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4']) {
     const copies = copiesOf(work, name);

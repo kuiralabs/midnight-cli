@@ -3,23 +3,23 @@
 // Dispatches to command handlers via dynamic import
 // Also supports: midnight --mcp (starts MCP server for AI agent integration)
 
-import { parseArgs, hasFlag } from './lib/argv.ts';
-import { errorMessage, usageMessage } from './ui/format.ts';
-import { assertKnownFlags } from './lib/command-flags.ts';
-import { withNodeReason } from './lib/sdk-errors.ts';
+import { parseArgs, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { errorMessage, usageMessage } from '@kuiralabs/midnight-cli-core/ui/format';
+import { assertKnownFlags } from '@kuiralabs/midnight-cli-core/lib/command-flags';
+import { withNodeReason } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { installedCommands } from './lib/installed-commands.ts';
 import { commandNeedsWalletSdk, dispatchCommand, processOutput } from './lib/command-dispatch.ts';
-import type { CommandOutcome } from './lib/call-context.ts';
-import { classifyError, humanizeNetworkError, EXIT_INVALID_ARGS } from './lib/exit-codes.ts';
-import { isUsageError } from './lib/errors.ts';
-import { writeJsonError } from './lib/json-output.ts';
+import type { CommandOutcome } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { classifyError, humanizeNetworkError, EXIT_INVALID_ARGS } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { isUsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { writeJsonError } from '@kuiralabs/midnight-cli-core/lib/json-output';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { migrateOldWallet } from './lib/wallet-paths.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
-import { setPrompter } from './lib/prompter.ts';
-import { createTerminalPrompter } from './ui/terminal-prompter.ts';
+import { setPrompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
+import { createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui/terminal-prompter';
 import { installCliHost } from './lib/cli-host.ts';
 
 // --mcp: start MCP server instead of CLI (for: npx midnight-wallet-cli --mcp)

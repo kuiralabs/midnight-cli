@@ -10,7 +10,7 @@ import {
   unsetConfigValue,
   getValidConfigKeys,
   getBlockfrostProjectId,
-} from '../lib/cli-config.ts';
+} from '@kuiralabs/midnight-cli-core/lib/cli-config';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-cli-config-test-${process.pid}`);
 

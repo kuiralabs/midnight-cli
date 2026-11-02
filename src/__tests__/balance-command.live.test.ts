@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import balanceCommand from '../commands/balance.ts';
-import { parseArgs } from '../lib/argv.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
 import { deriveUnshieldedAddress, deriveAllAddresses } from '../engine/rc/derive-address.ts';
-import { GENESIS_SEED } from '../lib/constants.ts';
+import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 beforeAll(async () => {
-  const { resolveNetwork } = await import('../lib/resolve-network.ts');
+  const { resolveNetwork } = await import('@kuiralabs/midnight-cli-core/lib/resolve-network');
   const { indexer } = resolveNetwork({ args: parseArgs(['balance', '--network', 'undeployed']) }).config;
   const answered = await fetch(indexer, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: '{ block { height } }' }), signal: AbortSignal.timeout(5_000) })
     .then((r) => r.ok, () => false);

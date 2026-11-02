@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { parseArgs } from '../lib/argv.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
-import { classifyError, EXIT_WALLET_NOT_FOUND, EXIT_INVALID_ARGS, EXIT_CANCELLED, EXIT_NETWORK_ERROR, EXIT_INSUFFICIENT_BALANCE, EXIT_TX_REJECTED, EXIT_GENERAL_ERROR, ERROR_CODES } from '../lib/exit-codes.ts';
-import { writeJsonResult, writeJsonError } from '../lib/json-output.ts';
+import { classifyError, EXIT_WALLET_NOT_FOUND, EXIT_INVALID_ARGS, EXIT_CANCELLED, EXIT_NETWORK_ERROR, EXIT_INSUFFICIENT_BALANCE, EXIT_TX_REJECTED, EXIT_GENERAL_ERROR, ERROR_CODES } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { writeJsonResult, writeJsonError } from '@kuiralabs/midnight-cli-core/lib/json-output';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -13,11 +13,11 @@ import infoCommand from '../commands/info.ts';
 import addressCommand from '../commands/address.ts';
 import genesisAddressCommand from '../commands/genesis-address.ts';
 import inspectCostCommand from '../commands/inspect-cost.ts';
-import configCommand from '../commands/config.ts';
+import configCommand from '@kuiralabs/midnight-cli-core/commands/config';
 import helpCommand from '../commands/help.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
 import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
-import { loadCliConfig } from '../lib/cli-config.ts';
+import { loadCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
 import { localIndexerFlags } from './helpers/local-indexer.ts';
 import { cliCall } from './helpers/cli-call.ts';
 

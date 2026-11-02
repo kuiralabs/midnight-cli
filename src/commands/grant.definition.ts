@@ -1,6 +1,6 @@
 // The `grant` command, described once.
 
-import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, confirmationTarget } from '../lib/command-definition.ts';
+import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, confirmationTarget } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 
 /** A grant request can run: its arguments, the network, the account and the wallet are all in order. */
 async function checkGrant(params: Readonly<Record<string, unknown>>, call: ToolCheckCall) {

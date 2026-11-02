@@ -5,9 +5,9 @@
 
 import { mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { DIR_MODE } from '../constants.ts';
+import { DIR_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { getActiveWalletName } from '../wallet-config.ts';
-import { stateRoot } from '../state-root.ts';
+import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
 
 /** The directory under ~/.midnight that holds each network's accounts. */
 export const ACCOUNTS_DIR_NAME = 'accounts';

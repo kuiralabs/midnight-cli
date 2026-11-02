@@ -12,7 +12,7 @@ import { WalletEntrySchema, mergeWalletEntries } from '@midnightntwrk/wallet-sdk
 import { EitherOps } from '@midnightntwrk/wallet-sdk/utilities';
 import { ConvergingDustTransacting, DustWallet } from '../engine/rc/dust-wallet.ts';
 import { FORK_SCHEDULE } from '../engine/rc/fork-schedule.ts';
-import { dustShortfallOf, isDustShortage } from '../lib/sdk-errors.ts';
+import { dustShortfallOf, isDustShortage } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import {
   CAPTURED_AT, type FeeRange, coinsAt, computeArguments, feeRange, paymentToBalance, timeWhenSmallestReaches, transacting,
 } from './helpers/dust-balancing-case.ts';

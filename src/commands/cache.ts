@@ -1,15 +1,15 @@
 // cache command — manage wallet state cache
 // cache clear [--network <name>] [--wallet <name|file>]
 
-import { type ParsedArgs, getFlag, hasFlag } from '../lib/argv.ts';
-import { UsageError, throwIfCancelled } from '../lib/errors.ts';
-import { clearWalletCache } from '../lib/wallet-cache.ts';
-import { clearDustDirectCache, clearNativeDustCheckpoint, clearShieldedDirectCache } from '../lib/reader-cache-files.ts';
-import { engineFor } from '../lib/engine.ts';
+import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { clearWalletCache } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
+import { clearDustDirectCache, clearNativeDustCheckpoint, clearShieldedDirectCache } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
+import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
-import { resolveNetworkName } from '../lib/resolve-network.ts';
-import { green } from '../ui/colors.ts';
-import type { CallContext } from '../lib/call-context.ts';
+import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
+import { green } from '@kuiralabs/midnight-cli-core/ui/colors';
+import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { clearChainCaches } from '../lib/chain-caches.ts';
 
 export default async function cacheCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {

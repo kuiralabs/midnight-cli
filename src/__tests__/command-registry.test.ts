@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { WORKSPACE_PACKAGES, sourceFiles } from '../../scripts/check-layering.mjs';
 import { installedCommands } from '../lib/installed-commands.ts';
 import {
   CommandDefinitionError,
@@ -21,18 +22,18 @@ import {
   NETWORK_PARAM,
   type CommandDefinition,
   type ToolDefinition,
-} from '../lib/command-definition.ts';
-import { getValidNetworkNames } from '../lib/network.ts';
+} from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
 import { CONFIRM_TOOL, listedTools } from '../lib/mcp/registry-tools.ts';
 import { commandNeedsWalletSdk, dispatchCommand, type ShellProvisions } from '../lib/command-dispatch.ts';
-import { FULL_FLAG, parseArgs, type ParsedArgs } from '../lib/argv.ts';
-import { CancelledError, isUsageError } from '../lib/errors.ts';
-import { classifyError, EXIT_CANCELLED } from '../lib/exit-codes.ts';
-import type { CallContext, CommandOutcome } from '../lib/call-context.ts';
-import { hostPaths } from '../lib/state-root.ts';
-import { settings } from '../lib/settings.ts';
-import type { Payer } from '../lib/payer.ts';
-import { createSdkWarningRouter, sdkWarningCallsOn } from '../lib/sdk-warnings.ts';
+import { FULL_FLAG, parseArgs, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { CancelledError, isUsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { classifyError, EXIT_CANCELLED } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import type { CallContext, CommandOutcome } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { hostPaths } from '@kuiralabs/midnight-cli-core/lib/state-root';
+import { settings } from '@kuiralabs/midnight-cli-core/lib/settings';
+import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
+import { createSdkWarningRouter, sdkWarningCallsOn } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import type { WalletProtector } from '../lib/wallet-protector.ts';
 
 const SRC = join(import.meta.dirname, '..');
@@ -60,7 +61,10 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => 
 
   it('loads each handler from its own command\'s module', async () => {
     for (const c of registry.commands.filter((c) => c.shell.unavailable === undefined)) {
-      const fromModule = await import(`../commands/${c.name}.ts`);
+      // A command's module sits in commands/, under src/ or a workspace package, which is imported by name.
+      const file = sourceFiles().find((f) => f.endsWith(`/commands/${c.name}.ts`))!;
+      const pkg = WORKSPACE_PACKAGES.find((p) => file.startsWith(p.dir + '/'));
+      const fromModule = await import(pkg === undefined ? file : `${pkg.name}/commands/${c.name}`);
       expect((await c.load()).default, c.name).toBe(fromModule.default);
     }
   }, 120_000);
@@ -201,17 +205,12 @@ describe('the accepted flags', () => {
   it('a flag takes a value exactly when the code reads one for it', () => {
     // getFlag/requireFlag read a value, hasFlag a bare switch, wherever in src/ a flag is read.
     const kinds = new Map<string, Set<boolean>>();
-    const scan = (dir: string): void => {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        const path = join(dir, entry.name);
-        if (entry.isDirectory()) { if (entry.name !== '__tests__') scan(path); continue; }
-        if (!entry.name.endsWith('.ts')) continue;
-        for (const m of readFileSync(path, 'utf8').matchAll(/(getFlag|requireFlag|hasFlag)\(\s*\w+\s*,\s*['"]([a-z0-9-]+)['"]/g)) {
-          kinds.set(m[2]!, (kinds.get(m[2]!) ?? new Set()).add(m[1] !== 'hasFlag'));
-        }
+    // src/ and the workspace packages, tests left out.
+    for (const path of sourceFiles()) {
+      for (const m of readFileSync(path, 'utf8').matchAll(/(getFlag|requireFlag|hasFlag)\(\s*\w+\s*,\s*['"]([a-z0-9-]+)['"]/g)) {
+        kinds.set(m[2]!, (kinds.get(m[2]!) ?? new Set()).add(m[1] !== 'hasFlag'));
       }
-    };
-    scan(SRC);
+    }
     // The grant request's limits are read in a loop over their names (LIMIT_FLAGS in lib/grant/request.ts), as values.
     for (const limit of ['cap', 'per-call', 'max-coin', 'expires-in']) kinds.set(limit, new Set([true]));
     for (const command of registry.commands) {

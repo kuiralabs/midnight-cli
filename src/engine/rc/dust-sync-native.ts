@@ -4,7 +4,7 @@
 // fails, callers fall back to the WASM path — the sidecar is an optional
 // accelerator, never a hard dependency.
 
-import { assertEndpointUsable } from '../../lib/blockfrost.ts';
+import { assertEndpointUsable } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -13,15 +13,15 @@ import { fileURLToPath } from 'node:url';
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import { DIR_MODE, FILE_MODE } from '../../lib/constants.ts';
+import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { deriveDustSeed } from './derivation.ts';
-import type { NetworkConfig } from '../../lib/network.ts';
+import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { collapseForeignGenerations } from './dust-collapse.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
-import { settings } from '../../lib/settings.ts';
-import { cacheRootDir } from '../../lib/wallet-cache.ts';
-import { nativeCheckpointName } from '../../lib/reader-cache-files.ts';
+import { settings } from '@kuiralabs/midnight-cli-core/lib/settings';
+import { cacheRootDir } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
+import { nativeCheckpointName } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
 
 /** Sidecar checkpoint JSON shape (snake_case — matches the Rust `Checkpoint`). */
 export interface SidecarCheckpoint {

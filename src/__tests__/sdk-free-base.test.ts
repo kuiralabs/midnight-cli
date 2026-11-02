@@ -1,6 +1,6 @@
 // The base and the network I/O helpers (the files the layering check places
 // in core and chain) load with no Midnight SDK: each is imported in a node
-// whose module hook refuses every Midnight and kuiralabs package. And the
+// whose module hook refuses every Midnight SDK and account package. And the
 // built `mn` loads none for --version, help or config, which run before any
 // command needs one.
 
@@ -12,7 +12,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const ROOT = resolve(import.meta.dirname, '..', '..');
-const SDK = String.raw`^(@midnight(?:-ntwrk|ntwrk)\/[^/]+|@kuiralabs\/[^/]+)`;
+const SDK = String.raw`^(@midnight(?:-ntwrk|ntwrk)\/[^/]+|@kuiralabs\/midnight-account[^/]*)`;
 
 /** A module hook file: `refuse` makes an SDK import fail, otherwise each one is logged to `log`. */
 function sdkHook(dir: string, mode: 'refuse' | 'record'): string {

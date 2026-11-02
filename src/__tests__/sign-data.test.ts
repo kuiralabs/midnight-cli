@@ -2,7 +2,7 @@
 // never signs bytes other than the ones the dApp meant.
 
 import { describe, expect, it } from 'vitest';
-import { decodeSignPayload, signedMessageBytes } from '../lib/sign-data.ts';
+import { decodeSignPayload, signedMessageBytes } from '@kuiralabs/midnight-cli-core/lib/sign-data';
 
 describe('signedMessageBytes', () => {
   it('puts "midnight_signed_message:<byte length>:" before the bytes', () => {

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { bindCachesToIndexer, describeIndexerChange, indexerIdentity } from '../lib/cache-indexer.ts';
+import { bindCachesToIndexer, describeIndexerChange, indexerIdentity } from '@kuiralabs/midnight-cli-core/lib/cache-indexer';
 
 const BLOCKFROST = 'wss://midnight-preprod.blockfrost.io/api/v0/ws?project_id=nightpreprodAbCdEfGhIjKlMnOpQrStUv0123';
 const OLD_PREPROD = 'wss://indexer.preprod.midnight.network/api/v4/graphql/ws';

@@ -1,10 +1,10 @@
 // Deploying a compiled contract: the deploy script, run against the wallet
 // the payer serves (served-wallet.ts). `mn contract deploy` and `mn dev` both deploy through here.
 
-import type { Payer, PayingTarget } from '../payer.ts';
+import type { Payer, PayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
 import { withServedWallet } from './served-wallet.ts';
-import type { Spinner } from '../../ui/spinner.ts';
-import type { CallSdkWarnings } from '../sdk-warnings.ts';
+import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import type { ContractDeployRequest } from './request.ts';
 
 export interface DeployContractParams {

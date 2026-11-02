@@ -12,7 +12,7 @@
 
 import { type Arm, type DeviceKey, type ReadKeyAttestation, deviceCodeOf as libraryDeviceCodeOf, joinCodeOf as libraryJoinCodeOf, parseDeviceCode as libraryParseDeviceCode } from '@kuiralabs/midnight-account';
 import type { LocalOwnerDevice, OwnerDevice } from '@kuiralabs/midnight-account-chain/owner';
-import { UsageError } from '../errors.ts';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 /** A device named by its arm and public key, with its read key, and its signature of it when the code carries one. */
 export interface DeviceIdentity {

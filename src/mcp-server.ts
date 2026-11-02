@@ -16,14 +16,14 @@ import {
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { CommandRun } from './lib/run-command.ts';
 import { servePayer } from './lib/serve-payer.ts';
-import { classifyError } from './lib/exit-codes.ts';
-import { withNodeReason } from './lib/sdk-errors.ts';
-import { trimAgentMessage } from './lib/error-trim.ts';
+import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { withNodeReason } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { trimAgentMessage } from '@kuiralabs/midnight-cli-core/lib/error-trim';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { createConfirmationStore } from './lib/mcp/confirmation.ts';
 import { assertKnownParams, assertParamTypes } from './lib/mcp/known-params.ts';
 import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from './lib/mcp/registry-tools.ts';
-import { needsConfirmation } from './lib/command-definition.ts';
+import { needsConfirmation } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';

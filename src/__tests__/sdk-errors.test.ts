@@ -6,9 +6,9 @@ import { describe, it, expect } from 'vitest';
 import { Brand, Effect } from 'effect';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import { NodeClientError } from '@midnightntwrk/wallet-sdk/node-client/effect';
-import { dustShortfallOf, isColdStartRace, isDustShortage, nodeRefusalOf, withDustShortfall, withNodeReason } from '../lib/sdk-errors.ts';
-import { TransactionRefusedError } from '../lib/errors.ts';
-import { classifyError } from '../lib/exit-codes.ts';
+import { dustShortfallOf, isColdStartRace, isDustShortage, nodeRefusalOf, withDustShortfall, withNodeReason } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { TransactionRefusedError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 
 /** wallet-sdk 2.0's dust InsufficientFundsError: tagged, with the token it could not balance. */
 function sdkInsufficientFunds(tokenType: string): Error {

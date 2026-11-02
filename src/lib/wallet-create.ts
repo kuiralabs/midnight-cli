@@ -6,9 +6,9 @@
 import * as path from 'path';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { anyEngine } from './engine.ts';
+import { anyEngine } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { writeSealedWallet, setActiveWallet, type WalletPublic } from './wallet-config.ts';
-import { isValidWalletName } from './constants.ts';
+import { isValidWalletName } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { getWalletsDir } from './wallet-paths.ts';
 
 /** A wallet's secret: the seed, and the mnemonic it came from when there is one. */

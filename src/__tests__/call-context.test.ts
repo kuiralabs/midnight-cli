@@ -11,12 +11,12 @@ import {
   createCallContext,
   runHandler,
   type CallContext,
-} from '../lib/call-context.ts';
-import { CancelledError } from '../lib/errors.ts';
-import { parseArgs } from '../lib/argv.ts';
-import { hostPaths } from '../lib/state-root.ts';
-import { settings } from '../lib/settings.ts';
-import type { Payer } from '../lib/payer.ts';
+} from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { hostPaths } from '@kuiralabs/midnight-cli-core/lib/state-root';
+import { settings } from '@kuiralabs/midnight-cli-core/lib/settings';
+import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
 
 const recordingSink = () => {
   const seen: string[] = [];

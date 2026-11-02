@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import inspectCostCommand from '../commands/inspect-cost.ts';
-import { parseArgs } from '../lib/argv.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { startLocalIndexer, type LocalIndexer } from './helpers/local-indexer.ts';
 import { LEDGER9_PARAMETERS_HEX } from './fixtures/ledger9-parameters.ts';

@@ -3,7 +3,7 @@
 // tested in a process of their own (process-safety.test.ts).
 
 import { describe, it, expect } from 'vitest';
-import { createSdkWarningRouter, sdkTransientWarning, sdkWarningCallsOn } from '../lib/sdk-warnings.ts';
+import { createSdkWarningRouter, sdkTransientWarning, sdkWarningCallsOn } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 
 describe('the SDK-warning router', () => {
   it('gives a warning with a call\'s identity to that call\'s newest listener, and no other call\'s', () => {

@@ -5,7 +5,7 @@ import * as os from 'os';
 import { loadWalletConfig, matchWalletAddress, unlockWallet, writeSealedWallet, type WalletInfo } from '../lib/wallet-config.ts';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { DIR_MODE, FILE_MODE } from '../lib/constants.ts';
+import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { deriveAllAddresses, deriveAllShieldedAddresses } from '../engine/rc/derive-address.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 

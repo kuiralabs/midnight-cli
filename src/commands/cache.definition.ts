@@ -1,6 +1,6 @@
 // The `cache` command, described once.
 
-import { type CommandDefinition, NETWORK_PARAM } from '../lib/command-definition.ts';
+import { type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 
 export const cacheDefinition: CommandDefinition = {
   name: 'cache',

@@ -6,7 +6,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path';
 
 import type { TestSuite, BrowserMode } from './types.ts';
-import { userHome } from '../state-root.ts';
+import { userHome } from '@kuiralabs/midnight-cli-core/lib/state-root';
 
 /**
  * Check whether the chrome-devtools MCP server is registered in Claude

@@ -2,13 +2,13 @@
 // ledger parameters of its latest block, as the engine for the chain's SDK
 // set reads them.
 
-import { type ParsedArgs, hasFlag } from '../lib/argv.ts';
-import { header, keyValue, divider } from '../ui/format.ts';
-import { bold, dim } from '../ui/colors.ts';
-import type { CallContext } from '../lib/call-context.ts';
-import { resolveNetwork } from '../lib/resolve-network.ts';
+import { type ParsedArgs, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { header, keyValue, divider } from '@kuiralabs/midnight-cli-core/ui/format';
+import { bold, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
+import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { fetchLedgerParameters } from '../lib/chain-params.ts';
-import { engineFor } from '../lib/engine.ts';
+import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { assertLedgerSupported, fetchProtocolVersion } from '../lib/ledger-guard.ts';
 
 const UNITS: Record<string, string> = {

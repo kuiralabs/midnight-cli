@@ -13,10 +13,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runLocalnet } from '../commands/localnet.ts';
 import { startLocalnet, type DockerCall } from '../lib/localnet.ts';
-import { CancelledError } from '../lib/errors.ts';
-import type { ExecRun, ExecRunner } from '../lib/exec-program.ts';
+import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import type { ExecRun, ExecRunner } from '@kuiralabs/midnight-cli-core/lib/exec-program';
 import { captureCommand } from '../lib/run-command.ts';
-import { parseArgs } from '../lib/argv.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { ownCall } from './helpers/own-call.ts';
 

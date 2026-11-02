@@ -3,7 +3,7 @@
 // normalizeFullness: normalized = value / limit, so limit = value / normalized.
 
 import * as ledger from '@midnightntwrk/ledger-v9';
-import type { BlockLimits } from '../../lib/engine.ts';
+import type { BlockLimits } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 type Dimension = keyof BlockLimits;
 

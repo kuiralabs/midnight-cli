@@ -13,9 +13,9 @@ import { join } from 'node:path';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { WalletDataRepository } from '../engine/rc/wallet-data-repository.ts';
 import { dustPublicKeyHexFromSeed, saveDustCache } from '../engine/rc/dust-direct-cache.ts';
-import type { NetworkConfig } from '../lib/network.ts';
-import { parseArgs } from '../lib/argv.ts';
-import { resolveNetwork } from '../lib/resolve-network.ts';
+import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { DUST_STATE_OWNED_HEX } from './fixtures/dust-state-owned.ts';
 
 let NETWORK: NetworkConfig;

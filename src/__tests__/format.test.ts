@@ -3,7 +3,7 @@ import {
   header, divider, keyValue,
   toNight, formatNight, toDust, roughDust, formatDust, formatAddress,
   box, errorMessage, usageMessage, successMessage,
-} from '../ui/format.ts';
+} from '@kuiralabs/midnight-cli-core/ui/format';
 
 // Run format tests with NO_COLOR so we can assert exact string content
 // without ANSI escape codes getting in the way

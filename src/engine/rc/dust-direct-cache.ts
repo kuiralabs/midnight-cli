@@ -14,10 +14,10 @@ import { randomBytes } from 'node:crypto';
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import { DIR_MODE, FILE_MODE } from '../../lib/constants.ts';
+import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { deriveDustSeed } from './derivation.ts';
 import { type DustRetention } from './dust-direct.ts';
-import { dustCacheDir, getDustCachePath } from '../../lib/reader-cache-files.ts';
+import { dustCacheDir, getDustCachePath } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
 
 // v2 added the retention fields (owned generation indices + frontier) that the
 // generation-tree collapse needs. v1 caches lack them and are invalidated, so

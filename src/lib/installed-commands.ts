@@ -5,7 +5,7 @@
 // flag checks read it, and so do help, the manual and the intro, the MCP
 // server's tools, and the agent manual and skills.
 
-import { createPackageRegistry, type FlagDefinition, type GlobalFlagHelp } from './command-definition.ts';
+import { createPackageRegistry, type FlagDefinition, type GlobalFlagHelp } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 import { walletDefinition } from '../commands/wallet.definition.ts';
 import { generateDefinition } from '../commands/generate.definition.ts';
 import { infoDefinition } from '../commands/info.definition.ts';
@@ -16,7 +16,7 @@ import { inspectCostDefinition } from '../commands/inspect-cost.definition.ts';
 import { airdropDefinition } from '../commands/airdrop.definition.ts';
 import { transferDefinition } from '../commands/transfer.definition.ts';
 import { dustDefinition } from '../commands/dust.definition.ts';
-import { configDefinition } from '../commands/config.definition.ts';
+import { configDefinition } from '@kuiralabs/midnight-cli-core/commands/config.definition';
 import { cacheDefinition } from '../commands/cache.definition.ts';
 import { serveDefinition } from '../commands/serve.definition.ts';
 import { testDefinition } from '../commands/test.definition.ts';
@@ -27,7 +27,7 @@ import { localnetDefinition } from '../commands/localnet.definition.ts';
 import { statusDefinition } from '../commands/status.definition.ts';
 import { helpDefinition } from '../commands/help.definition.ts';
 import { manualDefinition } from '../commands/manual.definition.ts';
-import { coreGuidance } from '../commands/core.guidance.ts';
+import { coreGuidance } from '@kuiralabs/midnight-cli-core/commands/core.guidance';
 import { chainGuidance } from '../commands/chain.guidance.ts';
 import { walletGuidance } from '../commands/wallet.guidance.ts';
 import { contractGuidance } from '../commands/contract.guidance.ts';

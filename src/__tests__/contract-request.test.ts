@@ -6,8 +6,8 @@ import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { resolveContractCallRequest, resolveContractDeployRequest } from '../lib/contract/request.ts';
-import { parseArgs } from '../lib/argv.ts';
-import { UsageError } from '../lib/errors.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 const UINT = { 'type-name': 'Uint', maxval: 255 };
 const ADDRESS = 'cb5230e1ac98e07520d3b330016743a05fec38dd8fe894ae5b9ac3f71cac5190';

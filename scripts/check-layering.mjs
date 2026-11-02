@@ -104,7 +104,27 @@ const ACCOUNT_CHAIN = /^@kuiralabs\/midnight-account/;
 // import ... from 'x', export ... from 'x', import 'x', import('x').
 const IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+)(['"])([^'"]+)\1/gm;
 
-export function sourceFiles(dir = SRC) {
+// The workspace packages carved out of src/, each with its source folder and
+// the home it is. A file's path in a package (lib/argv.ts) reads as it did
+// under src/, so the homes and rules above apply to it unchanged.
+export const WORKSPACE_PACKAGES = [
+  { name: '@kuiralabs/midnight-cli-core', dir: join(ROOT, 'packages', 'cli-core', 'src') },
+];
+
+/** The package source folder a file is in, or undefined for one under src/. */
+const packageOf = (file) => WORKSPACE_PACKAGES.find((pkg) => file.startsWith(pkg.dir + '/'));
+
+/** A file's path as the homes read it: under its package's source folder, or under src/. */
+export function relOf(file) {
+  return relative(packageOf(file)?.dir ?? SRC, file);
+}
+
+/** Where a file is, for a report: from the repository's root. */
+const shown = (file) => relative(ROOT, file);
+
+/** The source files of src/ and of every workspace package, tests left out; or those under `dir`. */
+export function sourceFiles(dir) {
+  if (dir === undefined) return [SRC, ...WORKSPACE_PACKAGES.map((pkg) => pkg.dir)].flatMap((d) => sourceFiles(d));
   const files = [];
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
@@ -118,7 +138,7 @@ export function sourceFiles(dir = SRC) {
 }
 
 export function homeOf(file) {
-  const rel = relative(SRC, file);
+  const rel = relOf(file);
   return HOMES.find(([, pattern]) => pattern.test(rel))?.[0];
 }
 
@@ -173,17 +193,24 @@ function importsOf(file) {
 export function findLayeringProblems() {
   const unhomed = [];
   const violations = [];
-  for (const file of sourceFiles(SRC)) {
-    const rel = relative(SRC, file);
+  for (const file of sourceFiles()) {
+    const rel = relOf(file);
     const home = homeOf(file);
     if (home === undefined) {
-      unhomed.push(rel);
+      unhomed.push(shown(file));
       continue;
     }
     for (const { specifier, line } of importsOf(file)) {
-      const where = `src/${rel}:${line}`;
-      if (specifier.startsWith('.')) {
-        const rule = importRule(rel, relative(SRC, resolve(dirname(file), specifier)));
+      const where = `${shown(file)}:${line}`;
+      const pkg = WORKSPACE_PACKAGES.find((p) => specifier.startsWith(p.name + '/'));
+      const from = packageOf(file);
+      if (specifier.startsWith('.') && from !== undefined && packageOf(resolve(dirname(file), specifier)) !== from) {
+        violations.push({ home, rule: `${home} package → outside it (a package imports another only by name)`, where, specifier });
+        continue;
+      }
+      if (specifier.startsWith('.') || pkg !== undefined) {
+        const target = pkg !== undefined ? `${specifier.slice(pkg.name.length + 1)}.ts` : relOf(resolve(dirname(file), specifier));
+        const rule = importRule(rel, target);
         if (rule !== undefined) violations.push({ home, rule, where, specifier });
       } else if (MIDNIGHT_SDK.test(specifier) && home !== 'engine') {
         violations.push({ home, rule: `${home} → Midnight SDK (only an engine imports it)`, where, specifier });
@@ -196,7 +223,7 @@ export function findLayeringProblems() {
 }
 
 function report({ unhomed, violations }) {
-  for (const rel of unhomed) process.stdout.write(`no package: src/${rel}\n`);
+  for (const file of unhomed) process.stdout.write(`no package: ${file}\n`);
 
   const byRule = (list) => {
     const groups = new Map();

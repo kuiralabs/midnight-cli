@@ -8,8 +8,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import type { CallScript, DeployScript, ScriptParts, StateScript } from '../../lib/engine.ts';
-import type { NetworkConfig } from '../../lib/network.ts';
+import type { CallScript, DeployScript, ScriptParts, StateScript } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 
 /**
  * Every package a generated script imports, and the compact runtime the
