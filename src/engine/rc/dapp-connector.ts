@@ -24,8 +24,8 @@ import { PartlySignedTransactionError, assertSignable, signRecipe } from './sign
 import { decodeSignPayload, signedMessageBytes } from '@kuiralabs/midnight-cli-core/lib/sign-data';
 import { DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
 import { formatWait } from '@kuiralabs/midnight-cli-core/lib/duration';
-import { fetchPartialSuccessSegments, type SegmentResult } from '../../lib/tx-segments.ts';
-import { walletsBelowLedger9 } from '../../lib/ledger-guard.ts';
+import { fetchPartialSuccessSegments, type SegmentResult } from '@kuiralabs/midnight-chain/lib/tx-segments';
+import { walletsBelowLedger9 } from '@kuiralabs/midnight-chain/lib/ledger-guard';
 import { TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
 import { roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui/format';

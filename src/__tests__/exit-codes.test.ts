@@ -58,8 +58,8 @@ describe('classifyError usage errors (positional-address balance)', () => {
 describe('classifyError: typed setup errors keep their own code', () => {
   // Agents read errorCode from --json / MCP; these must not collapse to UNKNOWN.
   it.each([
-    ['UNSUPPORTED_LEDGER', async () => new (await import('../lib/ledger-guard.ts')).UnsupportedLedgerError('preview', 1000300n)],
-    ['LOCAL_STACK_UNREACHABLE', async () => new (await import('../lib/ledger-guard.ts')).LocalStackUnreachableError('indexer', 'http://localhost:8088/api/v4/graphql')],
+    ['UNSUPPORTED_LEDGER', async () => new (await import('@kuiralabs/midnight-chain/lib/ledger-guard')).UnsupportedLedgerError('preview', 1000300n)],
+    ['LOCAL_STACK_UNREACHABLE', async () => new (await import('@kuiralabs/midnight-chain/lib/ledger-guard')).LocalStackUnreachableError('indexer', 'http://localhost:8088/api/v4/graphql')],
     ['LOCALNET_UNAVAILABLE', async () => new (await import('../lib/localnet.ts')).LocalnetUnavailableError()],
     ['AMBIGUOUS_LOCAL_STACKS', async () => new (await import('@kuiralabs/midnight-cli-core/lib/network')).AmbiguousLocalStacksError({ node: [9944, 29944], indexer: [8088, 28088], proofServer: [6300] })],
   ])('%s', async (code, make) => {

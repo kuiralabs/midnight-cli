@@ -68,9 +68,9 @@ async function handleUp(jsonMode: boolean, ctx: CallContext, docker: DockerCall)
       //     prove time with "Failed to prove transaction".
       spinner.update('Waiting for chain to produce first block...');
       try {
-        const { waitForFirstBlock } = await import('../lib/node-ready.ts');
-        const { waitForAddressFunded } = await import('../lib/indexer-ready.ts');
-        const { waitForProofServerReady } = await import('../lib/proof-server-ready.ts');
+        const { waitForFirstBlock } = await import('@kuiralabs/midnight-chain/lib/node-ready');
+        const { waitForAddressFunded } = await import('@kuiralabs/midnight-chain/lib/indexer-ready');
+        const { waitForProofServerReady } = await import('@kuiralabs/midnight-chain/lib/proof-server-ready');
         const { getNetworkConfig } = await import('@kuiralabs/midnight-cli-core/lib/network');
         const { engineFor } = await import('@kuiralabs/midnight-cli-core/lib/engine');
         const { GENESIS_SEED } = await import('@kuiralabs/midnight-cli-core/lib/constants');

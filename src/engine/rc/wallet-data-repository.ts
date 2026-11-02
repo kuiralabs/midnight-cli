@@ -43,17 +43,17 @@ import {
   validateWalletCacheChainId,
   type WalletCacheData,
 } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
-import { getChainGenesisHash } from '../../lib/chain-id.ts';
-import { assertLedgerSupported, fetchProtocolVersion } from '../../lib/ledger-guard.ts';
-import { checkBalance, type BalanceSummary } from '../../lib/balance-subscription.ts';
+import { getChainGenesisHash } from '@kuiralabs/midnight-chain/lib/chain-id';
+import { assertLedgerSupported, fetchProtocolVersion } from '@kuiralabs/midnight-chain/lib/ledger-guard';
+import { checkBalance, type BalanceSummary } from '@kuiralabs/midnight-chain/lib/balance-subscription';
 import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { bindCachesToIndexer, describeIndexerChange } from '@kuiralabs/midnight-cli-core/lib/cache-indexer';
 import { nativeDustSyncAvailable, runDustSyncNative } from './dust-sync-native.ts';
 import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
-import { callNodeRpc } from '../../lib/node-rpc.ts';
+import { callNodeRpc } from '@kuiralabs/midnight-chain/lib/node-rpc';
 import { deriveDustSeed } from './derivation.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
-import { fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '../../lib/event-tip.ts';
+import { fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain/lib/event-tip';
 import type { DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/lib/engine';
 export type { DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/lib/engine';
 

@@ -6,7 +6,7 @@
 import { Socket } from 'node:net';
 import { loadWalletConfig, resolveWalletPath, unlockWallet } from './wallet-config.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import { assertLedgerSupported } from './ledger-guard.ts';
+import { assertLedgerSupported } from '@kuiralabs/midnight-chain/lib/ledger-guard';
 import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { engineFor, type DAppConnectorCallbacks, type OpenedConnector } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { createRpcServer, type RpcServer } from './ws-rpc.ts';

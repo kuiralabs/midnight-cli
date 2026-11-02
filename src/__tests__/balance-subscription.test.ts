@@ -28,9 +28,9 @@ vi.mock('ws', async () => {
   return { default: WS };
 });
 
-let checkBalance: typeof import('../lib/balance-subscription.ts').checkBalance;
+let checkBalance: typeof import('@kuiralabs/midnight-chain/lib/balance-subscription').checkBalance;
 beforeAll(async () => {
-  ({ checkBalance } = await import('../lib/balance-subscription.ts'));
+  ({ checkBalance } = await import('@kuiralabs/midnight-chain/lib/balance-subscription'));
 });
 
 const OTHER_TOKEN = 'ff'.repeat(32);

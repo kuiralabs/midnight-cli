@@ -378,7 +378,7 @@ describe('registerNightUtxos', () => {
 
   it('refuses before estimating anything while the chain\'s clock lags this computer\'s', async () => {
     const { startLocalIndexer } = await import('./helpers/local-indexer.ts');
-    const { ChainClockBehindError } = await import('../lib/chain-clock.ts');
+    const { ChainClockBehindError } = await import('@kuiralabs/midnight-chain/lib/chain-clock');
     vi.useRealTimers();
     const indexer = await startLocalIndexer(() => JSON.stringify({ data: { block: { timestamp: Date.now() - 14 * 3_600_000 } } }));
     try {

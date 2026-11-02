@@ -14,7 +14,7 @@
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import { subscribeGraphqlWs } from '../../lib/graphql-ws-subscription.ts';
+import { subscribeGraphqlWs } from '@kuiralabs/midnight-chain/lib/graphql-ws-subscription';
 
 const SUBSCRIPTION_QUERY = `
   subscription ZswapLedgerEvents($id: Int) {

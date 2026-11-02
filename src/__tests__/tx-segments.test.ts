@@ -4,7 +4,7 @@
 // success lists segments.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { SegmentResultsUnavailableError, fetchPartialSuccessSegments } from '../lib/tx-segments.ts';
+import { SegmentResultsUnavailableError, fetchPartialSuccessSegments } from '@kuiralabs/midnight-chain/lib/tx-segments';
 import { startLocalIndexer, type LocalIndexer } from './helpers/local-indexer.ts';
 
 const HASH = '2ee4f2b48b659ff6b6f6312b85b49cbfba53fc5f77f430603c845c1a3378464b';

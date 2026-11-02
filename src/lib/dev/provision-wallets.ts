@@ -8,7 +8,7 @@ import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWall
 import { createWallet, walletFilePath, walletSecretFrom } from '../wallet-create.ts';
 import { passphraseForNewSecret } from '../passphrase.ts';
 import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { checkBalance } from '../balance-subscription.ts';
+import { checkBalance } from '@kuiralabs/midnight-chain/lib/balance-subscription';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';

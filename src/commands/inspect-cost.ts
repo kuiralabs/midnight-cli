@@ -9,7 +9,7 @@ import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context'
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { fetchLedgerParameters } from '../lib/chain-params.ts';
 import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { assertLedgerSupported, fetchProtocolVersion } from '../lib/ledger-guard.ts';
+import { assertLedgerSupported, fetchProtocolVersion } from '@kuiralabs/midnight-chain/lib/ledger-guard';
 
 const UNITS: Record<string, string> = {
   readTime: 'picoseconds',

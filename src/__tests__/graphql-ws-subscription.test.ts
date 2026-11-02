@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { WebSocketServer, type WebSocket as WsSocket } from 'ws';
 
-import { subscribeGraphqlWs } from '../lib/graphql-ws-subscription.ts';
+import { subscribeGraphqlWs } from '@kuiralabs/midnight-chain/lib/graphql-ws-subscription';
 
 type ServerScript = (ws: WsSocket) => void;
 

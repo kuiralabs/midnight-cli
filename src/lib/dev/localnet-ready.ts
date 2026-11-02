@@ -4,7 +4,7 @@
 // the single local stack docker shows).
 
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import { assertLedger9StackReachable } from '../ledger-guard.ts';
+import { assertLedger9StackReachable } from '@kuiralabs/midnight-chain/lib/ledger-guard';
 
 export type LocalnetState = 'already-running';
 

@@ -15,6 +15,6 @@
     "noEmit": true,
     "types": ["node", "vitest/globals", "ws"]
   },
-  "include": ["src/**/*.ts", "packages/cli-core/src/**/*.ts"],
+  "include": ["src/**/*.ts", "packages/cli-core/src/**/*.ts", "packages/chain/src/**/*.ts"],
   "exclude": ["node_modules"]
 }

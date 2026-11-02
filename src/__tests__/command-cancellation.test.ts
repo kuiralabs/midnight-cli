@@ -26,7 +26,7 @@ import type { WalletProtector } from '../lib/wallet-protector.ts';
 import type { CommandHandler } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import balanceCommand from '../commands/balance.ts';
 import inspectCostCommand from '../commands/inspect-cost.ts';
-import statusCommand from '../commands/status.ts';
+import statusCommand from '@kuiralabs/midnight-chain/commands/status';
 import generateCommand from '../commands/generate.ts';
 import walletCommand from '../commands/wallet.ts';
 import cacheCommand from '../commands/cache.ts';

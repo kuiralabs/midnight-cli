@@ -11,7 +11,7 @@ import {
   UnsupportedLedgerError,
   LocalStackUnreachableError,
   walletsBelowLedger9,
-} from '../lib/ledger-guard.ts';
+} from '@kuiralabs/midnight-chain/lib/ledger-guard';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 
 const PREVIEW = 1000300n;

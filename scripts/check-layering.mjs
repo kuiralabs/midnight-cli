@@ -109,6 +109,7 @@ const IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+)(['"])([^'"]+)\1/gm;
 // under src/, so the homes and rules above apply to it unchanged.
 export const WORKSPACE_PACKAGES = [
   { name: '@kuiralabs/midnight-cli-core', dir: join(ROOT, 'packages', 'cli-core', 'src') },
+  { name: '@kuiralabs/midnight-chain', dir: join(ROOT, 'packages', 'chain', 'src') },
 ];
 
 /** The package source folder a file is in, or undefined for one under src/. */

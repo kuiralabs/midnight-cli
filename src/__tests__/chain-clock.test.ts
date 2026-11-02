@@ -3,7 +3,7 @@
 // clock read 02:33 UTC: about 14 hours behind.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { ChainClockBehindError, CHAIN_CLOCK_TOLERANCE_MS, assertChainClockCurrent, fetchChainTime } from '../lib/chain-clock.ts';
+import { ChainClockBehindError, CHAIN_CLOCK_TOLERANCE_MS, assertChainClockCurrent, fetchChainTime } from '@kuiralabs/midnight-chain/lib/chain-clock';
 import { classifyError, EXIT_NETWORK_ERROR } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { startLocalIndexer, type LocalIndexer } from './helpers/local-indexer.ts';
 
