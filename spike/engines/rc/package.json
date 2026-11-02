@@ -1,0 +1,26 @@
+{
+  "name": "@kuiralabs/mn-engine-rc",
+  "version": "0.0.0-spike.0",
+  "private": true,
+  "description": "Spike EB only: the rc SDK set behind one probe function. Never published.",
+  "type": "module",
+  "main": "probe.mjs",
+  "exports": { ".": "./probe.mjs" },
+  "files": ["probe.mjs", "probe-core.mjs"],
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.20.0",
+    "@midnight-ntwrk/ledger-v8": "8.1.0",
+    "@midnight-ntwrk/midnight-js-contracts": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-network-id": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-protocol": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-types": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-utils": "5.0.0-rc.1",
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.5",
+    "@midnightntwrk/onchain-runtime-v4": "4.0.0-rc.3",
+    "@midnightntwrk/wallet-sdk": "2.0.0-rc.0"
+  }
+}
