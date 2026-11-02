@@ -2,7 +2,8 @@
 
 import { resolve } from 'node:path';
 import { type ParsedArgs, getFlag, hasFlag, requireFlag } from '../lib/argv.ts';
-import { UsageError } from '../lib/errors.ts';
+import { CancelledError, UsageError, throwIfCancelled } from '../lib/errors.ts';
+import { untilCancelled } from '../lib/sleep.ts';
 import type { CallContext, CallOutput } from '../lib/call-context.ts';
 import { header, keyValue } from '../ui/format.ts';
 import { bold, dim, teal, yellow, green } from '../ui/colors.ts';
@@ -286,12 +287,16 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
       ctx.output.stderr('\n');
     }
   } catch (err) {
+    // A cancelled call stops here; it doesn't fall back to the raw state.
+    if (err instanceof CancelledError) throw err;
+    throwIfCancelled(ctx.signal);
     // If runner fails (no compiled contract in cwd), fall back to raw state
     spinner.stop(yellow('⚠') + ' Parsed state unavailable, showing raw');
 
     const { buildStateProvider } = await import('../lib/contract/providers.ts');
     const publicDataProvider = buildStateProvider(networkConfig);
-    const contractState = await publicDataProvider.queryContractState(address);
+    // The provider's query takes no signal: the call stops waiting for it when cancelled.
+    const contractState = await untilCancelled(publicDataProvider.queryContractState(address), ctx.signal);
 
     if (!contractState) {
       throw new Error(`No contract found at address ${address} on ${network}`);
