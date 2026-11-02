@@ -2,10 +2,11 @@
 // devnet. `mn airdrop` and `mn dev` both fund wallets through here; the
 // caller has already checked that the network is the local one.
 
-import { GENESIS_SEED } from './constants.ts';
+import { GENESIS_SEED } from '../../lib/constants.ts';
 import { executeTransfer, type TransferParams, type TransferResult } from './transfer.ts';
+import type { AirdropParams } from '../../lib/engine.ts';
+export type { AirdropParams } from '../../lib/engine.ts';
 
-export type AirdropParams = Omit<TransferParams, 'seedBuffer'>;
 
 /** Sends `amountNight` NIGHT from genesis to `recipientAddress`. */
 export async function airdropNight(params: AirdropParams): Promise<TransferResult> {

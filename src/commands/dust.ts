@@ -7,11 +7,9 @@ import { UsageError, throwIfCancelled } from '../lib/errors.ts';
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveSeed } from '../lib/seed-resolver.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
-import { applyEndpointOverrides, type NetworkConfig } from '../lib/network.ts';
-import { registerDust } from '../lib/dust-register.ts';
+import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '../lib/network.ts';
 import { checkBalance } from '../lib/balance-subscription.ts';
-import { exportDustSnapshot } from '../lib/dust-export.ts';
-import { defaultRepository } from '../lib/wallet-data-repository.ts';
+import { engineFor } from '../lib/engine.ts';
 import { header, keyValue, divider, formatDust, successMessage, toDust } from '../ui/format.ts';
 import { bold, dim, yellow } from '../ui/colors.ts';
 
@@ -77,7 +75,7 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
     // Registered → read balance directly from indexer (bypasses the dust-wallet
     // SDK's `isConnected` hang). No facade needed for a read-only query.
     const useCache = !hasFlag(args, 'no-cache');
-    await dustStatusDirect(seedBuffer, networkConfig, preCheck, isJson, minimal, useCache, ctx);
+    await dustStatusDirect(seedBuffer, networkName, networkConfig, preCheck, isJson, minimal, useCache, ctx);
     return;
   }
 
@@ -85,14 +83,14 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
   // The repo's withFacade owns: validate caches, pre-prime dust, build facade,
   // sync (with retry), save, invalidate, stop. We just provide the work.
   rejectNoCacheForWrites(args);
-  await dustRegister(seedBuffer, networkConfig, isJson, ctx);
+  await dustRegister(seedBuffer, networkName, networkConfig, isJson, ctx);
 }
 
 // export: fast dust-direct sync → emit a facade-restorable snapshot. The snapshot
 // (the pipeable data) goes to stdout; a summary goes to stderr; --json bundles it all.
 async function dustExport(
   seedBuffer: Buffer,
-  networkName: string,
+  networkName: NetworkName,
   networkConfig: NetworkConfig,
   jsonMode: boolean,
   minimal: boolean,
@@ -100,7 +98,7 @@ async function dustExport(
 ): Promise<void> {
   const spinner = ctx.progress.start(`Reading dust events from ${networkName}...`);
   try {
-    const result = await exportDustSnapshot(seedBuffer, networkName, networkConfig, {
+    const result = await (await engineFor(networkName)).wallet.exportDust(seedBuffer, networkName, networkConfig, {
       signal: ctx.signal,
       log: ctx.diagnostics.line,
       onProgress: (applied, maxIdSeen) => spinner.update(
@@ -246,6 +244,7 @@ function printUnregisteredStatus(
 
 async function dustRegister(
   seedBuffer: Buffer,
+  network: NetworkName,
   networkConfig: NetworkConfig,
   jsonMode: boolean,
   ctx: CallContext,
@@ -257,7 +256,7 @@ async function dustRegister(
   const spinner = ctx.progress.start('Syncing wallet...');
 
   try {
-    const result = await registerDust(seedBuffer, networkConfig, {
+    const result = await (await engineFor(network)).wallet.registerDust(seedBuffer, networkConfig, {
       signal: ctx.signal,
       sdkWarnings: ctx.sdkWarnings,
       log: ctx.diagnostics.line,
@@ -299,6 +298,7 @@ async function dustRegister(
 // invalidation, and force-fresh — see lib/wallet-data-repository.ts.
 async function dustStatusDirect(
   seedBuffer: Buffer,
+  network: NetworkName,
   networkConfig: NetworkConfig,
   preCheck: PreCheckResult,
   jsonMode: boolean,
@@ -310,7 +310,7 @@ async function dustStatusDirect(
   const spinner = ctx.progress.start(`Reading dust events from ${networkName}...`);
 
   try {
-    const view = await defaultRepository().dust(seedBuffer, networkConfig, {
+    const view = await (await engineFor(network)).wallet.dustBalance(seedBuffer, networkConfig, {
       forceFresh: !useCache,
       signal: ctx.signal,
       log: ctx.diagnostics.line,

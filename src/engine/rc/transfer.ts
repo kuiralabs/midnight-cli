@@ -2,17 +2,17 @@
 // Handles: facade lifecycle, sync, balance check, dust, tx build/sign/prove/submit, retries
 
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { throwIfCancelled } from './errors.ts';
+import { throwIfCancelled } from '../../lib/errors.ts';
 import { MidnightBech32m, UnshieldedAddress, type DustAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { type FacadeState, type UtxoWithMeta } from '@midnightntwrk/wallet-sdk/facade';
 import * as rx from 'rxjs';
 
-import { type NetworkConfig } from './network.ts';
-import { getNetworkId } from './network-id.ts';
+import { type NetworkConfig } from '../../lib/network.ts';
+import { getNetworkId } from '../../lib/network-id.ts';
 import { type FacadeBundle, hasDustAvailable, quickSync } from './facade.ts';
 import { defaultRepository } from './wallet-data-repository.ts';
-import type { VerboseLog } from './verbose.ts';
-import { nightToMicro } from './amount.ts';
+import type { VerboseLog } from '../../lib/verbose.ts';
+import { nightToMicro } from '../../lib/amount.ts';
 import {
   NATIVE_TOKEN_TYPE,
   TOKEN_MULTIPLIER,
@@ -26,40 +26,10 @@ import {
   SYNC_ATTEMPT_TIMEOUT_MS,
   DUST_COST_OVERHEAD,
   MIN_DUST_FOR_TRANSFER,
-} from './constants.ts';
+} from '../../lib/constants.ts';
 
-export interface TransferParams {
-  seedBuffer: Buffer;
-  networkConfig: NetworkConfig;
-  recipientAddress: string;
-  amountNight: number;
-  signal?: AbortSignal;
-  onSync?: (applied: number, highest: number) => void;
-  onSyncDetail?: (walletsStillSyncing: string) => void;
-  onDust?: (status: string) => void;
-  onProving?: () => void;
-  onSubmitting?: () => void;
-  /** Fires every second while waiting for chain finalization. `elapsedMs`
-   * is the time since the submit started. Use to drive an elapsed-time
-   * display so users see the wait is alive.
-   */
-  onSubmittingTick?: (elapsedMs: number) => void;
-  onSyncWarning?: (tag: string, message: string) => void;
-  /** The call's SDK warnings, listened to for the whole transfer. */
-  sdkWarnings: CallSdkWarnings;
-  /** The call's verbose lines. */
-  log?: VerboseLog;
-}
 
-export interface TransferResult {
-  txHash: string;
-  amountMicroNight: bigint;
-}
 
-export interface EnsureDustResult {
-  alreadyAvailable: boolean;
-  txHash?: string;
-}
 
 /**
  * Validate recipient address format (bech32m, matching network).
@@ -83,17 +53,19 @@ export function validateRecipientAddress(address: string, networkConfig: Network
 // SDK error classifiers moved to ./sdk-errors.ts so wallet-data-repository
 // can import them without a circular dependency. Re-exported for callers
 // that still import from this module.
-export { isDustRelatedError, isSdkInsufficientFundsError } from './sdk-errors.ts';
-import { isColdStartRace, isDustRelatedError } from './sdk-errors.ts';
-import { DustFeeNotGeneratedError, planRegistration } from './dust-registration-plan.ts';
-import { formatWait } from './duration.ts';
-import { assertChainClockCurrent, fetchChainTime } from './chain-clock.ts';
-import { awaitDustForFee, sleep } from './dust-wait.ts';
+export { isDustRelatedError, isSdkInsufficientFundsError } from '../../lib/sdk-errors.ts';
+import { isColdStartRace, isDustRelatedError } from '../../lib/sdk-errors.ts';
+import { DustFeeNotGeneratedError, planRegistration } from '../../lib/dust-registration-plan.ts';
+import { formatWait } from '../../lib/duration.ts';
+import { assertChainClockCurrent, fetchChainTime } from '../../lib/chain-clock.ts';
+import { awaitDustForFee, sleep } from '../../lib/dust-wait.ts';
 
 /** How long the transfer retry waits for Dust to grow when the fee is above the pre-flight threshold. */
 const DUST_GROW_WAIT_MS = 10_000;
-import { toDust } from '../ui/format.ts';
-import type { CallSdkWarnings } from './sdk-warnings.ts';
+import { toDust } from '../../ui/format.ts';
+import type { CallSdkWarnings } from '../../lib/sdk-warnings.ts';
+import type { EnsureDustResult, TransferParams, TransferResult } from '../../lib/engine.ts';
+export type { EnsureDustResult, TransferParams, TransferResult } from '../../lib/engine.ts';
 
 
 /** Format milliseconds as "Xs" or "Xm Ys" for human-friendly elapsed display. */

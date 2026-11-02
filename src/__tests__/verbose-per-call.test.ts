@@ -13,7 +13,7 @@ import { callDiagnostics } from '../lib/call-context.ts';
 import { parseArgs } from '../lib/argv.ts';
 import { setNoticeSink } from '../lib/notices.ts';
 import { deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
-import { WalletDataRepository } from '../lib/wallet-data-repository.ts';
+import { WalletDataRepository } from '../engine/rc/wallet-data-repository.ts';
 import type { NetworkConfig } from '../lib/network.ts';
 import balanceCommand from '../commands/balance.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';

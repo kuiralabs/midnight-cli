@@ -84,7 +84,7 @@ export const ALLOWED = {
 export const ALLOWED_STATE = {
   // Shared on purpose: none holds a call's state.
   'lib/passphrase.ts': { unlocked: 'shared on purpose: the passphrase this process has unlocked, by state root (one prompt per run)' },
-  'lib/wallet-data-repository.ts': { defaultRepo: 'shared on purpose: the wallet repository, whose cache long-lived MCP sessions share across calls' },
+  'engine/rc/wallet-data-repository.ts': { defaultRepo: 'shared on purpose: the wallet repository, whose cache long-lived MCP sessions share across calls' },
   'lib/chain-id.ts': { CHAIN_ID_MEMO: 'shared on purpose: the chain-id memo, by endpoint' },
   'lib/ws-rpc.ts': { connectionCounter: 'shared on purpose: the RPC connection id counter, unique across servers in the process' },
   'lib/engine.ts': { loaded: 'shared on purpose: the one SDK engine this process loads (two WASM ledgers cannot share a process)' },

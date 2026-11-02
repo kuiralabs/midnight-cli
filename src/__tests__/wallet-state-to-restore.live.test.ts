@@ -11,7 +11,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { WalletDataRepository } from '../lib/wallet-data-repository.ts';
+import { WalletDataRepository } from '../engine/rc/wallet-data-repository.ts';
 import { dustPublicKeyHexFromSeed, saveDustCache } from '../engine/rc/dust-direct-cache.ts';
 import type { NetworkConfig } from '../lib/network.ts';
 import { parseArgs } from '../lib/argv.ts';

@@ -2,7 +2,7 @@
 // has a package, and no import crosses the layering the planned split needs.
 
 import { describe, expect, it } from 'vitest';
-import { PENDING_ENGINE, findLayeringProblems, importRule } from '../../scripts/check-layering.mjs';
+import { findLayeringProblems, importRule } from '../../scripts/check-layering.mjs';
 
 describe('the layering', () => {
   it('holds across src/', () => {
@@ -46,20 +46,8 @@ describe('the layering', () => {
     expect(importRule('engine/rc/index.ts', 'lib/facade.ts')).toBe('engine → wallet');
   });
 
-  // Each module here still imports the SDK itself. Taking one off is the
-  // point of moving it behind the engine; adding one is refused.
-  it('has no module importing the SDK outside the engine but those still waiting to move', () => {
-    expect([...PENDING_ENGINE].sort()).toStrictEqual([
-      'commands/airdrop.ts',
-      'commands/transfer.ts',
-      'lib/dapp-connector.ts',
-      'lib/dust-wallet.ts',
-      'lib/facade.ts',
-      'lib/fork-schedule.ts',
-      'lib/sign-recipe.ts',
-      'lib/transfer.ts',
-      'lib/wallet-data-repository.ts',
-    ]);
+  it('lets only an engine import the SDK', () => {
+    // findLayeringProblems above finds none elsewhere; core, chain and every package are held to it alike.
     expect(importRule('lib/wallet-create.ts', 'engine/rc/derivation.ts')).toBe('wallet → engine (reach it through lib/engine.ts)');
   });
 });

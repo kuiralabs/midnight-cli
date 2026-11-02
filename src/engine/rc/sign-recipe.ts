@@ -20,7 +20,7 @@
 
 import type { Signature } from '@midnightntwrk/ledger-v9';
 import type { BalancingRecipe, WalletFacade } from '@midnightntwrk/wallet-sdk/facade';
-import { readDAppTransaction, segmentsOf, unshieldedInputs, type FeeCheckTransaction } from '../engine/rc/fee-only-check.ts';
+import { readDAppTransaction, segmentsOf, unshieldedInputs, type FeeCheckTransaction } from './fee-only-check.ts';
 
 export type SignSegment = (data: Uint8Array) => Promise<Signature>;
 

@@ -7,9 +7,8 @@ import { existsSync } from 'node:fs';
 import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet } from '../wallet-config.ts';
 import { createWallet, walletFilePath, walletSecretFrom } from '../wallet-create.ts';
 import { passphraseForNewSecret } from '../passphrase.ts';
-import { airdropNight } from '../airdrop.ts';
+import { engineFor } from '../engine.ts';
 import { checkBalance } from '../balance-subscription.ts';
-import { registerDust } from '../dust-register.ts';
 import { resolveNetwork } from '../resolve-network.ts';
 import type { NetworkConfig } from '../network.ts';
 import type { CallSdkWarnings } from '../sdk-warnings.ts';
@@ -153,7 +152,8 @@ async function generateWallet(name: string, signal?: AbortSignal): Promise<void>
 
 async function airdropToWallet(network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
   const recipientAddress = (await loadWalletConfig(resolveWalletPath(name))).addresses.undeployed;
-  await airdropNight({ networkConfig: network, recipientAddress, amountNight, signal, sdkWarnings });
+  // dev's wallets live on the local chain.
+  await (await engineFor('undeployed')).wallet.airdrop({ networkConfig: network, recipientAddress, amountNight, signal, sdkWarnings });
 }
 
 async function walletNeedsDust(network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<boolean> {
@@ -164,5 +164,5 @@ async function walletNeedsDust(network: NetworkConfig, name: string, signal: Abo
 
 async function registerWalletDust(network: NetworkConfig, name: string, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
   const { seed } = await unlockWallet(resolveWalletPath(name));
-  await registerDust(Buffer.from(seed, 'hex'), network, { signal, sdkWarnings });
+  await (await engineFor('undeployed')).wallet.registerDust(Buffer.from(seed, 'hex'), network, { signal, sdkWarnings });
 }

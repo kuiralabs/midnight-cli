@@ -2,36 +2,16 @@
 // Dust to spend. `mn dust register` and `mn dev` both register through here.
 
 import { waitForLiteSyncedState } from './facade.ts';
-import { throwIfCancelled } from './errors.ts';
+import { throwIfCancelled } from '../../lib/errors.ts';
 import { ensureDust } from './transfer.ts';
 import { defaultRepository } from './wallet-data-repository.ts';
-import type { NetworkConfig } from './network.ts';
-import type { CallSdkWarnings } from './sdk-warnings.ts';
-import type { VerboseLog } from './verbose.ts';
+import type { NetworkConfig } from '../../lib/network.ts';
+import type { CallSdkWarnings } from '../../lib/sdk-warnings.ts';
+import type { VerboseLog } from '../../lib/verbose.ts';
+import type { DustRegisterOptions, DustRegistration } from '../../lib/engine.ts';
+export type { DustRegisterOptions, DustRegistration } from '../../lib/engine.ts';
 
-export interface DustRegisterOptions {
-  signal?: AbortSignal;
-  /** What the registration is doing now, for a progress line. */
-  onStatus?: (status: string) => void;
-  /** Wallet sync progress, as blocks applied of the highest seen. */
-  onSyncProgress?: (applied: number, highest: number) => void;
-  /** Which wallets the sync still waits on. */
-  onSyncDetail?: (detail: string) => void;
-  /** A transient SDK error the sync is retrying past. */
-  onSyncWarning?: (tag: string, message: string) => void;
-  /** The call's SDK warnings, listened to for the whole registration. */
-  sdkWarnings: CallSdkWarnings;
-  /** The call's verbose lines. */
-  log?: VerboseLog;
-}
 
-export interface DustRegistration {
-  /** The wallet had Dust already; nothing was registered. */
-  alreadyAvailable: boolean;
-  txHash?: string;
-  /** The Dust balance once synced, in its smallest unit. */
-  dustBalance: bigint;
-}
 
 export async function registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions): Promise<DustRegistration> {
   const { signal, onStatus, onSyncProgress, onSyncDetail, onSyncWarning, sdkWarnings, log } = options;

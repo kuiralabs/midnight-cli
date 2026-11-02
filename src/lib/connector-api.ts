@@ -41,3 +41,6 @@ export function createApiError(code: ErrorCode, reason: string): APIError {
   error.reason = reason;
   return error;
 }
+
+/** The error message when the operator declines an approval prompt. */
+export const OPERATOR_REJECTED_MESSAGE = 'User rejected the request';

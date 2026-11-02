@@ -4,9 +4,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as rx from 'rxjs';
 
-import { isDustRelatedError, ensureDust, registerNightUtxos } from '../lib/transfer.ts';
+import { isDustRelatedError, ensureDust, registerNightUtxos } from '../engine/rc/transfer.ts';
 import { DustFeeNotGeneratedError } from '../lib/dust-registration-plan.ts';
-import type { FacadeBundle } from '../lib/facade.ts';
+import type { FacadeBundle } from '../engine/rc/facade.ts';
 import type { DustAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { UtxoWithMeta } from '@midnightntwrk/wallet-sdk/facade';
 

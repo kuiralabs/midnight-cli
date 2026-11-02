@@ -1,24 +1,17 @@
 // transfer command — send NIGHT from my wallet to another address
 // Usage: midnight transfer <to> <amount> [--shielded]
 
-import * as ledger from '@midnightntwrk/ledger-v9';
 import { throwIfCancelled } from '../lib/errors.ts';
-import { MidnightBech32m } from '@midnightntwrk/wallet-sdk/address-format';
 import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '../lib/argv.ts';
 import { saveShieldedAddress, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides } from '../lib/network.ts';
-import { getNetworkId } from '../lib/network-id.ts';
 import { resolveTransferRequest, type TransferRequest } from '../lib/transfer-request.ts';
-import { decodeShieldedAddress } from '../engine/rc/addresses.ts';
-import { executeTransfer, ensureDust } from '../lib/transfer.ts';
+import { engineFor } from '../lib/engine.ts';
 import { nightToMicro } from '../lib/amount.ts';
-import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { header, keyValue, divider, formatAddress, successMessage } from '../ui/format.ts';
 import { bold, dim } from '../ui/colors.ts';
-import { trackElapsed } from '../ui/spinner.ts';
 import type { CallContext } from '../lib/call-context.ts';
-import { DUST_SHORT_WAIT_MS, payWhenDustCovers } from '../lib/dust-wait.ts';
 
 export default async function transferCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
@@ -54,7 +47,7 @@ async function unshieldedTransfer(
   const spinner = ctx.progress.start('Starting wallet...');
 
   try {
-    const result = await executeTransfer({
+    const result = await (await engineFor(networkName)).wallet.transfer({
       seedBuffer,
       networkConfig,
       recipientAddress,
@@ -128,16 +121,12 @@ async function shieldedTransfer(
   const seedBuffer = Buffer.from((await unlockWallet(walletPath)).seed, 'hex');
 
   const { name: networkName, config: networkConfig } = resolveNetwork({ args });
-  const networkId = getNetworkId(networkConfig.networkId);
-  const nightToken = ledger.unshieldedToken().raw;
 
   applyEndpointOverrides(networkConfig, {
     proofServer: getFlag(args, 'proof-server'),
     node: getFlag(args, 'node'),
     indexerWS: getFlag(args, 'indexer-ws'),
   }, networkName);
-
-  const decodedRecipient = decodeShieldedAddress(recipientAddress, networkName);
 
   ctx.output.stderr('\n' + header('Shielded Transfer') + '\n\n');
   ctx.output.stderr(keyValue('Network', networkName) + '\n');
@@ -151,74 +140,32 @@ async function shieldedTransfer(
   const spinner = ctx.progress.start('Syncing wallet...');
 
   try {
-    const txHash = await defaultRepository().withFacade(
-      seedBuffer,
+    const txHash = await (await engineFor(networkName)).wallet.shieldedTransfer({
+      seed: seedBuffer,
+      network: networkName,
       networkConfig,
-      async ({ bundle, state }) => {
-        // Cache shielded address in wallet file
-        const senderShieldedAddr = MidnightBech32m.encode(networkId, state.shielded.address).asString();
-        saveShieldedAddress(walletPath, networkName, senderShieldedAddr);
-
-        const shieldedBalance = state.shielded.balances[nightToken] ?? 0n;
-        if (shieldedBalance < amount) {
-          const available = Number(shieldedBalance) / 1_000_000;
-          throw new Error(
-            `Insufficient shielded balance: ${available.toFixed(6)} NIGHT available, ${amountNight} NIGHT requested.\n` +
-            `Fund shielded balance: midnight airdrop ${amountNight} --shielded`
-          );
+      recipient: recipientAddress,
+      amount,
+      progress: spinner,
+      // Right after another payment the wallet's Dust can be short of this
+      // fee: wait when the rest is moments away, else say how long it takes.
+      waitForDustToCover: true,
+      // Cache shielded address in wallet file
+      onSenderShieldedAddress: (address) => saveShieldedAddress(walletPath, networkName, address),
+      insufficient: (available) =>
+        `Insufficient shielded balance: ${available} NIGHT available, ${amountNight} NIGHT requested.\n` +
+        `Fund shielded balance: midnight airdrop ${amountNight} --shielded`,
+      log: ctx.diagnostics.line,
+      signal: ctx.signal,
+      onStatus: (s) => spinner.update(s),
+      onSyncProgress: (applied, highest) => {
+        if (highest > 0) {
+          const pct = Math.min(Math.round((applied / highest) * 100), 100);
+          spinner.update(pct >= 100 ? 'Syncing wallet...' : `Syncing wallet... ${pct}%`);
         }
-
-        spinner.update('Checking dust...');
-        await ensureDust(bundle, (status: string) => spinner.update(status));
-
-        throwIfCancelled(ctx.signal);
-
-        spinner.update('Building shielded transaction...');
-        // Right after another payment the wallet's Dust can be short of this
-        // fee: wait when the rest is moments away, else say how long it takes.
-        const recipe = await payWhenDustCovers(
-          () => bundle.facade.transferTransaction(
-            [{
-              type: 'shielded' as const,
-              outputs: [{ type: nightToken, amount, receiverAddress: decodedRecipient }],
-            }],
-            { ttl: new Date(Date.now() + 60 * 60 * 1000) },
-          ),
-          state.dust,
-          { maxWaitMs: DUST_SHORT_WAIT_MS, onStatus: (status) => spinner.update(status), signal: ctx.signal },
-        );
-
-        spinner.update('Signing...');
-        const signed = await bundle.facade.signRecipe(
-          recipe,
-          bundle.keystore.signDataAsync,
-        );
-
-        spinner.update('Generating ZK proof (this may take a few minutes)...');
-        const finalized = await bundle.facade.finalizeRecipe(signed);
-
-        const txId = await trackElapsed(
-          spinner,
-          'Submitting and waiting for finalization (typically 12 to 30s)...',
-          bundle.facade.submitTransaction(finalized),
-        );
-        return String(txId);
       },
-      {
-        syncMode: 'full',
-        log: ctx.diagnostics.line,
-        requireStrictSync: true,
-        signal: ctx.signal,
-        onStatus: (s) => spinner.update(s),
-        onSyncProgress: (applied, highest) => {
-          if (highest > 0) {
-            const pct = Math.min(Math.round((applied / highest) * 100), 100);
-            spinner.update(pct >= 100 ? 'Syncing wallet...' : `Syncing wallet... ${pct}%`);
-          }
-        },
-        onSyncDetail: (detail) => spinner.update(`Syncing wallet... (waiting on: ${detail})`),
-      },
-    );
+      onSyncDetail: (detail) => spinner.update(`Syncing wallet... (waiting on: ${detail})`),
+    });
 
     spinner.stop('Transaction submitted');
 

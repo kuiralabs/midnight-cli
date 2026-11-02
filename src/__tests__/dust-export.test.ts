@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { overlayDustDirectSnapshot } from '../lib/facade.ts';
+import { overlayDustDirectSnapshot } from '../engine/rc/facade.ts';
 import type { DustCacheEntry } from '../engine/rc/dust-direct-cache.ts';
 import { DUST_STATE_OWNED_HEX } from './fixtures/dust-state-owned.ts';
 
@@ -96,8 +96,8 @@ import { beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { exportDustSnapshot } from '../lib/dust-export.ts';
-import { WalletDataRepository } from '../lib/wallet-data-repository.ts';
+import { exportDustSnapshot } from '../engine/rc/dust-export.ts';
+import { WalletDataRepository } from '../engine/rc/wallet-data-repository.ts';
 import type { NetworkConfig } from '../lib/network.ts';
 import type { DustDirectResult } from '../engine/rc/dust-direct.ts';
 

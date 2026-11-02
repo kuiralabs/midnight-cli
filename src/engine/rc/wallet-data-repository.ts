@@ -18,11 +18,11 @@
 // tests against localnet — accepted scope per architecture-deepening.md.
 
 import { Buffer } from 'node:buffer';
-import { throwIfCancelled } from './errors.ts';
+import { throwIfCancelled } from '../../lib/errors.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import type { NetworkConfig, NetworkName } from './network.ts';
-import { isValidNetworkName } from './network.ts';
+import type { NetworkConfig, NetworkName } from '../../lib/network.ts';
+import { isValidNetworkName } from '../../lib/network.ts';
 import { type FacadeState } from '@midnightntwrk/wallet-sdk/facade';
 import {
   buildFacade,
@@ -33,66 +33,36 @@ import {
   type SyncMode,
   overlayDustDirectSnapshot,
 } from './facade.ts';
-import { isColdStartRace } from './sdk-errors.ts';
-import { loadDustCache, saveDustCache, dustPublicKeyHexFromSeed, validateDustCacheChainId } from '../engine/rc/dust-direct-cache.ts';
-import { clearDustDirectCache } from './reader-cache-files.ts';
+import { isColdStartRace } from '../../lib/sdk-errors.ts';
+import { loadDustCache, saveDustCache, dustPublicKeyHexFromSeed, validateDustCacheChainId } from './dust-direct-cache.ts';
+import { clearDustDirectCache } from '../../lib/reader-cache-files.ts';
 import {
   loadWalletCache,
   saveWalletCache,
   clearWalletCache,
   validateWalletCacheChainId,
   type WalletCacheData,
-} from './wallet-cache.ts';
-import { getChainGenesisHash } from './chain-id.ts';
-import { assertLedgerSupported, fetchProtocolVersion } from './ledger-guard.ts';
-import { checkBalance, type BalanceSummary } from './balance-subscription.ts';
-import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from '../engine/rc/dust-direct.ts';
-import { bindCachesToIndexer, describeIndexerChange } from './cache-indexer.ts';
-import { nativeDustSyncAvailable, runDustSyncNative } from '../engine/rc/dust-sync-native.ts';
-import type { VerboseLog } from './verbose.ts';
-import { callNodeRpc } from './node-rpc.ts';
-import { deriveDustSeed } from '../engine/rc/derivation.ts';
-import { deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
-import { fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from './event-tip.ts';
+} from '../../lib/wallet-cache.ts';
+import { getChainGenesisHash } from '../../lib/chain-id.ts';
+import { assertLedgerSupported, fetchProtocolVersion } from '../../lib/ledger-guard.ts';
+import { checkBalance, type BalanceSummary } from '../../lib/balance-subscription.ts';
+import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from './dust-direct.ts';
+import { bindCachesToIndexer, describeIndexerChange } from '../../lib/cache-indexer.ts';
+import { nativeDustSyncAvailable, runDustSyncNative } from './dust-sync-native.ts';
+import type { VerboseLog } from '../../lib/verbose.ts';
+import { callNodeRpc } from '../../lib/node-rpc.ts';
+import { deriveDustSeed } from './derivation.ts';
+import { deriveUnshieldedAddress } from './derive-address.ts';
+import { fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '../../lib/event-tip.ts';
+import type { DustBalance, ReadOptions, UnshieldedView } from '../../lib/engine.ts';
+export type { DustBalance, ReadOptions, UnshieldedView } from '../../lib/engine.ts';
 
 // ── Public types ──────────────────────────────────────────
 
-export interface DustView {
+export interface DustView extends DustBalance {
   state: ledger.DustLocalState;
-  balance: bigint;
-  availableCoins: number;
-  ownedUtxoCount: number;
-  syncTime: Date;
-  /**
-   * True iff any cache layer participated — either an in-memory memo hit, OR a
-   * disk-cache resume (delta sync from a previous checkpoint). False only for
-   * a true cold scan from event 0.
-   */
-  fromCache: boolean;
-  /** Number of events applied by this call (0 on memo hits; delta count on disk-resume; full count on cold). */
-  eventsApplied: number;
-  /**
-   * Id of the last dust event folded into `state`; -1 when the wallet has no
-   * dust events on this chain yet. This is the snapshot offset a restoring
-   * wallet resumes from, and it lives nowhere else in the view.
-   */
-  lastAppliedEventId: number;
-  /**
-   * True iff the sync stopped short of the chain tip even after exhausting the
-   * partial-resume loop — the state is a valid checkpoint but NOT current.
-   * Callers that hand this state to another wallet (`dust export`) must surface
-   * it: restoring a short state looks like success and then silently falls back
-   * to the SDK's cold sync for the remaining events.
-   */
-  partial: boolean;
-  /** Wall-clock millis when this value was last refreshed from the network. */
-  fetchedAt: number;
 }
 
-export interface UnshieldedView extends BalanceSummary {
-  fromCache: boolean;
-  fetchedAt: number;
-}
 
 /** What the caller borrows during withFacade. SDK type leak is intentional. */
 export interface FacadeLease {
@@ -110,22 +80,6 @@ export interface InvalidationScope {
   kinds?: ReadonlyArray<'dust' | 'unshielded' | 'facade'>;
 }
 
-export interface ReadOptions {
-  /** Bypass every cache layer and re-fetch from network. */
-  forceFresh?: boolean;
-  signal?: AbortSignal;
-  /** Status hook for spinner wiring. */
-  onStatus?: (s: string) => void;
-  /**
-   * Raw progress signal during the underlying network fetch. For dust this
-   * fires per-chunk (events applied vs max event id); for unshielded it
-   * fires per-UTXO-batch (current tx vs highest tx id). Callers that already
-   * have a spinner usually use this to render a percentage.
-   */
-  onProgress?: (current: number, highest: number) => void;
-  /** The call's verbose lines. */
-  log?: VerboseLog;
-}
 
 export interface FacadeOptions extends ReadOptions {
   syncMode?: SyncMode;

@@ -17,7 +17,7 @@ import { waitForFirstBlock } from '../lib/node-ready.ts';
 import { waitForAddressFunded } from '../lib/indexer-ready.ts';
 import { waitForProofServerReady } from '../lib/proof-server-ready.ts';
 import { sleep } from '../lib/sleep.ts';
-import { WalletDataRepository } from '../lib/wallet-data-repository.ts';
+import { WalletDataRepository } from '../engine/rc/wallet-data-repository.ts';
 import { getNetworkConfig, type NetworkConfig } from '../lib/network.ts';
 import type { BalanceSummary } from '../lib/balance-subscription.ts';
 

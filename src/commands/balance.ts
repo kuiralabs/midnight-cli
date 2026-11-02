@@ -9,7 +9,6 @@ import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides } from '../lib/network.ts';
 import { shieldedSyncEnabled, shieldedDisabledReason } from '../lib/shielded-policy.ts';
 import { isNativeToken } from '../lib/balance-subscription.ts';
-import { defaultRepository } from '../lib/wallet-data-repository.ts';
 import { engineFor } from '../lib/engine.ts';
 import { assertLedgerSupported, fetchProtocolVersion } from '../lib/ledger-guard.ts';
 import { getChainGenesisHash } from '../lib/chain-id.ts';
@@ -99,7 +98,7 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
   const spinner = ctx.progress.start(`Checking balance on ${networkName}...`);
 
   try {
-    const result = await defaultRepository().unshielded(address, networkConfig, {
+    const result = await (await engineFor(networkName)).wallet.unshieldedBalance(address, networkConfig, {
       forceFresh: hasFlag(args, 'no-cache'),
       signal: ctx.signal,
       log: ctx.diagnostics.line,
@@ -213,7 +212,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
     // ── Phase 1: fast unshielded via GraphQL (no facade, no proof server) ──
     if (!isJson) activeSpinner = ctx.progress.start('Checking unshielded...');
     ctx.diagnostics.line('balance', `phase=unshielded forceFresh=${noCache}`);
-    const unshieldedResult = await defaultRepository().unshielded(address, networkConfig, {
+    const unshieldedResult = await (await engineFor(networkName)).wallet.unshieldedBalance(address, networkConfig, {
       forceFresh: noCache,
       signal: ctx.signal,
       log: ctx.diagnostics.line,

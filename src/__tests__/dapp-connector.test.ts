@@ -10,19 +10,19 @@ import { Effect } from 'effect';
 
 // Stub SDK address encoding — MidnightBech32m.encode returns a mock
 
-import { createDAppConnector, signatureScheme, toHistoryEntry, type DAppConnector } from '../lib/dapp-connector.ts';
+import { createDAppConnector, signatureScheme, toHistoryEntry, type DAppConnector } from '../engine/rc/dapp-connector.ts';
 import { startLocalIndexer, type LocalIndexer } from './helpers/local-indexer.ts';
-import { PartlySignedTransactionError } from '../lib/sign-recipe.ts';
+import { PartlySignedTransactionError } from '../engine/rc/sign-recipe.ts';
 import { signedMessageBytes } from '../lib/sign-data.ts';
 import { createKeystore } from '@midnightntwrk/wallet-sdk/unshielded';
 import { Intent, UnshieldedOffer, verifySignature } from '@midnightntwrk/ledger-v9';
-import type { FacadeBundle } from '../lib/facade.ts';
+import type { FacadeBundle } from '../engine/rc/facade.ts';
 import type { NetworkConfig } from '../lib/network.ts';
 import type { RpcHandlerContext } from '../lib/ws-rpc.ts';
 import { PROOF_TIMEOUT_MS } from '../lib/constants.ts';
 import { withDustShortfall } from '../lib/sdk-errors.ts';
 import { classifyError } from '../lib/exit-codes.ts';
-import { FORK_SCHEDULE } from '../lib/fork-schedule.ts';
+import { FORK_SCHEDULE } from '../engine/rc/fork-schedule.ts';
 import { deriveUnshieldedAddress, deriveAllShieldedAddresses, deriveShieldedAddress } from '../engine/rc/derive-address.ts';
 import { DustAddress, MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';

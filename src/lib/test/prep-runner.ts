@@ -2,16 +2,11 @@
 
 import { join } from 'node:path';
 
-import { bindCachesToIndexer } from '../cache-indexer.ts';
 import { clearWalletCache } from '../wallet-cache.ts';
 import { resolveWalletPath, unlockWallet } from '../wallet-config.ts';
 import { resolveNetwork } from '../resolve-network.ts';
 import type { NetworkConfig, NetworkName } from '../network.ts';
 import { assertLedger9StackReachable, assertLedgerSupported } from '../ledger-guard.ts';
-import { buildFacade, hasDustAvailable, startAndSyncFacade, stopFacade, waitForDustAvailable } from '../facade.ts';
-import { loadWalletCache, saveWalletCache } from '../wallet-cache.ts';
-import { ensureDust } from '../transfer.ts';
-import { airdropNight } from '../airdrop.ts';
 
 import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallbacks } from './types.ts';
 import { startServeOrReuse } from '../serve-manager.ts';
@@ -120,38 +115,18 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
 
   // Check current balance — use fresh cache since localnet may have restarted
   callbacks.onMessage('Checking balance...');
-  bindCachesToIndexer(network, networkConfig.indexerWS);
-  const cache = loadWalletCache(address, network);
+  const engine = await engineFor(network);
   const stopListening = ctx.sdkWarnings.listen((_tag, msg) => {
     callbacks.onMessage(`SDK: ${msg}`);
   });
-  const bundle = await buildFacade(seedBuffer, networkConfig, cache).catch((err: unknown) => { stopListening(); throw err; });
-
   try {
-    const state = await startAndSyncFacade(bundle, {
-      syncMode: 'lite',
-      signal: ctx.signal,
-      onProgress: (applied, highest) => {
-        if (highest > 0) {
-          const pct = Math.min(Math.round((applied / highest) * 100), 100);
-          callbacks.onMessage(`Syncing wallet... ${pct}%`);
-        }
-      },
-      onSyncDetail: (detail) => {
-        callbacks.onMessage(`Syncing wallet... (${detail})`);
-      },
-    });
-    const nightToken = (await engineFor(network)).ledger.nightTokenId();
-    const balance = state.unshielded.balances[nightToken] ?? 0n;
-
+    const balance = await engine.wallet.prepNightBalance({ seed: seedBuffer, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage });
     if (balance > 0n) {
       callbacks.onMessage(`Balance OK: ${balance}`);
-      try { await saveWalletCache(address, network, bundle.facade); } catch {}
       return;
     }
   } finally {
     stopListening();
-    try { await stopFacade(bundle); } catch {}
   }
 
   // Balance is zero
@@ -166,7 +141,7 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
   // Undeployed (localnet) — auto-airdrop from genesis
   callbacks.onMessage(`Balance is 0. Airdropping ${amount} NIGHT from genesis...`);
   // The same genesis airdrop `mn airdrop` and `mn dev` fund through.
-  await airdropNight({
+  await engine.wallet.airdrop({
     networkConfig,
     recipientAddress: address,
     amountNight: amount,
@@ -195,33 +170,13 @@ async function stepDust(config: DappTestConfig, ctx: PrepContext, callbacks: Pre
   const address = walletConfig.addresses[network as NetworkName];
 
   // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
-  bindCachesToIndexer(network, networkConfig.indexerWS);
-  const cache = loadWalletCache(address, network);
   const stopListening = ctx.sdkWarnings.listen(undefined);
-  const bundle = await buildFacade(seedBuffer, networkConfig, cache).catch((err: unknown) => { stopListening(); throw err; });
-
   try {
-    callbacks.onMessage('Syncing wallet...');
-    await startAndSyncFacade(bundle, { syncMode: 'lite', signal: ctx.signal });
-
-    // Register dust (auto-registers UTXOs if needed, no-op if already available)
-    callbacks.onMessage('Ensuring dust...');
-    const result = await ensureDust(bundle, (status) => callbacks.onMessage(`Dust: ${status}`));
-
-    if (result.alreadyAvailable) {
-      callbacks.onMessage('Dust already available');
-      try { await saveWalletCache(address, network, bundle.facade); } catch {}
-      return;
-    }
-
-    // Dust was just registered — wait for coins to actually appear on-chain.
-    // This MUST use the same facade to get real-time state updates.
-    callbacks.onMessage('Dust registered. Waiting for coins to become available...');
-    const dustState = await waitForDustAvailable(bundle, DUST_WAIT_TIMEOUT_MS, ctx.signal);
-
+    const { dustAvailable } = await (await engineFor(network)).wallet.prepDust(
+      { seed: seedBuffer, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage },
+      DUST_WAIT_TIMEOUT_MS,
+    );
     // Verify dust is actually available — don't trust silent timeouts
-    const dustAvailable = hasDustAvailable(dustState);
-
     if (!dustAvailable) {
       if (network !== 'undeployed') {
         throw new Error(
@@ -232,12 +187,8 @@ async function stepDust(config: DappTestConfig, ctx: PrepContext, callbacks: Pre
       }
       throw new Error(`Dust not available after ${DUST_WAIT_TIMEOUT_MS / 1000}s. The chain may be slow — try again.`);
     }
-
-    callbacks.onMessage('Dust is available');
-    try { await saveWalletCache(address, network, bundle.facade); } catch {}
   } finally {
     stopListening();
-    try { await stopFacade(bundle); } catch {}
   }
 }
 

@@ -6,10 +6,8 @@ import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '../li
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides } from '../lib/network.ts';
-import { hasDustAvailable, isFacadeSynced, waitForDustAvailable } from '../lib/facade.ts';
-import { saveWalletCache } from '../lib/wallet-cache.ts';
-import { defaultRepository } from '../lib/wallet-data-repository.ts';
-import { createDAppConnector, OPERATOR_REJECTED_MESSAGE, type DAppConnectorCallbacks } from '../lib/dapp-connector.ts';
+import { engineFor, type DAppConnector, type DAppConnectorCallbacks } from '../lib/engine.ts';
+import { OPERATOR_REJECTED_MESSAGE } from '../lib/connector-api.ts';
 import type { PhaseTiming } from '../lib/phase-tracker.ts';
 import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
 import { DEFAULT_SERVE_PORT } from '../lib/constants.ts';
@@ -91,34 +89,42 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
     else { ctx.output.stderr(dim(`  SDK: ${msg}`) + '\n'); }
   });
 
-  // ── Build & sync facade via repo.withFacade ──
-  // The repo owns: validateNetworkCaches → primeDustCache → buildFacade →
-  // sync (with retry) → stopFacade. We pass `skipAutoSave: true` because
-  // serve has nuanced save logic (skip on pending txs to avoid persisting
-  // dust=0 corruption — see `connector.hasPendingTxs()` check below).
+  // ── Sync the wallet, through the engine for the network ──
+  // The engine owns validating the caches, priming Dust, building the
+  // wallet, syncing (with retries) and stopping it. Saving is ours: skipped
+  // while transactions are pending, to avoid persisting dust=0 (see the
+  // `connector.hasPendingTxs()` check below).
 
   const spinner = ctx.progress.start('Syncing wallet...');
   // Skip the (slow) shielded sync where shielded is unusable (no faucet on
   // preview/preprod). dApps there can only do unshielded + dust anyway.
   const syncMode = shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded')) ? 'full' : 'lite';
 
-  await defaultRepository().withFacade(seedBuffer, networkConfig, async ({ bundle }) => {
+  await (await engineFor(networkName)).wallet.serveWallet({ seed: seedBuffer, networkConfig, network: networkName, address, syncMode, signal: ctx.signal, log: ctx.diagnostics.line,
+    onStatus: (s) => spinner.update(s),
+    onSyncProgress: (applied, highest) => {
+      if (highest > 0) {
+        const pct = Math.min(Math.round((applied / highest) * 100), 100);
+        spinner.update(pct >= 100 ? 'Syncing wallet...' : `Syncing wallet... ${pct}%`);
+      }
+    },
+    onSyncDetail: (detail) => spinner.update(`Syncing wallet... (waiting on: ${detail})`),
+  }, async (served) => {
     spinner.stop('Wallet synced');
 
     // Wait for dust coins to actually be available before accepting write requests.
     // On preprod this can take 10-30s after sync completes.
     const dustSpinner = ctx.progress.start('Waiting for dust...');
-    const dustState = await waitForDustAvailable(bundle);
-    const hasDust = hasDustAvailable(dustState);
+    const hasDust = await served.waitForDust();
     dustSpinner.stop(hasDust ? 'Dust ready' : 'Dust not yet available (writes may fail)');
 
     // Save cache after successful sync (checkpoint before opening RPC).
-    try { await saveWalletCache(address, networkName, bundle.facade); } catch { /* best-effort */ }
+    await served.saveState();
 
     throwIfCancelled(ctx.signal);
 
     let server: RpcServer | undefined;
-    let connector: ReturnType<typeof createDAppConnector> | undefined;
+    let connector: DAppConnector | undefined;
     try {
       // ── Create DApp Connector ──
 
@@ -156,16 +162,12 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
       },
     };
 
-    connector = createDAppConnector({
-      bundle,
-      networkConfig,
+    // Reads answer from the state the Dust wait ended on, and from every
+    // later one that is synced by the rule the sync used.
+    connector = served.connect({
       approvalOptions: { approveAll, approveFees, autoApproveReads },
       feeLimits,
       callbacks: phaseCallbacks,
-      // Reads answer from the state this sync ended on, and from every later
-      // one that is synced by the rule the sync used.
-      initialState: dustState,
-      isCurrent: (state) => isFacadeSynced(state, syncMode, bundle.emptyStreams),
     });
 
     // ── Start WebSocket server ──
@@ -266,7 +268,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
       // The SDK drops pendingDustTokens on serialization, so saving while coins
       // are locked in pending would persist a corrupted state (dust=0).
       if (!connector.hasPendingTxs()) {
-        try { await saveWalletCache(address, networkName, bundle.facade); } catch { /* best-effort */ }
+        await served.saveState();
       }
       try { await server.close(); } catch { /* best-effort */ }
       connector.dispose();
@@ -279,22 +281,6 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
       connector?.dispose();
       throw err;
     }
-  }, {
-    syncMode,
-    // serve accepts write requests from dApps — must be strictly synced.
-    requireStrictSync: true,
-    // Save logic is conditional (skip if pending txs) — done manually above.
-    skipAutoSave: true,
-    signal: ctx.signal,
-    log: ctx.diagnostics.line,
-    onStatus: (s) => spinner.update(s),
-    onSyncProgress: (applied, highest) => {
-      if (highest > 0) {
-        const pct = Math.min(Math.round((applied / highest) * 100), 100);
-        spinner.update(pct >= 100 ? 'Syncing wallet...' : `Syncing wallet... ${pct}%`);
-      }
-    },
-    onSyncDetail: (detail) => spinner.update(`Syncing wallet... (waiting on: ${detail})`),
   }).finally(() => {
     stopListening();
   });
