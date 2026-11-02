@@ -2,7 +2,7 @@
 
 import { type ParsedArgs, hasFlag } from '../lib/argv.ts';
 import { GENESIS_SEED } from '../lib/constants.ts';
-import { deriveUnshieldedAddress } from '../lib/derive-address.ts';
+import { engineFor } from '../lib/engine.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { keyValue, divider, formatAddress } from '../ui/format.ts';
 import { dim } from '../ui/colors.ts';
@@ -11,7 +11,7 @@ import type { CallContext } from '../lib/call-context.ts';
 export default async function genesisAddressCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const networkName = resolveNetworkName({ args });
   const seedBuffer = Buffer.from(GENESIS_SEED, 'hex');
-  const address = deriveUnshieldedAddress(seedBuffer, networkName);
+  const address = (await engineFor(networkName)).keys.unshieldedAddress(seedBuffer, networkName);
 
   // JSON mode
   if (hasFlag(args, 'json')) {

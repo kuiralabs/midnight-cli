@@ -8,7 +8,7 @@ const ON_CHAIN: readonly string[] = ['deploy', 'call', 'state'];
 /** The wallet a deploy or call pays from exists and can be read. */
 async function checkSendingWallet(params: Readonly<Record<string, unknown>>): Promise<void> {
   const { loadWalletConfig, resolveWalletPath } = await import('../lib/wallet-config.ts');
-  loadWalletConfig(resolveWalletPath(params.wallet as string | undefined));
+  await loadWalletConfig(resolveWalletPath(params.wallet as string | undefined));
 }
 
 export const contractDefinition: CommandDefinition = {

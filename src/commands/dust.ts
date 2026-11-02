@@ -9,7 +9,7 @@ import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveSeed } from '../lib/seed-resolver.ts';
 import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides, type NetworkConfig } from '../lib/network.ts';
-import { deriveDustSeed } from '../lib/derivation.ts';
+import { deriveDustSeed } from '../engine/rc/derivation.ts';
 import { registerDust } from '../lib/dust-register.ts';
 import { checkBalance } from '../lib/balance-subscription.ts';
 import { dustPublicKeyHex } from '../lib/dust-direct-cache.ts';

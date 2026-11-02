@@ -39,7 +39,10 @@ const HOMES = [
 
   // A command's definition (<name>.definition.ts) lives in its command's package.
   ['core', /^commands\/config(\.definition)?\.ts$/],
-  ['core', /^lib\/(argv|errors|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance)\.ts$/],
+  // The SDK engines: each is the only code that imports its SDK set.
+  ['engine', /^engine\//],
+
+  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
   ['dev', /^ui\/(test-create-prompt|dev-keys)\.ts$/],
 
@@ -67,8 +70,10 @@ const HOMES = [
 
 // The packages each package may import, its own included. Dependencies point
 // one way: core, chain, wallet, then contract and connect side by side, then
-// dev, then grant.
+// dev, then grant. An engine sits beside chain: it uses core and chain, and
+// nothing imports it but core's loader.
 const MAY_IMPORT = {
+  engine: ['core', 'chain', 'engine'],
   core: ['core'],
   chain: ['core', 'chain'],
   wallet: ['core', 'chain', 'wallet'],
@@ -89,6 +94,44 @@ const MAY_IMPORT = {
 const DISPATCHERS = new Set(['shell', 'mcp']);
 
 const MIDNIGHT_SDK = /^@midnight(-ntwrk|ntwrk)\//;
+
+// The one module that may import an engine: core's loader, which imports the
+// engine for a network's SDK set when a call needs it.
+const ENGINE_LOADER = 'lib/engine.ts';
+
+// Modules that still import the SDK themselves, until each moves behind the
+// engine; a module on the list may also import the engine's own files. The
+// list only shrinks (a test pins it), and is empty when the engine is done.
+export const PENDING_ENGINE = new Set([
+  'commands/airdrop.ts',
+  'commands/balance.ts',
+  'commands/dust.ts',
+  'commands/inspect-cost.ts',
+  'commands/transfer.ts',
+  'lib/chain-params.ts',
+  'lib/contract/providers.ts',
+  'lib/contract/runner.ts',
+  'lib/dapp-connector.ts',
+  'lib/dust-balance-direct.ts',
+  'lib/dust-collapse.ts',
+  'lib/dust-direct-cache.ts',
+  'lib/dust-direct.ts',
+  'lib/dust-sync-native.ts',
+  'lib/dust-wallet.ts',
+  'lib/facade.ts',
+  'lib/fee-only-check.ts',
+  'lib/fork-schedule.ts',
+  'lib/grant/sealed-account.ts',
+  'lib/shielded-direct-cache.ts',
+  'lib/shielded-direct.ts',
+  'lib/sign-recipe.ts',
+  'lib/test/prep-runner.ts',
+  'lib/transfer-request.ts',
+  'lib/transfer.ts',
+  'lib/tx-inspect.ts',
+  'lib/wallet-data-repository.ts',
+  'lib/ws-rpc.ts',
+]);
 const ACCOUNT_CHAIN = /^@kuiralabs\/midnight-account/;
 const SDK_FREE = new Set(['core', 'chain']);
 
@@ -143,6 +186,9 @@ export function importRule(fromRel, toRel) {
   const isCommand = (path) => path.startsWith('commands/');
   const callsCommand = isCommand(toRel) && (!isCommand(fromRel) || targetHome !== home);
   if (callsCommand && !DISPATCHERS.has(home)) return `${isCommand(fromRel) ? 'command' : 'library'} → ${targetHome} command`;
+  if (targetHome === 'engine' && home !== 'engine') {
+    return fromRel === ENGINE_LOADER || PENDING_ENGINE.has(fromRel) ? undefined : `${home} → engine (reach it through ${ENGINE_LOADER})`;
+  }
   if (!MAY_IMPORT[home].includes(targetHome)) return `${home} → ${targetHome}`;
   return undefined;
 }
@@ -173,8 +219,8 @@ export function findLayeringProblems() {
       if (specifier.startsWith('.')) {
         const rule = importRule(rel, relative(SRC, resolve(dirname(file), specifier)));
         if (rule !== undefined) violations.push({ home, rule, where, specifier });
-      } else if (SDK_FREE.has(home) && MIDNIGHT_SDK.test(specifier)) {
-        violations.push({ home, rule: `${home} → Midnight SDK`, where, specifier });
+      } else if (MIDNIGHT_SDK.test(specifier) && home !== 'engine' && (SDK_FREE.has(home) || !PENDING_ENGINE.has(rel))) {
+        violations.push({ home, rule: `${home} → Midnight SDK (only an engine imports it)`, where, specifier });
       } else if (home !== 'grant' && ACCOUNT_CHAIN.test(specifier)) {
         violations.push({ home, rule: `${home} → account chain`, where, specifier });
       }

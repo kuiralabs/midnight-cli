@@ -26,7 +26,7 @@ import {
   FILE_MODE,
   isValidWalletName,
 } from '../lib/constants.ts';
-import { deriveAllAddresses } from '../lib/derive-address.ts';
+import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
 
 // Use a temp dir that simulates ~/.midnight
 const TEST_HOME = path.join(os.tmpdir(), `midnight-multi-wallet-test-${process.pid}`);
@@ -111,8 +111,8 @@ describe('resolveWalletPath', () => {
 // ─── listWallets ────────────────────────────────────────────
 
 describe('listWallets', () => {
-  it('returns empty array when wallets dir does not exist', () => {
-    const wallets = listWallets();
+  it('returns empty array when wallets dir does not exist', async () => {
+    const wallets = await listWallets();
     // There might be a real ~/.midnight/wallets dir, but in test context
     // we check the structure is correct
     expect(Array.isArray(wallets)).toBe(true);
@@ -179,9 +179,9 @@ describe('migrateOldWallet', () => {
 // ─── loadWalletConfig error messages ────────────────────────
 
 describe('loadWalletConfig error messages', () => {
-  it('suggests "midnight wallet generate" in missing file error', () => {
+  it('suggests "midnight wallet generate" in missing file error', async () => {
     const filePath = path.join(TEST_HOME, 'nonexistent.json');
-    expect(() => loadWalletConfig(filePath)).toThrow('midnight wallet generate');
+    await expect(loadWalletConfig(filePath)).rejects.toThrow('midnight wallet generate');
   });
 });
 
@@ -252,10 +252,10 @@ describe('isValidWalletName', () => {
 // ─── saveWalletConfig + loadWalletConfig round-trip ─────────
 
 describe('wallet config round-trip with named wallets', () => {
-  it('saves and loads from wallets directory path', () => {
+  it('saves and loads from wallets directory path', async () => {
     const walletPath = path.join(TEST_WALLETS_DIR, 'test.json');
     saveWalletConfig(VALID_WALLET, walletPath);
-    const loaded = loadWalletConfig(walletPath);
+    const loaded = await loadWalletConfig(walletPath);
     expect(loaded).not.toHaveProperty('seed');
     expect(loaded.isSealed).toBe(false);
     expect(loaded.addresses).toEqual(VALID_WALLET.addresses);

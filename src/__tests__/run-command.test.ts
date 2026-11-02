@@ -16,7 +16,7 @@ import addressCommand from '../commands/address.ts';
 import genesisAddressCommand from '../commands/genesis-address.ts';
 import inspectCostCommand from '../commands/inspect-cost.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveAllAddresses } from '../lib/derive-address.ts';
+import { deriveAllAddresses } from '../engine/rc/derive-address.ts';
 import { localIndexerFlags } from './helpers/local-indexer.ts';
 import { ownCall } from './helpers/own-call.ts';
 

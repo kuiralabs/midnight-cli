@@ -18,7 +18,7 @@ import { resolveNetwork } from '../lib/resolve-network.ts';
 import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '../lib/network.ts';
 import { getNetworkId } from '../lib/network-id.ts';
 import { GENESIS_SEED } from '../lib/constants.ts';
-import { deriveShieldedAddress } from '../lib/derive-address.ts';
+import { deriveShieldedAddress } from '../engine/rc/derive-address.ts';
 import { ensureDust } from '../lib/transfer.ts';
 import { parseAmount, nightToMicro } from '../lib/amount.ts';
 import { airdropNight } from '../lib/airdrop.ts';
@@ -65,7 +65,7 @@ export default async function airdropCommand(args: ParsedArgs, ctx: CallContext)
   const walletFlag = getFlag(args, 'wallet');
   const isShielded = hasFlag(args, 'shielded') ||
     (walletFlag !== undefined && walletFlag.startsWith('mn_shield-addr_'));
-  const destination = resolveDestination(args, networkName, networkConfig, isShielded);
+  const destination = await resolveDestination(args, networkName, networkConfig, isShielded);
 
   if (isShielded) {
     return shieldedAirdrop(args, destination as ShieldedDestination, amountNight, networkName, networkConfig, ctx);
@@ -91,12 +91,12 @@ function looksLikeBech32mAddress(value: string): boolean {
   return value.startsWith('mn_addr_') || value.startsWith('mn_shield-addr_');
 }
 
-function resolveDestination(
+async function resolveDestination(
   args: ParsedArgs,
   networkName: NetworkName,
   networkConfig: NetworkConfig,
   isShielded: boolean,
-): UnshieldedDestination | ShieldedDestination {
+): Promise<UnshieldedDestination | ShieldedDestination> {
   const walletFlag = getFlag(args, 'wallet');
 
   if (walletFlag !== undefined && looksLikeBech32mAddress(walletFlag)) {
@@ -105,7 +105,7 @@ function resolveDestination(
 
   // Fall back to wallet file (name, path, or active wallet)
   const walletPath = resolveWalletPath(walletFlag);
-  const config = loadWalletConfig(walletPath);
+  const config = await loadWalletConfig(walletPath);
 
   if (isShielded) {
     // The wallet's own shielded address, as its file keeps it: receiving needs no passphrase.

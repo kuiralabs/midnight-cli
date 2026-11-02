@@ -110,7 +110,7 @@ export const transferDefinition: CommandDefinition = {
           },
           async check(_params, call) {
             const { resolveTransferRequest } = await import('../lib/transfer-request.ts');
-            resolveTransferRequest(call.argv());
+            await resolveTransferRequest(call.argv());
           },
         },
         order: 12,

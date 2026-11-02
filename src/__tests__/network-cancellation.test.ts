@@ -39,8 +39,8 @@ beforeEach(async () => {
   process.env.HOME = home;
   process.env.MN_PASSPHRASE = PASSPHRASE;
   establishPassphrase(stateRootIn(home), PASSPHRASE);
-  createWallet('alice', walletSecretFrom(), PASSPHRASE);
-  createWallet('bob', walletSecretFrom(), PASSPHRASE);
+  await createWallet('alice', walletSecretFrom(), PASSPHRASE);
+  await createWallet('bob', walletSecretFrom(), PASSPHRASE);
   io = captureOutput();
   // Every endpoint: takes HTTP requests and WebSocket upgrades, and answers none.
   requests = 0;

@@ -23,7 +23,7 @@ import { PROOF_TIMEOUT_MS } from '../lib/constants.ts';
 import { withDustShortfall } from '../lib/sdk-errors.ts';
 import { classifyError } from '../lib/exit-codes.ts';
 import { FORK_SCHEDULE } from '../lib/fork-schedule.ts';
-import { deriveUnshieldedAddress, deriveAllShieldedAddresses, deriveShieldedAddress } from '../lib/derive-address.ts';
+import { deriveUnshieldedAddress, deriveAllShieldedAddresses, deriveShieldedAddress } from '../engine/rc/derive-address.ts';
 import { DustAddress, MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import type { FeeLimits } from '../lib/fee-limits.ts';

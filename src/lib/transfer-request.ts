@@ -23,7 +23,7 @@ export interface TransferRequest {
 }
 
 /** `transfer <to> <amount> [--shielded] [--wallet] [--network]`, checked without touching the chain. */
-export function resolveTransferRequest(args: ParsedArgs): TransferRequest {
+export async function resolveTransferRequest(args: ParsedArgs): Promise<TransferRequest> {
   const recipientInput = args.subcommand;
   const amountStr = args.positionals[0];
 
@@ -45,10 +45,10 @@ export function resolveTransferRequest(args: ParsedArgs): TransferRequest {
   }
 
   const shielded = hasFlag(args, 'shielded');
-  const recipientAddress = resolveRecipient(recipientInput, args, shielded);
+  const recipientAddress = await resolveRecipient(recipientInput, args, shielded);
   const amountNight = parseAmount(amountStr);
   const walletPath = resolveWalletPath(getFlag(args, 'wallet'));
-  const walletConfig = loadWalletConfig(walletPath);
+  const walletConfig = await loadWalletConfig(walletPath);
   const networkName = resolveNetworkName({ args });
 
   if (shielded) {
@@ -89,12 +89,12 @@ function decodeUnshieldedRecipient(address: string, networkName: NetworkName): U
  * An address (mn_addr_ or mn_shield-addr_ prefix) is used as given. Anything
  * else is a wallet name, and the address comes from that wallet's file.
  */
-function resolveRecipient(input: string, args: ParsedArgs, shielded: boolean): string {
+async function resolveRecipient(input: string, args: ParsedArgs, shielded: boolean): Promise<string> {
   if (input.startsWith('mn_addr_') || input.startsWith('mn_shield-addr_')) {
     return input;
   }
 
-  const recipientConfig = loadWalletConfig(resolveWalletPath(input));
+  const recipientConfig = await loadWalletConfig(resolveWalletPath(input));
   const networkName = resolveNetworkName({ args });
 
   if (shielded) {

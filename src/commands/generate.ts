@@ -8,7 +8,7 @@ import * as path from 'path';
 import { type ParsedArgs, getFlag, hasFlag } from '../lib/argv.ts';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { deriveAllAddresses } from '../lib/derive-address.ts';
+import { engineFor } from '../lib/engine.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { type WalletPublic, writeSealedWallet } from '../lib/wallet-config.ts';
 import { passphraseForNewSecret } from '../lib/passphrase.ts';
@@ -66,7 +66,7 @@ export default async function generateCommand(args: ParsedArgs, ctx: CallContext
     seedBuffer = Buffer.from(mnemonicToSeedSync(mnemonic));
   }
 
-  const addresses = deriveAllAddresses(seedBuffer);
+  const addresses = (await engineFor(networkName)).keys.unshieldedAddresses(seedBuffer);
   const activeAddress = addresses[networkName];
 
   const config: WalletPublic = {

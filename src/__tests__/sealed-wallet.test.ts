@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WrongPassphraseError } from '../lib/keystore.ts';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { loadWalletConfig, protectAllWallets, sealWalletInPlace, unlockWallet, writeSealedWallet } from '../lib/wallet-config.ts';
-import { deriveAllAddresses, deriveAllShieldedAddresses } from '../lib/derive-address.ts';
+import { deriveAllAddresses, deriveAllShieldedAddresses } from '../engine/rc/derive-address.ts';
 import { FILE_MODE } from '../lib/constants.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 
@@ -46,9 +46,9 @@ describe('a sealed wallet', () => {
     expect(fs.statSync(file).mode & 0o777).toBe(FILE_MODE);
   });
 
-  it('shows its addresses without the passphrase', () => {
+  it('shows its addresses without the passphrase', async () => {
     writeSealedWallet(file, PUBLIC, { seed: SEED }, PASSPHRASE);
-    const config = loadWalletConfig(file);
+    const config = await loadWalletConfig(file);
     expect(config.addresses).toEqual(PUBLIC.addresses);
     expect(config.shieldedAddresses).toEqual(PUBLIC.shieldedAddresses);
     expect(config.isSealed).toBe(true);
@@ -84,26 +84,26 @@ describe('a wallet an earlier mn wrote in plain text', () => {
     const warnings: string[] = [];
     const wallet = await unlockWallet(file, { root: stateRootIn(home), warn: (line) => warnings.push(line) });
     expect(wallet.seed).toBe(SEED);
-    expect(loadWalletConfig(file).isSealed).toBe(false);
+    expect((await loadWalletConfig(file)).isSealed).toBe(false);
     expect(warnings.join('\n')).toMatch(/not protected[\s\S]*midnight wallet protect/);
   });
 
   it('is sealed in place, keeping its seed, mnemonic and addresses, with nothing left in the clear', async () => {
     writePlain();
-    sealWalletInPlace(file, PASSPHRASE);
+    await sealWalletInPlace(file, PASSPHRASE);
     const text = fs.readFileSync(file, 'utf8');
     expect(text).not.toContain(SEED);
     expect(text).not.toContain('abandon');
-    expect(loadWalletConfig(file)).toMatchObject({ ...PUBLIC, isSealed: true });
+    expect(await loadWalletConfig(file)).toMatchObject({ ...PUBLIC, isSealed: true });
     const wallet = await unlockWallet(file, withPassphrase(PASSPHRASE));
     expect(wallet.seed).toBe(SEED);
     expect(wallet.mnemonic).toBe(MNEMONIC);
   });
 
-  it('is left as it was when it is already sealed', () => {
+  it('is left as it was when it is already sealed', async () => {
     writeSealedWallet(file, PUBLIC, { seed: SEED }, PASSPHRASE);
     const before = fs.readFileSync(file, 'utf8');
-    sealWalletInPlace(file, PASSPHRASE);
+    await sealWalletInPlace(file, PASSPHRASE);
     expect(fs.readFileSync(file, 'utf8')).toBe(before);
   });
 });

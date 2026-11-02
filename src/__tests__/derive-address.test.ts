@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveUnshieldedAddress, deriveAllShieldedAddresses } from '../lib/derive-address.ts';
+import { deriveUnshieldedAddress, deriveAllShieldedAddresses } from '../engine/rc/derive-address.ts';
 import { GENESIS_SEED } from '../lib/constants.ts';
 
 const genesisSeedBuffer = Buffer.from(GENESIS_SEED, 'hex');

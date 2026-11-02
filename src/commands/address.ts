@@ -3,7 +3,7 @@
 
 import { type ParsedArgs, getFlag, hasFlag } from '../lib/argv.ts';
 import { resolveSeed } from '../lib/seed-resolver.ts';
-import { deriveUnshieldedAddress } from '../lib/derive-address.ts';
+import { engineFor } from '../lib/engine.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { keyValue, divider, formatAddress } from '../ui/format.ts';
 import { dim } from '../ui/colors.ts';
@@ -20,7 +20,7 @@ export default async function addressCommand(args: ParsedArgs, ctx: CallContext)
   }
 
   const networkName = resolveNetworkName({ args });
-  const address = deriveUnshieldedAddress(seedBuffer, networkName, keyIndex);
+  const address = (await engineFor(networkName)).keys.unshieldedAddress(seedBuffer, networkName, keyIndex);
   const derivationPath = `m/44'/2400'/0'/NightExternal/${keyIndex}`;
 
   // JSON mode

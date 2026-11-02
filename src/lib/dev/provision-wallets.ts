@@ -148,16 +148,16 @@ async function generateWallet(name: string, signal?: AbortSignal): Promise<void>
   const passphrase = await passphraseForNewSecret();
   // Cancelled while the passphrase was asked for: no wallet is written.
   throwIfCancelled(signal);
-  createWallet(name, walletSecretFrom(), passphrase);
+  await createWallet(name, walletSecretFrom(), passphrase);
 }
 
 async function airdropToWallet(network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
-  const recipientAddress = loadWalletConfig(resolveWalletPath(name)).addresses.undeployed;
+  const recipientAddress = (await loadWalletConfig(resolveWalletPath(name))).addresses.undeployed;
   await airdropNight({ networkConfig: network, recipientAddress, amountNight, signal, sdkWarnings });
 }
 
 async function walletNeedsDust(network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<boolean> {
-  const address = loadWalletConfig(resolveWalletPath(name)).addresses.undeployed;
+  const address = (await loadWalletConfig(resolveWalletPath(name))).addresses.undeployed;
   const { registeredUtxos, unregisteredUtxos } = await checkBalance(address, network.indexerWS, undefined, signal);
   return registeredUtxos === 0 && unregisteredUtxos > 0;
 }

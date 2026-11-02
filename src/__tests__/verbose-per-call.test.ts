@@ -12,7 +12,7 @@ import { captureCommand } from '../lib/run-command.ts';
 import { callDiagnostics } from '../lib/call-context.ts';
 import { parseArgs } from '../lib/argv.ts';
 import { setNoticeSink } from '../lib/notices.ts';
-import { deriveUnshieldedAddress } from '../lib/derive-address.ts';
+import { deriveUnshieldedAddress } from '../engine/rc/derive-address.ts';
 import { WalletDataRepository } from '../lib/wallet-data-repository.ts';
 import type { NetworkConfig } from '../lib/network.ts';
 import balanceCommand from '../commands/balance.ts';

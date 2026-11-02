@@ -87,6 +87,7 @@ export const ALLOWED_STATE = {
   'lib/wallet-data-repository.ts': { defaultRepo: 'shared on purpose: the wallet repository, whose cache long-lived MCP sessions share across calls' },
   'lib/chain-id.ts': { CHAIN_ID_MEMO: 'shared on purpose: the chain-id memo, by endpoint' },
   'lib/ws-rpc.ts': { connectionCounter: 'shared on purpose: the RPC connection id counter, unique across servers in the process' },
+  'lib/engine.ts': { loaded: 'shared on purpose: the one SDK engine this process loads (two WASM ledgers cannot share a process)' },
   'lib/wallet-config.ts': { warnedPlain: 'shared on purpose: each plain-text wallet is warned about once per run' },
   // The host sources, set once by the host at start (handlers see them through the context).
   'lib/settings.ts': { source: 'shared on purpose: the host sets the settings source once' },

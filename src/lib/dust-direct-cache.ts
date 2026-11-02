@@ -15,7 +15,7 @@ import { randomBytes } from 'node:crypto';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { DIR_MODE, FILE_MODE } from './constants.ts';
-import { deriveDustSeed } from './derivation.ts';
+import { deriveDustSeed } from '../engine/rc/derivation.ts';
 import { type DustRetention } from './dust-direct.ts';
 import { cacheKeyOf, cacheRootDir } from './wallet-cache.ts';
 

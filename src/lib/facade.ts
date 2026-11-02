@@ -21,7 +21,7 @@ import * as rx from 'rxjs';
 import { type NetworkConfig } from './network.ts';
 import { FORK_SCHEDULE } from './fork-schedule.ts';
 import { getNetworkId } from './network-id.ts';
-import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from './derivation.ts';
+import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from '../engine/rc/derivation.ts';
 import { type WalletCacheData } from './wallet-cache.ts';
 import { loadDustCache, dustPublicKeyHex, type DustCacheEntry } from './dust-direct-cache.ts';
 import {

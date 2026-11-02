@@ -6,7 +6,7 @@
 import * as path from 'path';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { deriveAllAddresses, deriveAllShieldedAddresses } from './derive-address.ts';
+import { anyEngine } from './engine.ts';
 import { writeSealedWallet, setActiveWallet, type WalletPublic } from './wallet-config.ts';
 import { isValidWalletName } from './constants.ts';
 import { getWalletsDir } from './wallet-paths.ts';
@@ -54,10 +54,11 @@ export function walletSecretFrom(given: { seed?: Buffer; mnemonic?: string } = {
  * Writes the wallet `name` sealed under `passphrase` and makes it the active
  * wallet. An existing wallet of that name is replaced only with `overwrite`.
  */
-export function createWallet(name: string, secret: WalletSecret, passphrase: string, { overwrite = false }: { overwrite?: boolean } = {}): CreatedWallet {
+export async function createWallet(name: string, secret: WalletSecret, passphrase: string, { overwrite = false }: { overwrite?: boolean } = {}): Promise<CreatedWallet> {
   const targetPath = walletFilePath(name);
-  const addresses = deriveAllAddresses(secret.seed);
-  const shieldedAddresses = deriveAllShieldedAddresses(secret.seed);
+  const { keys } = await anyEngine();
+  const addresses = keys.unshieldedAddresses(secret.seed);
+  const shieldedAddresses = keys.shieldedAddresses(secret.seed);
   const config: WalletPublic = { addresses, shieldedAddresses, createdAt: new Date().toISOString() };
   const seedHex = secret.seed.toString('hex');
   const secrets = secret.mnemonic ? { seed: seedHex, mnemonic: secret.mnemonic } : { seed: seedHex };
