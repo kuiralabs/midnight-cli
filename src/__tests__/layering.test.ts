@@ -52,7 +52,6 @@ describe('the layering', () => {
     expect([...PENDING_ENGINE].sort()).toStrictEqual([
       'commands/airdrop.ts',
       'commands/balance.ts',
-      'commands/dust.ts',
       'commands/transfer.ts',
       'lib/dapp-connector.ts',
       'lib/dust-wallet.ts',

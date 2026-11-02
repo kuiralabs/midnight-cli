@@ -12,7 +12,7 @@ import { type FacadeBundle, hasDustAvailable } from './facade.ts';
 import { LEDGER_9_FORK_VERSION, type NetworkConfig } from './network.ts';
 import type { ApprovalOptions } from './approval.ts';
 import { promptApproval } from './approval.ts';
-import { createApiError, type RpcHandler, type RpcHandlerContext } from './ws-rpc.ts';
+import { createApiError, type RpcHandler, type RpcHandlerContext } from './connector-api.ts';
 import { createPhaseTracker, type PhaseTracker } from './phase-tracker.ts';
 import { toHex, fromHex } from './tx-serde.ts';
 import { getNetworkId } from './network-id.ts';
