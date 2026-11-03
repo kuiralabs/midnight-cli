@@ -200,6 +200,84 @@ describe("the process-safety check keeps calls' state out of modules", () => {
   });
 });
 
+// What a library needs from its host comes in through the host it is passed, never a module-level setter.
+describe('the process-safety check finds a library exporting a setter of host state', () => {
+  const plant = (rel: string, lines: string[]) => {
+    const file = join(dir, rel);
+    mkdirSync(join(file, '..'), { recursive: true });
+    writeFileSync(file, lines.join('\n'));
+    return file;
+  };
+  const setters = (file: string, allowedSetters?: Record<string, Record<string, string>>) =>
+    findViolations([file], {}, {}, dir, allowedSetters).filter((v) => v.rule.includes('setter')).map((v) => `${v.line} ${v.rule} ${v.name}`);
+
+  it('by its name, or by an exported function assigning a module-level let, however it is exported', () => {
+    const file = plant('lib/sources.ts', [
+      "import type { Settings } from './settings.ts';",
+      'export function setSettingsSource(next: (() => Settings) | null): void {}',
+      'export const setNoticeSink = (sink: (line: string) => void) => {};',
+      'export function setPrompter(p: unknown): void {}',
+      'export async function setEngineLoader(l: unknown): Promise<void> {}',
+      'let root: string | undefined;',
+      'export function useRoot(next: string): void {',
+      '  root = next;',
+      '}',
+      'let calls = 0;',
+      'function count(): number {',
+      '  return ++calls;',
+      '}',
+      'export { count as countCall };',
+    ]);
+    expect(setters(file)).toEqual([
+      '2 exports a setter of host state setSettingsSource',
+      '3 exports a setter of host state setNoticeSink',
+      '4 exports a setter of host state setPrompter',
+      '5 exports a setter of host state setEngineLoader',
+      '7 exports a setter of host state useRoot',
+      '11 exports a setter of host state count',
+    ]);
+  });
+
+  it('not a function that only reads module state, assigns its own local, or stays unexported, nor a setter of state on disk', () => {
+    const file = plant('lib/readers.ts', [
+      'let loaded: string | undefined;',
+      'export function current(): string | undefined {',
+      '  return loaded === undefined ? undefined : loaded;',
+      '}',
+      'export function tally(items: string[]): number {',
+      '  let loaded = 0;',
+      '  for (const _ of items) loaded += 1;',
+      '  return loaded;',
+      '}',
+      'function remember(next: string): void {',
+      '  loaded = next;',
+      '}',
+      'export const isLoaded = (x: string) => x === loaded;',
+      'export function setConfigValue(key: string, value: string, root: string): void {}',
+      "const note = 'export function setSettingsSource() {}';",
+    ]);
+    expect(setters(file)).toEqual([]);
+  });
+
+  it('allows claimSdkSet, the process guard, only where the allowlist names it, and reports an entry whose setter is gone', () => {
+    const guard = plant('lib/engine.ts', [
+      "let loadedSet: 'rc' | 'beta' | undefined;",
+      "export function claimSdkSet(set: 'rc' | 'beta'): void {",
+      '  if (loadedSet !== undefined && loadedSet !== set) throw new Error(set);',
+      '  loadedSet = set;',
+      '}',
+    ]);
+    expect(setters(guard)).toEqual([]);
+    expect(setters(guard, {})).toEqual(['2 exports a setter of host state claimSdkSet']);
+    const elsewhere = plant('lib/other.ts', [
+      "let loadedSet: 'rc' | 'beta' | undefined;",
+      "export function claimSdkSet(set: 'rc' | 'beta'): void { loadedSet = set; }",
+    ]);
+    expect(setters(elsewhere)).toEqual(['2 exports a setter of host state claimSdkSet']);
+    expect(setters(plant('lib/engine.ts', ['export const NONE = 1;']))).toEqual(['0 allowlists a setter it no longer exports claimSdkSet']);
+  });
+});
+
 describe('the shell filters the SDK noise', () => {
   const run = (body: string) => {
     const script = join(dir, 'noise.mjs');

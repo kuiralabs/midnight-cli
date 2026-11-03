@@ -1174,6 +1174,7 @@ export declare function openWithKey(key: Uint8Array, sealed: unknown, purpose: S
 ## `@kuiralabs/midnight-cli-core/lib/network`
 
 ```ts
+import type { Settings } from "./settings.ts";
 import type { SdkSet } from "./engine.ts";
 export type NetworkName = "preprod" | "preview" | "stagenet" | "undeployed";
 export declare const LEDGER_9_FORK_VERSION = 2000000n;
@@ -1213,10 +1214,11 @@ export interface NeededComponents {
     proofServer: boolean;
 }
 export declare function pickLocalStack(found: LocalStackPorts, need?: NeededComponents): TestcontainerPorts;
-export declare function detectLocalStacks(): LocalStackPorts;
+export declare function detectLocalStacks(settings: Pick<Settings, "isLocalDetectOff">): LocalStackPorts;
 export interface ResolveNetworkConfigOptions {
     given?: EndpointOverrides;
     detect?: () => LocalStackPorts;
+    isLocalDetectOff?: boolean;
     blockfrostProjectId?: string;
 }
 export declare function resolveNetworkConfig(name: NetworkName, options?: ResolveNetworkConfigOptions): NetworkConfig;
@@ -1385,15 +1387,17 @@ export declare function clearNativeDustCheckpoint(network: string | undefined, p
 ```ts
 import { type ParsedArgs } from "./argv.ts";
 import { type NetworkName, type NetworkConfig } from "./network.ts";
-import { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV } from "./settings.ts";
+import { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV, type Settings } from "./settings.ts";
+export type BlockfrostSettings = Pick<Settings, "blockfrostProjectId" | "sharedBlockfrostProjectId">;
+export type NetworkSettings = BlockfrostSettings & Pick<Settings, "isLocalDetectOff">;
 export interface NetworkResolutionContext {
     args: ParsedArgs;
     configDir: string;
 }
 export declare function resolveNetworkName(ctx: NetworkResolutionContext): NetworkName;
 export { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV };
-export declare function resolveBlockfrostProjectId(name: NetworkName, configDir: string, env?: Record<string, string | undefined>): string | undefined;
-export declare function resolveNetwork(ctx: NetworkResolutionContext): {
+export declare function resolveBlockfrostProjectId(name: NetworkName, configDir: string, settings: BlockfrostSettings): string | undefined;
+export declare function resolveNetwork(ctx: NetworkResolutionContext, settings: NetworkSettings): {
     name: NetworkName;
     config: NetworkConfig;
 };
@@ -1477,8 +1481,6 @@ export interface Settings {
     sharedBlockfrostProjectId: string | undefined;
 }
 export declare function settingsFromEnvironment(env: Record<string, string | undefined>): Settings;
-export declare function setSettingsSource(next: (() => Settings) | null): void;
-export declare function settings(): Settings;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/shielded-policy`
@@ -1599,6 +1601,7 @@ export declare function clearWalletCache(address: string | undefined, network: s
 import { type HostEngines, type OpenedConnector, type TransactionDetail } from "./engine.ts";
 import type { NetworkConfig, NetworkName } from "./network.ts";
 import type { NoticeSink } from "./notices.ts";
+import { type NetworkSettings } from "./resolve-network.ts";
 import type { SwapLeg } from "./swap-offer.ts";
 import type { OpenOffer } from "./open-offers.ts";
 export interface WalletAddresses {
@@ -1654,6 +1657,7 @@ export interface OpenWalletSessionOptions {
     notice: NoticeSink;
     engines: HostEngines;
     networkConfig?: NetworkConfig;
+    settings?: NetworkSettings;
     forceShielded?: boolean;
     dustWaitMs?: number;
     signal?: AbortSignal;

@@ -57,7 +57,7 @@ afterEach(() => {
 
 beforeAll(async () => {
   const { resolveNetwork } = await import('@kuiralabs/midnight-cli-core/lib/resolve-network');
-  const { indexer } = resolveNetwork({ args: parseArgs(['balance', '--network', 'undeployed']), configDir: testHost().paths().stateRoot }).config;
+  const { indexer } = resolveNetwork({ args: parseArgs(['balance', '--network', 'undeployed']), configDir: testHost().paths().stateRoot }, testHost().settings()).config;
   const answered = await fetch(indexer, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: '{ block { height } }' }), signal: AbortSignal.timeout(5_000) })
     .then((r) => r.ok, () => false);
   if (!answered) throw new Error(`No ledger-9 indexer answers at ${indexer}: start the local chain (or point undeployed at one with midnight config set) before npm run test:live.`);

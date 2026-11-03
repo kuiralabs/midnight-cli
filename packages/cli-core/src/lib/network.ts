@@ -2,7 +2,7 @@ import { blockfrostEndpoints, usesBlockfrost } from './blockfrost.ts';
 import { execSync } from 'child_process';
 import { loadCliConfig, getEndpointOverridesForNetwork, getSdkSetOverride } from './cli-config.ts';
 import { INDEXER_GRAPHQL_PATH, INDEXER_GRAPHQL_WS_PATH } from './constants.ts';
-import { settings } from './settings.ts';
+import type { Settings } from './settings.ts';
 import type { SdkSet } from './engine.ts';
 
 export type NetworkName = 'preprod' | 'preview' | 'stagenet' | 'undeployed';
@@ -183,11 +183,11 @@ export function pickLocalStack(found: LocalStackPorts, need: NeededComponents = 
 
 /**
  * Read the local Midnight containers from docker (empty when docker isn't
- * available, or when MN_NO_LOCAL_DETECT=1 turns detection off and leaves
- * undeployed on its default endpoints).
+ * available, or when the settings turn detection off (MN_NO_LOCAL_DETECT=1)
+ * and leave undeployed on its default endpoints).
  */
-export function detectLocalStacks(): LocalStackPorts {
-  if (settings().isLocalDetectOff) return { node: [], indexer: [], proofServer: [] };
+export function detectLocalStacks(settings: Pick<Settings, 'isLocalDetectOff'>): LocalStackPorts {
+  if (settings.isLocalDetectOff) return { node: [], indexer: [], proofServer: [] };
   try {
     return parseLocalStacks(execSync('docker ps --format "{{.Image}}|{{.Ports}}"', { encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }));
   } catch {
@@ -200,6 +200,8 @@ export interface ResolveNetworkConfigOptions {
   given?: EndpointOverrides;
   /** Local stack detection (tests inject docker output). */
   detect?: () => LocalStackPorts;
+  /** MN_NO_LOCAL_DETECT: don't look for a local stack (looked for when not given). */
+  isLocalDetectOff?: boolean;
   /** The user's Blockfrost project id, for a network Blockfrost serves. */
   blockfrostProjectId?: string;
 }
@@ -221,7 +223,7 @@ export function resolveNetworkConfig(name: NetworkName, options: ResolveNetworkC
     proofServer: given.proofServer === undefined,
   };
   if (name === 'undeployed' && (need.node || need.indexer || need.proofServer)) {
-    const detected = pickLocalStack((options.detect ?? detectLocalStacks)(), need);
+    const detected = pickLocalStack((options.detect ?? (() => detectLocalStacks({ isLocalDetectOff: options.isLocalDetectOff ?? false })))(), need);
 
     if (detected.indexerPort) {
       config.indexer = `http://localhost:${detected.indexerPort}${INDEXER_GRAPHQL_PATH}`;

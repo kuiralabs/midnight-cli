@@ -55,7 +55,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
   const config = await unlockWallet(resolveWalletPath(root, getFlag(args, 'wallet')), { root, host: ctx.host });
   const seedBuffer = Buffer.from(config.seed, 'hex');
 
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root }, ctx.config.settings);
   const address = config.addresses[networkName];
 
   // Apply endpoint overrides: --flag > config > network default

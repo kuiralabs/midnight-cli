@@ -13,11 +13,10 @@ import { NotAnOfferError, TermsMismatchError } from '@kuiralabs/midnight-cli-cor
 import { readOffer } from '@kuiralabs/midnight-engine-rc/offer-reader';
 import { DEFAULT_OFFER_LIFETIME_S, prepareMake, prepareTake, termsOf } from '../lib/swap/request.ts';
 import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from './fixtures/swap-offer.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { testHost } from './helpers/test-host.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
-const host = createHost({ engineLoader: loadInstalledEngine });
+// The host the tests' calls run in (test-host.ts): settings from the test's environment, nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
+const host = testHost();
 
 const NOW = new Date('2026-11-02T12:00:00.000Z');
 // A state root with no config: the networks' own endpoints.

@@ -10,10 +10,10 @@ import * as path from 'path';
 import * as os from 'os';
 import { cliCall } from './helpers/cli-call.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { testHost } from './helpers/test-host.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped.
-const host = createHost();
+// The host the tests' calls run in (test-host.ts): settings from the test's environment, nobody to ask, notices dropped.
+const host = testHost();
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-generate-cmd-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';

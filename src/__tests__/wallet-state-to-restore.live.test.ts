@@ -22,7 +22,7 @@ import { testHost } from './helpers/test-host.ts';
 let NETWORK: NetworkConfig;
 
 beforeAll(async () => {
-  NETWORK = resolveNetwork({ args: parseArgs(['balance', '--network', 'undeployed']), configDir: testHost().paths().stateRoot }).config;
+  NETWORK = resolveNetwork({ args: parseArgs(['balance', '--network', 'undeployed']), configDir: testHost().paths().stateRoot }, testHost().settings()).config;
   const answered = await fetch(NETWORK.indexer, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: '{ block { protocolVersion } }' }), signal: AbortSignal.timeout(5_000) })
     .then(async (r) => ((await r.json()) as { data?: { block?: { protocolVersion?: number } } }).data?.block?.protocolVersion ?? null, () => null);
   if (answered === null) throw new Error(`No indexer answers at ${NETWORK.indexer}: start the local chain (or point undeployed at one with midnight config set) before npm run test:live.`);

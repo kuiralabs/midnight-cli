@@ -65,7 +65,7 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
   }
 
   const root = ctx.config.paths.stateRoot;
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root }, ctx.config.settings);
 
   // Shielded balances are private: reading one needs the wallet's secret key,
   // which an address alone doesn't carry. If this address belongs to one of our
@@ -172,7 +172,7 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
 
 async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const root = ctx.config.paths.stateRoot;
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root }, ctx.config.settings);
   ctx.diagnostics.line('balance', `network=${networkName} indexerWS=${networkConfig.indexerWS}`);
   // Seed source: --seed → MN_SEED → --wallet <name> → active wallet (shared resolver).
   const { seed: seedBuffer, walletPath, config } = await resolveSeedSource(args, root, ctx.host);

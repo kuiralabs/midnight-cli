@@ -62,7 +62,7 @@ async function runStep(
     return stepCacheClear(config, ctx.root);
   }
   if (step === 'localnet-up') {
-    return stepLocalnetUp(config, ctx.root, callbacks);
+    return stepLocalnetUp(config, ctx, callbacks);
   }
   if (step.startsWith('balance:')) {
     const amount = parseInt(step.split(':')[1], 10);
@@ -90,14 +90,14 @@ async function stepCacheClear(config: DappTestConfig, root: string): Promise<voi
   clearWalletCache(undefined, network, root);
 }
 
-async function stepLocalnetUp(config: DappTestConfig, root: string, callbacks: PrepCallbacks): Promise<void> {
+async function stepLocalnetUp(config: DappTestConfig, ctx: PrepContext, callbacks: PrepCallbacks): Promise<void> {
   // This build can't start a localnet (no published ledger-9 indexer image),
   // so the step requires a running ledger-9 stack at the resolved endpoints.
   const network = config.network ?? 'undeployed';
   const { config: networkConfig } = resolveNetwork({
     args: { command: 'test', subcommand: undefined, positionals: [], flags: { network } },
-    configDir: root,
-  });
+    configDir: ctx.root,
+  }, ctx.host.settings());
   await assertLedger9StackReachable(network, networkConfig);
   callbacks.onMessage(`Using the ledger-9 stack at ${networkConfig.node} (indexer ${networkConfig.indexer})`);
 }
@@ -107,7 +107,7 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
   const { config: networkConfig } = resolveNetwork({
     args: { command: 'test', subcommand: undefined, positionals: [], flags: { network } },
     configDir: ctx.root,
-  });
+  }, ctx.host.settings());
   // On a ledger-8 chain the SDK's sync would retry forever.
   await assertLedgerSupported(network, networkConfig);
 
@@ -167,7 +167,7 @@ async function stepDust(config: DappTestConfig, ctx: PrepContext, callbacks: Pre
   const { config: networkConfig } = resolveNetwork({
     args: { command: 'test', subcommand: undefined, positionals: [], flags: { network } },
     configDir: ctx.root,
-  });
+  }, ctx.host.settings());
   await assertLedgerSupported(network, networkConfig);
 
   const walletConfig = await unlockWallet(resolveWalletPath(ctx.root), { root: ctx.root, host: ctx.host });

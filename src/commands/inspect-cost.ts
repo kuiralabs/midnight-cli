@@ -20,7 +20,7 @@ const UNITS: Record<string, string> = {
 
 export default async function inspectCostCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const root = ctx.config.paths.stateRoot;
-  const { name: networkName, config } = resolveNetwork({ args, configDir: root });
+  const { name: networkName, config } = resolveNetwork({ args, configDir: root }, ctx.config.settings);
   // A ledger-8 chain's parameters aren't ledger-9 ones: refuse it like every other chain read.
   await assertLedgerSupported(networkName, config, fetchProtocolVersion, ctx.signal);
   const { height, parametersHex } = await fetchLedgerParameters(config.indexer, ctx.signal);

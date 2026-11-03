@@ -17,7 +17,12 @@
 //   - only the shell sets the process's exit code; a handler returns its own;
 //   - only the shell's noise filter (lib/sdk-noise.ts) may keep ambient per-call
 //     storage (AsyncLocalStorage, async_hooks); everything else is passed the
-//     call's context explicitly.
+//     call's context explicitly;
+//   - library, ui and command code exports no setter of host state: no
+//     function named set…Source, set…Sink, setPrompter or setEngineLoader, and
+//     no exported function that assigns a module-level `let` or `var`. What a
+//     library needs from its host comes in through the host it is passed; the
+//     one process guard allowed is named below, with its reason.
 //
 // Usage: node scripts/check-process-safety.mjs
 // Exits 1 when a library does something the rules above forbid, or any code
@@ -54,6 +59,8 @@ const COMMAND_RULES = RULES.filter(([rule]) => rule === 'writes to the terminal'
 // The module-state rules, each with the code it applies to.
 const MODULE_STATE = 'keeps module state';
 const STALE_STATE = 'allowlists module state it no longer keeps';
+const SETTER = 'exports a setter of host state';
+const STALE_SETTER = 'allowlists a setter it no longer exports';
 const AMBIENT = 'keeps ambient per-call storage';
 const notNoiseFilter = (rel) => rel !== 'lib/sdk-noise.ts';
 // [rule, pattern, the files it applies to, whether it reads the raw source (an import's specifier)].
@@ -87,9 +94,18 @@ export const ALLOWED_STATE = {
   'lib/engine.ts': {
     loadedSet: 'shared on purpose: the SDK set this process loads, whichever host loads it (two WASM ledgers cannot share a process)',
   },
-  // The host source, set once by the host at start (handlers see it through the context).
-  'lib/settings.ts': { source: 'shared on purpose: the host sets the settings source once' },
 };
+
+// Exported functions that set module state, which the setter rule allows, by
+// file and name, and why. Host state is never one: a host passes it in.
+export const ALLOWED_SETTERS = {
+  'lib/engine.ts': {
+    claimSdkSet: 'the process guard, approved by the owner: records the one SDK set this process loads, whichever host loads it, and refuses the other (two WASM ledgers cannot share a process)',
+  },
+};
+
+// The names a setter of host state goes by, whatever it assigns.
+const SETTER_NAME = /^(set\w*Source|set\w*Sink|setPrompter|setEngineLoader)$/;
 
 /**
  * Replaces string, template-literal text, regex-literal and comment contents
@@ -167,7 +183,7 @@ function codeOnly(source) {
 
 /**
  * The module-level declarations in `code` (as codeOnly leaves it) that hold
- * mutable state: { line, name }. A `let` or `var`; a `const` made with
+ * mutable state: { line, name, kind }. A `let` or `var`; a `const` made with
  * `new Map/Set/WeakMap/WeakSet/Array` unless typed ReadonlyMap/ReadonlySet;
  * an array literal unless typed readonly or `as const`; an empty object
  * literal unless typed Readonly. A non-empty object literal is a table of
@@ -192,7 +208,7 @@ export function moduleStateDeclarations(code) {
     if (head === null) continue;
     const statement = topLevelStatement(code, i);
     const [, kind, name] = head;
-    if (kind !== 'const' || isMutableInitializer(statement.slice(head[0].length))) found.push({ line: lineNumber, name });
+    if (kind !== 'const' || isMutableInitializer(statement.slice(head[0].length))) found.push({ line: lineNumber, name, kind });
   }
   return found;
 }
@@ -207,6 +223,64 @@ function topLevelStatement(code, start) {
     else if (c === ';' && depth === 0) return code.slice(start, j);
   }
   return code.slice(start);
+}
+
+/**
+ * The module-level statements in `code` (as codeOnly leaves it): { line, text },
+ * each from a line that starts outside any bracket to the next such line.
+ */
+function topLevelStatements(code) {
+  const statements = [];
+  let depth = 0;
+  code.split('\n').forEach((text, at) => {
+    if (depth === 0 && text.trim() !== '') statements.push({ line: at + 1, text });
+    else if (statements.length > 0) statements[statements.length - 1].text += '\n' + text;
+    for (const c of text) {
+      if (c === '{' || c === '[' || c === '(') depth += 1;
+      else if (c === '}' || c === ']' || c === ')') depth -= 1;
+    }
+  });
+  return statements;
+}
+
+/**
+ * The functions `code` exports that set host state: { line, name }. One named
+ * as a setter of host state, or one whose body assigns a module-level `let` or
+ * `var` (a local of the same name declared in it aside). Exported by
+ * declaration, as a const holding a function, or through an `export { … }` list.
+ */
+export function exportedSetters(code) {
+  const lets = moduleStateDeclarations(code).filter((d) => d.kind !== 'const').map((d) => d.name);
+  const functions = new Map();
+  const exported = new Set();
+  for (const { line, text } of topLevelStatements(code)) {
+    const declared = /^\s*(export\s+(?:default\s+)?)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/.exec(text)
+      ?? /^\s*(export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]*)?=\s*(?:async\s+)?(?:function\b|\([^)]*\)\s*(?::[^=]*)?=>|[A-Za-z_$][\w$]*\s*=>)/.exec(text);
+    if (declared !== null) {
+      functions.set(declared[2], { line, text });
+      if (declared[1] !== undefined) exported.add(declared[2]);
+      continue;
+    }
+    const list = /^\s*export\s*\{([^}]*)\}/.exec(text);
+    if (list !== null) for (const item of list[1].split(',')) {
+      const local = item.trim().split(/\s+as\s+/)[0];
+      if (local) exported.add(local);
+    }
+  }
+  const assigns = (text, bare) => {
+    const name = bare.replace(/\$/g, '\\$');
+    if (new RegExp(`\\b(let|var|const)\\s+${name}\\b`).test(text)) return false;
+    return new RegExp(`(?<![\\w$.])${name}\\s*(?:[-+*/%&|^]|\\*\\*|<<|>>>?|\\?\\?|\\|\\||&&)?=(?![=>])|(?:\\+\\+|--)\\s*${name}\\b|(?<![\\w$.])${name}\\s*(?:\\+\\+|--)`).test(text);
+  };
+  const found = [];
+  for (const name of exported) {
+    const fn = functions.get(name);
+    if (fn === undefined) continue;
+    // The text after the function's name: its parameters and body.
+    const body = fn.text.slice(fn.text.indexOf(name) + name.length);
+    if (SETTER_NAME.test(name) || lets.some((n) => assigns(body, n))) found.push({ line: fn.line, name });
+  }
+  return found.sort((a, b) => a.line - b.line);
 }
 
 /** After a const's name: its type annotation and initializer hold mutable state. */
@@ -251,7 +325,7 @@ const isCommand = (rel) => rel.startsWith('commands/');
  * the name for module state. `src` is the folder the files' kinds are read
  * from (commands/, ui/, …): src/, unless a test plants files elsewhere.
  */
-export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowedState = ALLOWED_STATE, src = SRC) {
+export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowedState = ALLOWED_STATE, src = SRC, allowedSetters = ALLOWED_SETTERS) {
   const found = [];
   for (const file of files) {
     const rel = src === SRC ? relOf(file) : relative(src, file);
@@ -283,6 +357,13 @@ export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowed
       for (const name of Object.keys(allowedState[rel] ?? {})) {
         if (!declared.some((d) => d.name === name)) found.push({ file: rel, line: 0, rule: STALE_STATE, name });
       }
+      const setters = exportedSetters(code);
+      for (const { line, name } of setters) {
+        if (!Object.hasOwn(allowedSetters[rel] ?? {}, name)) found.push({ file: rel, line, rule: SETTER, name });
+      }
+      for (const name of Object.keys(allowedSetters[rel] ?? {})) {
+        if (!setters.some((s) => s.name === name)) found.push({ file: rel, line: 0, rule: STALE_SETTER, name });
+      }
     }
     for (const [rule, pattern, appliesTo, isRaw] of CALL_RULES) {
       if (appliesTo(rel, file) && !rel.startsWith('__tests__/')) scanRule(rule, pattern, isRaw);
@@ -297,6 +378,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   for (const v of found) process.stdout.write(`src/${v.file}:${v.line}  ${v.rule}${v.name === undefined ? '' : ` (${v.name})`}\n`);
   const allowedCount = Object.keys(ALLOWED).length;
   const stateCount = Object.values(ALLOWED_STATE).reduce((n, names) => n + Object.keys(names).length, 0);
-  process.stdout.write(`\n${found.length === 0 ? 'Libraries leave the process alone, commands write through their call, and no call keeps its state in a module' : `${found.length} place(s) where code touches the process or keeps a call's state`} (${allowedCount} file(s) and ${stateCount} module state(s) allowed, with their reasons).\n`);
+  const setterCount = Object.values(ALLOWED_SETTERS).reduce((n, names) => n + Object.keys(names).length, 0);
+  process.stdout.write(`\n${found.length === 0 ? 'Libraries leave the process alone, commands write through their call, no call keeps its state in a module, and no library exports a setter of host state' : `${found.length} place(s) where code touches the process, keeps a call's state or exports a setter of host state`} (${allowedCount} file(s), ${stateCount} module state(s) and ${setterCount} setter(s) allowed, with their reasons).\n`);
   process.exit(found.length === 0 ? 0 : 1);
 }

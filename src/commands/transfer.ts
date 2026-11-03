@@ -30,7 +30,7 @@ async function unshieldedTransfer(
   const root = ctx.config.paths.stateRoot;
   const seedBuffer = Buffer.from((await unlockWallet(walletPath, { root, host: ctx.host })).seed, 'hex');
 
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root }, ctx.config.settings);
   const address = config.addresses[networkName];
 
   applyEndpointOverrides(networkConfig, {
@@ -129,7 +129,7 @@ async function shieldedTransfer(
   const root = ctx.config.paths.stateRoot;
   const seedBuffer = Buffer.from((await unlockWallet(walletPath, { root, host: ctx.host })).seed, 'hex');
 
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root }, ctx.config.settings);
 
   applyEndpointOverrides(networkConfig, {
     proofServer: getFlag(args, 'proof-server'),

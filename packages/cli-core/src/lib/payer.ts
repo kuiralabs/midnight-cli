@@ -41,7 +41,7 @@ export function resolvePayingTarget(args: ParsedArgs, command: string, subcomman
   const { name, config: networkConfig } = resolveNetwork({
     args: { command, subcommand, positionals: [], flags: { ...(network ? { network } : {}), ...endpointFlags(endpoints) } },
     configDir: root,
-  });
+  }, host.settings());
   applyEndpointOverrides(networkConfig, endpoints, name, root);
   return { network: name, root, host, networkConfig, endpoints };
 }

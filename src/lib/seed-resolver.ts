@@ -6,7 +6,6 @@
 import { getFlag, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { resolveWalletPath, unlockWallet, type UnlockHost, type WalletConfig } from './wallet-config.ts';
-import { settings } from '@kuiralabs/midnight-cli-core/lib/settings';
 
 export interface ResolvedSeed {
   /** The wallet seed: 32-byte raw, or 64-byte BIP-39 (mnemonic-derived). */
@@ -52,11 +51,11 @@ export function parseSeedHex(input: string, label: string): Buffer {
  *   `--seed <hex>` → `MN_SEED` (env, kept off the process list) → `--wallet <name>` → active wallet.
  * Returns the seed plus the backing wallet file/config (both null for a `--seed` / `MN_SEED`
  * source), so a caller that caches to the wallet file can skip that when there is none.
- * Wallets are the ones under the state root `root`.
+ * Wallets are the ones under the state root `root`; MN_SEED is the one in `host`'s settings.
  */
 export async function resolveSeedSource(args: ParsedArgs, root: string, host: UnlockHost, opts: ResolveSeedOptions = {}): Promise<ResolvedSeed> {
   const seedFlag = getFlag(args, 'seed');
-  const seedSource = seedFlag ?? settings().seed;
+  const seedSource = seedFlag ?? host.settings().seed;
   if (seedSource) {
     return {
       seed: parseSeedHex(seedSource, seedFlag ? '--seed' : 'MN_SEED'),

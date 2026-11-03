@@ -12,6 +12,10 @@ import {
   resolveNetworkConfig,
   AmbiguousLocalStacksError,
 } from '@kuiralabs/midnight-cli-core/lib/network';
+import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
+
+// Settings that turn detection off, for the resolutions whose docker output isn't the test's.
+const NO_DETECT = settingsFromEnvironment({ MN_NO_LOCAL_DETECT: '1' });
 
 const SCRATCH = [
   'midnightntwrk/indexer-standalone:4.4.0-rc.5|0.0.0.0:28088->8088/tcp, [::]:28088->8088/tcp',
@@ -148,7 +152,7 @@ describe('resolveNetwork', () => {
       network: 'undeployed',
       networks: { undeployed: { node: 'ws://localhost:29944', 'indexer-ws': 'ws://localhost:28088/api/v4/graphql/ws', 'proof-server': 'http://localhost:26300' } },
     }, (configDir) => {
-      const { config } = resolveNetwork({ args: parseArgs(['test']), configDir });
+      const { config } = resolveNetwork({ args: parseArgs(['test']), configDir }, NO_DETECT);
       expect(config.node).toBe('ws://localhost:29944');
       expect(config.indexer).toBe('http://localhost:28088/api/v4/graphql');
       expect(config.indexerWS).toBe('ws://localhost:28088/api/v4/graphql/ws');
@@ -160,7 +164,7 @@ describe('resolveNetwork', () => {
     const { resolveNetwork } = await import('@kuiralabs/midnight-cli-core/lib/resolve-network');
     const { parseArgs } = await import('@kuiralabs/midnight-cli-core/lib/argv');
     await withConfig({ network: 'undeployed', networks: { undeployed: { node: 'ws://localhost:29944' } } }, (configDir) => {
-      const { config } = resolveNetwork({ args: parseArgs(['balance', '--node', 'ws://localhost:39944']), configDir });
+      const { config } = resolveNetwork({ args: parseArgs(['balance', '--node', 'ws://localhost:39944']), configDir }, NO_DETECT);
       expect(config.node).toBe('ws://localhost:39944');
     });
   });
@@ -169,7 +173,7 @@ describe('resolveNetwork', () => {
     const { resolveNetwork } = await import('@kuiralabs/midnight-cli-core/lib/resolve-network');
     const { parseArgs } = await import('@kuiralabs/midnight-cli-core/lib/argv');
     await withConfig({ network: 'preview', networks: { preview: { 'proof-server': 'http://preview-prover:6300' } } }, (configDir) => {
-      const { config } = resolveNetwork({ args: parseArgs(['balance', '--network', 'preprod']), configDir });
+      const { config } = resolveNetwork({ args: parseArgs(['balance', '--network', 'preprod']), configDir }, NO_DETECT);
       expect(config.proofServer).toBe('http://localhost:6300');
     });
   });
@@ -182,7 +186,7 @@ describe('resolveNetwork', () => {
         args: parseArgs(['balance', '--network', 'undeployed', '--node', 'ws://localhost:29944',
           '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300']),
         configDir,
-      });
+      }, NO_DETECT);
       expect(name).toBe('undeployed');
       expect(config.node).toBe('ws://localhost:29944');
       expect(config.indexer).toBe('http://localhost:28088/api/v4/graphql');

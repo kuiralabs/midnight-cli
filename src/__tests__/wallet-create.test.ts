@@ -13,11 +13,10 @@ import { getActiveWalletName, unlockWallet } from '../lib/wallet-config.ts';
 import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { PASSPHRASE_ENV, passphraseForNewSecret } from '../lib/passphrase.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { testHost } from './helpers/test-host.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
-const host = createHost({ engineLoader: loadInstalledEngine });
+// The host the tests' calls run in (test-host.ts): settings from the test's environment, nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
+const host = testHost();
 
 const CHOSEN = 'correct horse battery staple';
 // The passphrase as a caller gets it: the first secret in a new home sets it.

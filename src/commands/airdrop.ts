@@ -38,7 +38,7 @@ export default async function airdropCommand(args: ParsedArgs, ctx: CallContext)
 
   const amountNight = parseAmount(amountStr);
   const root = ctx.config.paths.stateRoot;
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root }, ctx.config.settings);
 
   applyEndpointOverrides(networkConfig, {
     proofServer: getFlag(args, 'proof-server'),
