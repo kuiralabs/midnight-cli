@@ -5,10 +5,21 @@ import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 /** The indexer could not answer a query: unreachable, an HTTP error, a non-JSON body, or GraphQL errors. */
 export class IndexerQueryError extends Error {
-  constructor(reason: string) {
-    super(reason);
+  constructor(reason: string, options?: { cause?: unknown }) {
+    super(reason, options);
     this.name = 'IndexerQueryError';
     Object.setPrototypeOf(this, IndexerQueryError.prototype);
+  }
+}
+
+/** The indexer could not be reached (refused, no such host, timed out): fetch's own words, and fetch's error as the cause. */
+export class IndexerUnreachableError extends IndexerQueryError {
+  readonly code = 'NETWORK_ERROR';
+
+  constructor(reason: string, options?: { cause?: unknown }) {
+    super(reason, options);
+    this.name = 'IndexerUnreachableError';
+    Object.setPrototypeOf(this, IndexerUnreachableError.prototype);
   }
 }
 
@@ -36,7 +47,7 @@ export async function queryIndexer<TData>(
     });
   } catch (err) {
     throwIfCancelled(signal);
-    throw new IndexerQueryError((err as Error).message);
+    throw new IndexerUnreachableError((err as Error).message, { cause: err });
   }
   if (!res.ok) throw endpointRefusal(indexerHttpUrl, res.status) ?? new IndexerQueryError(`HTTP ${res.status} ${res.statusText}`.trim());
   let body: { data?: TData | null; errors?: Array<{ message: string }> };

@@ -803,6 +803,7 @@ export declare class DustFeeNotGeneratedError extends Error {
 
 ```ts
 import { sleep } from "./sleep.ts";
+import { DustRequiredError } from "./errors.ts";
 export interface DustBalanceSource {
     balance(at: Date): bigint;
 }
@@ -810,7 +811,7 @@ export declare const DUST_SHORT_WAIT_MS: number;
 export declare const OWN_COMMAND_DUST_WAIT_MS: number;
 export declare const LOOK_AHEAD_MS: number;
 export declare function msUntilDust(dust: DustBalanceSource, needed: bigint, now: Date, horizonMs: number): number | null;
-export declare function dustShortError(have: bigint, needed: bigint, waitMs: number | null): Error;
+export declare function dustShortError(have: bigint, needed: bigint, waitMs: number | null): DustRequiredError;
 export declare function awaitDustForFee(dust: DustBalanceSource, needed: bigint, onStatus?: (status: string) => void, signal?: AbortSignal): Promise<void>;
 export interface DustWaitPlan {
     have: bigint;
@@ -1202,6 +1203,24 @@ export declare class TransactionRefusedError extends Error {
         cause?: unknown;
     });
 }
+export declare class DustRequiredError extends Error {
+    readonly code = "DUST_REQUIRED";
+    constructor(message: string);
+}
+export declare class InsufficientBalanceError extends Error {
+    readonly code = "INSUFFICIENT_BALANCE";
+    constructor(message: string);
+}
+export declare class SyncTimeoutError extends Error {
+    readonly code = "SYNC_TIMEOUT";
+    constructor(message: string);
+}
+export declare class NetworkError extends Error {
+    readonly code = "NETWORK_ERROR";
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
+}
 export declare class CommandFailedError extends Error {
     readonly code = "COMMAND_FAILED";
     readonly exitCode: number;
@@ -1229,6 +1248,7 @@ export declare class ProgramFailedError extends Error {
 }
 export declare class ProgramTimedOutError extends Error {
     readonly command: string;
+    readonly code = "NETWORK_ERROR";
     constructor(command: string, timeoutMs: number);
 }
 export declare const execProgram: ExecRunner;
@@ -1292,6 +1312,7 @@ interface ClassifiedError {
     errorCode: string;
 }
 export declare function classifyError(err: Error, codes?: CodeRegistry): ClassifiedError;
+export declare function classifyByCode(err: Error, codes: CodeRegistry): ClassifiedError;
 export declare function humanizeNetworkError(message: string): string;
 ```
 

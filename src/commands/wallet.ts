@@ -58,7 +58,7 @@ export default async function walletCommand(args: ParsedArgs, ctx: WalletCommand
 async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const name = args.positionals[0];
   if (!name) {
-    throw new Error(
+    throw new UsageError(
       'Missing wallet name.\nUsage: midnight wallet generate <name> [--network <name>]'
     );
   }
@@ -71,7 +71,7 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
   const mnemonicStr = getFlag(args, 'mnemonic');
 
   if (seedHex !== undefined && mnemonicStr !== undefined) {
-    throw new Error('Cannot specify both --seed and --mnemonic. Use one or the other.');
+    throw new UsageError('Cannot specify both --seed and --mnemonic. Use one or the other.');
   }
 
   if (fs.existsSync(targetPath) && !hasFlag(args, 'force')) {
@@ -216,7 +216,7 @@ async function walletList(args: ParsedArgs, ctx: CallContext): Promise<void> {
 async function walletUse(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const name = args.positionals[0];
   if (!name) {
-    throw new Error(
+    throw new UsageError(
       'Missing wallet name.\nUsage: midnight wallet use <name>'
     );
   }
@@ -305,7 +305,7 @@ async function walletInfo(args: ParsedArgs, ctx: CallContext): Promise<void> {
 async function walletRemove(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const name = args.positionals[0];
   if (!name) {
-    throw new Error(
+    throw new UsageError(
       'Missing wallet name.\nUsage: midnight wallet remove <name>'
     );
   }

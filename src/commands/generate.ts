@@ -16,7 +16,7 @@ import { header, keyValue, divider, formatAddress } from '@kuiralabs/midnight-cl
 import { bold, yellow, dim, green } from '@kuiralabs/midnight-cli-core/ui/colors';
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { getDefaultWalletPath } from '../lib/wallet-paths.ts';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export default async function generateCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const root = ctx.config.paths.stateRoot;
@@ -32,7 +32,7 @@ export default async function generateCommand(args: ParsedArgs, ctx: CallContext
   const mnemonicStr = getFlag(args, 'mnemonic');
 
   if (seedHex !== undefined && mnemonicStr !== undefined) {
-    throw new Error('Cannot specify both --seed and --mnemonic. Use one or the other.');
+    throw new UsageError('Cannot specify both --seed and --mnemonic. Use one or the other.');
   }
 
   // Overwrite protection: check if target file already exists
@@ -56,7 +56,7 @@ export default async function generateCommand(args: ParsedArgs, ctx: CallContext
   } else if (mnemonicStr !== undefined) {
     // Mode: restore from mnemonic
     if (!validateMnemonic(mnemonicStr, wordlist)) {
-      throw new Error('Invalid BIP-39 mnemonic. Expected 12 or 24 words from the English wordlist.');
+      throw new UsageError('Invalid BIP-39 mnemonic. Expected 12 or 24 words from the English wordlist.');
     }
     mnemonic = mnemonicStr;
     seedBuffer = Buffer.from(mnemonicToSeedSync(mnemonic));

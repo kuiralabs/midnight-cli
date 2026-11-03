@@ -52,7 +52,7 @@ export async function resolveTransferRequest(args: ParsedArgs, root: string, hos
 
   if (shielded) {
     if (!shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded'))) {
-      throw new Error(shieldedDisabledReason(networkName));
+      throw new UsageError(shieldedDisabledReason(networkName));
     }
   }
   assertRecipient((await host.engines.load(sdkSetOf(networkName, root))).keys, recipientAddress, shielded, networkName);

@@ -373,7 +373,7 @@ export interface ShieldedTransferParams extends WalletSyncHooks {
   amount: bigint;
   /** Says each step, and the time the submit has taken. */
   progress: Spinner;
-  /** The refusal when the wallet holds less shielded NIGHT than `amount`, given what it holds, in NIGHT. */
+  /** The message of the InsufficientBalanceError thrown when the wallet holds less shielded NIGHT than `amount`, given what it holds, in NIGHT. */
   insufficient: (availableNight: string) => string;
   /** Right after another payment the wallet's Dust can be short of this fee: wait when the rest is moments away. */
   waitForDustToCover: boolean;

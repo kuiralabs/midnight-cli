@@ -9,7 +9,7 @@
 //      file required, useful for funding externally-generated addresses.
 //      A shielded address implies --shielded; the flag is optional there.
 
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { resolveWalletPath, saveShieldedAddress, walletAddress, walletShieldedAddress, type UnlockHost } from '../lib/wallet-config.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
@@ -27,7 +27,7 @@ export default async function airdropCommand(args: ParsedArgs, ctx: CallContext)
   rejectNoCacheForWrites(args);
   const amountStr = args.subcommand;
   if (!amountStr) {
-    throw new Error(
+    throw new UsageError(
       'Missing amount.\n' +
       'Usage: midnight airdrop <amount> [--wallet <name|file|address>]\n' +
       'Example: midnight airdrop 1000\n' +

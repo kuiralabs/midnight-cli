@@ -61,6 +61,50 @@ export class TransactionRefusedError extends Error {
   }
 }
 
+/** Not enough Dust to pay a transaction's fee: raised by mn's checks and by the engines, so its code is the engine contract's. */
+export class DustRequiredError extends Error {
+  readonly code = 'DUST_REQUIRED';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'DustRequiredError';
+    Object.setPrototypeOf(this, DustRequiredError.prototype);
+  }
+}
+
+/** Not enough NIGHT for the amount asked for: raised by the engines with the message the command gives them. */
+export class InsufficientBalanceError extends Error {
+  readonly code = 'INSUFFICIENT_BALANCE';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'InsufficientBalanceError';
+    Object.setPrototypeOf(this, InsufficientBalanceError.prototype);
+  }
+}
+
+/** A wait for the chain, the indexer or the proof server passed its deadline. */
+export class SyncTimeoutError extends Error {
+  readonly code = 'SYNC_TIMEOUT';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'SyncTimeoutError';
+    Object.setPrototypeOf(this, SyncTimeoutError.prototype);
+  }
+}
+
+/** A connection to the node, the indexer or the proof server failed; `cause` is the transport's own error. */
+export class NetworkError extends Error {
+  readonly code = 'NETWORK_ERROR';
+
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'NetworkError';
+    Object.setPrototypeOf(this, NetworkError.prototype);
+  }
+}
+
 /**
  * A command that ended with a non-zero exit code without throwing (a test run
  * whose tests failed): the code, and the JSON result it wrote. A runner with no

@@ -5,7 +5,7 @@
 
 import WebSocket from 'ws';
 import { assertEndpointUsable, endpointRefusalFromWsError } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
-import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { CancelledError, NetworkError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export interface RpcOptions {
   url: string;
@@ -79,9 +79,10 @@ export async function callNodeRpc<T = unknown>(
       });
     });
 
+    // The connection failed (refused, no such host, a dropped socket): its own words, as a network error.
     ws.on('error', (err) => {
       clearTimeout(timer);
-      settle(() => rejectPromise(endpointRefusalFromWsError(opts.url, err) ?? (err instanceof Error ? err : new Error(String(err)))));
+      settle(() => rejectPromise(endpointRefusalFromWsError(opts.url, err) ?? new NetworkError(err.message, { cause: err })));
     });
   });
 }
