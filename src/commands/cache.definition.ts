@@ -1,6 +1,8 @@
 // The `cache` command, described once.
 
 import { type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { LOADS_ENGINE, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { OPENS_WALLET } from './wallet.codes.ts';
 
 export const cacheDefinition: CommandDefinition = {
   name: 'cache',
@@ -43,6 +45,7 @@ export const cacheDefinition: CommandDefinition = {
   intro: { brief: 'Manage wallet cache', order: 14 },
   needsWalletSdk: false,
   shell: {},
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, 'NETWORK_ERROR'] },
   load: () => import('./cache.ts'),
   mcp: {
     tools: [

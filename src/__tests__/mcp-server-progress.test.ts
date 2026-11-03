@@ -15,6 +15,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { JSONRPCMessage, Progress } from '@modelcontextprotocol/sdk/types.js';
 import { startRefusingEndpoint } from './helpers/stand-in-indexer.ts';
+import { expectDeclaredToolResult } from './helpers/expect-declared.ts';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const TSX = path.join(REPO, 'node_modules', '.bin', 'tsx');
@@ -88,7 +89,9 @@ describe('progress notifications', () => {
     expect(progress[0]).toMatchObject({ progress: 1, message: 'Checking balance on undeployed...' });
     expect(progress.map((update) => update.progress)).toEqual(progress.map((_, index) => index + 1));
     expect(Math.max(...progress.map((update) => update.at))).toBeLessThan(answerAt(call.id));
-    expect(JSON.parse((result.content as Array<{ text: string }>)[0]!.text)).toMatchObject({ error: true, code: 'NETWORK_ERROR' });
+    const body = JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as Record<string, unknown>;
+    expect(body).toMatchObject({ error: true, code: 'NETWORK_ERROR' });
+    expectDeclaredToolResult('midnight_balance', body);
   }, 60_000);
 
   it('sends none to a call that asked for none, which gets the same result', async () => {
@@ -96,6 +99,8 @@ describe('progress notifications', () => {
     const result = await client.callTool(balanceOfAlice());
     expect(lastCall().progressToken).toBeUndefined();
     expect(fromServer.slice(before).filter((m) => 'method' in m && m.method === 'notifications/progress')).toEqual([]);
-    expect(JSON.parse((result.content as Array<{ text: string }>)[0]!.text)).toMatchObject({ error: true, code: 'NETWORK_ERROR' });
+    const body = JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as Record<string, unknown>;
+    expect(body).toMatchObject({ error: true, code: 'NETWORK_ERROR' });
+    expectDeclaredToolResult('midnight_balance', body);
   }, 60_000);
 });

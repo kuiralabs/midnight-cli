@@ -2,6 +2,7 @@
 
 import type { CommandDefinition } from '../lib/command-definition.ts';
 import { INDEXER_GRAPHQL_WS_PATH } from '../lib/constants.ts';
+import { RESOLVES_NETWORK } from './core.codes.ts';
 
 export const configDefinition: CommandDefinition = {
   name: 'config',
@@ -59,6 +60,7 @@ export const configDefinition: CommandDefinition = {
   intro: { brief: 'Manage CLI config', order: 13 },
   needsWalletSdk: false,
   shell: {},
+  errors: { codes: [RESOLVES_NETWORK] },
   load: () => import('./config.ts'),
   mcp: {
     tools: [

@@ -1,6 +1,9 @@
 // The `swap` command, described once.
 
 import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands/chain.codes';
+import { OPENS_WALLET } from './wallet.codes.ts';
 
 /** The terms a swap request states, as the maker gives and wants them. */
 function describeTerms(params: Readonly<Record<string, unknown>>): string {
@@ -141,6 +144,7 @@ export const swapDefinition: CommandDefinition = {
   intro: { brief: 'Private swaps through offer files', order: 12.5 },
   needsWalletSdk: true,
   shell: { payer: true },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'NO_PAYER', 'OFFER_EXPIRED'] },
   load: () => import('./swap.ts'),
   mcp: {
     tools: [

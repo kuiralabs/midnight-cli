@@ -12,6 +12,7 @@ import { installedCommands } from '../lib/installed-commands.ts';
 import { captureCommand } from '../lib/run-command.ts';
 import type { CommandHandler } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { ownCall } from './helpers/own-call.ts';
+import { declaredOutcome } from './helpers/expect-declared.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 let home: string;
@@ -36,7 +37,7 @@ async function run(...argv: string[]): Promise<Record<string, unknown>> {
   const args = parseArgs([...argv, '--json']);
   args.flags._full = true;
   const { default: handler } = await installedCommands.find(args.command!)!.load();
-  return captureCommand(handler as CommandHandler, args, ownCall());
+  return declaredOutcome(args.command!, captureCommand(handler as CommandHandler, args, ownCall()));
 }
 
 // In order: a later run reads what an earlier one wrote.

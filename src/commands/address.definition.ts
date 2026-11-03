@@ -1,6 +1,8 @@
 // The `address` command, described once.
 
 import { type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { LOADS_ENGINE, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { OPENS_WALLET } from './wallet.codes.ts';
 
 export const addressDefinition: CommandDefinition = {
   name: 'address',
@@ -50,6 +52,7 @@ export const addressDefinition: CommandDefinition = {
   intro: { brief: 'Derive address from seed', order: 4 },
   needsWalletSdk: false,
   shell: {},
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, 'NETWORK_ERROR'] },
   load: () => import('./address.ts'),
   mcp: {
     tools: [

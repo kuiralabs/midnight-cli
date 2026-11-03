@@ -1,6 +1,7 @@
 // The `localnet` command, described once.
 
 import type { CommandDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { LOADS_ENGINE, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
 
 export const localnetDefinition: CommandDefinition = {
   name: 'localnet',
@@ -46,6 +47,7 @@ export const localnetDefinition: CommandDefinition = {
   intro: { brief: 'Manage local network', order: 15 },
   needsWalletSdk: false,
   shell: {},
+  errors: { codes: [RESOLVES_NETWORK, LOADS_ENGINE, 'NETWORK_ERROR', 'SYNC_TIMEOUT', 'LOCALNET_UNAVAILABLE'] },
   load: () => import('./localnet.ts'),
   mcp: {
     tools: [

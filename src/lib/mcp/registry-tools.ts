@@ -1,10 +1,12 @@
 // The MCP server's tools, from the command registry: each command's
-// definition gives its tools' names, descriptions, annotations, schemas, argv
-// mapping and confirmation; the server runs the command's own handler. The
+// definition gives its tools' names, descriptions (ending with the codes its
+// command can end with), annotations, schemas, argv mapping and confirmation; the
+// server runs the command's own handler. The
 // server's one tool of its own, midnight_confirm_operation, redeems the tokens
 // the confirmation flow gives.
 
 import { type CommandRun, captureCommand } from '../run-command.ts';
+import { listedNames } from '../code-tables.ts';
 import { getEndpointOverridesForNetwork, loadCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
 import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import {
@@ -12,7 +14,9 @@ import {
   type RegisteredTool,
   type ToolAnnotations,
   type ToolInputSchema,
+  commandOwnCodes,
   confirmationText,
+  declaredSets,
   toolArgv,
 } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 
@@ -32,9 +36,22 @@ export const CONFIRM_TOOL: ListedTool = {
   annotations: { destructiveHint: true, openWorldHint: true },
 };
 
+/**
+ * A command's tool's description as tools/list sends it: its definition's,
+ * then the codes its command can end with: its own, and the sets it declares
+ * by name, which the full skill lists.
+ */
+export function toolDescription(registry: Pick<CommandRegistry, 'code'>, tool: RegisteredTool): string {
+  const own = commandOwnCodes(registry, tool.command).map((definition) => definition.code);
+  const sets = declaredSets(tool.command).map((set) => set.name);
+  if (own.length === 0 && sets.length === 0) return tool.description;
+  const named = sets.length === 0 ? '' : `the ${listedNames(sets)} codes (see the skill)`;
+  return `${tool.description} Errors: ${own.join(', ')}${own.length > 0 && named !== '' ? '; and ' : ''}${named}.`;
+}
+
 /** tools/list: every tool the installed commands define, in the registry's order, then the confirm tool. */
 export function listedTools(registry: CommandRegistry): ListedTool[] {
-  return [...registry.tools, CONFIRM_TOOL].map((tool) => ({
+  return [...registry.tools.map((tool) => ({ ...tool, description: toolDescription(registry, tool) })), CONFIRM_TOOL].map((tool) => ({
     name: tool.name,
     description: tool.description,
     inputSchema: tool.inputSchema,

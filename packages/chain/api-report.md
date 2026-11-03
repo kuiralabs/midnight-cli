@@ -28,6 +28,7 @@ export declare const chainCodes: readonly [
         readonly recovery: "Wait for it to catch up, or ask the user to restart the local chain.";
     }
 ];
+export declare const READS_CHAIN: import("@kuiralabs/midnight-cli-core/lib/error-codes").CodeSet;
 ```
 
 ## `@kuiralabs/midnight-chain/commands/chain.guidance`

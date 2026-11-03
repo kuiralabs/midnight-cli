@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { expectDeclaredToolResult } from './helpers/expect-declared.ts';
 import { freshGrantee, grantRequestFor, grantRequestLink } from '@kuiralabs/midnight-account-chain/agent';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
@@ -58,9 +59,16 @@ afterAll(async () => {
   fs.rmSync(home, { recursive: true, force: true });
 });
 
+/** The tool each pending token was issued for: confirming it runs that tool's command. */
+const pendingTools = new Map<unknown, string>();
+
 const call = async (name: string, args: Record<string, unknown>) => {
   const result = await client.callTool({ name, arguments: args });
-  return JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as Record<string, unknown>;
+  const body = JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as Record<string, unknown>;
+  if (body.pending === true) pendingTools.set(body.token, name);
+  const ran = name === 'midnight_confirm_operation' ? pendingTools.get(args.token) : name;
+  if (ran !== undefined) expectDeclaredToolResult(ran, body);
+  return body;
 };
 
 /** Every file under the home, with its contents: what a call that does nothing leaves as it was. */

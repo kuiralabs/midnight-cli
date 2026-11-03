@@ -80,7 +80,7 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => 
   const payer = { name: 'test payer' } as unknown as Payer;
   const protector = { name: 'test protector' } as unknown as WalletProtector;
   const testCommand = (name: string, shell: CommandDefinition['shell'], outcome?: CommandOutcome): CommandDefinition => ({
-    name, order: 1, flags: [], needsWalletSdk: false, shell,
+    name, order: 1, flags: [], needsWalletSdk: false, shell, errors: { codes: [] },
     load: async () => {
       loaded.push(name);
       return {
@@ -411,6 +411,7 @@ describe('createCommandRegistry', () => {
     help: { description: 'X', usage: 'midnight x', flags: ['note', { flag: 'a' }] },
     needsWalletSdk: false,
     shell: {},
+    errors: { codes: [] },
     load: async () => ({ default: async () => {} }),
   };
 

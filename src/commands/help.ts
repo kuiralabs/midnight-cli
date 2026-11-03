@@ -12,6 +12,7 @@ import { animateMaterialize } from '../ui/animate.ts';
 import { WORDMARK_BIG } from '../ui/art.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { agentManual } from '../lib/agent-manual.ts';
+import { commandCodeLines } from '../lib/code-tables.ts';
 import { commandHelpSpecs, introBriefs, type CommandHelpSpec } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 import { hasShownIntroThisSession, markIntroShown } from '../lib/intro-marker.ts';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
@@ -80,6 +81,10 @@ function printCommandHelp(output: CallOutput, spec: CommandSpec): void {
     }
     output.stdout('\n');
   }
+
+  output.stdout(gray('Errors:') + '\n');
+  for (const line of commandCodeLines(spec, 2)) output.stdout(`${line}\n`);
+  output.stdout('\n');
 }
 
 function outputJsonManifest(ctx: CallContext): void {
@@ -98,6 +103,9 @@ function outputJsonManifest(ctx: CallContext): void {
       flags: spec.flags,
       examples: spec.examples,
       jsonFields: spec.jsonFields,
+      errorCodes: spec.errorCodes.map(({ code, exitCode }) => ({ code, exitCode })),
+      errorSets: spec.errorSets,
+      exitCodes: spec.exitCodes,
     })),
   };
 

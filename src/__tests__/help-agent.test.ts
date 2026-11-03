@@ -39,6 +39,18 @@ describe('help --agent', () => {
     expect(missing).toEqual([]);
   });
 
+  it("names each command's own error codes under its usage", async () => {
+    await cliCall(helpCommand, parseArgs(['help', '--agent']));
+    expect(io.stdout()).toContain('\n  tx\n  midnight tx status <hash or identifier> [options]\n  Error codes: NETWORK_ERROR; sets: network\n  JSON fields:\n');
+    expect(io.stdout()).toContain('\n  config\n  midnight config <get|set|unset> <key> [value] [--network <name>]\n  Error codes: none; sets: network\n');
+  });
+
+  it('lists each set of codes once, by name, after the code table', async () => {
+    await cliCall(helpCommand, parseArgs(['help', '--agent']));
+    const table = io.stdout().split('ERROR CODES')[1]!.split('MCP SERVER')[0]!;
+    expect(table).toContain('\n  Sets of codes (a command\'s "sets", a tool\'s "Errors" name them):\n    network  AMBIGUOUS_LOCAL_STACKS, BLOCKFROST_PROJECT_ID_REQUIRED, BLOCKFROST_PROJECT_ID_REJECTED, BLOCKFROST_LIMIT_REACHED, ENDPOINT_SHUT_DOWN\n    wallet   WALLET_NOT_FOUND, WRONG_PASSPHRASE, PASSPHRASE_REQUIRED\n');
+  });
+
   it('documents all commands', async () => {
     const args = parseArgs(['help', '--agent']);
     await cliCall(helpCommand, args);

@@ -1,6 +1,9 @@
 // The `serve` command, described once.
 
 import type { CommandDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands/chain.codes';
+import { OPENS_WALLET } from './wallet.codes.ts';
 
 export const serveDefinition: CommandDefinition = {
   name: 'serve',
@@ -110,5 +113,6 @@ export const serveDefinition: CommandDefinition = {
   intro: { brief: 'DApp Connector server', order: 16 },
   needsWalletSdk: true,
   shell: {},
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND'] },
   load: () => import('./serve.ts'),
 };

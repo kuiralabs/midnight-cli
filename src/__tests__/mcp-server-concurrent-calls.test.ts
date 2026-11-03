@@ -24,6 +24,7 @@ import type { JSONRPCMessage, Progress } from '@modelcontextprotocol/sdk/types.j
 import { deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { toNight } from '@kuiralabs/midnight-cli-core/ui/format';
 import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from './helpers/stand-in-indexer.ts';
+import { expectDeclaredToolResult } from './helpers/expect-declared.ts';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const TSX = path.join(REPO, 'node_modules', '.bin', 'tsx');
@@ -86,8 +87,12 @@ const balanceOf = (address: string, indexer: StandInIndexer) => ({
   },
 });
 
-const resultOf = (answer: unknown): Record<string, unknown> =>
-  JSON.parse(((answer as { content: Array<{ text: string }> }).content)[0]!.text) as Record<string, unknown>;
+/** A balance call's result, its error (if it is one) held to the codes balance declares. */
+const resultOf = (answer: unknown): Record<string, unknown> => {
+  const result = JSON.parse(((answer as { content: Array<{ text: string }> }).content)[0]!.text) as Record<string, unknown>;
+  expectDeclaredToolResult('midnight_balance', result);
+  return result;
+};
 
 /** The id of the tools/call request the client sent for `address`. */
 function requestIdFor(address: string): unknown {

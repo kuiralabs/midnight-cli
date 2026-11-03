@@ -6,12 +6,14 @@
 //
 // Libraries never call commands, and commands never call another package's
 // commands: a command is an adapter over library functions, and only the shell
-// and the MCP server dispatch to one.
+// and the MCP server dispatch to one. A package's codes file is data, not a
+// command: a package below lends its sets of codes to the definitions above.
 //
 // Usage: node scripts/check-layering.mjs
 // Imported, it exports sourceFiles and homeOf: which package each file of src/ is in;
-// importRule and guidanceRule: the rule an import breaks; and findLayeringProblems,
-// which the suite runs. Exits 1 when a file has no package, or an import breaks a rule.
+// importRule and guidanceRule: the rule an import breaks; findLayeringProblems,
+// which the suite runs; and importsOf and importTarget, a file's imports and the
+// files they name (scripts/code-reach.mjs walks them). Exits 1 when a file has no package, or an import breaks a rule.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -187,7 +189,9 @@ export function importRule(fromRel, toRel) {
   const guidance = guidanceRule(fromRel, toRel);
   if (guidance !== undefined) return guidance;
   const isCommand = (path) => path.startsWith('commands/');
-  const callsCommand = isCommand(toRel) && (!isCommand(fromRel) || targetHome !== home);
+  // A package's codes (<package>.codes.ts) are data, not a command: its own code and the packages above it name its sets of codes.
+  const isCodes = (path) => /\.codes\.ts$/.test(path);
+  const callsCommand = isCommand(toRel) && !isCodes(toRel) && (!isCommand(fromRel) || targetHome !== home);
   if (callsCommand && !DISPATCHERS.has(home)) return `${isCommand(fromRel) ? 'command' : 'library'} → ${targetHome} command`;
   if (targetHome === 'engine' && home !== 'engine') {
     return fromRel === ENGINE_LOADER ? undefined : `${home} → engine (reach it through ${ENGINE_LOADER})`;
@@ -197,14 +201,39 @@ export function importRule(fromRel, toRel) {
   return undefined;
 }
 
-function importsOf(file) {
+/**
+ * Whether the import ending at `index` brings in types alone: `import type …`
+ * or `export type … from`, or a `typeof import(…)` in a type. Such an import
+ * runs nothing, so it adds no code a module can throw (scripts/code-reach.mjs).
+ */
+function isTypeOnly(source, match) {
+  const before = source.slice(0, match.index);
+  if (match[0].includes('(')) return /\btypeof\s+$/.test(before);
+  if (!/^from\b/.test(match[0])) return false;
+  const start = Math.max(before.lastIndexOf('import '), before.lastIndexOf('export '));
+  return start >= 0 && /^(import|export)\s+type\s/.test(source.slice(start, match.index));
+}
+
+/** A file's imports: each specifier, its line, whether it is an `import()`, and whether it brings in types alone. */
+export function importsOf(file) {
   const source = readFileSync(file, 'utf8');
   const found = [];
   for (const match of source.matchAll(IMPORT)) {
     const line = source.slice(0, match.index).split('\n').length;
-    found.push({ specifier: match[2], line });
+    found.push({ specifier: match[2], line, dynamic: match[0].includes('('), typeOnly: isTypeOnly(source, match) });
   }
   return found;
+}
+
+/**
+ * The source file an import of `file` names: a relative path, or a workspace
+ * package's (`@kuiralabs/midnight-cli-core/lib/errors` is its src/lib/errors.ts,
+ * the package name alone its index); undefined for an outside package.
+ */
+export function importTarget(file, specifier) {
+  const pkg = WORKSPACE_PACKAGES.find((p) => specifier === p.name || specifier.startsWith(p.name + '/'));
+  if (pkg !== undefined) return join(pkg.dir, `${specifier === pkg.name ? 'index' : specifier.slice(pkg.name.length + 1)}.ts`);
+  return specifier.startsWith('.') ? resolve(dirname(file), specifier) : undefined;
 }
 
 /** Files with no package, and imports that break a rule. */

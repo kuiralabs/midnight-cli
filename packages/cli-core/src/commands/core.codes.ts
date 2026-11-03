@@ -3,8 +3,11 @@
 // SDK set and its layout, the Node.js version, the state root, the payer, a
 // failed command), and those of the engine contract, which every engine
 // raises (proofs, transactions, stale state, sync, Dust and balance, swap offers).
+// Beside them, the sets of its codes a command definition declares (its
+// errors.codes) by what the command does; scripts/code-reach.mjs holds each
+// definition to what its modules can throw.
 
-import { defineCodes } from '../lib/error-codes.ts';
+import { defineCodeSet, defineCodes } from '../lib/error-codes.ts';
 import {
   EXIT_CANCELLED,
   EXIT_GENERAL_ERROR,
@@ -49,3 +52,21 @@ export const coreCodes = defineCodes([
   { code: 'OFFER_EXPIRED', exitCode: EXIT_INVALID_ARGS, order: 350, summary: 'A swap offer is past the expiry its maker set.', recovery: 'Ask the maker for a new one.' },
   { code: 'OFFER_COINS_IN_USE', exitCode: EXIT_INVALID_ARGS, order: 360, summary: "A spend would use coins an open swap offer of this wallet's holds, cancelling it.", recovery: 'Cancel the offer first (`mn swap cancel`), or wait until it is taken.' },
 ]);
+
+/** What every command can end with, which no definition declares: the shell's usage and flag checks, cancellation, an error carrying no code, the Node.js version, the state root. */
+export const EVERY_COMMAND = ['INVALID_ARGS', 'CANCELLED', 'UNKNOWN', 'UNSUPPORTED_NODE', 'NO_STATE_ROOT'] as const;
+
+/** Resolving a network and its endpoints: several local stacks, Blockfrost's project id and limits, an endpoint shut down. */
+export const RESOLVES_NETWORK = defineCodeSet('network', ['AMBIGUOUS_LOCAL_STACKS', 'BLOCKFROST_PROJECT_ID_REQUIRED', 'BLOCKFROST_PROJECT_ID_REJECTED', 'BLOCKFROST_LIMIT_REACHED', 'ENDPOINT_SHUT_DOWN']);
+
+/** Asking the host for an engine: the other SDK set loaded in the process, or an install without its shrinkwrap. */
+export const LOADS_ENGINE = defineCodeSet('engine', ['OTHER_SDK_SET', 'MIXED_SDK_LAYOUT']);
+
+/** Syncing a wallet through an engine: a connection that failed, a sync past its deadline, a cache the chain no longer fits. */
+export const ENGINE_SYNC = defineCodeSet('sync', ['NETWORK_ERROR', 'SYNC_TIMEOUT', 'STALE_CACHE']);
+
+/** Paying for a transaction: the node's refusals, the proof, the Dust for the fee, the NIGHT, coins an open swap offer holds. */
+export const PAYS = defineCodeSet('paying', ['TX_REJECTED', 'STALE_UTXO', 'INVALID_DUST_PROOF', 'PROOF_TIMEOUT', 'PROOF_FAILURE', 'DUST_REQUIRED', 'DUST_GENERATING', 'INSUFFICIENT_BALANCE', 'OFFER_COINS_IN_USE']);
+
+/** Reading a swap offer's bytes and terms. */
+export const READS_OFFERS = defineCodeSet('offers', ['NOT_AN_OFFER', 'TERMS_MISMATCH']);

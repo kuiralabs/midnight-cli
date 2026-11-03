@@ -1,6 +1,9 @@
 // The `transfer` command, described once.
 
 import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands/chain.codes';
+import { OPENS_WALLET } from './wallet.codes.ts';
 
 export const transferDefinition: CommandDefinition = {
   name: 'transfer',
@@ -91,6 +94,7 @@ export const transferDefinition: CommandDefinition = {
   intro: { brief: 'Send NIGHT tokens', order: 8 },
   needsWalletSdk: true,
   shell: {},
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND'] },
   load: () => import('./transfer.ts'),
   mcp: {
     tools: [

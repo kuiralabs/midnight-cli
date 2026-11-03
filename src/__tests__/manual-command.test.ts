@@ -47,6 +47,20 @@ describe('mn manual', () => {
     }
   });
 
+  it("ends each command's page with its errors, as help shows them", () => {
+    const m = stripAnsi(buildManual());
+    const tx = m.split('▸ tx')[1]!.split('▸ ')[0]!;
+    expect(tx.indexOf('ERRORS')).toBeGreaterThan(tx.indexOf('EXAMPLES'));
+    expect(tx).toContain('  ERRORS\n    NETWORK_ERROR                  4  Indexer/node/proof-server connection refused or DNS failure.\n');
+    expect(tx).toContain('    Also: the network codes, and INVALID_ARGS, CANCELLED, UNKNOWN, UNSUPPORTED_NODE, NO_STATE_ROOT (mn manual lists them all).\n');
+  });
+
+  it('lists each set of codes the commands name, with its codes', () => {
+    const codes = stripAnsi(buildManual()).split('Sets of codes')[1]!.split('TROUBLESHOOTING')[0]!;
+    expect(codes).toContain('\n    network  AMBIGUOUS_LOCAL_STACKS, BLOCKFROST_PROJECT_ID_REQUIRED, BLOCKFROST_PROJECT_ID_REJECTED, BLOCKFROST_LIMIT_REACHED, ENDPOINT_SHUT_DOWN\n');
+    expect(codes).toContain('\n    chain    UNSUPPORTED_LEDGER, LOCAL_STACK_UNREACHABLE\n');
+  });
+
   it('lists the stable error code strings', () => {
     const m = stripAnsi(buildManual());
     for (const code of [
