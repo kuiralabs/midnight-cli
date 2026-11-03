@@ -143,14 +143,14 @@ async function fetchJson<T>(path: string, signal: AbortSignal): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-async function tryDetectNetwork(args: ParsedArgs): Promise<string | undefined> {
+async function tryDetectNetwork(args: ParsedArgs, root: string): Promise<string | undefined> {
   const flagNetwork = getFlag(args, 'network');
   if (flagNetwork) return flagNetwork;
 
   // Check config file for default network
   try {
     const { loadCliConfig } = await import('@kuiralabs/midnight-cli-core/lib/cli-config');
-    const config = loadCliConfig();
+    const config = loadCliConfig(root);
     if (config.network && isValidNetworkName(config.network)) return config.network;
   } catch {
     // fall through
@@ -297,10 +297,10 @@ async function probeExplorer(explorerUrl: string | null, signal: AbortSignal): P
 }
 
 /** The live probes of one network; a cancelled call's probes stop at once (their results then mean nothing). */
-async function runLocalProbes(networkName: string, signal: AbortSignal): Promise<Record<string, ProbeResult>> {
+async function runLocalProbes(networkName: string, root: string, signal: AbortSignal): Promise<Record<string, ProbeResult>> {
   if (!isValidNetworkName(networkName)) return {};
 
-  const netConfig = resolveNetworkConfig(networkName as NetworkName, { blockfrostProjectId: resolveBlockfrostProjectId(networkName as NetworkName) });
+  const netConfig = resolveNetworkConfig(networkName as NetworkName, { blockfrostProjectId: resolveBlockfrostProjectId(networkName as NetworkName, root) });
   const extra = EXTRA_ENDPOINTS[networkName];
   if (!extra) return {};
 
@@ -384,7 +384,7 @@ export default async function statusCommand(args: ParsedArgs, ctx: CallContext):
   const watchMode = hasFlag(args, 'watch');
 
   // Determine target network(s) first
-  const detected = (await tryDetectNetwork(args)) ?? 'preprod';
+  const detected = (await tryDetectNetwork(args, ctx.config.paths.stateRoot)) ?? 'preprod';
 
   // Fetch canary data + run local probes in parallel
   const spinner = ctx.progress.start('Checking network status...');
@@ -412,7 +412,7 @@ export default async function statusCommand(args: ParsedArgs, ctx: CallContext):
       return null;
     }),
     // Local probes per network
-    ...targetNetworks.map(name => runLocalProbes(name, ctx.signal)),
+    ...targetNetworks.map(name => runLocalProbes(name, ctx.config.paths.stateRoot, ctx.signal)),
   ]);
 
   // Cancelled: the probes stopped early, so what they found says nothing about the network.
@@ -523,7 +523,7 @@ export default async function statusCommand(args: ParsedArgs, ctx: CallContext):
             fetchJson<StatusJson>('/api/status', ctx.signal),
             fetchJson<IssuesJson>('/api/issues', ctx.signal),
           ]).catch(() => null),
-          ...targetNetworks.map(name => runLocalProbes(name, ctx.signal)),
+          ...targetNetworks.map(name => runLocalProbes(name, ctx.config.paths.stateRoot, ctx.signal)),
         ]);
         // Watching ended while this refresh ran: nothing to show.
         if (ctx.signal.aborted) return;

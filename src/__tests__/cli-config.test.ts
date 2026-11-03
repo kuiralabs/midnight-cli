@@ -15,8 +15,6 @@ import {
 import { sdkSetOfNetwork } from '@kuiralabs/midnight-cli-core/lib/network';
 import { getCachePath, networkCacheFolder } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
 import { getDustCachePath } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
-import { setHostPathsSource } from '@kuiralabs/midnight-cli-core/lib/state-root';
-import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-cli-config-test-${process.pid}`);
 
@@ -588,24 +586,22 @@ describe('the sdk-set key', () => {
 
 describe('the SDK set a network runs on', () => {
   const root = path.join(TEST_DIR, 'state');
-  beforeEach(() => setHostPathsSource(() => ({ stateRoot: root, home: TEST_DIR })));
-  afterEach(() => setHostPathsSource(() => ({ stateRoot: path.join(os.homedir(), MIDNIGHT_DIR), home: os.homedir() })));
 
   it('is the table\'s until config gives the network another, and the caches follow it to a folder of the set\'s own', () => {
-    expect(sdkSetOfNetwork('undeployed')).toBe('rc');
-    expect(networkCacheFolder('undeployed')).toBe('undeployed');
-    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed')).toBe(path.join(root, 'cache', 'undeployed', 'mn_addr_undeployed1a.json'));
+    expect(sdkSetOfNetwork('undeployed', root)).toBe('rc');
+    expect(networkCacheFolder('undeployed', root)).toBe('undeployed');
+    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)).toBe(path.join(root, 'cache', 'undeployed', 'mn_addr_undeployed1a.json'));
 
-    setConfigValue('sdk-set', 'beta', undefined, 'undeployed');
-    expect(sdkSetOfNetwork('undeployed')).toBe('beta');
-    expect(networkCacheFolder('undeployed')).toBe('undeployed.beta');
-    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed')).toBe(path.join(root, 'cache', 'undeployed.beta', 'mn_addr_undeployed1a.json'));
-    expect(getDustCachePath('undeployed', 'ab'.repeat(32))).toBe(path.join(root, 'cache', 'undeployed.beta', `dust-${'ab'.repeat(10)}.json`));
+    setConfigValue('sdk-set', 'beta', root, 'undeployed');
+    expect(sdkSetOfNetwork('undeployed', root)).toBe('beta');
+    expect(networkCacheFolder('undeployed', root)).toBe('undeployed.beta');
+    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)).toBe(path.join(root, 'cache', 'undeployed.beta', 'mn_addr_undeployed1a.json'));
+    expect(getDustCachePath('undeployed', 'ab'.repeat(32), root)).toBe(path.join(root, 'cache', 'undeployed.beta', `dust-${'ab'.repeat(10)}.json`));
 
     // Back on the network's own set, the caches it kept there are the ones read.
-    unsetConfigValue('sdk-set', undefined, 'undeployed');
-    expect(networkCacheFolder('undeployed')).toBe('undeployed');
-    expect(sdkSetOfNetwork('stagenet')).toBe('beta');
-    expect(networkCacheFolder('stagenet')).toBe('stagenet');
+    unsetConfigValue('sdk-set', root, 'undeployed');
+    expect(networkCacheFolder('undeployed', root)).toBe('undeployed');
+    expect(sdkSetOfNetwork('stagenet', root)).toBe('beta');
+    expect(networkCacheFolder('stagenet', root)).toBe('stagenet');
   });
 });

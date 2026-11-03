@@ -21,6 +21,8 @@ export interface ServeHandle {
 }
 
 export interface ServeManagerOptions {
+  /** The state root the wallets, config and caches live under. */
+  root: string;
   port?: number;
   network?: string;
   /** Explicit endpoints; they win over the network defaults and docker auto-detection. */
@@ -46,8 +48,9 @@ export function resolveServeTarget(options: ServeManagerOptions): { networkName:
       positionals: [],
       flags: { ...(options.network ? { network: options.network } : {}), ...endpointFlags(options.endpoints ?? {}) },
     },
+    configDir: options.root,
   });
-  applyEndpointOverrides(networkConfig, options.endpoints ?? {}, networkName);
+  applyEndpointOverrides(networkConfig, options.endpoints ?? {}, networkName, options.root);
   return { networkName, networkConfig };
 }
 
@@ -194,7 +197,7 @@ export async function startServeOrReuse(options: ServeManagerOptions): Promise<S
 
     const runningAddress = await probeServeWallet(port);
     if (runningAddress !== null) {
-      const wanted = await walletAddress(resolveWalletPath(options.wallet), actualNetwork as NetworkName);
+      const wanted = await walletAddress(resolveWalletPath(options.root, options.wallet), actualNetwork as NetworkName, options.root);
       const walletMismatch = serveWalletMismatch(runningAddress, { address: wanted, name: options.wallet ?? 'the active wallet' });
       if (walletMismatch) {
         throw new Error(
@@ -229,7 +232,7 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
 
   throwIfCancelled(signal);
   // Load wallet
-  const config = await unlockWallet(resolveWalletPath(options.wallet));
+  const config = await unlockWallet(resolveWalletPath(options.root, options.wallet), { root: options.root });
   const seedBuffer = Buffer.from(config.seed, 'hex');
 
   const { networkName, networkConfig } = resolveServeTarget(options);
@@ -243,8 +246,9 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
   // the listener doesn't outlive this call and the wallet doesn't keep syncing.
   let opened: OpenedConnector;
   try {
-    opened = await (await engineFor(networkName)).wallet.openConnector({
+    opened = await (await engineFor(networkName, options.root)).wallet.openConnector({
       seed: seedBuffer,
+      root: options.root,
       network: networkName,
       networkConfig,
       address,

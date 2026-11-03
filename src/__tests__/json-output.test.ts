@@ -20,6 +20,7 @@ import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address
 import { loadCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
 import { localIndexerFlags } from './helpers/local-indexer.ts';
 import { cliCall } from './helpers/cli-call.ts';
+import { stateRootIn } from './helpers/state-root-in.ts';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-json-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
@@ -344,12 +345,12 @@ describe('config --json', () => {
   let originalNetwork: string;
 
   beforeEach(() => {
-    originalNetwork = loadCliConfig().network;
+    originalNetwork = loadCliConfig(stateRootIn(TEST_DIR)).network;
   });
 
   afterEach(async () => {
     // Restore original config
-    if (loadCliConfig().network !== originalNetwork) {
+    if (loadCliConfig(stateRootIn(TEST_DIR)).network !== originalNetwork) {
       io.restore();
       const restoreIo = captureOutput();
       await cliCall(configCommand, parseArgs(['config', 'set', 'network', originalNetwork]));

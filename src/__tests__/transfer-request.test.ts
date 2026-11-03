@@ -34,7 +34,7 @@ function saveWallet(name: string, seed: Buffer, shielded = false): string {
   return file;
 }
 
-const request = (...argv: string[]) => resolveTransferRequest(parseArgs(['transfer', ...argv]));
+const request = (...argv: string[]) => resolveTransferRequest(parseArgs(['transfer', ...argv]), path.join(HOME, MIDNIGHT_DIR));
 
 beforeEach(() => {
   origHome = process.env.HOME;

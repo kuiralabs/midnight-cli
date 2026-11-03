@@ -1,7 +1,7 @@
 // Boundary tests for WalletDataRepository.
 // Uses the four constructor seams (now, fetchTip, fetchUnshielded, fetchDust)
 // to exercise cache + tip + invalidation logic without touching the network,
-// the SDK, or the proof server. cacheDir points at a per-test tmp directory.
+// the SDK, or the proof server. Each read keeps its caches under a per-test tmp state root.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, readdirSync } from 'node:fs';
@@ -76,10 +76,9 @@ describe('WalletDataRepository — ledger guard', () => {
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
       fetchDust,
-      cacheDir: TMP,
     });
 
-    await expect(repo.dust(SEED, NETWORK)).rejects.toBeInstanceOf(UnsupportedLedgerError);
+    await expect(repo.dust(SEED, NETWORK, { root: TMP })).rejects.toBeInstanceOf(UnsupportedLedgerError);
     expect(fetchDust).not.toHaveBeenCalled();
   });
 });
@@ -92,7 +91,6 @@ describe('WalletDataRepository — unshielded reads', () => {
       fetchTip: async () => { tipCalls++; return 'tip-A'; },
       fetchUnshielded: async () => { fetchCalls++; return fakeBalanceSummary({ utxoCount: 3 }); },
       fetchDust: async () => fakeDustResult(),
-      cacheDir: TMP,
     });
 
     const first = await repo.unshielded('addr-1', NETWORK);
@@ -113,7 +111,6 @@ describe('WalletDataRepository — unshielded reads', () => {
       fetchTip: async () => tip,
       fetchUnshielded: async () => { fetchCalls++; return fakeBalanceSummary({ utxoCount: fetchCalls }); },
       fetchDust: async () => fakeDustResult(),
-      cacheDir: TMP,
     });
 
     await repo.unshielded('addr-1', NETWORK);
@@ -133,7 +130,6 @@ describe('WalletDataRepository — unshielded reads', () => {
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => { fetchCalls++; return fakeBalanceSummary(); },
       fetchDust: async () => fakeDustResult(),
-      cacheDir: TMP,
     });
 
     await repo.unshielded('addr-1', NETWORK);
@@ -153,7 +149,6 @@ describe('WalletDataRepository — unshielded reads', () => {
       },
       fetchUnshielded: async () => { fetchCalls++; return fakeBalanceSummary({ utxoCount: 7 }); },
       fetchDust: async () => fakeDustResult(),
-      cacheDir: TMP,
     });
 
     // Prime the memo, then break the tip and step past the TTL.
@@ -175,11 +170,10 @@ describe('WalletDataRepository — dust reads', () => {
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
       fetchDust: async () => { fetchCalls++; return fakeDustResult(); },
-      cacheDir: TMP,
     });
 
-    await repo.dust(SEED, NETWORK);
-    const second = await repo.dust(SEED, NETWORK);
+    await repo.dust(SEED, NETWORK, { root: TMP });
+    const second = await repo.dust(SEED, NETWORK, { root: TMP });
     expect(second.fromCache).toBe(true);
     expect(fetchCalls).toBe(1);
   });
@@ -195,20 +189,19 @@ describe('WalletDataRepository — dust reads', () => {
         startIds.push(opts.startFromId);
         return fakeDustResult({ lastAppliedEventId: lastId, eventCount: lastId + 1 - opts.startFromId });
       },
-      cacheDir: TMP,
     });
     // Before the reset: the cache reaches event 500.
-    await new WalletDataRepository(deps(null, [], 500)).dust(SEED, NETWORK);
+    await new WalletDataRepository(deps(null, [], 500)).dust(SEED, NETWORK, { root: TMP });
 
     // After it: the chain's latest event is 106, so the cache can't be from this chain.
     const startIds: number[] = [];
-    const view = await new WalletDataRepository(deps(106, startIds, 106)).dust(SEED, NETWORK);
+    const view = await new WalletDataRepository(deps(106, startIds, 106)).dust(SEED, NETWORK, { root: TMP });
 
     expect(startIds).toEqual([0]);
     expect(view.fromCache).toBe(false);
-    const files = readdirSync(join(TMP, 'undeployed')).filter((f) => f.startsWith('dust-'));
+    const files = readdirSync(join(TMP, 'cache', 'undeployed')).filter((f) => f.startsWith('dust-'));
     expect(files).toHaveLength(1);
-    expect(JSON.parse(readFileSync(join(TMP, 'undeployed', files[0]!), 'utf-8')).lastAppliedEventId).toBe(106);
+    expect(JSON.parse(readFileSync(join(TMP, 'cache', 'undeployed', files[0]!), 'utf-8')).lastAppliedEventId).toBe(106);
   });
 
   it('resumes a Dust cache that is behind or at the chain\'s latest event', async () => {
@@ -220,10 +213,9 @@ describe('WalletDataRepository — dust reads', () => {
       fetchChainId: async () => null,
       fetchEventTip: async () => eventTip,
       fetchDust: async (_seed, _net, opts) => { startIds.push(opts.startFromId); return fakeDustResult({ lastAppliedEventId: lastId }); },
-      cacheDir: TMP,
     });
-    await new WalletDataRepository(deps(null, 100)).dust(SEED, NETWORK);
-    await new WalletDataRepository(deps(150, 150)).dust(SEED, NETWORK);
+    await new WalletDataRepository(deps(null, 100)).dust(SEED, NETWORK, { root: TMP });
+    await new WalletDataRepository(deps(150, 150)).dust(SEED, NETWORK, { root: TMP });
     expect(startIds).toEqual([0, 101]);
   });
 
@@ -249,10 +241,9 @@ describe('WalletDataRepository — dust reads', () => {
         nextLastEventId += 250;
         return result;
       },
-      cacheDir: TMP,
     });
 
-    const view = await repo.dust(SEED, NETWORK);
+    const view = await repo.dust(SEED, NETWORK, { root: TMP });
     expect(startIds).toEqual([0, 250, 500, 750]); // each call resumed from prior checkpoint
     expect(view.eventsApplied).toBe(1000);         // sum across 4 calls
     expect(view.fromCache).toBe(false);            // we started cold
@@ -275,10 +266,9 @@ describe('WalletDataRepository — dust reads', () => {
         opts.onCheckpoint?.(result.state, result.lastAppliedEventId, result.retention);
         return result;
       },
-      cacheDir: TMP,
     });
 
-    const view = await repo.dust(SEED, NETWORK);
+    const view = await repo.dust(SEED, NETWORK, { root: TMP });
     expect(calls).toBe(21);
     expect(view.partial).toBe(false);
     expect(view.eventsApplied).toBe(21 * 80_000);
@@ -298,10 +288,9 @@ describe('WalletDataRepository — dust reads', () => {
         if (moved) opts.onCheckpoint?.(result.state, result.lastAppliedEventId, result.retention);
         return result;
       },
-      cacheDir: TMP,
     });
 
-    const view = await repo.dust(SEED, NETWORK);
+    const view = await repo.dust(SEED, NETWORK, { root: TMP });
     expect(calls).toBe(4);
     expect(view.partial).toBe(true);
     expect(view.lastAppliedEventId).toBe(499);
@@ -315,10 +304,9 @@ describe('WalletDataRepository — dust reads', () => {
       fetchTip: async () => { throw new Error('node unreachable'); },
       fetchUnshielded: async () => fakeBalanceSummary(),
       fetchDust: async () => fakeDustResult({ lastAppliedEventId: 77, eventCount: 78 }),
-      cacheDir: TMP,
     });
 
-    const view = await repo.dust(SEED, NETWORK);
+    const view = await repo.dust(SEED, NETWORK, { root: TMP });
     expect(view.lastAppliedEventId).toBe(77);
     expect(view.partial).toBe(false);
   });
@@ -329,10 +317,9 @@ describe('WalletDataRepository — dust reads', () => {
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
       fetchDust: async () => fakeDustResult({ lastAppliedEventId: 4242, eventCount: 4243, partial: false }),
-      cacheDir: TMP,
     });
 
-    const view = await repo.dust(SEED, NETWORK);
+    const view = await repo.dust(SEED, NETWORK, { root: TMP });
     expect(view.partial).toBe(false);
     expect(view.lastAppliedEventId).toBe(4242);
   });
@@ -362,10 +349,9 @@ describe('WalletDataRepository — dust reads', () => {
         nextLastEventId += 250;
         return result;
       },
-      cacheDir: TMP,
     });
 
-    const view = await repo.dust(SEED, NETWORK);
+    const view = await repo.dust(SEED, NETWORK, { root: TMP });
     expect(view.partial).toBe(true);
     expect(calls).toBe(6);                             // it used its hour, and no more
     expect(view.lastAppliedEventId).toBe(nextLastEventId - 250); // the checkpoint it got to
@@ -382,17 +368,16 @@ describe('WalletDataRepository — dust reads', () => {
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
       fetchDust,
-      cacheDir: TMP,
     });
 
     const cold = await new WalletDataRepository(
       deps(async () => fakeDustResult({ lastAppliedEventId: 900, eventCount: 901 })),
-    ).dust(SEED, NETWORK);
+    ).dust(SEED, NETWORK, { root: TMP });
     expect(cold.lastAppliedEventId).toBe(900);
 
     const warm = await new WalletDataRepository(
       deps(async () => fakeDustResult({ lastAppliedEventId: -1, eventCount: 0 })),
-    ).dust(SEED, NETWORK);
+    ).dust(SEED, NETWORK, { root: TMP });
     expect(warm.lastAppliedEventId).toBe(900);
     expect(warm.fromCache).toBe(true);
   });
@@ -409,12 +394,11 @@ describe('WalletDataRepository — dust reads', () => {
         lastStartFromId = opts.startFromId;
         return fakeDustResult();
       },
-      cacheDir: TMP,
     });
 
-    await repo.dust(SEED, NETWORK);                       // 1st: starts at 0
+    await repo.dust(SEED, NETWORK, { root: TMP });                       // 1st: starts at 0
     expect(lastStartFromId).toBe(0);
-    await repo.dust(SEED, NETWORK, { forceFresh: true }); // forceFresh: start back at 0, ignore disk
+    await repo.dust(SEED, NETWORK, { root: TMP, forceFresh: true }); // forceFresh: start back at 0, ignore disk
     expect(fetchCalls).toBe(2);
     expect(lastStartFromId).toBe(0);
   });
@@ -428,17 +412,16 @@ describe('WalletDataRepository — invalidation', () => {
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => { unshieldedCalls++; return fakeBalanceSummary(); },
       fetchDust: async () => { dustCalls++; return fakeDustResult(); },
-      cacheDir: TMP,
     });
 
-    await repo.dust(SEED, NETWORK);
+    await repo.dust(SEED, NETWORK, { root: TMP });
     await repo.unshielded(SEED, NETWORK);
     expect(dustCalls).toBe(1);
     expect(unshieldedCalls).toBe(1);
 
-    repo.invalidate({ network: NETWORK, seed: SEED });
+    repo.invalidate({ network: NETWORK, root: TMP, seed: SEED });
 
-    await repo.dust(SEED, NETWORK);
+    await repo.dust(SEED, NETWORK, { root: TMP });
     await repo.unshielded(SEED, NETWORK);
     expect(dustCalls).toBe(2);
     expect(unshieldedCalls).toBe(2);
@@ -451,15 +434,14 @@ describe('WalletDataRepository — invalidation', () => {
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => { unshieldedCalls++; return fakeBalanceSummary(); },
       fetchDust: async () => { dustCalls++; return fakeDustResult(); },
-      cacheDir: TMP,
     });
 
-    await repo.dust(SEED, NETWORK);
+    await repo.dust(SEED, NETWORK, { root: TMP });
     await repo.unshielded(SEED, NETWORK);
 
-    repo.invalidate({ network: NETWORK, seed: SEED, kinds: ['dust'] });
+    repo.invalidate({ network: NETWORK, root: TMP, seed: SEED, kinds: ['dust'] });
 
-    const dustAgain = await repo.dust(SEED, NETWORK);
+    const dustAgain = await repo.dust(SEED, NETWORK, { root: TMP });
     const unshieldedAgain = await repo.unshielded(SEED, NETWORK);
     // Network was hit again for dust (memo dropped), but the disk checkpoint
     // from the first call survived → fromCache is true (delta-resume counts).
@@ -477,13 +459,14 @@ describe('WalletDataRepository — invalidation', () => {
 // the guard never wiped anything — a chain reset surfaced a stale balance from
 // the old chain's coins. These lock both halves via the fetchChainId seam.
 
-/** Read the single dust-*.json cache file written under TMP, or null. */
+/** Read the single dust-*.json cache file written under TMP's cache folder, or null. */
 function readDustCacheFile(): { chainId?: string; lastAppliedEventId?: number } | null {
-  for (const net of readdirSync(TMP)) {
+  const cacheDir = join(TMP, 'cache');
+  for (const net of readdirSync(cacheDir)) {
     let files: string[] = [];
-    try { files = readdirSync(join(TMP, net)); } catch { continue; }
+    try { files = readdirSync(join(cacheDir, net)); } catch { continue; }
     const f = files.find((x) => x.startsWith('dust-') && x.endsWith('.json'));
-    if (f) return JSON.parse(readFileSync(join(TMP, net, f), 'utf-8'));
+    if (f) return JSON.parse(readFileSync(join(cacheDir, net, f), 'utf-8'));
   }
   return null;
 }
@@ -495,16 +478,15 @@ describe('WalletDataRepository — dust cache chain-reset guard', () => {
       fetchUnshielded: async () => fakeBalanceSummary(),
       fetchDust,
       fetchChainId: async () => chainId,
-      cacheDir: TMP,
     });
 
   it('persists the chain genesis hash into the dust cache on save', async () => {
-    await mkRepo('0xchainA', async () => fakeDustResult()).dust(SEED, NETWORK);
+    await mkRepo('0xchainA', async () => fakeDustResult()).dust(SEED, NETWORK, { root: TMP });
     expect(readDustCacheFile()?.chainId).toBe('0xchainA');
   });
 
   it('wipes a cache from a different chain and re-syncs fresh from event 0', async () => {
-    await mkRepo('0xchainA', async () => fakeDustResult({ lastAppliedEventId: 5 })).dust(SEED, NETWORK);
+    await mkRepo('0xchainA', async () => fakeDustResult({ lastAppliedEventId: 5 })).dust(SEED, NETWORK, { root: TMP });
     expect(readDustCacheFile()?.chainId).toBe('0xchainA');
 
     // Chain reset: node now reports genesis hash B. A fresh repo must WIPE the
@@ -513,7 +495,7 @@ describe('WalletDataRepository — dust cache chain-reset guard', () => {
     const view = await mkRepo('0xchainB', async (_s, _n, opts) => {
       startFromSeen = opts.startFromId;
       return fakeDustResult({ lastAppliedEventId: 2 });
-    }).dust(SEED, NETWORK);
+    }).dust(SEED, NETWORK, { root: TMP });
 
     expect(startFromSeen).toBe(0);                        // wiped → fresh, not resumed
     expect(view.fromCache).toBe(false);
@@ -521,13 +503,13 @@ describe('WalletDataRepository — dust cache chain-reset guard', () => {
   });
 
   it('resumes (does NOT wipe) when the genesis hash is unchanged', async () => {
-    await mkRepo('0xchainA', async () => fakeDustResult({ lastAppliedEventId: 5 })).dust(SEED, NETWORK);
+    await mkRepo('0xchainA', async () => fakeDustResult({ lastAppliedEventId: 5 })).dust(SEED, NETWORK, { root: TMP });
 
     let startFromSeen = -999;
     const view = await mkRepo('0xchainA', async (_s, _n, opts) => {
       startFromSeen = opts.startFromId;
       return fakeDustResult({ lastAppliedEventId: 5 });
-    }).dust(SEED, NETWORK);
+    }).dust(SEED, NETWORK, { root: TMP });
 
     expect(startFromSeen).toBe(6);          // resumed from lastAppliedEventId + 1
     expect(view.fromCache).toBe(true);

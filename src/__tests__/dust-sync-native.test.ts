@@ -164,7 +164,7 @@ describe('runDustSyncNative exit handling (fake sidecar binary)', () => {
 
   it('accepts the checkpoint from a clean exit (control: the fake binary works)', async () => {
     fakeSidecar(0);
-    const r = await runDustSyncNative(seed, network, { startFromId: 0 });
+    const r = await runDustSyncNative(seed, network, { root: join(dir, '.midnight'), startFromId: 0 });
     expect(r.lastAppliedEventId).toBe(7);
   });
 
@@ -172,7 +172,7 @@ describe('runDustSyncNative exit handling (fake sidecar binary)', () => {
     // A ledger-8 sidecar on a ledger-9 chain dies like this (exit 2) after a
     // checkpoint already sits at --out; parsing it as success froze dust.
     fakeSidecar(2);
-    await expect(runDustSyncNative(seed, network, { startFromId: 0 })).rejects.toThrow('dust-sync exited 2');
+    await expect(runDustSyncNative(seed, network, { root: join(dir, '.midnight'), startFromId: 0 })).rejects.toThrow('dust-sync exited 2');
   });
 });
 

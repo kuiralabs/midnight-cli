@@ -23,7 +23,7 @@ let origHome: string | undefined;
 
 const accounts = () => path.join(home, '.midnight', 'accounts');
 const recordsOf = (wallet: string) => path.join(accounts(), 'undeployed', wallet);
-const prepare = (...argv: string[]) => prepareGrant(parseArgs(['grant', ...argv, ...ENDPOINTS]));
+const prepare = (...argv: string[]) => prepareGrant(parseArgs(['grant', ...argv, ...ENDPOINTS]), path.join(home, '.midnight'));
 const asAlice = (...argv: string[]) => prepare(...argv, '--wallet', 'alice');
 // A wallet file, as far as preparing needs one: that it is there.
 const aliceWallet = () => {

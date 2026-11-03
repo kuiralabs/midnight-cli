@@ -29,11 +29,12 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
   const jsonMode = hasFlag(args, 'json');
   const spinnerFor = (label: string): Spinner => (jsonMode ? ctx.progress.silent() : ctx.progress.start(label));
   const walletFlag = getFlag(args, 'wallet');
+  const root = ctx.config.paths.stateRoot;
   const now = new Date();
 
   switch (args.subcommand) {
     case 'make': {
-      const { target, terms, expiresAt, out } = prepareMake(args, now);
+      const { target, terms, expiresAt, out } = prepareMake(args, root, now);
       if (out !== undefined && existsSync(out)) throw new UsageError(`${out} already exists; an offer file is never written over another`);
       if (!jsonMode) {
         ctx.output.stderr('\n' + header('Swap: make an offer') + '\n\n');
@@ -41,11 +42,11 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
         ctx.output.stderr(keyValue('Gives', legText(terms.give)) + '\n');
         ctx.output.stderr(keyValue('Wants', legText(terms.want)) + '\n\n');
       }
-      const address = await walletAddress(resolveWalletPath(walletFlag), target.network);
+      const address = await walletAddress(resolveWalletPath(root, walletFlag), target.network, root);
       const session = await payerFor('swap make', ctx).connect(target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal, SHIELDED);
       try {
         const spinner = spinnerFor('Making the offer (proving its half)...');
-        const made = await makeOffer(session, address, terms, expiresAt, now);
+        const made = await makeOffer(session, root, address, terms, expiresAt, now);
         const file = out ?? `offer-${made.envelope.id.slice(0, 16)}.json`;
         writeFileSync(file, made.file, { flag: 'wx' });
         spinner.stop('Offer made');
@@ -65,7 +66,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
     }
 
     case 'inspect': {
-      const target = resolvePayingTarget(args, 'swap', 'inspect');
+      const target = resolvePayingTarget(args, 'swap', 'inspect', root);
       const offer = await readOfferArg(args, target);
       const spinner = spinnerFor('Asking the indexer whether it is still live...');
       const { expired, spends } = await standingOf(offer, target.networkConfig, now, ctx.signal);
@@ -86,7 +87,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
     }
 
     case 'take': {
-      const { target, offer, agreed } = await prepareTake(args, now);
+      const { target, offer, agreed } = await prepareTake(args, root, now);
       if (!jsonMode) {
         ctx.output.stderr('\n' + header('Swap: take an offer') + '\n\n');
         ctx.output.stderr(keyValue('Offer', offer.envelope.id) + '\n');
@@ -116,12 +117,12 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
     case 'cancel': {
       const id = args.positionals[0];
       if (id === undefined) throw new UsageError('swap cancel needs the offer\'s id (8 characters of it at least): midnight swap cancel <id>');
-      const target = resolvePayingTarget(args, 'swap', 'cancel');
-      const address = await walletAddress(resolveWalletPath(walletFlag), target.network);
+      const target = resolvePayingTarget(args, 'swap', 'cancel', root);
+      const address = await walletAddress(resolveWalletPath(root, walletFlag), target.network, root);
       const session = await payerFor('swap cancel', ctx).connect(target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal, SHIELDED);
       try {
         const spinner = spinnerFor('Spending the offer\'s coins back to this wallet...');
-        const outcome = await cancelOffer(session, target.networkConfig, address, id, ctx.signal);
+        const outcome = await cancelOffer(session, root, target.networkConfig, address, id, ctx.signal);
         if (outcome.txHash !== undefined) spinner.update('Waiting for the indexer to list it...');
         const receipt = outcome.txHash === undefined ? undefined : await receiptOf(target.networkConfig.indexer, outcome.txHash, ctx.signal);
         spinner.stop(outcome.txHash === undefined ? 'It was taken already' : 'Offer cancelled');
@@ -142,10 +143,10 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
     }
 
     case 'list': {
-      const target = resolvePayingTarget(args, 'swap', 'list');
-      const address = await walletAddress(resolveWalletPath(walletFlag), target.network);
+      const target = resolvePayingTarget(args, 'swap', 'list', root);
+      const address = await walletAddress(resolveWalletPath(root, walletFlag), target.network, root);
       const spinner = spinnerFor('Asking the indexer about each open offer...');
-      const listed = await listOffers(target.network, target.networkConfig, address, now, ctx.signal);
+      const listed = await listOffers(root, target.network, target.networkConfig, address, now, ctx.signal);
       spinner.stop(`${listed.length} offer${listed.length === 1 ? '' : 's'}`);
       if (jsonMode) {
         ctx.output.result({

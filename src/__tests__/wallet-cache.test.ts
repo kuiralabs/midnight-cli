@@ -22,19 +22,22 @@ function makeTmpDir(): string {
 }
 
 describe('wallet-cache', () => {
+  // The state root the functions are given, and the cache folder under it.
+  let root: string;
   let cacheDir: string;
 
   beforeEach(() => {
-    cacheDir = makeTmpDir();
+    root = makeTmpDir();
+    cacheDir = join(root, 'cache');
   });
 
   afterEach(() => {
-    rmSync(cacheDir, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   });
 
   describe('getCachePath', () => {
-    it('returns path under cacheDir/network/prefix.json', () => {
-      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+    it('returns path under the state root\'s cache/network/prefix.json', () => {
+      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, root);
       expect(path).toBe(join(cacheDir, TEST_NETWORK, `${TEST_ADDRESS.slice(0, 20)}.json`));
     });
   });
@@ -53,8 +56,8 @@ describe('wallet-cache', () => {
         dust: { serializeState: async () => walletData.dust },
       };
 
-      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, fakeFacade, cacheDir);
-      const loaded = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, fakeFacade, root);
+      const loaded = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, root);
 
       expect(loaded).not.toBeNull();
       expect(loaded!.shielded).toBe(walletData.shielded);
@@ -69,10 +72,10 @@ describe('wallet-cache', () => {
         dust: { serializeState: async () => 'c' },
       };
 
-      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, root);
       expect(existsSync(path)).toBe(false);
 
-      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, fakeFacade, cacheDir);
+      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, fakeFacade, root);
       expect(existsSync(path)).toBe(true);
     });
 
@@ -83,9 +86,9 @@ describe('wallet-cache', () => {
         dust: { serializeState: async () => 'dust-data' },
       };
 
-      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, fakeFacade, cacheDir);
+      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, fakeFacade, root);
 
-      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, root);
       const raw = JSON.parse(readFileSync(path, 'utf-8'));
       expect(raw.version).toBe(CACHE_VERSION);
       expect(raw.network).toBe(TEST_NETWORK);
@@ -96,21 +99,21 @@ describe('wallet-cache', () => {
 
   describe('loadWalletCache — error cases', () => {
     it('returns null when cache file does not exist', () => {
-      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, root);
       expect(result).toBeNull();
     });
 
     it('returns null when cache file is corrupted JSON', () => {
-      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, root);
       mkdirSync(join(cacheDir, TEST_NETWORK), { recursive: true });
       writeFileSync(path, 'not valid json{{{');
 
-      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, root);
       expect(result).toBeNull();
     });
 
     it('returns null when version mismatches', () => {
-      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, root);
       mkdirSync(join(cacheDir, TEST_NETWORK), { recursive: true });
       writeFileSync(path, JSON.stringify({
         version: CACHE_VERSION + 1,
@@ -120,12 +123,12 @@ describe('wallet-cache', () => {
         wallets: { shielded: 'a', unshielded: 'b', dust: 'c' },
       }));
 
-      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, root);
       expect(result).toBeNull();
     });
 
     it('returns null when network mismatches', () => {
-      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, root);
       mkdirSync(join(cacheDir, TEST_NETWORK), { recursive: true });
       writeFileSync(path, JSON.stringify({
         version: CACHE_VERSION,
@@ -135,12 +138,12 @@ describe('wallet-cache', () => {
         wallets: { shielded: 'a', unshielded: 'b', dust: 'c' },
       }));
 
-      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, root);
       expect(result).toBeNull();
     });
 
     it('returns null when address mismatches', () => {
-      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, root);
       mkdirSync(join(cacheDir, TEST_NETWORK), { recursive: true });
       writeFileSync(path, JSON.stringify({
         version: CACHE_VERSION,
@@ -150,12 +153,12 @@ describe('wallet-cache', () => {
         wallets: { shielded: 'a', unshielded: 'b', dust: 'c' },
       }));
 
-      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, root);
       expect(result).toBeNull();
     });
 
     it('returns null when wallets structure is missing fields', () => {
-      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, root);
       mkdirSync(join(cacheDir, TEST_NETWORK), { recursive: true });
       writeFileSync(path, JSON.stringify({
         version: CACHE_VERSION,
@@ -165,12 +168,12 @@ describe('wallet-cache', () => {
         wallets: { shielded: 'a' },
       }));
 
-      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, root);
       expect(result).toBeNull();
     });
 
     it('returns null when wallets field is null', () => {
-      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, root);
       mkdirSync(join(cacheDir, TEST_NETWORK), { recursive: true });
       writeFileSync(path, JSON.stringify({
         version: CACHE_VERSION,
@@ -180,7 +183,7 @@ describe('wallet-cache', () => {
         wallets: null,
       }));
 
-      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const result = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, root);
       expect(result).toBeNull();
     });
   });
@@ -193,16 +196,16 @@ describe('wallet-cache', () => {
         dust: { serializeState: async () => 'c' },
       };
 
-      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, fakeFacade, cacheDir);
-      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, fakeFacade, root);
+      const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, root);
       expect(existsSync(path)).toBe(true);
 
-      clearWalletCache(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      clearWalletCache(TEST_ADDRESS, TEST_NETWORK, root);
       expect(existsSync(path)).toBe(false);
     });
 
     it('does not throw when cache file does not exist', () => {
-      expect(() => clearWalletCache(TEST_ADDRESS, TEST_NETWORK, cacheDir)).not.toThrow();
+      expect(() => clearWalletCache(TEST_ADDRESS, TEST_NETWORK, root)).not.toThrow();
     });
 
     it('deletes all caches for a network', async () => {
@@ -213,12 +216,12 @@ describe('wallet-cache', () => {
       };
 
       const addr2 = 'mn_addr_preprod1other_address_here';
-      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, fakeFacade, cacheDir);
-      await saveWalletCache(addr2, TEST_NETWORK, fakeFacade, cacheDir);
+      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, fakeFacade, root);
+      await saveWalletCache(addr2, TEST_NETWORK, fakeFacade, root);
 
-      clearWalletCache(undefined, TEST_NETWORK, cacheDir);
-      expect(existsSync(getCachePath(TEST_ADDRESS, TEST_NETWORK, cacheDir))).toBe(false);
-      expect(existsSync(getCachePath(addr2, TEST_NETWORK, cacheDir))).toBe(false);
+      clearWalletCache(undefined, TEST_NETWORK, root);
+      expect(existsSync(getCachePath(TEST_ADDRESS, TEST_NETWORK, root))).toBe(false);
+      expect(existsSync(getCachePath(addr2, TEST_NETWORK, root))).toBe(false);
     });
   });
 
@@ -235,10 +238,10 @@ describe('wallet-cache', () => {
         dust: { serializeState: async () => 'new-dust' },
       };
 
-      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, facade1, cacheDir);
-      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, facade2, cacheDir);
+      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, facade1, root);
+      await saveWalletCache(TEST_ADDRESS, TEST_NETWORK, facade2, root);
 
-      const loaded = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, cacheDir);
+      const loaded = loadWalletCache(TEST_ADDRESS, TEST_NETWORK, root);
       expect(loaded!.shielded).toBe('new-shielded');
       expect(loaded!.unshielded).toBe('new-unshielded');
       expect(loaded!.dust).toBe('new-dust');

@@ -236,7 +236,7 @@ describe('a wallet written before stagenet', () => {
     const config = await loadWalletConfig(filePath);
     expect(config.addresses.stagenet).toBe(stagenetAddress);
     expect(JSON.parse(fs.readFileSync(filePath, 'utf-8')).addresses).toEqual(VALID_ADDRESSES);
-    expect(await walletAddress(filePath, 'stagenet')).toBe(stagenetAddress);
+    expect(await walletAddress(filePath, 'stagenet', stateRootIn(TEST_DIR))).toBe(stagenetAddress);
   });
 
   it('keeps a sealed wallet as written until it is unlocked, then derives and saves its stagenet addresses beside the sealed secret', async () => {

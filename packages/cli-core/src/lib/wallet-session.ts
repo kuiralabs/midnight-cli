@@ -221,6 +221,8 @@ export interface OpenWalletSessionOptions {
   /** The wallet's seed: 64 bytes from a mnemonic, or 32 raw. */
   seed: Buffer;
   network: NetworkName;
+  /** The state root the wallet's config and caches live under. */
+  root: string;
   /** The network's endpoints; when absent, as a command without endpoint flags resolves them (the saved config, then the defaults). */
   networkConfig?: NetworkConfig;
   /** Whether to sync the shielded wallet; off where the network has no shielded faucet, unless forced. */
@@ -235,17 +237,18 @@ export interface OpenWalletSessionOptions {
 
 /**
  * Opens a seed's wallet on a network: synced, its Dust ready. The host must
- * have installed its engine loader, settings and state root first, as the CLI
- * does at start.
+ * have installed its engine loader and settings first, as the CLI does at
+ * start.
  */
 export async function openWalletSession(options: OpenWalletSessionOptions): Promise<WalletSession> {
-  const { seed, network, signal } = options;
+  const { seed, network, root, signal } = options;
   throwIfCancelled(signal);
   const networkConfig = options.networkConfig
-    ?? resolveNetwork({ args: { command: 'wallet-session', subcommand: '', positionals: [], flags: { network } } }).config;
-  const engine = await engineFor(network);
+    ?? resolveNetwork({ args: { command: 'wallet-session', subcommand: '', positionals: [], flags: { network } }, configDir: root }).config;
+  const engine = await engineFor(network, root);
   const open = () => engine.wallet.openConnector({
     seed,
+    root,
     network,
     networkConfig,
     address: engine.keys.unshieldedAddress(seed, network),

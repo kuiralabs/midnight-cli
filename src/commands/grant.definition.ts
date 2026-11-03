@@ -5,9 +5,10 @@ import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, confirmati
 /** A grant request can run: its arguments, the network, the account and the wallet are all in order. */
 async function checkGrant(params: Readonly<Record<string, unknown>>, call: ToolCheckCall) {
   const { prepareGrant } = await import('../lib/grant/prepare.ts');
-  const prepared = await prepareGrant(call.argv());
+  const root = call.host.paths().stateRoot;
+  const prepared = await prepareGrant(call.argv(), root);
   const { loadWalletConfig, resolveWalletPath } = await import('../lib/wallet-config.ts');
-  await loadWalletConfig(resolveWalletPath(params.wallet as string | undefined));
+  await loadWalletConfig(resolveWalletPath(root, params.wallet as string | undefined));
   return prepared;
 }
 

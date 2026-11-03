@@ -13,6 +13,8 @@ import type { WalletSession } from './wallet-session.ts';
 /** The network a command acts on, with its endpoints resolved. */
 export interface PayingTarget {
   network: NetworkName;
+  /** The state root the command's config, wallets and caches live under. */
+  root: string;
   networkConfig: NetworkConfig;
   /** The endpoints given as flags, which a server started for the command must use too. */
   endpoints: EndpointOverrides;
@@ -22,9 +24,10 @@ export interface PayingTarget {
  * --network, else the network set with `midnight config set network`, else
  * undeployed (as every other command), then explicit endpoint flags over the
  * defaults. Without endpoint flags, `undeployed` resolves to whatever local
- * stack docker shows, which is ambiguous when more than one runs.
+ * stack docker shows, which is ambiguous when more than one runs. The saved
+ * network and endpoints are the config's under the state root `root`.
  */
-export function resolvePayingTarget(args: ParsedArgs, command: string, subcommand: string): PayingTarget {
+export function resolvePayingTarget(args: ParsedArgs, command: string, subcommand: string, root: string): PayingTarget {
   const network = getFlag(args, 'network');
   const endpoints: EndpointOverrides = {
     node: getFlag(args, 'node'),
@@ -33,9 +36,10 @@ export function resolvePayingTarget(args: ParsedArgs, command: string, subcomman
   };
   const { name, config: networkConfig } = resolveNetwork({
     args: { command, subcommand, positionals: [], flags: { ...(network ? { network } : {}), ...endpointFlags(endpoints) } },
+    configDir: root,
   });
-  applyEndpointOverrides(networkConfig, endpoints, name);
-  return { network: name, networkConfig, endpoints };
+  applyEndpointOverrides(networkConfig, endpoints, name, root);
+  return { network: name, root, networkConfig, endpoints };
 }
 
 /** A wallet served over the DApp connector's WebSocket, for a script in another process to pay through. */

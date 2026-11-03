@@ -31,6 +31,8 @@ export interface ActionResult {
 }
 
 export interface ActionsRunnerOptions {
+  /** The state root whose config names the network's SDK set. */
+  root: string;
   actions: TestAction[];
   config: DappTestConfig;
   dappDir: string;
@@ -48,7 +50,7 @@ export interface ActionsRunnerOptions {
  * Deploy address flows to subsequent call/state actions automatically.
  */
 export async function runActions(options: ActionsRunnerOptions): Promise<ActionResult[]> {
-  const { actions, config, dappDir, suiteName, networkConfig, servePort, redeploy, onActionStart, onActionComplete, onMessage } = options;
+  const { root, actions, config, dappDir, suiteName, networkConfig, servePort, redeploy, onActionStart, onActionComplete, onMessage } = options;
   const results: ActionResult[] = [];
 
   // Load cached contract address (test replay). The address is only as good
@@ -103,6 +105,7 @@ export async function runActions(options: ActionsRunnerOptions): Promise<ActionR
 
     try {
       const result = await executeAction(action, {
+        root,
         dappDir,
         network,
         networkConfig,
@@ -153,6 +156,7 @@ export async function runActions(options: ActionsRunnerOptions): Promise<ActionR
 // ── Action execution ──
 
 interface ExecutionContext {
+  root: string;
   dappDir: string;
   network: NetworkName;
   networkConfig: NetworkConfig;
@@ -197,6 +201,7 @@ async function executeDeploy(action: TestAction, ctx: ExecutionContext): Promise
   const result = await runDeploy({
     dappDir: ctx.dappDir,
     network: ctx.network,
+    root: ctx.root,
     networkConfig: ctx.networkConfig,
     managedDir: ctx.managedDir,
     contractName: ctx.contractName,
@@ -246,6 +251,7 @@ async function executeCall(action: TestAction, ctx: ExecutionContext): Promise<A
     stateBefore = await runState({
       dappDir: ctx.dappDir,
       network: ctx.network,
+    root: ctx.root,
       networkConfig: ctx.networkConfig,
       managedDir: ctx.managedDir,
       contractName: ctx.contractName,
@@ -262,6 +268,7 @@ async function executeCall(action: TestAction, ctx: ExecutionContext): Promise<A
   await runCall({
     dappDir: ctx.dappDir,
     network: ctx.network,
+    root: ctx.root,
     networkConfig: ctx.networkConfig,
     managedDir: ctx.managedDir,
     contractName: ctx.contractName,
@@ -278,6 +285,7 @@ async function executeCall(action: TestAction, ctx: ExecutionContext): Promise<A
     stateAfter = await runState({
       dappDir: ctx.dappDir,
       network: ctx.network,
+    root: ctx.root,
       networkConfig: ctx.networkConfig,
       managedDir: ctx.managedDir,
       contractName: ctx.contractName,
@@ -307,6 +315,7 @@ async function executeState(action: TestAction, ctx: ExecutionContext): Promise<
   const stateResult = await runState({
     dappDir: ctx.dappDir,
     network: ctx.network,
+    root: ctx.root,
     networkConfig: ctx.networkConfig,
     managedDir: ctx.managedDir,
     contractName: ctx.contractName,

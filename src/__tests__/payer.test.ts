@@ -20,6 +20,7 @@ import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
 import contractCommand from '../commands/contract.ts';
 import grantCommand from '../commands/grant.ts';
 import { cliCall } from './helpers/cli-call.ts';
+import { stateRootIn } from './helpers/state-root-in.ts';
 
 const ENDPOINTS = ['--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
 
@@ -39,7 +40,7 @@ afterEach(() => {
 
 describe('resolvePayingTarget', () => {
   it('acts on undeployed when no network is given, with the endpoints given as flags', () => {
-    const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy');
+    const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy', stateRootIn(home));
     expect(target.network).toBe('undeployed');
     expect(target.endpoints).toEqual({ node: 'ws://localhost:29944', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws', proofServer: 'http://localhost:26300' });
     expect(target.networkConfig.node).toBe('ws://localhost:29944');
@@ -48,9 +49,9 @@ describe('resolvePayingTarget', () => {
   });
 
   it('acts on the network set with config set network when none is given, as every other command does', () => {
-    saveCliConfig({ network: 'preprod' });
-    expect(resolvePayingTarget(parseArgs(['contract', 'deploy']), 'contract', 'deploy').network).toBe('preprod');
-    expect(resolvePayingTarget(parseArgs(['contract', 'deploy', '--network', 'preview']), 'contract', 'deploy').network).toBe('preview');
+    saveCliConfig({ network: 'preprod' }, stateRootIn(home));
+    expect(resolvePayingTarget(parseArgs(['contract', 'deploy']), 'contract', 'deploy', stateRootIn(home)).network).toBe('preprod');
+    expect(resolvePayingTarget(parseArgs(['contract', 'deploy', '--network', 'preview']), 'contract', 'deploy', stateRootIn(home)).network).toBe('preview');
   });
 });
 
@@ -99,7 +100,7 @@ describe('the serve payer', () => {
     const serve = await runningServe();
     const said: string[] = [];
     try {
-      const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy');
+      const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy', stateRootIn(home));
       const served = await servePayerAt(serve.port).serve(target, undefined, silentSpinner((message) => said.push(message)), createSdkWarningRouter().openCall().warnings, undefined);
       expect(served.port).toBe(serve.port);
       expect(said).toEqual([`Reusing existing mn serve on port ${serve.port}`, `mn serve ready (port ${serve.port})`]);
@@ -114,7 +115,7 @@ describe('the serve payer', () => {
     const serve = await runningServe();
     const said: string[] = [];
     try {
-      const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy');
+      const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy', stateRootIn(home));
       const controller = new AbortController();
       controller.abort();
       await expect(servePayerAt(serve.port).serve(target, undefined, silentSpinner((message) => said.push(message)), createSdkWarningRouter().openCall().warnings, controller.signal)).rejects.toBeInstanceOf(CancelledError);
@@ -125,7 +126,7 @@ describe('the serve payer', () => {
   });
 
   it('checks no wallet for a call already cancelled', async () => {
-    const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy');
+    const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy', stateRootIn(home));
     const controller = new AbortController();
     controller.abort();
     // Not cancelled, this would fail on the missing wallet file.

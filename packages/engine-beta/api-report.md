@@ -188,9 +188,9 @@ export interface DustCacheEntry {
 }
 export declare function dustPublicKeyHex(publicKey: ledger.DustPublicKey): string;
 export declare function dustPublicKeyHexFromSeed(seedBuffer: Buffer): string;
-export declare function loadDustCache(network: string, pubkeyHex: string, cacheDir?: string): DustCacheEntry | null;
-export declare function saveDustCache(network: string, pubkeyHex: string, state: ledger.DustLocalState, lastAppliedEventId: number, cacheDir?: string, chainId?: string, retention?: DustRetention): void;
-export declare function validateDustCacheChainId(network: string, currentChainId: string | null, cacheDir?: string): string[];
+export declare function loadDustCache(network: string, pubkeyHex: string, root: string): DustCacheEntry | null;
+export declare function saveDustCache(network: string, pubkeyHex: string, state: ledger.DustLocalState, lastAppliedEventId: number, root: string, chainId?: string, retention?: DustRetention): void;
+export declare function validateDustCacheChainId(network: string, currentChainId: string | null, root: string): string[];
 ```
 
 ## `@kuiralabs/midnight-engine-beta/dust-export`
@@ -202,13 +202,14 @@ import type { VerboseLog } from "@kuiralabs/midnight-cli-core/lib/verbose";
 import type { DustExportResult } from "@kuiralabs/midnight-cli-core/lib/engine";
 export type { DustExportResult } from "@kuiralabs/midnight-cli-core/lib/engine";
 export interface DustExportOptions {
+    root: string;
     onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
     signal?: AbortSignal;
     repository?: WalletDataRepository;
-    buildBaseDust?: (seed: Buffer, networkConfig: NetworkConfig, log?: VerboseLog) => Promise<string>;
+    buildBaseDust?: (seed: Buffer, networkConfig: NetworkConfig, root: string, log?: VerboseLog) => Promise<string>;
     log?: VerboseLog;
 }
-export declare function exportDustSnapshot(seedBuffer: Buffer, network: string, networkConfig: NetworkConfig, options?: DustExportOptions): Promise<DustExportResult>;
+export declare function exportDustSnapshot(seedBuffer: Buffer, network: string, networkConfig: NetworkConfig, options: DustExportOptions): Promise<DustExportResult>;
 ```
 
 ## `@kuiralabs/midnight-engine-beta/dust-register`
@@ -242,7 +243,7 @@ interface NativeFetchOptions {
     initialRetention?: DustRetention;
     signal?: AbortSignal;
     onProgress?: (applied: number, max: number) => void;
-    cacheDir?: string;
+    root: string;
 }
 export declare function resolveSidecarBinary(): string | null;
 export declare function platformPackageBinary(fromUrl: string): string | null;
@@ -294,7 +295,7 @@ export interface FacadeBundle {
     indexerWsUrl?: string;
     emptyStreams?: EmptyStreams;
 }
-export declare function buildFacade(seedBuffer: Buffer, networkConfig: NetworkConfig, cache?: WalletCacheData | null, log?: VerboseLog): Promise<FacadeBundle>;
+export declare function buildFacade(seedBuffer: Buffer, networkConfig: NetworkConfig, root: string, cache?: WalletCacheData | null, log?: VerboseLog): Promise<FacadeBundle>;
 export interface FacadeDustSnapshot {
     publicKey: {
         publicKey: string;
@@ -434,11 +435,11 @@ export interface ShieldedCacheEntry {
     lastAppliedEventId: number;
 }
 export declare function shieldedCoinPublicKeyHexFromSeed(seedBuffer: Buffer): string;
-export declare function loadShieldedCache(network: string, pubkeyHex: string, cacheDir?: string, expectedChainId?: string): ShieldedCacheEntry | null;
-export declare function saveShieldedCache(network: string, pubkeyHex: string, state: ledger.ZswapLocalState, lastAppliedEventId: number, cacheDir?: string, chainId?: string): void;
+export declare function loadShieldedCache(network: string, pubkeyHex: string, root: string, expectedChainId?: string): ShieldedCacheEntry | null;
+export declare function saveShieldedCache(network: string, pubkeyHex: string, state: ledger.ZswapLocalState, lastAppliedEventId: number, root: string, chainId?: string): void;
 export type { ShieldedBalanceResult, ShieldedCachedOptions } from "@kuiralabs/midnight-cli-core/lib/engine";
 import type { ShieldedBalanceResult, ShieldedCachedOptions } from "@kuiralabs/midnight-cli-core/lib/engine";
-export declare function readShieldedBalanceCached(seedBuffer: Buffer, network: string, indexerWS: string, options?: ShieldedCachedOptions): Promise<ShieldedBalanceResult>;
+export declare function readShieldedBalanceCached(seedBuffer: Buffer, network: string, indexerWS: string, options: ShieldedCachedOptions): Promise<ShieldedBalanceResult>;
 ```
 
 ## `@kuiralabs/midnight-engine-beta/sign-recipe`
@@ -504,8 +505,8 @@ import { type BalanceSummary } from "@kuiralabs/midnight-chain/lib/balance-subsc
 import { type DustDirectResult, type DustRetention } from "./dust-direct.ts";
 import type { VerboseLog } from "@kuiralabs/midnight-cli-core/lib/verbose";
 import { type LedgerEventStream } from "@kuiralabs/midnight-chain/lib/event-tip";
-import type { DustBalance, ReadOptions, UnshieldedView } from "@kuiralabs/midnight-cli-core/lib/engine";
-export type { DustBalance, ReadOptions, UnshieldedView } from "@kuiralabs/midnight-cli-core/lib/engine";
+import type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from "@kuiralabs/midnight-cli-core/lib/engine";
+export type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from "@kuiralabs/midnight-cli-core/lib/engine";
 export interface DustView extends DustBalance {
     state: ledger.DustLocalState;
 }
@@ -515,11 +516,12 @@ export interface FacadeLease {
 }
 export interface InvalidationScope {
     network: NetworkConfig;
+    root: string;
     seed?: Buffer;
     address?: string;
     kinds?: ReadonlyArray<"dust" | "unshielded" | "facade">;
 }
-export interface FacadeOptions extends ReadOptions {
+export interface FacadeOptions extends CachedReadOptions {
     syncMode?: SyncMode;
     requireStrictSync?: boolean;
     readOnly?: boolean;
@@ -542,13 +544,12 @@ export interface RepoDeps {
         signal?: AbortSignal;
         onProgress?: (applied: number, max: number) => void;
         onCheckpoint?: (state: ledger.DustLocalState, lastAppliedEventId: number, retention: DustRetention) => void;
-        cacheDir?: string;
+        root: string;
         log?: VerboseLog;
     }) => Promise<DustDirectResult>;
     fetchChainId?: (nodeWsUrl: string) => Promise<string | null>;
     fetchEventTip?: (indexerWS: string, stream: LedgerEventStream) => Promise<number | null>;
     fetchProtocolVersion?: (indexerHttpUrl: string, signal?: AbortSignal) => Promise<bigint | null>;
-    cacheDir?: string;
 }
 export declare class WalletDataRepository {
     private readonly now;
@@ -558,17 +559,16 @@ export declare class WalletDataRepository {
     private readonly fetchChainId;
     private readonly fetchEventTip;
     private readonly fetchProtocolVersion;
-    private readonly cacheDir;
     private readonly dustMemo;
     private readonly unshieldedMemo;
     private readonly tipMemo;
     constructor(deps?: RepoDeps);
     private keepCachesOfThisIndexer;
-    walletStateToRestore(seed: Buffer, network: NetworkConfig, networkName: NetworkName, log?: VerboseLog): Promise<WalletCacheData | null>;
+    walletStateToRestore(seed: Buffer, network: NetworkConfig, networkName: NetworkName, root: string, log?: VerboseLog): Promise<WalletCacheData | null>;
     private freshWalletOnDustCheckpoint;
-    dust(seed: Buffer, network: NetworkConfig, opts?: ReadOptions): Promise<DustView>;
+    dust(seed: Buffer, network: NetworkConfig, opts: CachedReadOptions): Promise<DustView>;
     unshielded(identity: string | Buffer, network: NetworkConfig, opts?: ReadOptions): Promise<UnshieldedView>;
-    withFacade<T>(seed: Buffer, network: NetworkConfig, fn: (lease: FacadeLease) => Promise<T>, opts?: FacadeOptions): Promise<T>;
+    withFacade<T>(seed: Buffer, network: NetworkConfig, fn: (lease: FacadeLease) => Promise<T>, opts: FacadeOptions): Promise<T>;
     invalidate(scope: InvalidationScope): void;
     resetTipMemo(): void;
     private tryMemo;

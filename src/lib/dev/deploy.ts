@@ -10,7 +10,7 @@ import { resolvePayingTarget, type Payer } from '@kuiralabs/midnight-cli-core/li
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 
-export async function deployDevContract(projectRoot: string, wallet: string, network: string, payer: Payer, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<DeployedContract> {
+export async function deployDevContract(root: string, projectRoot: string, wallet: string, network: string, payer: Payer, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<DeployedContract> {
   // The deploy as `mn contract deploy --path <projectRoot> --wallet <wallet> --network <network>` reads it.
   const args: ParsedArgs = {
     command: 'contract',
@@ -20,7 +20,7 @@ export async function deployDevContract(projectRoot: string, wallet: string, net
   };
   return deployContract({
     request: resolveContractDeployRequest(args),
-    target: resolvePayingTarget(args, 'contract', 'deploy'),
+    target: resolvePayingTarget(args, 'contract', 'deploy', root),
     wallet,
     payer,
     progress: () => progress,

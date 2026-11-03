@@ -73,7 +73,7 @@ hideProjectIdsInOutput();
 const host = createCliHost({ prompter: createTerminalPrompter() });
 
 // Auto-migrate old ~/.midnight/wallet.json → wallets/default.json (silent, one-time)
-migrateOldWallet();
+migrateOldWallet(host.paths().stateRoot);
 
 // Global AbortController for clean shutdown on SIGINT/SIGTERM
 const abortController = new AbortController();

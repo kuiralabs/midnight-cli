@@ -2,7 +2,7 @@
 // opens: the terms, the expiry, and an offer file checked against its bytes,
 // its network, the agreed terms and its expiry.
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,6 +15,9 @@ import { DEFAULT_OFFER_LIFETIME_S, prepareMake, prepareTake, termsOf } from '../
 import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from './fixtures/swap-offer.ts';
 
 const NOW = new Date('2026-11-02T12:00:00.000Z');
+// A state root with no config: the networks' own endpoints.
+const ROOT = mkdtempSync(join(tmpdir(), 'mn-swap-request-root-'));
+afterAll(() => rmSync(ROOT, { recursive: true, force: true }));
 const TERMS = ['--give', '10', '--give-token', OFFER_GIVE, '--want', '7', '--want-token', OFFER_WANT];
 
 describe('the terms', () => {
@@ -38,9 +41,9 @@ describe('the terms', () => {
 
 describe('make', () => {
   it('expires a day on unless --expires-in says', () => {
-    expect(prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed']), NOW).expiresAt).toEqual(new Date(NOW.getTime() + DEFAULT_OFFER_LIFETIME_S * 1000));
-    expect(prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed', '--expires-in', '60']), NOW).expiresAt).toEqual(new Date(NOW.getTime() + 60_000));
-    expect(() => prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed', '--expires-in', 'soon']), NOW)).toThrow('--expires-in must be a whole number of seconds');
+    expect(prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed']), ROOT, NOW).expiresAt).toEqual(new Date(NOW.getTime() + DEFAULT_OFFER_LIFETIME_S * 1000));
+    expect(prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed', '--expires-in', '60']), ROOT, NOW).expiresAt).toEqual(new Date(NOW.getTime() + 60_000));
+    expect(() => prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed', '--expires-in', 'soon']), ROOT, NOW)).toThrow('--expires-in must be a whole number of seconds');
   });
 });
 
@@ -58,7 +61,7 @@ describe('take', () => {
     }));
     return file;
   };
-  const take = (file: string, terms = TERMS) => prepareTake(parseArgs(['swap', 'take', file, ...terms, '--network', 'undeployed']), NOW);
+  const take = (file: string, terms = TERMS) => prepareTake(parseArgs(['swap', 'take', file, ...terms, '--network', 'undeployed']), ROOT, NOW);
 
   it('reads a real offer file at the agreed terms', async () => {
     const { offer, agreed, target } = await take(offerFile());

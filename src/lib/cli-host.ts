@@ -14,7 +14,6 @@ import { join } from 'node:path';
 import { installSdkNoiseFilters } from './sdk-noise.ts';
 import { setNoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 import { setSettingsSource, settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
-import { setHostPathsSource } from '@kuiralabs/midnight-cli-core/lib/state-root';
 import { setPrompter, type Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { setEngineLoader } from '@kuiralabs/midnight-cli-core/lib/engine';
@@ -36,7 +35,6 @@ export function createCliHost({ prompter }: { prompter: Prompter | null }): Host
   });
   setNoticeSink(host.notice);
   setSettingsSource(host.settings);
-  setHostPathsSource(host.paths);
   setPrompter(host.prompter);
   setEngineLoader(loadInstalledEngine);
   return host;

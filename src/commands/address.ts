@@ -11,7 +11,8 @@ import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context'
 
 export default async function addressCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // `address` is a seed-derivation tool with no active-wallet notion → requireExplicit.
-  const seedBuffer = await resolveSeed(args, { requireExplicit: true, label: 'address' });
+  const root = ctx.config.paths.stateRoot;
+  const seedBuffer = await resolveSeed(args, root, { requireExplicit: true, label: 'address' });
 
   const indexStr = getFlag(args, 'index');
   const keyIndex = indexStr !== undefined ? parseInt(indexStr, 10) : 0;
@@ -19,8 +20,8 @@ export default async function addressCommand(args: ParsedArgs, ctx: CallContext)
     throw new Error('Key index must be a non-negative integer');
   }
 
-  const networkName = resolveNetworkName({ args });
-  const address = (await engineFor(networkName)).keys.unshieldedAddress(seedBuffer, networkName, keyIndex);
+  const networkName = resolveNetworkName({ args, configDir: root });
+  const address = (await engineFor(networkName, root)).keys.unshieldedAddress(seedBuffer, networkName, keyIndex);
   const derivationPath = `m/44'/2400'/0'/NightExternal/${keyIndex}`;
 
   // JSON mode

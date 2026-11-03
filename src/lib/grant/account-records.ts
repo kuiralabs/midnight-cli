@@ -6,8 +6,6 @@
 import { mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { DIR_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { getActiveWalletName } from '../wallet-config.ts';
-import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
 
 /** The directory under ~/.midnight that holds each network's accounts. */
 export const ACCOUNTS_DIR_NAME = 'accounts';
@@ -17,12 +15,12 @@ export const ACCOUNTS_DIR_NAME = 'accounts';
  * wallet given as a file, the file's name without `.json`. The active wallet
  * when none is given.
  */
-export function accountWalletName(walletFlag: string | undefined, activeWallet: () => string = getActiveWalletName): string {
+export function accountWalletName(walletFlag: string | undefined, activeWallet: () => string): string {
   if (walletFlag === undefined) return activeWallet();
   return basename(walletFlag).replace(/\.json$/, '');
 }
 
-export function accountRecordsDir(network: string, walletName: string, root: string = stateRoot()): string {
+export function accountRecordsDir(network: string, walletName: string, root: string): string {
   return join(root, ACCOUNTS_DIR_NAME, network, walletName);
 }
 

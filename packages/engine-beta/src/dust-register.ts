@@ -14,7 +14,7 @@ export type { DustRegisterOptions, DustRegistration } from '@kuiralabs/midnight-
 
 
 export async function registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions): Promise<DustRegistration> {
-  const { signal, onStatus, onSyncProgress, onSyncDetail, onSyncWarning, sdkWarnings, log } = options;
+  const { signal, onStatus, onSyncProgress, onSyncDetail, onSyncWarning, sdkWarnings, log, root } = options;
   const stopListening = sdkWarnings.listen(onSyncWarning);
   try {
     const { result, dustBalance } = await defaultRepository().withFacade(
@@ -35,6 +35,7 @@ export async function registerDust(seed: Buffer, networkConfig: NetworkConfig, o
         return { result, dustBalance: finalState.dust.balance(new Date()) };
       },
       {
+        root,
         syncMode: 'lite',
         requireStrictSync: true,
         signal,

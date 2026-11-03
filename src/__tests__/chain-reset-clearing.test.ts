@@ -25,15 +25,16 @@ const touch = (file: string): string => {
 
 describe('clearChainCaches', () => {
   it("clears the wallet, Dust, shielded and native-sidecar caches of one network and leaves another network's", () => {
+    // `dir` is the state root; its cache folder is where the files land.
     const cache = path.join(dir, 'cache');
-    const wallet = touch(getCachePath('mn_addr_undeployed1abcdefghijklmnop', 'undeployed', cache));
-    const dust = touch(getDustCachePath('undeployed', 'ab'.repeat(32), cache));
-    const shielded = touch(getShieldedCachePath('undeployed', 'cd'.repeat(32), cache));
+    const wallet = touch(getCachePath('mn_addr_undeployed1abcdefghijklmnop', 'undeployed', dir));
+    const dust = touch(getDustCachePath('undeployed', 'ab'.repeat(32), dir));
+    const shielded = touch(getShieldedCachePath('undeployed', 'cd'.repeat(32), dir));
     const native = touch(path.join(cache, 'undeployed', `dust-native-${'ab'.repeat(10)}.json`));
-    const otherWallet = touch(getCachePath('mn_addr_preview1abcdefghijklmnop', 'preview', cache));
-    const otherDust = touch(getDustCachePath('preview', 'ab'.repeat(32), cache));
+    const otherWallet = touch(getCachePath('mn_addr_preview1abcdefghijklmnop', 'preview', dir));
+    const otherDust = touch(getDustCachePath('preview', 'ab'.repeat(32), dir));
 
-    clearChainCaches('undeployed', cache);
+    clearChainCaches('undeployed', dir);
 
     expect([wallet, dust, shielded, native].map((f) => fs.existsSync(f))).toEqual([false, false, false, false]);
     expect([fs.existsSync(otherWallet), fs.existsSync(otherDust)]).toEqual([true, true]);

@@ -118,9 +118,9 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
     ctx.output.stderr('\n' + header('Contract Deploy') + '\n\n');
   }
 
-  const target = resolvePayingTarget(args, 'contract', 'deploy');
+  const target = resolvePayingTarget(args, 'contract', 'deploy', ctx.config.paths.stateRoot);
   const { network } = target;
-  await assertContractRunsOn(info, network);
+  await assertContractRunsOn(info, network, target.root);
 
   if (!jsonMode) {
     ctx.output.stderr(keyValue('Contract', info.name) + '\n');
@@ -192,9 +192,9 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
     ctx.output.stderr('\n' + header('Contract Call') + '\n\n');
   }
 
-  const target = resolvePayingTarget(args, 'contract', 'call');
+  const target = resolvePayingTarget(args, 'contract', 'call', ctx.config.paths.stateRoot);
   const { network } = target;
-  await assertContractRunsOn(info, network);
+  await assertContractRunsOn(info, network, target.root);
 
   if (!jsonMode) {
     ctx.output.stderr(keyValue('Contract', info.name) + '\n');
@@ -238,7 +238,7 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
 
   const { runState } = await import('../lib/contract/runner.ts');
 
-  const { network, networkConfig } = resolvePayingTarget(args, 'contract', 'state');
+  const { network, root, networkConfig } = resolvePayingTarget(args, 'contract', 'state', ctx.config.paths.stateRoot);
 
   if (!jsonMode) {
     ctx.output.stderr('\n' + header('Contract State') + '\n\n');
@@ -255,6 +255,7 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
     const result = await runState({
       dappDir,
       network,
+      root,
       networkConfig,
       managedDir: info.managedDir,
       contractName: info.name,
@@ -298,7 +299,7 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
     spinner.stop(yellow('⚠') + ' Parsed state unavailable, showing raw');
 
     // The engine's query takes no signal: the call stops waiting for it when cancelled.
-    const raw = await untilCancelled((await engineFor(network)).contracts.rawState(networkConfig, address), ctx.signal);
+    const raw = await untilCancelled((await engineFor(network, root)).contracts.rawState(networkConfig, address), ctx.signal);
 
     if (!raw) {
       throw new Error(`No contract found at address ${address} on ${network}`);

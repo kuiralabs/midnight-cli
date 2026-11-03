@@ -59,10 +59,10 @@ async function runStep(
   callbacks: PrepCallbacks,
 ): Promise<void> {
   if (step === 'cache-clear') {
-    return stepCacheClear(config);
+    return stepCacheClear(config, ctx.root);
   }
   if (step === 'localnet-up') {
-    return stepLocalnetUp(config, callbacks);
+    return stepLocalnetUp(config, ctx.root, callbacks);
   }
   if (step.startsWith('balance:')) {
     const amount = parseInt(step.split(':')[1], 10);
@@ -83,19 +83,20 @@ async function runStep(
 
 // ── Step implementations ──
 
-async function stepCacheClear(config: DappTestConfig): Promise<void> {
+async function stepCacheClear(config: DappTestConfig, root: string): Promise<void> {
   const network = config.network ?? 'undeployed';
   // Clear ALL wallet caches for this network — not just the active wallet.
   // After a localnet restart, every wallet (including genesis) has stale state.
-  clearWalletCache(undefined, network);
+  clearWalletCache(undefined, network, root);
 }
 
-async function stepLocalnetUp(config: DappTestConfig, callbacks: PrepCallbacks): Promise<void> {
+async function stepLocalnetUp(config: DappTestConfig, root: string, callbacks: PrepCallbacks): Promise<void> {
   // This build can't start a localnet (no published ledger-9 indexer image),
   // so the step requires a running ledger-9 stack at the resolved endpoints.
   const network = config.network ?? 'undeployed';
   const { config: networkConfig } = resolveNetwork({
     args: { command: 'test', subcommand: undefined, positionals: [], flags: { network } },
+    configDir: root,
   });
   await assertLedger9StackReachable(network, networkConfig);
   callbacks.onMessage(`Using the ledger-9 stack at ${networkConfig.node} (indexer ${networkConfig.indexer})`);
@@ -105,22 +106,23 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
   const network = config.network ?? 'undeployed';
   const { config: networkConfig } = resolveNetwork({
     args: { command: 'test', subcommand: undefined, positionals: [], flags: { network } },
+    configDir: ctx.root,
   });
   // On a ledger-8 chain the SDK's sync would retry forever.
   await assertLedgerSupported(network, networkConfig);
 
-  const walletConfig = await unlockWallet(resolveWalletPath());
+  const walletConfig = await unlockWallet(resolveWalletPath(ctx.root), { root: ctx.root });
   const seedBuffer = Buffer.from(walletConfig.seed, 'hex');
   const address = walletConfig.addresses[network as NetworkName];
 
   // Check current balance — use fresh cache since localnet may have restarted
   callbacks.onMessage('Checking balance...');
-  const engine = await engineFor(network);
+  const engine = await engineFor(network, ctx.root);
   const stopListening = ctx.sdkWarnings.listen((_tag, msg) => {
     callbacks.onMessage(`SDK: ${msg}`);
   });
   try {
-    const balance = await engine.wallet.prepNightBalance({ seed: seedBuffer, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage });
+    const balance = await engine.wallet.prepNightBalance({ seed: seedBuffer, root: ctx.root, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage });
     if (balance > 0n) {
       callbacks.onMessage(`Balance OK: ${balance}`);
       return;
@@ -151,6 +153,7 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
     onSubmitting() { callbacks.onMessage('Submitting airdrop transaction...'); },
     onSyncWarning(_tag, msg) { callbacks.onMessage(`Syncing genesis... (${msg})`); },
     sdkWarnings: ctx.sdkWarnings,
+    root: ctx.root,
   });
 
   callbacks.onMessage(`Airdropped ${amount} NIGHT`);
@@ -162,18 +165,19 @@ async function stepDust(config: DappTestConfig, ctx: PrepContext, callbacks: Pre
   const network = config.network ?? 'undeployed';
   const { config: networkConfig } = resolveNetwork({
     args: { command: 'test', subcommand: undefined, positionals: [], flags: { network } },
+    configDir: ctx.root,
   });
   await assertLedgerSupported(network, networkConfig);
 
-  const walletConfig = await unlockWallet(resolveWalletPath());
+  const walletConfig = await unlockWallet(resolveWalletPath(ctx.root), { root: ctx.root });
   const seedBuffer = Buffer.from(walletConfig.seed, 'hex');
   const address = walletConfig.addresses[network as NetworkName];
 
   // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
   const stopListening = ctx.sdkWarnings.listen(undefined);
   try {
-    const { dustAvailable } = await (await engineFor(network)).wallet.prepDust(
-      { seed: seedBuffer, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage },
+    const { dustAvailable } = await (await engineFor(network, ctx.root)).wallet.prepDust(
+      { seed: seedBuffer, root: ctx.root, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage },
       DUST_WAIT_TIMEOUT_MS,
     );
     // Verify dust is actually available — don't trust silent timeouts
@@ -201,6 +205,7 @@ async function stepMnServe(config: DappTestConfig, ctx: PrepContext, callbacks: 
   // than silently double-binding and falling back to whatever was there
   // before.
   const handle = await startServeOrReuse({
+    root: ctx.root,
     port: undefined, // use default
     network: config.network,
     onMessage: (msg) => callbacks.onMessage(`[serve] ${msg}`),

@@ -30,9 +30,9 @@ export interface WalletProtector {
 /** The wallet command's call context: a command's, with the protectors `wallet protect` runs. */
 export type WalletCommandContext = CallContext<WalletProtector>;
 
-/** The shielded coin public key of the wallet `name`, unlocked with mn's passphrase. */
-export async function coinKeyOfWallet(name: string): Promise<string> {
+/** The shielded coin public key of the wallet `name` under the state root `root`, unlocked with mn's passphrase. */
+export async function coinKeyOfWallet(root: string, name: string): Promise<string> {
   // The engine loads the SDK, which the other wallet subcommands don't need: loaded here, not up front.
   const { anyEngine } = await import('@kuiralabs/midnight-cli-core/lib/engine');
-  return (await anyEngine()).keys.shieldedCoinPublicKeyHex(Buffer.from((await unlockWallet(resolveWalletPath(name))).seed, 'hex'));
+  return (await anyEngine()).keys.shieldedCoinPublicKeyHex(Buffer.from((await unlockWallet(resolveWalletPath(root, name), { root })).seed, 'hex'));
 }

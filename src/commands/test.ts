@@ -446,7 +446,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
   }
 
   // Prep context for resource tracking + teardown
-  const prep = createPrepContext(ctx.sdkWarnings, signal);
+  const prep = createPrepContext(ctx.config.paths.stateRoot, ctx.sdkWarnings, signal);
   const prepResults: PrepStepResult[] = [];
 
   // Register teardown on abort
@@ -512,6 +512,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
           prompt,
           dappDir,
           logFile: testLogFile,
+          home: ctx.config.paths.home,
           onOutput: (chunk) => writeTestOutput(testOutput.write(chunk)),
           terminal: 'inherit',
           onMessage: (msg) => {
@@ -548,6 +549,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
         const network = config.network ?? 'undeployed';
         const { config: networkConfig } = resolveNetwork({
           args: { command: 'test', subcommand: 'run', positionals: [], flags: { network } },
+          configDir: ctx.config.paths.stateRoot,
         });
 
         // mn serve should already be started by the prep step (mn-serve)
@@ -559,6 +561,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
 
         let currentAction: import('../lib/test/types.ts').TestAction | undefined;
         const actionResults = await runActions({
+          root: ctx.config.paths.stateRoot,
           actions: actionsConfig.actions,
           config,
           dappDir,

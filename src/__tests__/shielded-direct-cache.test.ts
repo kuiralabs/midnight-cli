@@ -53,7 +53,7 @@ describe('shielded-direct cache round-trip', () => {
 
   it('rejects a version mismatch', () => {
     const path = getShieldedCachePath('undeployed', PUBKEY, dir);
-    mkdirSync(join(dir, 'undeployed'), { recursive: true });
+    mkdirSync(join(dir, 'cache', 'undeployed'), { recursive: true });
     const raw = { version: 999, network: 'undeployed', coinPublicKeyHex: PUBKEY, lastAppliedEventId: 1, timestamp: '', zswapState: Buffer.from(freshState().serialize()).toString('hex') };
     writeFileSync(path, JSON.stringify(raw));
     expect(loadShieldedCache('undeployed', PUBKEY, dir)).toBeNull();

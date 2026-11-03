@@ -43,13 +43,13 @@ export interface IndexerChange {
 }
 
 /**
- * Makes `network`'s cache directory belong to the indexer at `indexerUrl`.
+ * Makes `network`'s cache directory, under the state root `root`, belong to the indexer at `indexerUrl`.
  * Returns what was removed when its state came from another indexer, and
  * undefined when it already belonged to this one or held nothing.
  */
-export function bindCachesToIndexer(network: string, indexerUrl: string, cacheDir?: string): IndexerChange | undefined {
+export function bindCachesToIndexer(network: string, indexerUrl: string, root: string): IndexerChange | undefined {
   const current = indexerIdentity(indexerUrl);
-  const dir = join(cacheRootDir(cacheDir), networkCacheFolder(network));
+  const dir = join(cacheRootDir(root), networkCacheFolder(network, root));
   const marker = join(dir, MARKER);
 
   const recorded = existsSync(marker) ? readFileSync(marker, 'utf-8').trim() : undefined;

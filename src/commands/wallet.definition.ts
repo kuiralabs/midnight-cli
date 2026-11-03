@@ -132,11 +132,11 @@ export const walletDefinition: CommandDefinition = {
         // Replacing a wallet deletes its seed, so a call with force is confirmed like remove.
         confirmation: {
           when: (params) => params.force === true,
-          async check(params) {
+          async check(params, call) {
             const fs = await import('node:fs');
             const { walletFilePath } = await import('../lib/wallet-create.ts');
             const name = String(params.name);
-            return fs.existsSync(walletFilePath(name))
+            return fs.existsSync(walletFilePath(call.host.paths().stateRoot, name))
               ? `Replace wallet ${name}: its file, and the seed in it, is deleted from this machine and a new wallet written in its place`
               : `Create wallet ${name} (no wallet of that name exists, so nothing is replaced)`;
           },
@@ -196,9 +196,9 @@ export const walletDefinition: CommandDefinition = {
         confirmation: {
           describe: (params) => `Remove wallet ${params.name}: its file, and the seed in it, is deleted from this machine`,
           // A wallet that can't be removed is refused before the agent asks the user.
-          async check(params) {
+          async check(params, call) {
             const { assertWalletRemovable } = await import('../lib/wallet-config.ts');
-            assertWalletRemovable(String(params.name));
+            assertWalletRemovable(call.host.paths().stateRoot, String(params.name));
           },
         },
         order: 5,

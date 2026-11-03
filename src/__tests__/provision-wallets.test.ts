@@ -8,6 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { provisionDevWallets, type ProvisionSteps } from '../lib/dev/provision-wallets.ts';
+import { stateRootIn } from './helpers/state-root-in.ts';
 
 let home: string;
 let originalHome: string | undefined;
@@ -41,6 +42,7 @@ describe('provisionDevWallets', () => {
     const progress: string[] = [];
 
     const result = await provisionDevWallets({
+      root: stateRootIn(home),
       names: ['dev-alice', 'dev-bob', 'dev-carol'],
       amountNight: 1000,
       steps: recordingSteps(calls),
@@ -68,7 +70,7 @@ describe('provisionDevWallets', () => {
     writeFileSync(join(home, '.midnight', 'wallets', 'dev-alice.json'), '{}');
     const calls: string[] = [];
 
-    const result = await provisionDevWallets({ names: ['dev-alice'], amountNight: 1000, steps: recordingSteps(calls, ['dev-alice']) });
+    const result = await provisionDevWallets({ root: stateRootIn(home), names: ['dev-alice'], amountNight: 1000, steps: recordingSteps(calls, ['dev-alice']) });
 
     expect(calls).toEqual(['check dev-alice', 'register dev-alice']);
     expect(result).toEqual([{ name: 'dev-alice', state: 'created' }]);
@@ -82,7 +84,7 @@ describe('provisionDevWallets', () => {
     steps.airdrop = async (name, amount, signal) => { await airdrop(name, amount, signal); controller.abort(); };
 
     // Regression: it failed with the signal's own AbortError, which mn's error codes don't read as CANCELLED.
-    await expect(provisionDevWallets({ names: ['dev-alice'], amountNight: 1000, steps, signal: controller.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(provisionDevWallets({ root: stateRootIn(home), names: ['dev-alice'], amountNight: 1000, steps, signal: controller.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
     expect(calls).toEqual(['generate dev-alice', 'airdrop dev-alice 1000']);
   });
 });

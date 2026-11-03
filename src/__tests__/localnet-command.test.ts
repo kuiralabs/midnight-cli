@@ -140,15 +140,17 @@ describe('ledger-9 build: mn localnet cannot start a network', () => {
   // The compose stack is ledger 8, which wallet-sdk 2.0 can't sync with, and
   // no published indexer image runs ledger 9 yet. Every start path goes
   // through ensureComposeFile, so it refuses there, before writing anything.
+  // A state root of the test's own, which nothing creates.
+  const root = join(tmpdir(), `midnight-localnet-ledger9-${process.pid}`);
   const composeFingerprint = () => {
-    const path = getComposePath();
+    const path = getComposePath(root);
     return existsSync(path) ? `${statSync(path).mtimeMs}:${readFileSync(path, 'utf-8').length}` : 'absent';
   };
 
   it('ensureComposeFile refuses, says what to run instead, and writes nothing', () => {
     const before = composeFingerprint();
     let err: unknown;
-    try { ensureComposeFile(); } catch (e) { err = e; }
+    try { ensureComposeFile(root); } catch (e) { err = e; }
     expect(err).toBeInstanceOf(LocalnetUnavailableError);
     const msg = (err as Error).message;
     expect(msg).toContain('ledger 9');

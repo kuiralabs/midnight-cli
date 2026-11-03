@@ -6,16 +6,15 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path';
 
 import type { TestSuite, BrowserMode } from './types.ts';
-import { userHome } from '@kuiralabs/midnight-cli-core/lib/state-root';
 
 /**
  * Check whether the chrome-devtools MCP server is registered in Claude
- * Code's user-level config. dom/script browser modes depend on it for
+ * Code's user-level config, in the user's home `home`. dom/script browser modes depend on it for
  * Chrome control. Returns false if claude.json is missing, malformed,
  * or doesn't list the server — all three mean the user must install it.
  */
-function hasChromeDevToolsMcp(): boolean {
-  const path = join(userHome(), '.claude.json');
+function hasChromeDevToolsMcp(home: string): boolean {
+  const path = join(home, '.claude.json');
   if (!existsSync(path)) return false;
   try {
     const config = JSON.parse(readFileSync(path, 'utf-8')) as { mcpServers?: Record<string, unknown> };
@@ -60,6 +59,8 @@ export interface BrowserTestOptions {
   prompt: string;
   dappDir: string;
   logFile: string;
+  /** The user's home, where Claude Code keeps its config. */
+  home: string;
   onMessage?: (msg: string) => void;
   /** The test's own output as it comes, to show beside the log file it also goes to. */
   onOutput?: (chunk: Buffer) => void;
@@ -150,7 +151,7 @@ export async function runBrowserTest(options: BrowserTestOptions): Promise<Brows
   // session. Pre-flight here with an actionable install command — much
   // better than a 10-minute timeout and a confusing log.
   if (mode === 'dom' || mode === 'script') {
-    if (!hasChromeDevToolsMcp()) {
+    if (!hasChromeDevToolsMcp(options.home)) {
       throw new Error(
         `Browser mode "${mode}" requires the chrome-devtools MCP server, ` +
         `which is not registered in ~/.claude.json.\n\n` +

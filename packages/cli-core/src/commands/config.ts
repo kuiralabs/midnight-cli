@@ -33,16 +33,17 @@ export default async function configCommand(args: ParsedArgs, ctx: CallContext):
     throw new UsageError(`Invalid network: "${networkFlag}"\nValid networks: ${getValidNetworkNames().join(', ')}`);
   }
   const scope = networkFlag as NetworkName | undefined;
+  const root = ctx.config.paths.stateRoot;
 
   if (action === 'get') {
-    const value = getConfigValue(key, undefined, scope);
+    const value = getConfigValue(key, root, scope);
     if (hasFlag(args, 'json')) {
       ctx.output.result({ action: 'get', key, value });
       return;
     }
     ctx.output.stdout(value + '\n');
   } else if (action === 'unset') {
-    unsetConfigValue(key, undefined, scope);
+    unsetConfigValue(key, root, scope);
     const displayValue = key === 'network' ? '(default)' : '(removed)';
     if (hasFlag(args, 'json')) {
       ctx.output.result({ action: 'unset', key, value: displayValue });
@@ -54,9 +55,9 @@ export default async function configCommand(args: ParsedArgs, ctx: CallContext):
     if (value === undefined) {
       throw new UsageError(`Missing value for config set.\nUsage: midnight config set ${key} <value>`);
     }
-    setConfigValue(key, value, undefined, scope);
+    setConfigValue(key, value, root, scope);
     // A project id is a secret: what was set is said the way `config get` shows it.
-    const shown = key === 'blockfrost-project-id' ? getConfigValue(key, undefined, scope) : value;
+    const shown = key === 'blockfrost-project-id' ? getConfigValue(key, root, scope) : value;
     if (hasFlag(args, 'json')) {
       ctx.output.result({ action: 'set', key, value: shown });
       return;

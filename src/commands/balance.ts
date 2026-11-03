@@ -65,14 +65,15 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
     args = { ...args, flags: { ...args.flags, network: inferredNetwork } };
   }
 
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args });
+  const root = ctx.config.paths.stateRoot;
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
 
   // Shielded balances are private: reading one needs the wallet's secret key,
   // which an address alone doesn't carry. If this address belongs to one of our
   // wallets we have the seed → run the full wallet sync (which shows shielded).
   // Otherwise there's nothing to decrypt with → fail with a clear, actionable error.
   if (hasFlag(args, 'shielded')) {
-    const owned = await findWalletByAddress(address);
+    const owned = await findWalletByAddress(root, address);
     if (owned) {
       ctx.diagnostics.line('balance', `shielded positional → wallet ${owned.wallet.name} on ${owned.network}`);
       const delegated: ParsedArgs = {
@@ -93,12 +94,12 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
     proofServer: getFlag(args, 'proof-server'),
     node: getFlag(args, 'node'),
     indexerWS: getFlag(args, 'indexer-ws'),
-  }, networkName);
+  }, networkName, root);
 
   const spinner = ctx.progress.start(`Checking balance on ${networkName}...`);
 
   try {
-    const result = await (await engineFor(networkName)).wallet.unshieldedBalance(address, networkConfig, {
+    const result = await (await engineFor(networkName, root)).wallet.unshieldedBalance(address, networkConfig, {
       forceFresh: hasFlag(args, 'no-cache'),
       signal: ctx.signal,
       log: ctx.diagnostics.line,
@@ -171,14 +172,15 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
 // ── Wallet-based: full facade sync, both unshielded + shielded ──
 
 async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> {
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args });
+  const root = ctx.config.paths.stateRoot;
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
   ctx.diagnostics.line('balance', `network=${networkName} indexerWS=${networkConfig.indexerWS}`);
   // Seed source: --seed → MN_SEED → --wallet <name> → active wallet (shared resolver).
-  const { seed: seedBuffer, walletPath, config } = await resolveSeedSource(args);
+  const { seed: seedBuffer, walletPath, config } = await resolveSeedSource(args, root);
   ctx.diagnostics.line('balance', `wallet path=${walletPath ?? '(from --seed/MN_SEED)'}`);
   // Derive the unshielded address from the seed so a --seed/MN_SEED caller (no wallet
   // file) behaves identically to a named wallet — for a wallet this equals the stored one.
-  const engine = await engineFor(networkName);
+  const engine = await engineFor(networkName, root);
   const address = config?.addresses[networkName] ?? engine.keys.unshieldedAddress(seedBuffer, networkName);
   const shieldedAddrStr = config?.shieldedAddresses?.[networkName] ?? '';
 
@@ -186,7 +188,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
     proofServer: getFlag(args, 'proof-server'),
     node: getFlag(args, 'node'),
     indexerWS: getFlag(args, 'indexer-ws'),
-  }, networkName);
+  }, networkName, root);
 
   // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
   const stopListening = ctx.sdkWarnings.listen(undefined);
@@ -212,7 +214,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
     // ── Phase 1: fast unshielded via GraphQL (no facade, no proof server) ──
     if (!isJson) activeSpinner = ctx.progress.start('Checking unshielded...');
     ctx.diagnostics.line('balance', `phase=unshielded forceFresh=${noCache}`);
-    const unshieldedResult = await (await engineFor(networkName)).wallet.unshieldedBalance(address, networkConfig, {
+    const unshieldedResult = await (await engineFor(networkName, root)).wallet.unshieldedBalance(address, networkConfig, {
       forceFresh: noCache,
       signal: ctx.signal,
       log: ctx.diagnostics.line,
@@ -273,6 +275,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
         networkName,
         networkConfig.indexerWS,
         {
+          root,
           forceFresh: noCache,
           chainId,
           signal: ctx.signal,

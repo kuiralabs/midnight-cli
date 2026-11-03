@@ -14,7 +14,7 @@ describe('runPrepSteps', () => {
     const controller = new AbortController();
     controller.abort();
     const started: string[] = [];
-    await expect(runPrepSteps(config, '/nonexistent', createPrepContext(createSdkWarningRouter().openCall().warnings, controller.signal), {
+    await expect(runPrepSteps(config, '/nonexistent', createPrepContext('/nonexistent/.midnight', createSdkWarningRouter().openCall().warnings, controller.signal), {
       onStepStart: (step) => started.push(step),
       onStepComplete: () => {},
       onMessage: () => {},

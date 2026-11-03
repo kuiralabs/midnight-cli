@@ -41,8 +41,8 @@ interface NativeFetchOptions {
   initialRetention?: DustRetention;
   signal?: AbortSignal;
   onProgress?: (applied: number, max: number) => void;
-  /** The wallet's cache folder (the state root's when absent): the checkpoint lives beside the other Dust caches. */
-  cacheDir?: string;
+  /** The state root: the checkpoint lives beside the other Dust caches under it. */
+  root: string;
 }
 
 /**
@@ -125,8 +125,8 @@ function readCheckpointCursor(path: string): number {
 
 /** The sidecar's checkpoint file for a Dust key, beside the other Dust caches. */
 
-function nativeCheckpointPath(networkName: string, pubkeyHex: string, cacheDir?: string): string {
-  const dir = join(cacheRootDir(cacheDir), networkCacheFolder(networkName));
+function nativeCheckpointPath(networkName: string, pubkeyHex: string, root: string): string {
+  const dir = join(cacheRootDir(root), networkCacheFolder(networkName, root));
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: DIR_MODE });
   return join(dir, nativeCheckpointName(pubkeyHex));
 }
@@ -150,7 +150,7 @@ export function runDustSyncNative(
 
     const networkName = network.networkId.toLowerCase();
     const pubkeyHex = dustPublicKeyHexFromSeed(seed);
-    const out = nativeCheckpointPath(networkName, pubkeyHex, opts.cacheDir);
+    const out = nativeCheckpointPath(networkName, pubkeyHex, opts.root);
 
     // Resume selection (out == resume file; the sidecar reads it once at start,
     // then overwrites it with its own checkpoints — kill-safe at this path):

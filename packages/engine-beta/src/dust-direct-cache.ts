@@ -73,9 +73,9 @@ export function dustPublicKeyHexFromSeed(seedBuffer: Buffer): string {
 export function loadDustCache(
   network: string,
   pubkeyHex: string,
-  cacheDir?: string,
+  root: string,
 ): DustCacheEntry | null {
-  const path = getDustCachePath(network, pubkeyHex, cacheDir);
+  const path = getDustCachePath(network, pubkeyHex, root);
   if (!existsSync(path)) return null;
 
   try {
@@ -111,7 +111,7 @@ export function saveDustCache(
   pubkeyHex: string,
   state: ledger.DustLocalState,
   lastAppliedEventId: number,
-  cacheDir?: string,
+  root: string,
   chainId?: string,
   retention: DustRetention = EMPTY_RETENTION,
 ): void {
@@ -127,7 +127,7 @@ export function saveDustCache(
     ...(chainId ? { chainId } : {}),
   };
 
-  const path = getDustCachePath(network, pubkeyHex, cacheDir);
+  const path = getDustCachePath(network, pubkeyHex, root);
   const dir = dirname(path);
 
   if (!existsSync(dir)) {
@@ -153,13 +153,13 @@ export function saveDustCache(
 export function validateDustCacheChainId(
   network: string,
   currentChainId: string | null,
-  cacheDir?: string,
+  root: string,
 ): string[] {
   // Caller fetches the chain's current genesis hash once and passes it in.
   // A null hash (node unreachable) skips validation — proceed best-effort.
   if (!currentChainId) return [];
 
-  const dir = dustCacheDir(network, cacheDir);
+  const dir = dustCacheDir(network, root);
   if (!existsSync(dir)) return [];
 
   const wiped: string[] = [];

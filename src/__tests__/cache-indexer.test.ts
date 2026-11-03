@@ -13,6 +13,8 @@ const BLOCKFROST = 'wss://midnight-preprod.blockfrost.io/api/v0/ws?project_id=ni
 const OLD_PREPROD = 'wss://indexer.preprod.midnight.network/api/v4/graphql/ws';
 const PREVIEW = 'wss://indexer.preview.midnight.network/api/v4/graphql/ws';
 
+// The state root the function is given, and the cache folder under it.
+let root: string;
 let dir: string;
 const files = (network: string) => (fs.existsSync(path.join(dir, network)) ? fs.readdirSync(path.join(dir, network)).sort() : []);
 const cache = (network: string, ...names: string[]) => {
@@ -20,8 +22,11 @@ const cache = (network: string, ...names: string[]) => {
   for (const name of names) fs.writeFileSync(path.join(dir, network, name), '{}');
 };
 
-beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-cache-indexer-')); });
-afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+beforeEach(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-cache-indexer-'));
+  dir = path.join(root, 'cache');
+});
+afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
 
 describe('indexerIdentity', () => {
   it('is the host and port, never the query that carries a project id', () => {
@@ -37,7 +42,7 @@ describe('bindCachesToIndexer', () => {
     cache('preprod', 'mn_addr_preprod1abc.json', 'dust-0123.json', 'dust-native-0123.json', 'shielded-4567.json');
     cache('preview', 'mn_addr_preview1abc.json');
 
-    const change = bindCachesToIndexer('preprod', BLOCKFROST, dir);
+    const change = bindCachesToIndexer('preprod', BLOCKFROST, root);
     expect(change).toEqual({ previous: 'indexer.preprod.midnight.network', current: 'midnight-preprod.blockfrost.io', removed: 4 });
     expect(files('preprod')).toEqual(['indexer.host']);
     expect(files('preview')).toEqual(['mn_addr_preview1abc.json']);
@@ -45,51 +50,51 @@ describe('bindCachesToIndexer', () => {
 
   it('keeps state saved before the indexer was recorded when the network is still on that indexer', () => {
     cache('preview', 'mn_addr_preview1abc.json', 'dust-0123.json');
-    expect(bindCachesToIndexer('preview', PREVIEW, dir)).toBeUndefined();
+    expect(bindCachesToIndexer('preview', PREVIEW, root)).toBeUndefined();
     expect(files('preview')).toEqual(['dust-0123.json', 'indexer.host', 'mn_addr_preview1abc.json']);
   });
 
   it('keeps a local network\'s unrecorded state: its indexer was never a fixed one', () => {
     cache('undeployed', 'mn_addr_undeployed1abc.json');
-    expect(bindCachesToIndexer('undeployed', 'ws://localhost:8088/api/v4/graphql/ws', dir)).toBeUndefined();
+    expect(bindCachesToIndexer('undeployed', 'ws://localhost:8088/api/v4/graphql/ws', root)).toBeUndefined();
     expect(files('undeployed')).toEqual(['indexer.host', 'mn_addr_undeployed1abc.json']);
   });
 
   it('does nothing more once the directory belongs to the indexer', () => {
-    bindCachesToIndexer('preprod', BLOCKFROST, dir);
+    bindCachesToIndexer('preprod', BLOCKFROST, root);
     cache('preprod', 'dust-0123.json');
-    expect(bindCachesToIndexer('preprod', BLOCKFROST, dir)).toBeUndefined();
+    expect(bindCachesToIndexer('preprod', BLOCKFROST, root)).toBeUndefined();
     expect(files('preprod')).toEqual(['dust-0123.json', 'indexer.host']);
   });
 
   it('removes the state again when the indexer changes, in either direction', () => {
-    bindCachesToIndexer('preprod', BLOCKFROST, dir);
+    bindCachesToIndexer('preprod', BLOCKFROST, root);
     cache('preprod', 'dust-0123.json');
-    expect(bindCachesToIndexer('preprod', 'wss://my-indexer.example/api/v4/graphql/ws', dir))
+    expect(bindCachesToIndexer('preprod', 'wss://my-indexer.example/api/v4/graphql/ws', root))
       .toEqual({ previous: 'midnight-preprod.blockfrost.io', current: 'my-indexer.example', removed: 1 });
     cache('preprod', 'dust-0123.json');
-    expect(bindCachesToIndexer('preprod', BLOCKFROST, dir)?.removed).toBe(1);
+    expect(bindCachesToIndexer('preprod', BLOCKFROST, root)?.removed).toBe(1);
   });
 
   it('tells two local stacks apart by their port', () => {
-    bindCachesToIndexer('undeployed', 'ws://localhost:8088/api/v4/graphql/ws', dir);
+    bindCachesToIndexer('undeployed', 'ws://localhost:8088/api/v4/graphql/ws', root);
     cache('undeployed', 'dust-0123.json');
-    expect(bindCachesToIndexer('undeployed', 'ws://localhost:38088/api/v4/graphql/ws', dir)?.removed).toBe(1);
+    expect(bindCachesToIndexer('undeployed', 'ws://localhost:38088/api/v4/graphql/ws', root)?.removed).toBe(1);
   });
 
   it('records the host only: the project id is never written', () => {
-    bindCachesToIndexer('preprod', BLOCKFROST, dir);
+    bindCachesToIndexer('preprod', BLOCKFROST, root);
     expect(fs.readFileSync(path.join(dir, 'preprod', 'indexer.host'), 'utf-8')).toBe('midnight-preprod.blockfrost.io\n');
   });
 
   it('records the indexer for a network with no cache yet, and reports nothing', () => {
-    expect(bindCachesToIndexer('preprod', BLOCKFROST, dir)).toBeUndefined();
+    expect(bindCachesToIndexer('preprod', BLOCKFROST, root)).toBeUndefined();
     expect(files('preprod')).toEqual(['indexer.host']);
   });
 
   it('leaves the old preprod state alone while preprod is still pointed at the old indexer', () => {
     cache('preprod', 'dust-0123.json');
-    expect(bindCachesToIndexer('preprod', OLD_PREPROD, dir)).toBeUndefined();
+    expect(bindCachesToIndexer('preprod', OLD_PREPROD, root)).toBeUndefined();
     expect(files('preprod')).toEqual(['dust-0123.json', 'indexer.host']);
   });
 });

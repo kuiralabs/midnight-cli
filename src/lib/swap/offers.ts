@@ -23,15 +23,15 @@ export interface MadeOffer {
 
 /**
  * Makes an offer with the session's wallet: its half of the swap, proved and
- * signed, recorded among the wallet's open offers so its later spends don't
- * cancel it unawares.
+ * signed, recorded among the wallet's open offers (under the state root
+ * `root`) so its later spends don't cancel it unawares.
  */
-export async function makeOffer(session: WalletSession, walletAddress: string, terms: SwapTerms, expiresAt: Date, now: Date = new Date()): Promise<MadeOffer> {
-  const engine = await engineFor(session.network);
+export async function makeOffer(session: WalletSession, root: string, walletAddress: string, terms: SwapTerms, expiresAt: Date, now: Date = new Date()): Promise<MadeOffer> {
+  const engine = await engineFor(session.network, root);
   const tx = await session.makeOffer(terms.give, terms.want);
   const read = engine.ledger.readOffer(tx);
   const envelope: OfferEnvelope = { network: session.network, id: read.id, terms: read.terms, expiresAt, tx };
-  recordOpenOffer(session.network, walletAddress, { id: read.id, terms: read.terms, nullifiers: read.nullifiers, madeAt: now, expiresAt });
+  recordOpenOffer(root, session.network, walletAddress, { id: read.id, terms: read.terms, nullifiers: read.nullifiers, madeAt: now, expiresAt });
   return { envelope, file: encodeOfferEnvelope(envelope) };
 }
 
@@ -41,13 +41,13 @@ export interface ReadOffer {
   contents: OfferContents;
 }
 
-/** Reads an offer file's text for `network`. Throws NotAnOfferError for anything that isn't one, or says other than its bytes. */
-export async function readOfferFile(text: string, network: NetworkName): Promise<ReadOffer> {
+/** Reads an offer file's text for `network`, with the engine the config under the state root `root` gives it. Throws NotAnOfferError for anything that isn't one, or says other than its bytes. */
+export async function readOfferFile(root: string, text: string, network: NetworkName): Promise<ReadOffer> {
   const envelope = decodeOfferEnvelope(text);
   if (envelope.network !== network) {
     throw new UsageError(`The offer is for ${envelope.network}, not ${network}: take it on ${envelope.network} (--network ${envelope.network}).`);
   }
-  const contents = (await engineFor(network)).ledger.readOffer(envelope.tx);
+  const contents = (await engineFor(network, root)).ledger.readOffer(envelope.tx);
   assertEnvelopeMatches(envelope, contents);
   return { envelope, contents };
 }
@@ -96,16 +96,17 @@ export interface ListedOffer {
 
 /**
  * The wallet's open offers on the network, each asked of the indexer: the
- * ones taken since are closed in mn's record and listed as taken.
+ * ones taken since are closed in mn's record (under the state root `root`)
+ * and listed as taken.
  */
-export async function listOffers(network: NetworkName, networkConfig: NetworkConfig, walletAddress: string, now: Date = new Date(), signal?: AbortSignal): Promise<ListedOffer[]> {
+export async function listOffers(root: string, network: NetworkName, networkConfig: NetworkConfig, walletAddress: string, now: Date = new Date(), signal?: AbortSignal): Promise<ListedOffer[]> {
   const listed: ListedOffer[] = [];
-  for (const offer of readOpenOffers(network, walletAddress)) {
+  for (const offer of readOpenOffers(root, network, walletAddress)) {
     const spends = await spendsOf(networkConfig, offer.nullifiers, { signal });
     listed.push({ offer, expired: now.getTime() >= offer.expiresAt.getTime(), taken: spends.length > 0 });
   }
   const taken = listed.filter((l) => l.taken).map((l) => l.offer.id);
-  if (taken.length > 0) closeOpenOffers(network, walletAddress, taken);
+  if (taken.length > 0) closeOpenOffers(root, network, walletAddress, taken);
   return listed;
 }
 
@@ -127,21 +128,22 @@ export interface CancelOutcome {
 /**
  * Cancels the wallet's open offer with this id (or a prefix of it, 8
  * characters at least): spends its coins back to the wallet, then closes it in
- * mn's record. An offer found taken already is only closed.
+ * mn's record under the state root `root`. An offer found taken already is
+ * only closed.
  */
-export async function cancelOffer(session: WalletSession, networkConfig: NetworkConfig, walletAddress: string, id: string, signal?: AbortSignal): Promise<CancelOutcome> {
+export async function cancelOffer(session: WalletSession, root: string, networkConfig: NetworkConfig, walletAddress: string, id: string, signal?: AbortSignal): Promise<CancelOutcome> {
   const wanted = id.toLowerCase();
-  const matches = readOpenOffers(session.network, walletAddress).filter((o) => wanted.length >= 8 && o.id.startsWith(wanted));
+  const matches = readOpenOffers(root, session.network, walletAddress).filter((o) => wanted.length >= 8 && o.id.startsWith(wanted));
   if (matches.length === 0) throw new NoSuchOfferError(id);
   if (matches.length > 1) throw new UsageError(`${id} names ${matches.length} open offers: give more of the id`);
   const offer = matches[0]!;
   const spends = await spendsOf(networkConfig, offer.nullifiers, { signal });
   if (spends.length > 0) {
-    closeOpenOffers(session.network, walletAddress, [offer.id]);
+    closeOpenOffers(root, session.network, walletAddress, [offer.id]);
     return { txHash: undefined, cancelled: [], alreadyTaken: [offer] };
   }
   const cancel = await session.cancelOffers([offer]);
   const txHash = await session.submit(cancel);
-  closeOpenOffers(session.network, walletAddress, [offer.id]);
+  closeOpenOffers(root, session.network, walletAddress, [offer.id]);
   return { txHash, cancelled: [offer], alreadyTaken: [] };
 }

@@ -263,14 +263,16 @@ describe('generated scripts', () => {
 describe('a cancelled run', () => {
   it('starts no script for a deploy, a call or a state read whose run was cancelled, and says it was cancelled', async () => {
     const dappDir = mkdtempSync(join(tmpdir(), 'mn-cancelled-run-'));
+    const root = mkdtempSync(join(tmpdir(), 'mn-cancelled-run-root-'));
     try {
-      const common = { dappDir, network: 'undeployed' as const, networkConfig: NETWORK, managedDir: join(dappDir, 'managed', 'counter'), contractName: 'counter', signal: AbortSignal.abort() };
+      const common = { dappDir, network: 'undeployed' as const, root, networkConfig: NETWORK, managedDir: join(dappDir, 'managed', 'counter'), contractName: 'counter', signal: AbortSignal.abort() };
       await expect(runDeploy({ ...common, servePort: 9932 })).rejects.toBeInstanceOf(CancelledError);
       await expect(runCall({ ...common, servePort: 9932, contractAddress: 'ab'.repeat(32), circuit: 'increment' })).rejects.toBeInstanceOf(CancelledError);
       await expect(runState({ ...common, contractAddress: 'ab'.repeat(32) })).rejects.toBeInstanceOf(CancelledError);
       expect(readdirSync(dappDir)).toEqual([]);
     } finally {
       rmSync(dappDir, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

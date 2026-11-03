@@ -6,30 +6,25 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { loadCliConfig, saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
-
-function getMidnightDir(): string {
-  return stateRoot();
+/** The wallets folder under the state root `root`. */
+export function getWalletsDir(root: string): string {
+  return path.join(root, WALLETS_DIR_NAME);
 }
 
-export function getWalletsDir(): string {
-  return path.join(getMidnightDir(), WALLETS_DIR_NAME);
+/** Where an early mn kept its one wallet, under the state root `root`. */
+export function getDefaultWalletPath(root: string): string {
+  return path.join(root, DEFAULT_WALLET_FILENAME);
 }
 
-export function getDefaultWalletPath(): string {
-  return path.join(getMidnightDir(), DEFAULT_WALLET_FILENAME);
-}
-
-function ensureMidnightDir(): void {
-  const dir = getMidnightDir();
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
+function ensureMidnightDir(root: string): void {
+  if (!fs.existsSync(root)) {
+    fs.mkdirSync(root, { recursive: true, mode: DIR_MODE });
   }
 }
 
-export function ensureWalletsDir(): void {
-  ensureMidnightDir();
-  const dir = getWalletsDir();
+export function ensureWalletsDir(root: string): void {
+  ensureMidnightDir(root);
+  const dir = getWalletsDir(root);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
   }
@@ -37,13 +32,13 @@ export function ensureWalletsDir(): void {
 
 /**
  * Migrate old ~/.midnight/wallet.json to ~/.midnight/wallets/default.json.
- * Silent, one-time migration. No-op if wallets/ already has files or old wallet doesn't exist.
+ * Silent, one-time migration, under the state root `root`. No-op if wallets/ already has files or old wallet doesn't exist.
  */
-export function migrateOldWallet(): void {
-  const oldPath = getDefaultWalletPath();
+export function migrateOldWallet(root: string): void {
+  const oldPath = getDefaultWalletPath(root);
   if (!fs.existsSync(oldPath)) return;
 
-  const walletsDir = getWalletsDir();
+  const walletsDir = getWalletsDir(root);
 
   // If wallets/ already has files, don't migrate (user already using multi-wallet)
   if (fs.existsSync(walletsDir)) {
@@ -52,7 +47,7 @@ export function migrateOldWallet(): void {
   }
 
   // Ensure wallets directory exists
-  ensureWalletsDir();
+  ensureWalletsDir(root);
 
   // Move old wallet to wallets/default.json
   const newPath = path.join(walletsDir, `${DEFAULT_WALLET_NAME}.json`);
@@ -61,7 +56,7 @@ export function migrateOldWallet(): void {
   fs.unlinkSync(oldPath);
 
   // Set active wallet to default
-  const config = loadCliConfig();
+  const config = loadCliConfig(root);
   config.wallet = DEFAULT_WALLET_NAME;
-  saveCliConfig(config);
+  saveCliConfig(config, root);
 }

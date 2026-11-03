@@ -144,6 +144,8 @@ export interface BuildHandle {
 // ── Prep context — accumulates resources for teardown ──
 
 export interface PrepContext {
+  /** The state root the wallets, config and caches live under. */
+  root: string;
   /** The SDK warnings of the call that runs the prep: the steps that run the SDK listen to them. */
   sdkWarnings: CallSdkWarnings;
   /** The run's cancellation: no step starts after it aborts, and the waits inside a step stop. */
@@ -154,9 +156,10 @@ export interface PrepContext {
   addCleanup(fn: () => Promise<void>): void;
 }
 
-export function createPrepContext(sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): PrepContext {
+export function createPrepContext(root: string, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): PrepContext {
   const cleanups: (() => Promise<void>)[] = [];
   return {
+    root,
     sdkWarnings,
     signal,
     cleanups,

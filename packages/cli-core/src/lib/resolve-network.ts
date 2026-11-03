@@ -18,7 +18,8 @@ import { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV, settings }
 
 export interface NetworkResolutionContext {
   args: ParsedArgs;
-  configDir?: string;
+  /** The state root whose config.json holds the saved network and endpoints. */
+  configDir: string;
 }
 
 /**
@@ -60,7 +61,7 @@ export { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV };
  */
 export function resolveBlockfrostProjectId(
   name: NetworkName,
-  configDir?: string,
+  configDir: string,
   env: Record<string, string | undefined> = {
     [BLOCKFROST_PROJECT_ID_ENV]: settings().blockfrostProjectId,
     [SHARED_BLOCKFROST_PROJECT_ID_ENV]: settings().sharedBlockfrostProjectId,

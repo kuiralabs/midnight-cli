@@ -27,7 +27,7 @@ export default async function txCommand(args: ParsedArgs, ctx: CallContext): Pro
   const ref = parseTxReference(given);
   const timeoutMs = timeoutMsOf(args);
   const jsonMode = hasFlag(args, 'json');
-  const { name: network, config } = resolveNetwork({ args });
+  const { name: network, config } = resolveNetwork({ args, configDir: ctx.config.paths.stateRoot });
 
   const wait = hasFlag(args, 'wait');
   const spinner = jsonMode ? ctx.progress.silent() : ctx.progress.start(wait ? 'Waiting for the indexer to list it...' : 'Asking the indexer...');
