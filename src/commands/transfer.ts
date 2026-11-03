@@ -12,6 +12,8 @@ import { nightToMicro } from '@kuiralabs/midnight-cli-core/lib/amount';
 import { header, keyValue, divider, formatAddress, successMessage } from '@kuiralabs/midnight-cli-core/ui/format';
 import { bold, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { receiptJson, receiptOf } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { receiptText } from '../ui/receipt.ts';
 
 export default async function transferCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
@@ -84,6 +86,8 @@ async function unshieldedTransfer(
       },
     });
 
+    spinner.update('Waiting for the indexer to list it...');
+    const receipt = await receiptOf(networkConfig.indexer, result.txHash, ctx.signal);
     spinner.stop('Transaction submitted');
 
     if (hasFlag(args, 'json')) {
@@ -92,6 +96,7 @@ async function unshieldedTransfer(
         amount: amountNight,
         recipient: recipientAddress,
         network: networkName,
+        ...receiptJson(receipt),
       });
       return;
     }
@@ -102,6 +107,7 @@ async function unshieldedTransfer(
       `Transferred ${amountNight} NIGHT`,
       result.txHash,
     ) + '\n');
+    ctx.output.stderr(receiptText(receipt, result.txHash));
     ctx.output.stderr('\n' + divider() + '\n');
     ctx.output.stderr(dim('  Verify: midnight balance') + '\n\n');
   } catch (err) {
@@ -167,14 +173,17 @@ async function shieldedTransfer(
       onSyncDetail: (detail) => spinner.update(`Syncing wallet... (waiting on: ${detail})`),
     });
 
+    spinner.update('Waiting for the indexer to list it...');
+    const receipt = await receiptOf(networkConfig.indexer, txHash, ctx.signal);
     spinner.stop('Transaction submitted');
 
     if (hasFlag(args, 'json')) {
-      ctx.output.result({ txHash, amount: amountNight, recipient: recipientAddress, network: networkName, type: 'shielded' });
+      ctx.output.result({ txHash, amount: amountNight, recipient: recipientAddress, network: networkName, type: 'shielded', ...receiptJson(receipt) });
       return;
     }
     ctx.output.stdout(txHash + '\n');
     ctx.output.stderr('\n' + successMessage(`Transferred ${amountNight} shielded NIGHT`, txHash) + '\n');
+    ctx.output.stderr(receiptText(receipt, txHash));
     ctx.output.stderr('\n' + divider() + '\n');
     ctx.output.stderr(dim('  Verify: midnight balance --shielded') + '\n\n');
   } catch (err) {

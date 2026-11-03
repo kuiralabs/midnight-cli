@@ -207,7 +207,7 @@ describe('the texts, assembled from the installed packages', () => {
     const shown = [...section.matchAll(/^ {2}(midnight_\w+)/gm)].map((m) => m[1]);
     expect([...shown].sort()).toStrictEqual([...listed].sort());
     expect(section.startsWith(` (${listed.length})\n`)).toBe(true);
-    expect(listed.length).toBe(43);
+    expect(listed.length).toBe(44);
   });
 
   it('lists the grant tools under Grants (experimental), last', () => {
@@ -225,7 +225,7 @@ describe('the texts, assembled from the installed packages', () => {
     const section = toolsSection(agentManual(registry));
     expect(section).not.toContain('Grants (experimental)');
     expect(section).toContain('  Other\n  midnight_grant_status        The wallet\'s account: address, owner key, what it holds, number of grants (see skill).');
-    expect(section.startsWith(' (43)\n')).toBe(true);
+    expect(section.startsWith(' (44)\n')).toBe(true);
   });
 
   it('leaves out a package that is not installed: its sections, its rows and its tools', () => {
@@ -234,7 +234,7 @@ describe('the texts, assembled from the installed packages', () => {
     expect(manual).not.toContain('GRANTS (experimental)');
     expect(manual).not.toContain('NO_ACCOUNT');
     expect(manual).not.toContain('midnight_grant_');
-    expect(toolsSection(manual).startsWith(' (35)\n')).toBe(true);
+    expect(toolsSection(manual).startsWith(' (36)\n')).toBe(true);
     expect(skillCore(registry)).not.toContain('midnight_grant_');
     const full = skillFull(registry);
     expect(full).not.toContain('allowance (experimental)');

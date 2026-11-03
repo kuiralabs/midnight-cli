@@ -37,4 +37,7 @@ export const chainGuidance: PackageGuidance = {
 `,
     },
   ],
+  toolsTable: [
+    { tool: 'midnight_tx_status', group: 'transactions', order: 50, description: ['What became of a transaction: block, fee, result'] },
+  ],
 };
