@@ -15,22 +15,29 @@ import { installSdkNoiseFilters } from './sdk-noise.ts';
 import { setNoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 import { setSettingsSource, settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
 import { setHostPathsSource } from '@kuiralabs/midnight-cli-core/lib/state-root';
+import { setPrompter, type Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { setEngineLoader } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { loadInstalledEngine } from './installed-engines.ts';
-import type { SdkWarningCalls } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 
-/** What the host gives its runners. */
-export interface CliHost {
-  /** Runs each call with its own SDK warnings. */
-  readonly sdkWarnings: SdkWarningCalls;
-}
-
-export function installCliHost(): CliHost {
-  const sdkWarnings = installSdkNoiseFilters();
-  setNoticeSink((line) => process.stderr.write(line + '\n'));
-  setSettingsSource(() => settingsFromEnvironment(process.env));
-  setHostPathsSource(() => ({ stateRoot: join(homedir(), MIDNIGHT_DIR), home: homedir() }));
+/**
+ * The CLI's host, or the MCP server's (`prompter` null: no terminal there).
+ * Until every library takes the host it is given, the module-level sources
+ * they still read are set from it.
+ */
+export function createCliHost({ prompter }: { prompter: Prompter | null }): Host {
+  const host = createHost({
+    settings: () => settingsFromEnvironment(process.env),
+    paths: () => ({ stateRoot: join(homedir(), MIDNIGHT_DIR), home: homedir() }),
+    notice: (line) => process.stderr.write(line + '\n'),
+    prompter,
+    sdkWarnings: installSdkNoiseFilters(),
+  });
+  setNoticeSink(host.notice);
+  setSettingsSource(host.settings);
+  setHostPathsSource(host.paths);
+  setPrompter(host.prompter);
   setEngineLoader(loadInstalledEngine);
-  return { sdkWarnings };
+  return host;
 }

@@ -28,7 +28,8 @@ import { needsConfirmation } from '@kuiralabs/midnight-cli-core/lib/command-defi
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
-import { installCliHost, type CliHost } from './lib/cli-host.ts';
+import { createCliHost } from './lib/cli-host.ts';
+import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { installedCommands } from './lib/installed-commands.ts';
 import { skillCore, skillFull } from './lib/mcp/skills.ts';
 
@@ -47,7 +48,7 @@ const SKILL_LEGACY_URI = 'midnight-wallet://skill';
 const confirmationStore = createConfirmationStore();
 
 // What the host gives the tools' runs, once main() has installed it.
-let host: CliHost | null = null;
+let host: Host | null = null;
 
 // ── Server setup ────────────────────────────────────────────
 
@@ -220,7 +221,7 @@ async function main() {
   // Endpoint URLs can carry a Blockfrost project id: no response or log shows it.
   hideProjectIdsInOutput();
   // What the tools' libraries get from their host, as the CLI gives them (no prompter: no terminal here).
-  host = installCliHost();
+  host = createCliHost({ prompter: null });
   // The server runs facades on demand (balance/transfer/etc.). A cold shielded
   // sync would overflow Node's default heap, so re-exec once at startup with
   // more headroom. No-op when launched via `mn --mcp` (already bumped) or when

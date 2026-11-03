@@ -18,9 +18,8 @@ import { migrateOldWallet } from './lib/wallet-paths.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
-import { setPrompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui/terminal-prompter';
-import { installCliHost } from './lib/cli-host.ts';
+import { createCliHost } from './lib/cli-host.ts';
 
 // --mcp: start MCP server instead of CLI (for: npx midnight-wallet-cli --mcp)
 if (process.argv.includes('--mcp')) {
@@ -69,11 +68,9 @@ if (needsWalletSdk) await ensureHeapForSync();
 hideProjectIdsInOutput();
 
 // What the libraries get from their host: the SDK noise filters, notices on
-// stderr, settings from the environment, and the state root ~/.midnight.
-const host = installCliHost();
-
-// Libraries ask their questions (passphrase, approvals) at the terminal.
-setPrompter(createTerminalPrompter());
+// stderr, settings from the environment, the state root ~/.midnight, and the
+// terminal to ask their questions (passphrase, approvals) at.
+const host = createCliHost({ prompter: createTerminalPrompter() });
 
 // Auto-migrate old ~/.midnight/wallet.json → wallets/default.json (silent, one-time)
 migrateOldWallet();
