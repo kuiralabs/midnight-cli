@@ -91,6 +91,14 @@ export function sdkWarningCallsOn(router: SdkWarningRouter): SdkWarningCalls {
   return { run: (run) => run(router.openCall().warnings) };
 }
 
+/**
+ * Runs `work` with a call's SDK warnings: `given`, the caller's, or else those
+ * of a call of its own on `calls` (its host's).
+ */
+export function withCallSdkWarnings<T>(calls: SdkWarningCalls, given: CallSdkWarnings | undefined, work: (warnings: CallSdkWarnings) => Promise<T>): Promise<T> {
+  return given === undefined ? calls.run(work) : work(given);
+}
+
 /** What a transient warning says when the SDK gives no message. */
 const TRANSIENT_FALLBACK_MESSAGE = 'transient error';
 /** The tag a bare-string Wallet.* trace is reported under. */

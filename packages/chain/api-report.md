@@ -270,6 +270,8 @@ export declare function fetchPartialSuccessSegments(indexerHttpUrl: string, txHa
 ## `@kuiralabs/midnight-chain/lib/tx-status`
 
 ```ts
+import { type ProgressListener } from "@kuiralabs/midnight-cli-core/lib/progress";
+export declare const TX_STATUS_WAIT_MS = 120000;
 export type TxReference = {
     hash: string;
 } | {
@@ -300,4 +302,13 @@ export type TransactionStatus = FinalTransaction | UnknownTransaction;
 export declare function parseTxReference(text: string): TxReference;
 export declare function fetchTransactionStatus(indexerHttpUrl: string, ref: TxReference, signal?: AbortSignal): Promise<TransactionStatus>;
 export declare function waitForTransactionStatus(indexerHttpUrl: string, ref: TxReference, timeoutMs: number, signal?: AbortSignal, intervalMs?: number): Promise<TransactionStatus>;
+export interface TransactionStatusOptions {
+    indexer: string;
+    ref: TxReference;
+    wait?: boolean;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    onProgress?: ProgressListener;
+}
+export declare function transactionStatus(options: TransactionStatusOptions): Promise<TransactionStatus>;
 ```

@@ -102,6 +102,7 @@ describe('the accepted flags match the code', () => {
     'resolveNetwork(': ['network', 'node', 'indexer-ws', 'proof-server'],
     'resolveNetworkName(': ['network'],
     'resolvePayingTarget(': ['network', 'node', 'indexer-ws', 'proof-server'],
+    'networkChoiceFromArgs(': ['network', 'node', 'indexer-ws', 'proof-server'],
     // Reads the request's flags, and the network and endpoints.
     'prepareGrant(': ['backup', 'cap', 'expires-in', 'max-coin', 'per-call', 'yes', 'network', 'node', 'indexer-ws', 'proof-server', 'wallet'],
     // The swap request's terms and expiry, and the network and endpoints.
@@ -109,6 +110,7 @@ describe('the accepted flags match the code', () => {
     'prepareTake(': ['give', 'give-token', 'want', 'want-token', 'network', 'node', 'indexer-ws', 'proof-server'],
     'resolveSeedSource(': ['seed', 'wallet'],
     'resolveSeed(': ['seed', 'wallet'],
+    'walletSourceOf(': ['seed', 'wallet'],
     'isVerbose(': ['verbose'],
     // The call's diagnostics are verbose when its --verbose is given: a command that writes them, or hands them to a library, reads it.
     'ctx.diagnostics.': ['verbose'],

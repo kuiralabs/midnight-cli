@@ -1596,6 +1596,21 @@ export declare function getNetworkId(networkIdStr: string): MidnightNetworkId;
 export declare function networkIdForName(name: NetworkName): MidnightNetworkId;
 ```
 
+## `@kuiralabs/midnight-cli-core/lib/network-target`
+
+```ts
+import { type ParsedArgs } from "./argv.ts";
+import { type EndpointOverrides, type NetworkName } from "./network.ts";
+import type { Host } from "./host.ts";
+import type { PayingTarget } from "./payer.ts";
+export interface NetworkChoice extends EndpointOverrides {
+    network?: NetworkName;
+}
+export declare function networkChoiceFromArgs(args: ParsedArgs): NetworkChoice;
+export declare function networkTargetOf(host: Host, choice?: NetworkChoice): PayingTarget;
+export declare function networkTargetUnder(root: string, host: Host, choice: NetworkChoice): PayingTarget;
+```
+
 ## `@kuiralabs/midnight-cli-core/lib/notices`
 
 ```ts
@@ -1653,8 +1668,8 @@ export declare function assertSpendsNoOfferCoin(open: readonly OpenOffer[], spen
 ## `@kuiralabs/midnight-cli-core/lib/payer`
 
 ```ts
-import { type ParsedArgs } from "./argv.ts";
-import { type EndpointOverrides, type NetworkConfig, type NetworkName } from "./network.ts";
+import type { ParsedArgs } from "./argv.ts";
+import type { EndpointOverrides, NetworkConfig, NetworkName } from "./network.ts";
 import type { Spinner } from "../ui/spinner.ts";
 import type { CallSdkWarnings } from "./sdk-warnings.ts";
 import type { WalletSession } from "./wallet-session.ts";
@@ -1710,6 +1725,28 @@ export interface PhaseCallbacks {
     onComplete?: (phase: string, durationMs: number) => void;
 }
 export declare function createPhaseTracker(callbacks?: PhaseCallbacks): PhaseTracker;
+```
+
+## `@kuiralabs/midnight-cli-core/lib/progress`
+
+```ts
+export type ProgressEvent = {
+    readonly kind: "start";
+    readonly message: string;
+} | {
+    readonly kind: "update";
+    readonly message: string;
+} | {
+    readonly kind: "done";
+    readonly message: string;
+};
+export type ProgressListener<Event = ProgressEvent> = (event: Event) => void;
+export interface ProgressSteps {
+    start(message: string): void;
+    update(message: string): void;
+    done(message: string): void;
+}
+export declare function progressSteps(listener: ProgressListener | undefined): ProgressSteps;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/prompter`
@@ -1815,6 +1852,7 @@ export interface SdkWarningCalls {
     run<T>(run: (warnings: CallSdkWarnings) => Promise<T>): Promise<T>;
 }
 export declare function sdkWarningCallsOn(router: SdkWarningRouter): SdkWarningCalls;
+export declare function withCallSdkWarnings<T>(calls: SdkWarningCalls, given: CallSdkWarnings | undefined, work: (warnings: CallSdkWarnings) => Promise<T>): Promise<T>;
 export declare function sdkTransientWarning(value: unknown): {
     tag: string;
     message: string;
@@ -2083,6 +2121,7 @@ export declare function successMessage(msg: string, txHash?: string): string;
 ## `@kuiralabs/midnight-cli-core/ui/spinner`
 
 ```ts
+import type { ProgressEvent } from "../lib/progress.ts";
 export interface Spinner {
     update(message: string): void;
     stop(finalMessage?: string): void;
@@ -2098,6 +2137,11 @@ export interface Progress {
     active(): Spinner | null;
 }
 export declare function createProgress(report?: ProgressReport): Progress;
+export interface SpinnerReporter {
+    report(event: ProgressEvent): void;
+    fail(message?: string): void;
+}
+export declare function spinnerReporter(progress: Progress, silent: boolean): SpinnerReporter;
 export declare function start(message: string, report?: ProgressReport, onEnd?: (spinner: Spinner) => void): Spinner;
 export declare function trackElapsed<T>(spinner: Spinner, baseMessage: string, promise: Promise<T>): Promise<T>;
 export declare function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T>;

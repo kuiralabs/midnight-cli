@@ -7,7 +7,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { parseSeedHex, resolveSeedSource, resolveSeed } from '../lib/seed-resolver.ts';
+import { parseSeedHex, resolveSeedSource, resolveSeed, seedOf, walletSourceOf } from '../lib/seed-resolver.ts';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { mkdirSync } from 'node:fs';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { type WalletPublic, writeSealedWallet } from '../lib/wallet-config.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
@@ -148,5 +152,60 @@ describe('resolveSeedSource', () => {
 
   it('resolveSeed returns just the seed buffer', async () => {
     expect((await resolveSeed(argsFor(['--seed', SEED_A]), stateRootIn(TMP), host)).toString('hex')).toBe(SEED_A);
+  });
+});
+
+describe('seedOf', () => {
+  // A program's host: its own state root, its passphrase given in its settings, no environment read.
+  const programHost = (root: string) => createHost({
+    paths: { stateRoot: root, home: TMP },
+    settings: settingsFromEnvironment({ [PASSPHRASE_ENV]: PASSPHRASE }),
+    engineLoader: loadInstalledEngine,
+  });
+
+  it('gives a seed the program holds as it is, with no wallet file', async () => {
+    const r = await seedOf(programHost(stateRootIn(TMP)), { seed: Buffer.from(SEED_A, 'hex') });
+    expect(r).toEqual({ seed: Buffer.from(SEED_A, 'hex'), walletPath: null, config: null });
+    expect((await seedOf(programHost(stateRootIn(TMP)), { seed: new Uint8Array(64).fill(7) })).seed.length).toBe(64);
+  });
+
+  it.each([0, 16, 33, 65])('refuses a seed of %i bytes as a usage error', async (size) => {
+    await expect(seedOf(programHost(stateRootIn(TMP)), { seed: new Uint8Array(size) })).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('32 or 64 bytes') });
+  });
+
+  it('unlocks a sealed wallet by path through the host\'s passphrase', async () => {
+    const root = stateRootIn(TMP);
+    establishPassphrase(root, PASSPHRASE);
+    const p = writeSealedWallet(join(TMP, 'sealed.json'), { addresses: {} as WalletPublic['addresses'], createdAt: new Date().toISOString() }, { seed: SEED_B }, PASSPHRASE);
+    const r = await seedOf(programHost(root), { wallet: p });
+    expect(r.seed.toString('hex')).toBe(SEED_B);
+    expect(r.walletPath).toBe(p);
+    expect(r.config?.isSealed).toBe(true);
+  });
+
+  it('finds a wallet by name, and the active one, each under its own host\'s state root', async () => {
+    const rootA = join(TMP, 'a');
+    const rootB = join(TMP, 'b');
+    for (const [root, seed] of [[rootA, SEED_A], [rootB, SEED_B]] as const) {
+      mkdirSync(join(root, 'wallets'), { recursive: true });
+      writeFileSync(join(root, 'wallets', 'alice.json'), JSON.stringify({ seed, addresses: {}, createdAt: new Date().toISOString() }));
+      writeFileSync(join(root, 'config.json'), JSON.stringify({ wallet: 'alice' }));
+    }
+    expect((await seedOf(programHost(rootA), { wallet: 'alice' })).seed.toString('hex')).toBe(SEED_A);
+    expect((await seedOf(programHost(rootB), { wallet: 'alice' })).seed.toString('hex')).toBe(SEED_B);
+    expect((await seedOf(programHost(rootB), {})).seed.toString('hex')).toBe(SEED_B);
+  });
+
+  it('refuses a wallet that is not there, with WALLET_NOT_FOUND', async () => {
+    await expect(seedOf(programHost(stateRootIn(TMP)), { wallet: 'nobody' })).rejects.toMatchObject({ code: 'WALLET_NOT_FOUND' });
+  });
+});
+
+describe('walletSourceOf', () => {
+  it('takes --seed over MN_SEED over --wallet, and the active wallet when none is given', () => {
+    expect(walletSourceOf(argsFor(['--seed', SEED_A, '--wallet', 'bob']), { seed: SEED_B })).toEqual({ seed: Buffer.from(SEED_A, 'hex') });
+    expect(walletSourceOf(argsFor(['--wallet', 'bob']), { seed: SEED_B })).toEqual({ seed: Buffer.from(SEED_B, 'hex') });
+    expect(walletSourceOf(argsFor(['--wallet', 'bob']), { seed: undefined })).toEqual({ wallet: 'bob' });
+    expect(walletSourceOf(argsFor([]), { seed: undefined })).toEqual({});
   });
 });
