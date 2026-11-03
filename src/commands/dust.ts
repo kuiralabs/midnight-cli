@@ -31,7 +31,7 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
 
   // Resolve network first — independent of the wallet (--network flag / config / fallback).
   const root = ctx.config.paths.stateRoot;
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root }, ctx.config.settings);
 
   // Apply endpoint overrides: --flag > config > network default
   applyEndpointOverrides(networkConfig, {

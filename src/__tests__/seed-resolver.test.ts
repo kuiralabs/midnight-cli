@@ -11,11 +11,10 @@ import { parseSeedHex, resolveSeedSource, resolveSeed } from '../lib/seed-resolv
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { type WalletPublic, writeSealedWallet } from '../lib/wallet-config.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { testHost } from './helpers/test-host.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
-const host = createHost({ engineLoader: loadInstalledEngine });
+// The host the tests' calls run in (test-host.ts): settings from the test's environment, nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
+const host = testHost();
 
 const PASSPHRASE = 'correct horse battery staple';
 const ORIGINAL_HOME = process.env.HOME;

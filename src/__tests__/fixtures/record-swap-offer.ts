@@ -13,7 +13,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setSettingsSource, settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
+import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { loadInstalledEngine } from '../../lib/installed-engines.ts';
@@ -34,7 +34,6 @@ const networkConfig: NetworkConfig = {
 
 const home = mkdtempSync(join(tmpdir(), 'mn-record-offer-'));
 const root = join(home, '.midnight');
-setSettingsSource(() => settingsFromEnvironment(process.env));
 const host = createHost({ settings: () => settingsFromEnvironment(process.env), paths: { stateRoot: root, home }, engineLoader: loadInstalledEngine });
 
 const engine = await host.engines.for('undeployed');

@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { NoStateRootError } from '@kuiralabs/midnight-cli-core/lib/state-root';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { testHost } from './helpers/test-host.ts';
 import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import configCommand from '@kuiralabs/midnight-cli-core/commands/config';
 import { cliCall } from './helpers/cli-call.ts';
@@ -44,7 +44,7 @@ async function writeEveryOwnersFiles(root: string): Promise<void> {
   setConfigValue('network', 'preview', root);
   setConfigValue('node', 'ws://localhost:29944', root, 'undeployed');
   bindCachesToIndexer('undeployed', 'ws://localhost:28088/api/v4/graphql/ws', root);
-  const host = createHost({ engineLoader: loadInstalledEngine });
+  const host = testHost();
   await createWallet(root, 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), await passphraseForNewSecret(host, root), await host.engines.any());
   fs.mkdirSync(accountRecordsDir('undeployed', 'alice', root), { recursive: true });
 }

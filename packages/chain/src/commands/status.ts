@@ -9,7 +9,7 @@ import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/
 import { DASHBOARD_BASE_URL } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { BlockfrostProjectIdRequiredError, assertEndpointUsable, endpointRefusal } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
 import { isValidNetworkName, resolveNetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { resolveBlockfrostProjectId } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
+import { resolveBlockfrostProjectId, type NetworkSettings } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { header, divider } from '@kuiralabs/midnight-cli-core/ui/format';
 import { bold, dim, teal, green, red, gray } from '@kuiralabs/midnight-cli-core/ui/colors';
@@ -297,10 +297,13 @@ async function probeExplorer(explorerUrl: string | null, signal: AbortSignal): P
 }
 
 /** The live probes of one network; a cancelled call's probes stop at once (their results then mean nothing). */
-async function runLocalProbes(networkName: string, root: string, signal: AbortSignal): Promise<Record<string, ProbeResult>> {
+async function runLocalProbes(networkName: string, root: string, settings: NetworkSettings, signal: AbortSignal): Promise<Record<string, ProbeResult>> {
   if (!isValidNetworkName(networkName)) return {};
 
-  const netConfig = resolveNetworkConfig(networkName as NetworkName, { blockfrostProjectId: resolveBlockfrostProjectId(networkName as NetworkName, root) });
+  const netConfig = resolveNetworkConfig(networkName as NetworkName, {
+    isLocalDetectOff: settings.isLocalDetectOff,
+    blockfrostProjectId: resolveBlockfrostProjectId(networkName as NetworkName, root, settings),
+  });
   const extra = EXTRA_ENDPOINTS[networkName];
   if (!extra) return {};
 
@@ -412,7 +415,7 @@ export default async function statusCommand(args: ParsedArgs, ctx: CallContext):
       return null;
     }),
     // Local probes per network
-    ...targetNetworks.map(name => runLocalProbes(name, ctx.config.paths.stateRoot, ctx.signal)),
+    ...targetNetworks.map(name => runLocalProbes(name, ctx.config.paths.stateRoot, ctx.config.settings, ctx.signal)),
   ]);
 
   // Cancelled: the probes stopped early, so what they found says nothing about the network.
@@ -523,7 +526,7 @@ export default async function statusCommand(args: ParsedArgs, ctx: CallContext):
             fetchJson<StatusJson>('/api/status', ctx.signal),
             fetchJson<IssuesJson>('/api/issues', ctx.signal),
           ]).catch(() => null),
-          ...targetNetworks.map(name => runLocalProbes(name, ctx.config.paths.stateRoot, ctx.signal)),
+          ...targetNetworks.map(name => runLocalProbes(name, ctx.config.paths.stateRoot, ctx.config.settings, ctx.signal)),
         ]);
         // Watching ended while this refresh ran: nothing to show.
         if (ctx.signal.aborted) return;

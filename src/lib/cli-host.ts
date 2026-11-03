@@ -1,6 +1,5 @@
-// A shell concern: what the CLI and the MCP server, as hosts, give the
-// libraries at start. Libraries never set these
-// themselves; a consumer sets its own.
+// A shell concern: the host the CLI and the MCP server each build at start,
+// which their calls pass to the libraries. A consumer builds its own.
 //   - the filters for the SDK's noise, acting while a call listens, and the
 //     calls it runs, whose SDK warnings go to the call that raised them;
 //   - a notice sink: stderr;
@@ -12,19 +11,15 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { installSdkNoiseFilters } from './sdk-noise.ts';
-import { setSettingsSource, settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
+import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
 import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { loadInstalledEngine } from './installed-engines.ts';
 
-/**
- * The CLI's host, or the MCP server's (`prompter` null: no terminal there).
- * Until every library takes the host's settings, the module-level settings
- * source they still read is set from it.
- */
+/** The CLI's host, or the MCP server's (`prompter` null: no terminal there). */
 export function createCliHost({ prompter }: { prompter: Prompter | null }): Host {
-  const host = createHost({
+  return createHost({
     settings: () => settingsFromEnvironment(process.env),
     paths: () => ({ stateRoot: join(homedir(), MIDNIGHT_DIR), home: homedir() }),
     notice: (line) => process.stderr.write(line + '\n'),
@@ -32,6 +27,4 @@ export function createCliHost({ prompter }: { prompter: Prompter | null }): Host
     sdkWarnings: installSdkNoiseFilters(),
     engineLoader: loadInstalledEngine,
   });
-  setSettingsSource(host.settings);
-  return host;
 }

@@ -9,7 +9,7 @@ import { createWallet, walletFilePath, walletSecretFrom } from '../wallet-create
 import { passphraseForNewSecret } from '../passphrase.ts';
 import { sdkSetOf } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { checkBalance } from '@kuiralabs/midnight-chain/lib/balance-subscription';
-import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
+import { resolveNetwork, type NetworkSettings } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
@@ -70,7 +70,7 @@ function walletSteps(root: string, host: UnlockHost, network: NetworkConfig, sdk
  */
 export async function provisionDevWallets(opts: ProvisionOptions): Promise<ProvisionedWallet[]> {
   const { root } = opts;
-  const steps = 'steps' in opts ? opts.steps : walletSteps(root, opts.host, undeployedNetwork(root), opts.sdkWarnings);
+  const steps = 'steps' in opts ? opts.steps : walletSteps(root, opts.host, undeployedNetwork(root, opts.host.settings()), opts.sdkWarnings);
   const results: ProvisionedWallet[] = [];
   const created: string[] = [];
 
@@ -139,12 +139,12 @@ function walletExists(root: string, name: string): boolean {
   return existsSync(walletFilePath(root, name));
 }
 
-/** The local network, with any endpoints saved for it, as the wallet commands resolve it. */
-function undeployedNetwork(root: string): NetworkConfig {
+/** The local network, with any endpoints saved for it, as the wallet commands resolve it with the host's settings. */
+function undeployedNetwork(root: string, settings: NetworkSettings): NetworkConfig {
   return resolveNetwork({
     args: { command: 'dev', subcommand: undefined, positionals: [], flags: { network: 'undeployed' } },
     configDir: root,
-  }).config;
+  }, settings).config;
 }
 
 async function generateWallet(root: string, host: UnlockHost, name: string, signal?: AbortSignal): Promise<void> {

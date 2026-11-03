@@ -550,7 +550,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
         const { config: networkConfig } = resolveNetwork({
           args: { command: 'test', subcommand: 'run', positionals: [], flags: { network } },
           configDir: ctx.config.paths.stateRoot,
-        });
+        }, ctx.config.settings);
 
         // mn serve should already be started by the prep step (mn-serve)
         // Use the serve port from the prep context if available, otherwise default

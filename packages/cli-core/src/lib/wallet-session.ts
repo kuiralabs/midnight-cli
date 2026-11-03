@@ -14,7 +14,8 @@
 import { sdkSetOf, type DAppConnector, type HostEngines, type OpenedConnector, type TransactionDetail } from './engine.ts';
 import type { NetworkConfig, NetworkName } from './network.ts';
 import type { NoticeSink } from './notices.ts';
-import { resolveNetwork } from './resolve-network.ts';
+import { resolveNetwork, type NetworkSettings } from './resolve-network.ts';
+import { settingsFromEnvironment } from './settings.ts';
 import { shieldedSyncEnabled } from './shielded-policy.ts';
 import { throwIfCancelled } from './errors.ts';
 import { isColdStartRace } from './sdk-errors.ts';
@@ -230,6 +231,8 @@ export interface OpenWalletSessionOptions {
   engines: HostEngines;
   /** The network's endpoints; when absent, as a command without endpoint flags resolves them (the saved config, then the defaults). */
   networkConfig?: NetworkConfig;
+  /** The host's settings, read only to resolve the endpoints when `networkConfig` is absent (local stack detection, the Blockfrost ids); every one unset when not given. */
+  settings?: NetworkSettings;
   /** Whether to sync the shielded wallet; off where the network has no shielded faucet, unless forced. */
   forceShielded?: boolean;
   /** How long to wait for the wallet's Dust once synced, in milliseconds; the connector's default when absent. */
@@ -242,14 +245,13 @@ export interface OpenWalletSessionOptions {
 
 /**
  * Opens a seed's wallet on a network: synced, its Dust ready, with the
- * network's engine from `options.engines`. The host must have installed its
- * settings first, as the CLI does at start.
+ * network's engine from `options.engines`.
  */
 export async function openWalletSession(options: OpenWalletSessionOptions): Promise<WalletSession> {
   const { seed, network, root, signal } = options;
   throwIfCancelled(signal);
   const networkConfig = options.networkConfig
-    ?? resolveNetwork({ args: { command: 'wallet-session', subcommand: '', positionals: [], flags: { network } }, configDir: root }).config;
+    ?? resolveNetwork({ args: { command: 'wallet-session', subcommand: '', positionals: [], flags: { network } }, configDir: root }, options.settings ?? settingsFromEnvironment({})).config;
   const engine = await options.engines.load(sdkSetOf(network, root));
   const open = () => engine.wallet.openConnector({
     seed,

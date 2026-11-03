@@ -1,10 +1,13 @@
 // Types for what scripts/check-process-safety.mjs exports when imported.
 export const ALLOWED: Record<string, string[]>;
 export const ALLOWED_STATE: Record<string, Record<string, string>>;
-export function moduleStateDeclarations(code: string): { line: number; name: string }[];
+export const ALLOWED_SETTERS: Record<string, Record<string, string>>;
+export function moduleStateDeclarations(code: string): { line: number; name: string; kind: 'let' | 'var' | 'const' }[];
+export function exportedSetters(code: string): { line: number; name: string }[];
 export function findViolations(
   files?: string[],
   allowed?: Record<string, string[]>,
   allowedState?: Record<string, Record<string, string>>,
   src?: string,
+  allowedSetters?: Record<string, Record<string, string>>,
 ): { file: string; line: number; rule: string; name?: string }[];

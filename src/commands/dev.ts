@@ -54,7 +54,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
   // ── Phase 2: ensure localnet running ──────────────────────
   const localnetSpinner = ctx.progress.start('Checking localnet...');
   try {
-    const result = await ensureLocalnetRunning(ctx.config.paths.stateRoot, (msg) => localnetSpinner.update(msg));
+    const result = await ensureLocalnetRunning(ctx.config.paths.stateRoot, ctx.config.settings, (msg) => localnetSpinner.update(msg));
     const stateLabel = {
       'already-running': 'Ledger-9 stack reachable',
     }[result.state];

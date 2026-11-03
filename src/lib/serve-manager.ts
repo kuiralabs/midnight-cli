@@ -51,7 +51,7 @@ export function resolveServeTarget(options: ServeManagerOptions): { networkName:
       flags: { ...(options.network ? { network: options.network } : {}), ...endpointFlags(options.endpoints ?? {}) },
     },
     configDir: options.root,
-  });
+  }, options.host.settings());
   applyEndpointOverrides(networkConfig, options.endpoints ?? {}, networkName, options.root);
   return { networkName, networkConfig };
 }

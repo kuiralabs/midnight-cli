@@ -13,7 +13,7 @@ import { throwIfCancelled, UsageError } from '@kuiralabs/midnight-cli-core/lib/e
 import { openSecret, sealSecret } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { defineHostSlot, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { PASSPHRASE_ENV, settings } from '@kuiralabs/midnight-cli-core/lib/settings';
+import { PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core/lib/settings';
 
 /** The variable a non-interactive run sets the passphrase in (named in settings.ts). */
 export { PASSPHRASE_ENV };
@@ -34,8 +34,9 @@ export class NoPassphraseError extends UsageError {
   }
 }
 
-/** Where the passphrase is read from besides the prompter: the environment (the settings', unless given). */
+/** Where the passphrase is read from besides the prompter. */
 export interface PassphraseSource {
+  /** The environment to read MN_PASSPHRASE from: given, it stands in for the host's settings; readPassphrase reads none without it. */
   env?: Record<string, string | undefined>;
   /** Ask twice and refuse two that differ: for setting the passphrase. */
   confirm?: boolean;
@@ -51,9 +52,9 @@ const ask = async (prompter: Prompter, question: string): Promise<string> => {
   return line;
 };
 
-/** The passphrase: from MN_PASSPHRASE, else asked for through `prompter` (at the terminal) when it can ask. */
+/** The passphrase: from MN_PASSPHRASE in `source.env`, else asked for through `prompter` (at the terminal) when it can ask. */
 export async function readPassphrase(prompter: Prompter | null, source: PassphraseSource = {}): Promise<string> {
-  const fromEnv = source.env !== undefined ? source.env[PASSPHRASE_ENV] : settings().passphrase;
+  const fromEnv = source.env?.[PASSPHRASE_ENV];
   if (fromEnv !== undefined && fromEnv.length > 0) return fromEnv;
   if (prompter === null || !prompter.isInteractive()) throw new NoPassphraseError();
   const passphrase = await ask(prompter, source.confirm ? 'New passphrase for mn: ' : 'Passphrase for mn: ');
@@ -87,24 +88,30 @@ export function checkPassphrase(root: string, passphrase: string): void {
 /** The shortest passphrase mn accepts when one is set. */
 export const MIN_PASSPHRASE_LENGTH = 12;
 
-/** What a passphrase is had through: the host's prompter, and the host's record of the passphrases it has unlocked. */
-export type PassphraseHost = Pick<Host, 'prompter' | 'slot'>;
+/** What a passphrase is had through: the host's settings (MN_PASSPHRASE), its prompter, and its record of the passphrases it has unlocked. */
+export type PassphraseHost = Pick<Host, 'settings' | 'prompter' | 'slot'>;
+
+/** `source`, reading MN_PASSPHRASE from the host's settings unless it gives an environment of its own. */
+const withHostPassphrase = (host: PassphraseHost, source: PassphraseSource): PassphraseSource =>
+  source.env !== undefined ? source : { ...source, env: { [PASSPHRASE_ENV]: host.settings().passphrase } };
 
 // The passphrase each host has unlocked, by state root: one prompt per run.
 const UNLOCKED = defineHostSlot('passphrase.unlocked', () => new Map<string, string>());
 
 /**
  * mn's passphrase, read and checked against the one set; asked for once per
- * run of `host`. One already checked is taken again only when the environment
- * names no other: a changed MN_PASSPHRASE is checked afresh.
+ * run of `host`. One already checked is taken again only when the host's
+ * settings (or `source.env`) name no other: a changed MN_PASSPHRASE is
+ * checked afresh.
  */
 export async function unlockPassphrase(host: PassphraseHost, root: string, source: PassphraseSource = {}): Promise<string> {
   const unlocked = host.slot(UNLOCKED);
   const known = unlocked.get(root);
-  const fromEnv = source.env !== undefined ? source.env[PASSPHRASE_ENV] : settings().passphrase;
+  const read = withHostPassphrase(host, source);
+  const fromEnv = read.env?.[PASSPHRASE_ENV];
   if (known !== undefined && (fromEnv === undefined || fromEnv === '' || fromEnv === known)) return known;
   if (!isPassphraseSet(root)) throw new UsageError('mn has no passphrase yet. Set one with: midnight wallet protect');
-  const passphrase = await readPassphrase(host.prompter, source);
+  const passphrase = await readPassphrase(host.prompter, read);
   checkPassphrase(root, passphrase);
   unlocked.set(root, passphrase);
   return passphrase;
@@ -116,7 +123,7 @@ export async function unlockPassphrase(host: PassphraseHost, root: string, sourc
  */
 export async function passphraseForNewSecret(host: PassphraseHost, root: string, source: PassphraseSource = {}): Promise<string> {
   if (isPassphraseSet(root)) return unlockPassphrase(host, root, source);
-  const passphrase = await readPassphrase(host.prompter, { ...source, confirm: true });
+  const passphrase = await readPassphrase(host.prompter, { ...withHostPassphrase(host, source), confirm: true });
   if ([...passphrase].length < MIN_PASSPHRASE_LENGTH) {
     throw new UsageError(`mn's passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters.`);
   }

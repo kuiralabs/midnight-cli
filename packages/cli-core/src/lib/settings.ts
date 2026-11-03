@@ -1,8 +1,8 @@
 // What the environment says, as settings libraries read. The environment
-// variables are the shell's public contract: the shell gives the
-// libraries a source of settings, read from them as each is needed, and a
-// consumer gives its own. A library never reads the environment itself; with
-// no source, every setting is unset.
+// variables are the shell's public contract: the shell's host reads its
+// settings from them as each is needed, and a consumer's host gives its own.
+// A library never reads the environment itself: it takes the settings from
+// its call's host, or as a parameter.
 
 /** The environment variables that become settings: their names, in one place. */
 export const PASSPHRASE_ENV = 'MN_PASSPHRASE';
@@ -45,19 +45,4 @@ export function settingsFromEnvironment(env: Record<string, string | undefined>)
     blockfrostProjectId: env[BLOCKFROST_PROJECT_ID_ENV],
     sharedBlockfrostProjectId: env[SHARED_BLOCKFROST_PROJECT_ID_ENV],
   };
-}
-
-/** Every setting unset: what a library sees with no source. */
-const UNSET: Settings = settingsFromEnvironment({});
-
-let source: (() => Settings) | null = null;
-
-/** Where settings come from from now on; null for none. */
-export function setSettingsSource(next: (() => Settings) | null): void {
-  source = next;
-}
-
-/** The settings now. */
-export function settings(): Settings {
-  return source?.() ?? UNSET;
 }
