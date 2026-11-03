@@ -9,20 +9,23 @@ export declare const chainCodes: readonly [
     {
         readonly code: "UNSUPPORTED_LEDGER";
         readonly exitCode: 4;
-        readonly summary: "The chain is on ledger 8; this build supports ledger 9 only.";
-        readonly recovery: "Use midnight-wallet-cli 0.5.x for that network.";
+        readonly order: 150;
+        readonly summary: "The network is on ledger 8; this build supports ledger 9 only.";
+        readonly recovery: "Tell the user: this network needs midnight-wallet-cli 0.5.x. Don't retry.";
     },
     {
         readonly code: "LOCAL_STACK_UNREACHABLE";
         readonly exitCode: 4;
+        readonly order: 170;
         readonly summary: "No ledger-9 stack answers at the configured endpoints.";
-        readonly recovery: "Start one, or fix the endpoints.";
+        readonly recovery: "Ask the user to start their stack or fix the configured node / indexer-ws / proof-server endpoints.";
     },
     {
         readonly code: "CHAIN_CLOCK_BEHIND";
         readonly exitCode: 4;
-        readonly summary: "The chain's clock is behind this computer's (a local chain after the machine slept), so Dust estimates don't hold.";
-        readonly recovery: "Wait for it to catch up, or restart the local chain.";
+        readonly order: 140;
+        readonly summary: "The chain's clock lags this computer's (a local chain after sleep), so Dust estimates don't hold.";
+        readonly recovery: "Wait for it to catch up, or ask the user to restart the local chain.";
     }
 ];
 ```
@@ -30,7 +33,7 @@ export declare const chainCodes: readonly [
 ## `@kuiralabs/midnight-chain/commands/chain.guidance`
 
 ```ts
-import type { PackageGuidance } from "@kuiralabs/midnight-cli-core/lib/agent-guidance";
+import { type PackageGuidance } from "@kuiralabs/midnight-cli-core/lib/agent-guidance";
 export declare const chainGuidance: PackageGuidance;
 ```
 

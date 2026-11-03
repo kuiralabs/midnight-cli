@@ -11,6 +11,7 @@ import {
 } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { ERROR_CODES, EXIT_NETWORK_ERROR, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 const ID = 'nightpreprodAbCdEfGhIjKlMnOpQrStUv0123';
 const WITH_ID = blockfrostEndpoints('preprod', ID);
@@ -144,7 +145,7 @@ describe('the errors\' codes', () => {
       [new EndpointShutDownError('https://indexer.preprod.midnight.network/api/v4/graphql'), ERROR_CODES.ENDPOINT_SHUT_DOWN],
     ];
     for (const [error, errorCode] of cases) {
-      expect(classifyError(error)).toEqual({ exitCode: EXIT_NETWORK_ERROR, errorCode });
+      expect(classifyError(error, installedCommands)).toEqual({ exitCode: EXIT_NETWORK_ERROR, errorCode });
     }
   });
 });

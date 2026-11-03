@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { ChainClockBehindError, CHAIN_CLOCK_TOLERANCE_MS, assertChainClockCurrent, fetchChainTime } from '@kuiralabs/midnight-chain/lib/chain-clock';
 import { classifyError, EXIT_NETWORK_ERROR } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { installedCommands } from '../lib/installed-commands.ts';
 import { startLocalIndexer, type LocalIndexer } from './helpers/local-indexer.ts';
 
 const LAGGING_BLOCK = 1_791_116_964_002; // 2026-10-04T12:29:24.002Z
@@ -36,7 +37,7 @@ describe('assertChainClockCurrent', () => {
       + '2026-10-04T12:29:24.002Z). Dust is generated in chain time, so a registration now would be refused for an unpaid fee. '
       + 'A local chain falls behind like this after the machine sleeps and catches up as it produces blocks: run midnight dust '
       + 'register again once it has, or restart the local chain.');
-    expect(classifyError(err)).toEqual({ exitCode: EXIT_NETWORK_ERROR, errorCode: 'CHAIN_CLOCK_BEHIND' });
+    expect(classifyError(err, installedCommands)).toEqual({ exitCode: EXIT_NETWORK_ERROR, errorCode: 'CHAIN_CLOCK_BEHIND' });
   });
 
   it('accepts a chain within the tolerance, or ahead', () => {

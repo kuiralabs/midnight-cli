@@ -7,6 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { installedCommands } from '../lib/installed-commands.ts';
 import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
@@ -42,7 +43,7 @@ describe('a contract for another compact runtime', () => {
     expect((refused as Error).message).toBe(
       'counter was compiled by compactc 0.30.0 for compact-runtime 0.16.0, but undeployed runs contracts on compact-runtime 0.20.0.\nRecompile it with compactc 0.35.',
     );
-    expect(classifyError(refused as Error).errorCode).toBe('INVALID_ARGS');
+    expect(classifyError(refused as Error, installedCommands).errorCode).toBe('INVALID_ARGS');
   });
 
   it('lets through one compiled for the engine\'s runtime, and one whose compiler recorded none', async () => {

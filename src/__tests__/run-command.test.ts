@@ -3,6 +3,7 @@ import { captureCommand } from '../lib/run-command.ts';
 import { SecondResultError, type CommandHandler } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { CancelledError, CommandFailedError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { installedCommands } from '../lib/installed-commands.ts';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import { parseArgs, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
@@ -58,7 +59,7 @@ describe('captureCommand', () => {
     expect(err).toBeInstanceOf(CommandFailedError);
     expect((err as CommandFailedError).exitCode).toBe(1);
     expect((err as CommandFailedError).result).toStrictEqual({ overall: 'fail' });
-    expect(classifyError(err as Error).exitCode).toBe(1);
+    expect(classifyError(err as Error, installedCommands).exitCode).toBe(1);
 
     const passing: CommandHandler = async (_args, ctx) => { ctx.output.result({ overall: 'pass' }); return { exitCode: 0 }; };
     expect(await captureCommand(passing, parseArgs(['test', 'run']), ownCall())).toStrictEqual({ overall: 'pass' });
@@ -239,7 +240,7 @@ describe('captureCommand', () => {
       let ran = false;
       const err = await captureCommand(async () => { ran = true; }, noArgs(), ownCall({ signal: controller.signal })).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(CancelledError);
-      expect(classifyError(err as Error).errorCode).toBe('CANCELLED');
+      expect(classifyError(err as Error, installedCommands).errorCode).toBe('CANCELLED');
       expect(ran).toBe(false);
     });
   });

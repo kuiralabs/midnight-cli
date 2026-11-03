@@ -7,10 +7,12 @@ import { Brand, Effect } from 'effect';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import { NodeClientError } from '@midnightntwrk/wallet-sdk/node-client/effect';
 import { dustShortfallOf, isColdStartRace, isDustShortage, mnCodeOf, nodeRefusalOf, refusalCodeOf, toEngineError, withDustShortfall, withEngineCode, withNodeReason } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
-import { DustRequiredError, InsufficientBalanceError, ProofTimeoutError, StaleWalletStateError, TransactionRefusedError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { classifyByCode, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { DustRequiredError, InsufficientBalanceError, NetworkError, ProofFailureError, ProofTimeoutError, StaleWalletStateError, SyncTimeoutError, TransactionRefusedError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { createApiError } from '@kuiralabs/midnight-cli-core/lib/connector-api';
 import { installedCommands } from '../lib/installed-commands.ts';
+import { isTransportFailure } from '@kuiralabs/midnight-cli-core/lib/transport-failure';
+import { closedPort } from './helpers/closed-port.ts';
 
 /** wallet-sdk 2.0's dust InsufficientFundsError: tagged, with the token it could not balance. */
 function sdkInsufficientFunds(tokenType: string): Error {
@@ -167,22 +169,21 @@ describe("the node's reason for refusing a transaction", () => {
     expect(reported).toBeInstanceOf(TransactionRefusedError);
     expect(reported.message).toBe('The node refused the transaction: 1010: Invalid Transaction: Custom error: 170');
     expect(reported.cause).toBe(thrown);
-    expect(classifyError(reported)).toEqual({ exitCode: 6, errorCode: 'INVALID_DUST_PROOF' });
-    expect(classifyByCode(reported, installedCommands)).toEqual({ exitCode: 6, errorCode: 'INVALID_DUST_PROOF' });
-    // Unexplained, the same error was UNKNOWN.
-    expect(classifyError(thrown).errorCode).toBe('UNKNOWN');
+    expect(classifyError(reported, installedCommands)).toEqual({ exitCode: 6, errorCode: 'INVALID_DUST_PROOF' });
+    // Unexplained, the same error is UNKNOWN.
+    expect(classifyError(thrown, installedCommands).errorCode).toBe('UNKNOWN');
   });
 
   it("is the node client's own words when the node gave none", async () => {
     const thrown = await caught(refusal(new NodeClientError.TransactionInvalidError({ message: 'Transaction is invalid and was rejected by the node', txData: TX_DATA })));
     expect(nodeRefusalOf(thrown)).toBe('Transaction is invalid and was rejected by the node');
-    expect(classifyError(withNodeReason(thrown))).toEqual({ exitCode: 6, errorCode: 'TX_REJECTED' });
+    expect(classifyError(withNodeReason(thrown), installedCommands)).toEqual({ exitCode: 6, errorCode: 'TX_REJECTED' });
   });
 
   it('classifies a reason no rule knows as TX_REJECTED, with the reason in the message', async () => {
     const reported = withNodeReason(await caught(refusal(new NodeClientError.SubmissionError({ message: 'Transaction submission failed', txData: TX_DATA, cause: new Error('1010: Invalid Transaction: Custom error: 199') }))));
     expect(reported.message).toContain('Custom error: 199');
-    expect(classifyError(reported)).toEqual({ exitCode: 6, errorCode: 'TX_REJECTED' });
+    expect(classifyError(reported, installedCommands)).toEqual({ exitCode: 6, errorCode: 'TX_REJECTED' });
   });
 
   it('leaves any other error as it is, and a submission error with nothing under its wrapper', async () => {
@@ -218,7 +219,7 @@ describe("the engine contract's reading of a failure", () => {
     // The ledger's words when a saved state is resumed on an indexer that numbers its events differently.
     const resumed = toEngineError(new Error('Failed applying dust events: commitment inserted non-linearly')) as Error;
     expect(resumed).toBeInstanceOf(StaleWalletStateError);
-    expect(classifyByCode(resumed, installedCommands)).toStrictEqual({ errorCode: 'STALE_CACHE', exitCode: 6 });
+    expect(classifyError(resumed, installedCommands)).toStrictEqual({ errorCode: 'STALE_CACHE', exitCode: 6 });
   });
 
   it("leaves an error that carries its own code, a refusal already reported, and one it doesn't name, as they are", () => {
@@ -229,6 +230,26 @@ describe("the engine contract's reading of a failure", () => {
     const unnamed = new Error('Something unexpected happened');
     expect(toEngineError(unnamed)).toBe(unnamed);
     expect(toEngineError('a string')).toBe('a string');
+  });
+
+  it('reports a connection the SDK could not make as a NetworkError, last among what it names', async () => {
+    // A socket's own error carries the transport's code, not mn's.
+    const socket = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8088'), { code: 'ECONNREFUSED' });
+    const fromSocket = toEngineError(socket) as Error;
+    expect(fromSocket).toBeInstanceOf(NetworkError);
+    expect(fromSocket.message).toBe(socket.message);
+    expect(fromSocket.cause).toBe(socket);
+    // fetch says only "fetch failed"; what failed is its cause (ECONNREFUSED).
+    const fetched = await fetch(`http://127.0.0.1:${await closedPort()}/`).then(() => { throw new Error('expected fetch to fail'); }, (e: Error) => e);
+    expect(fetched.message).toBe('fetch failed');
+    expect(isTransportFailure(Object.assign(new Error('the SDK said no more'), { cause: fetched }))).toBe(true);
+    expect(classifyError(toEngineError(fetched) as Error, installedCommands)).toStrictEqual({ errorCode: 'NETWORK_ERROR', exitCode: 4 });
+    expect(classifyError(toEngineError(new Error('WebSocket connection to ws://127.0.0.1:8088 failed')) as Error, installedCommands)).toStrictEqual({ errorCode: 'NETWORK_ERROR', exitCode: 4 });
+    // A proof server out of reach is a failed proof, as the SDK says first.
+    expect(toEngineError(new Error('Failed to prove transaction', { cause: socket }))).toBeInstanceOf(ProofFailureError);
+    // An error with a code of its own keeps it, whatever its cause.
+    const own = new SyncTimeoutError('Wallet sync timed out', { cause: socket });
+    expect(toEngineError(own)).toBe(own);
   });
 
   it("reports a connector error marked with mn's code as the typed error for it, in its own words", () => {

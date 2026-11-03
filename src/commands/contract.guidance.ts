@@ -2,18 +2,11 @@
 // its pieces of `help --agent` and of the two skills, each naming its section
 // and its place there, and its tools' rows in the manual's tools table.
 
-import type { PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { codeGuidancePieces, type PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { contractCodes } from './contract.codes.ts';
 
 export const contractGuidance: PackageGuidance = {
   pieces: [
-    {
-      text: 'agent-manual',
-      section: 'error-codes',
-      order: 95,
-      body: `  NO_NODE_RUNTIME         1     Contract scripts run under Node.js and none
-                                is on PATH: install Node.js 22 or later
-`,
-    },
     {
       text: 'skill-full',
       section: 'what-you-can-do',
@@ -116,6 +109,8 @@ Plain strings, booleans, fractional numbers, and \`null\` pass through unchanged
 
 `,
     },
+    // Its error codes' rows in the manual and the full skill, from their definitions.
+    ...codeGuidancePieces(contractCodes),
   ],
   toolsTable: [
     { tool: 'midnight_inspect_cost', group: 'balance-info', order: 50, description: ['Display block cost limits'] },

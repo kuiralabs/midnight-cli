@@ -1,4 +1,3 @@
-import { CANCELLED_MESSAGE, isUsageError } from './errors.ts';
 import type { CodeRegistry } from './error-codes.ts';
 // Structured exit codes and error classification for CLI
 // Used by both JSON mode and non-JSON error reporting
@@ -88,21 +87,6 @@ export const ERROR_CODES = {
   UNKNOWN: 'UNKNOWN',
 } as const;
 
-/** Errors the caller fixes (mn's passphrase, an offer that isn't the agreed one), classified by their code before any usage error. */
-const CALLER_ERROR_CODES: ReadonlySet<string> = new Set([ERROR_CODES.WRONG_PASSPHRASE, ERROR_CODES.PASSPHRASE_REQUIRED, ERROR_CODES.NOT_AN_OFFER, ERROR_CODES.TERMS_MISMATCH, ERROR_CODES.OFFER_EXPIRED, ERROR_CODES.OFFER_COINS_IN_USE]);
-
-/** Typed setup errors that carry their own `code`; classified by it, not by message text. */
-const SETUP_ERROR_CODES: ReadonlySet<string> = new Set([
-  ERROR_CODES.UNSUPPORTED_LEDGER,
-  ERROR_CODES.LOCALNET_UNAVAILABLE,
-  ERROR_CODES.LOCAL_STACK_UNREACHABLE,
-  ERROR_CODES.AMBIGUOUS_LOCAL_STACKS,
-  ERROR_CODES.BLOCKFROST_PROJECT_ID_REQUIRED,
-  ERROR_CODES.BLOCKFROST_PROJECT_ID_REJECTED,
-  ERROR_CODES.BLOCKFROST_LIMIT_REACHED,
-  ERROR_CODES.ENDPOINT_SHUT_DOWN,
-]);
-
 /** @deprecated A code is a string a package defines; see ERROR_CODES. */
 export type ErrorCode = typeof ERROR_CODES[keyof typeof ERROR_CODES];
 
@@ -113,172 +97,22 @@ interface ClassifiedError {
 }
 
 /**
- * The error's code and the exit code it ends the CLI with. An error that
- * carries a code `codes` defines is classified by it; any other falls back to
- * the rules below, which read its message.
+ * The error's code and the exit code it ends the CLI with: the definition of
+ * the code it carries, among those `codes` defines (the installed packages',
+ * a plugin's included); UNKNOWN (exit 1) for an error that carries none of
+ * them. Only its `code` is read, never its message.
  */
-export function classifyError(err: Error, codes?: CodeRegistry): ClassifiedError {
-  return (codes === undefined ? undefined : byCode(err, codes)) ?? legacyByMessage(err);
-}
-
-/**
- * The classification by the error's code alone: UNKNOWN for an error that
- * carries no code `codes` defines, whatever its message says. Tests use it to
- * check that a typed error reports its code without the message rules.
- */
-export function classifyByCode(err: Error, codes: CodeRegistry): ClassifiedError {
-  return byCode(err, codes) ?? { exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.UNKNOWN };
-}
-
-/** The definition of the code `err` carries, as an exit code and code; undefined when `codes` defines none. */
-function byCode(err: Error, codes: CodeRegistry): ClassifiedError | undefined {
+export function classifyError(err: Error, codes: CodeRegistry): ClassifiedError {
   const code = (err as { code?: unknown }).code;
   const defined = typeof code === 'string' ? codes.code(code) : undefined;
-  return defined === undefined ? undefined : { exitCode: defined.exitCode, errorCode: defined.code };
+  return defined === undefined
+    ? { exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.UNKNOWN }
+    : { exitCode: defined.exitCode, errorCode: defined.code };
 }
 
-/**
- * The classification before codes were owned per package, unchanged: the
- * typed codes it knew, then patterns over the message from the CLI and the
- * Midnight SDK. Order matters: more specific patterns are checked before
- * broader ones.
- */
-function legacyByMessage(err: Error): ClassifiedError {
-  // A usage error is the caller's to fix, whatever its text (the CLI and MCP agree on this).
-  // (Tested through `unknown`: UsageError has Error's shape, so narrowing `err` itself would leave `never`.)
-  const code = (err as { code?: unknown }).code;
-  if (typeof code === 'string' && CALLER_ERROR_CODES.has(code)) {
-    return { exitCode: EXIT_INVALID_ARGS, errorCode: code as ErrorCode };
-  }
-  if (isUsageError(err as unknown)) {
-    return { exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.INVALID_ARGS };
-  }
-  if (typeof code === 'string' && SETUP_ERROR_CODES.has(code)) {
-    return { exitCode: EXIT_NETWORK_ERROR, errorCode: code as ErrorCode };
-  }
-  if (code === ERROR_CODES.UNSUPPORTED_NODE) {
-    return { exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.UNSUPPORTED_NODE };
-  }
-  if (code === ERROR_CODES.MIXED_SDK_LAYOUT) {
-    return { exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.MIXED_SDK_LAYOUT };
-  }
-  if (code === ERROR_CODES.OTHER_SDK_SET) {
-    return { exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.OTHER_SDK_SET };
-  }
-  if (code === ERROR_CODES.NO_ACCOUNT) {
-    return { exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.NO_ACCOUNT };
-  }
-  if (code === ERROR_CODES.DUST_GENERATING) {
-    return { exitCode: EXIT_INSUFFICIENT_BALANCE, errorCode: ERROR_CODES.DUST_GENERATING };
-  }
-  if (code === ERROR_CODES.CANCELLED) {
-    return { exitCode: EXIT_CANCELLED, errorCode: ERROR_CODES.CANCELLED };
-  }
-  if (code === ERROR_CODES.CHAIN_CLOCK_BEHIND) {
-    return { exitCode: EXIT_NETWORK_ERROR, errorCode: ERROR_CODES.CHAIN_CLOCK_BEHIND };
-  }
-
-  const msg = (err.message ?? '').toLowerCase();
-
-  // Cancelled by user (SIGINT / AbortController)
-  if (msg.includes(CANCELLED_MESSAGE.toLowerCase()) || msg.includes('operation aborted') || msg === 'cancelled' || msg === 'aborted') {
-    return { exitCode: EXIT_CANCELLED, errorCode: ERROR_CODES.CANCELLED };
-  }
-
-  // Wallet file not found
-  if (msg.includes('wallet file not found') || (msg.includes('wallet') && msg.includes('not found'))) {
-    return { exitCode: EXIT_WALLET_NOT_FOUND, errorCode: ERROR_CODES.WALLET_NOT_FOUND };
-  }
-
-  // Invalid arguments / usage errors
-  if (
-    msg.includes('missing required flag') ||
-    msg.includes('missing amount') ||
-    msg.includes('missing recipient') ||
-    msg.includes('missing config key') ||
-    msg.includes('missing or invalid subcommand') ||
-    msg.includes('unknown command') ||
-    msg.includes('cannot specify both') ||
-    msg.includes('invalid bip-39') ||
-    msg.includes('seed must be') ||
-    msg.includes('key index must be') ||
-    msg.includes('shielded balances are private') ||
-    msg.includes('shielded is unavailable') ||
-    msg.includes('belongs to') && msg.includes('--network is') ||
-    msg.includes('usage:')
-  ) {
-    return { exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.INVALID_ARGS };
-  }
-
-  // Proof timeout (before general timeout/dust checks)
-  if (msg.includes('proof') && msg.includes('timeout')) {
-    return { exitCode: EXIT_TX_REJECTED, errorCode: ERROR_CODES.PROOF_TIMEOUT };
-  }
-
-  // Stale UTXO — match the specific error code from the Midnight node
-  if (msg.includes('stale utxo') || msg.includes('error code 115') || msg.includes('custom error: 115') || msg.includes('errorcode: 115')) {
-    return { exitCode: EXIT_TX_REJECTED, errorCode: ERROR_CODES.STALE_UTXO };
-  }
-
-  // Invalid dust spend proof — substrate "Custom error 170". Distinct from
-  // PROOF_FAILURE because the recovery is "clear cache" not "retry".
-  if (msg.includes('error 170') || msg.includes('error: 170') || msg.includes('errorcode: 170') || msg.includes('invaliddustspendproof')) {
-    return { exitCode: EXIT_TX_REJECTED, errorCode: ERROR_CODES.INVALID_DUST_PROOF };
-  }
-
-  // Stale local cache (e.g. `applied > highest`, `chainId mismatch`)
-  // "inserted non-linearly": state resumed against an indexer that numbers its events differently.
-  if (msg.includes('stale cache') || msg.includes('chain reset') || msg.includes('chainid mismatch') || msg.includes('applied > highest') || msg.includes('inserted non-linearly')) {
-    return { exitCode: EXIT_TX_REJECTED, errorCode: ERROR_CODES.STALE_CACHE };
-  }
-
-  // Proof server failure — SDK ClientError "Failed to prove transaction".
-  if (msg.includes('failed to prove')) {
-    return { exitCode: EXIT_TX_REJECTED, errorCode: ERROR_CODES.PROOF_FAILURE };
-  }
-
-  // Sync timeouts — wallet sync, dust waits, indexer waits.
-  if (
-    msg.includes('wallet sync timed out') ||
-    msg.includes('sync timed out') ||
-    msg.includes('timed out waiting for dust') ||
-    msg.includes('did not respond within') ||
-    msg.includes('did not produce a block') ||
-    msg.includes('did not report funds')
-  ) {
-    return { exitCode: EXIT_NETWORK_ERROR, errorCode: ERROR_CODES.SYNC_TIMEOUT };
-  }
-
-  // Dust required — match specific dust-related failures
-  if (msg.includes('no dust') || msg.includes('dust') && (msg.includes('required') || msg.includes('available') || msg.includes('insufficient'))) {
-    return { exitCode: EXIT_INSUFFICIENT_BALANCE, errorCode: ERROR_CODES.DUST_REQUIRED };
-  }
-
-  // Insufficient balance
-  if (msg.includes('insufficient') || msg.includes('not enough')) {
-    return { exitCode: EXIT_INSUFFICIENT_BALANCE, errorCode: ERROR_CODES.INSUFFICIENT_BALANCE };
-  }
-
-  // Transaction rejected: by the node (its words in the message, when no rule above knew them), or as the message says.
-  if ((err as { name?: unknown }).name === 'TransactionRefusedError' || msg.includes('rejected') || msg.includes('transaction failed')) {
-    return { exitCode: EXIT_TX_REJECTED, errorCode: ERROR_CODES.TX_REJECTED };
-  }
-
-  // Network / connection errors
-  if (
-    msg.includes('econnrefused') ||
-    msg.includes('enotfound') ||
-    msg.includes('etimedout') ||
-    msg.includes('websocket') ||
-    msg.includes('connection refused') ||
-    msg.includes('request to ') && msg.includes(' failed, reason:') ||
-    (msg.includes('network') && msg.includes('error'))
-  ) {
-    return { exitCode: EXIT_NETWORK_ERROR, errorCode: ERROR_CODES.NETWORK_ERROR };
-  }
-
-  // Fallback
-  return { exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.UNKNOWN };
+/** @deprecated The same as classifyError, now that every classification is by code alone. */
+export function classifyByCode(err: Error, codes: CodeRegistry): ClassifiedError {
+  return classifyError(err, codes);
 }
 
 /**

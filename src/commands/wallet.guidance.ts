@@ -3,7 +3,8 @@
 // skills, each naming its section and its place there, and its tools' rows in
 // the manual's tools table.
 
-import type { PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { codeGuidancePieces, type PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { walletCodes } from './wallet.codes.ts';
 
 export const walletGuidance: PackageGuidance = {
   pieces: [
@@ -80,40 +81,6 @@ Transfer commands accept wallet names instead of full addresses:
 Names are resolved from ~/.midnight/wallets/<name>.json. If the input
 starts with mn_addr_ or mn_shield-addr_, it's used as an address directly.
 
-`,
-    },
-    {
-      text: 'agent-manual',
-      section: 'error-codes',
-      order: 20,
-      body: `  WALLET_NOT_FOUND        3     Wallet file does not exist
-`,
-    },
-    {
-      text: 'agent-manual',
-      section: 'error-codes',
-      order: 40,
-      body: `  SYNC_TIMEOUT            4     Wallet sync exceeded its deadline (retry resumes)
-  INSUFFICIENT_BALANCE    5     Not enough NIGHT for the operation
-  TX_REJECTED             6     Transaction rejected by the node
-  STALE_UTXO              6     UTXOs consumed by another transaction
-  STALE_CACHE             6     Local cache disagrees with chain state
-  PROOF_TIMEOUT           6     ZK proof generation timed out
-  PROOF_FAILURE           6     Proof server failed to generate the ZK proof
-  INVALID_DUST_PROOF      6     Chain rejected the dust spend proof as malformed
-  DUST_REQUIRED           5     Not enough Dust for the fee. Not registered:
-                                dust register. Generating: the message says
-                                how long (retry then, or register more NIGHT)
-  DUST_GENERATING         5     Dust registration fee not generated yet; the
-                                message says when (rerun then, or add NIGHT)
-`,
-    },
-    {
-      text: 'agent-manual',
-      section: 'error-codes',
-      order: 120,
-      body: `  PASSPHRASE_REQUIRED     2     A secret was needed and no passphrase could be
-                                had: set MN_PASSPHRASE, or run at a terminal
 `,
     },
     {
@@ -240,41 +207,8 @@ At step 5 the user is ready to transact.
 
 `,
     },
-    {
-      text: 'skill-full',
-      section: 'error-recovery',
-      order: 10,
-      body: `| \`INSUFFICIENT_BALANCE\` | Wallet doesn't have enough NIGHT to cover the requested amount. | Show the user. On localnet: \`midnight_airdrop({ amount: "..." })\`. On hosted networks: tell user to fund the address. |
-| \`DUST_REQUIRED\` | Wallet has NIGHT but not enough DUST for the fee. | Not registered (\`midnight_dust_status()\` shows \`registered: false\`): run \`midnight_dust_register()\`. Registered: its NIGHT is still generating the fee, which happens with time. mn has already waited when the fee was a few minutes away; the message says how long the rest takes ("generates the rest in about 4 minutes"). Wait that long and retry, don't retry at once. |
-| \`INVALID_DUST_PROOF\` | Chain rejected the dust spend proof as malformed (substrate "Custom error 170"). Stale commitment tree. | \`midnight_cache_clear({ wallet: "<name>" })\` then retry. |
-| \`STALE_CACHE\` | Local wallet cache disagrees with chain (e.g. localnet reset, remote testnet re-indexed). | \`midnight_cache_clear({ wallet: "<name>" })\` then retry. |
-| \`STALE_UTXO\` | UTXO was already spent on-chain (substrate "error code 115"). | Re-sync (the next call will refresh state) and retry. |
-| \`PROOF_FAILURE\` | Proof server rejected or failed to generate the ZK proof. Often a stale commitment tree or unreachable proof server. | Check that the proof server is running (\`midnight_localnet_status()\`, or the endpoint the user configured); if it is, \`midnight_cache_clear({ wallet: "<name>" })\` then retry. |
-| \`PROOF_TIMEOUT\` | ZK proof generation didn't finish within the deadline. | Retry — proofs can be slow under load. |
-| \`SYNC_TIMEOUT\` | Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync. | Retry; the cache resumes from the last applied event so progress is preserved. |
-`,
-    },
-    {
-      text: 'skill-full',
-      section: 'error-recovery',
-      order: 80,
-      body: `| \`PASSPHRASE_REQUIRED\` | A tool needed a secret (a wallet's seed, an account's owner key) and the MCP server has no passphrase. | Ask the user to set \`MN_PASSPHRASE\` in the MCP server's environment and restart it. Never ask them to type the passphrase into the chat. |
-`,
-    },
-    {
-      text: 'skill-full',
-      section: 'error-recovery',
-      order: 100,
-      body: `| \`WALLET_NOT_FOUND\` | Named wallet doesn't exist on disk. | \`midnight_wallet_list()\` — user may have removed it. |
-`,
-    },
-    {
-      text: 'skill-full',
-      section: 'error-recovery',
-      order: 120,
-      body: `| \`TX_REJECTED\` | Chain rejected the submitted transaction (catch-all when no more specific code applies). | Read the message; usually a state mismatch resolved by re-sync + retry. |
-`,
-    },
+    // Its error codes' rows in the manual and the full skill, from their definitions.
+    ...codeGuidancePieces(walletCodes),
   ],
   toolsTable: [
     { tool: 'midnight_wallet_generate', group: 'wallet-management', order: 10, description: ['Create a named wallet'] },

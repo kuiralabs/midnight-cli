@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assertSpendsNoOfferCoin, closeOpenOffers, OfferCoinsInUseError, openOffersFile, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core/lib/open-offers';
 import { classifyError, ERROR_CODES, EXIT_INVALID_ARGS } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 const WALLET = 'mn_addr_undeployed1maker';
 const offer = (id: string, nullifiers: string[]): OpenOffer => ({
@@ -51,7 +52,7 @@ describe('open offers', () => {
     expect(err).toBeInstanceOf(OfferCoinsInUseError);
     expect(err.offerIds).toEqual(['a1'.repeat(16)]);
     expect(err.message).toBe(`This would spend coins held by an open swap offer (${'a1'.repeat(8)}…), cancelling it. Cancel it first, or wait until it is taken.`);
-    expect(classifyError(err)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.OFFER_COINS_IN_USE });
+    expect(classifyError(err, installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.OFFER_COINS_IN_USE });
     expect(() => assertSpendsNoOfferCoin(open, ['aa11'], ['a1'.repeat(16)])).not.toThrow();
   });
 });

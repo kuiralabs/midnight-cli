@@ -24,8 +24,9 @@ import type { SignatureVerifyingKey } from '@midnightntwrk/ledger-v9';
 import { signedMessageBytes } from '@kuiralabs/midnight-cli-core/lib/sign-data';
 import type { RpcHandlerContext } from '@kuiralabs/midnight-cli-core/lib/connector-api';
 import { PROOF_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { withDustShortfall } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { toEngineError, withDustShortfall } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { installedCommands } from '../../lib/installed-commands.ts';
 import type { FeeLimits } from '@kuiralabs/midnight-cli-core/lib/fee-limits';
 import type { ApprovalOptions } from '@kuiralabs/midnight-cli-core/lib/approval';
 import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
@@ -1132,7 +1133,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         expect(err.message).toContain('The wallet has no Dust available that covers this transaction\'s fee (No dust tokens found in the wallet state)');
         expect(err.message).toContain('no balanced transaction is holding any back on this server');
         expect(err.message).not.toContain('Retry once they settle');
-        expect(classifyError(err).errorCode).toBe('DUST_REQUIRED');
+        expect(classifyError(toEngineError(err) as Error, installedCommands).errorCode).toBe('DUST_REQUIRED');
         expect(err.mnCode).toBe('DUST_REQUIRED');
         expect(callCount).toBe(10); // DUST_RETRY_ATTEMPTS = 10
         vi.useRealTimers();
@@ -1183,7 +1184,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
           expect(err.message).toBe(
             "Not enough Dust available for this transaction's fee: the wallet has 0.35 DUST and the fee takes 2.00. "
             + 'Its registered NIGHT generates the rest in about 4 minutes: retry then, or register more NIGHT to get there sooner.');
-          expect(classifyError(err).errorCode).toBe('DUST_REQUIRED');
+          expect(classifyError(toEngineError(err) as Error, installedCommands).errorCode).toBe('DUST_REQUIRED');
           expect(err.mnCode).toBe('DUST_REQUIRED');
         });
 
@@ -1427,7 +1428,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
             const err: any = await failure;
             expect(err.message).toContain('No Dust is free to pay the fee ([Wallet.InsufficientFunds] Insufficient Funds: could not balance dust)');
             expect(err.message).toContain('1 balanced transaction(s) are waiting to be submitted on this server. Retry once they settle.');
-            expect(classifyError(err).errorCode).toBe('DUST_REQUIRED');
+            expect(classifyError(toEngineError(err) as Error, installedCommands).errorCode).toBe('DUST_REQUIRED');
             expect(err.mnCode).toBe('DUST_REQUIRED');
           } finally {
             process.stderr.write = stderrWrite;

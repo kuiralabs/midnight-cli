@@ -1,22 +1,22 @@
 // What each typed error, thrown where mn throws it, reports: its code and the
-// exit code it ends the CLI with. Each row records the classification without
-// the registry (what mn reported before codes were owned per package) and with
-// the installed registry (what the shell and the MCP server report now). They
-// differ only where the owner approved it (Y52): NO_STATE_ROOT, NO_PAYER and
-// NO_NODE_RUNTIME by name instead of UNKNOWN, an escaped stale cache as
-// STALE_CACHE, and a failed command run through MCP as COMMAND_FAILED; and
-// (Y53) a wallet with no NIGHT as INSUFFICIENT_BALANCE and an unreachable
-// indexer as NETWORK_ERROR, whatever their messages say; and (Y54) a ZK proof
-// that timed out as PROOF_TIMEOUT, and a contract run's transaction the node
-// refused as TX_REJECTED whatever its reason's words. A third
-// classification reads the error's code alone, with no message rule: what the
-// shell and the MCP server report once the rules are gone.
+// exit code it ends the CLI with, classified by its code through the installed
+// registry, as the shell and the MCP server classify it. Each row also records
+// what mn reported before codes were owned per package, when the message rules
+// still read an error's words (removed since; the record is kept, not
+// computed). The two differ only on rows marked approved: (Y52) NO_STATE_ROOT,
+// NO_PAYER and NO_NODE_RUNTIME by name instead of UNKNOWN, an escaped stale
+// cache as STALE_CACHE, and a failed command run through MCP as
+// COMMAND_FAILED; (Y53) a wallet with no NIGHT as INSUFFICIENT_BALANCE and an
+// unreachable indexer, node or proof server as NETWORK_ERROR, whatever their
+// messages say; and (Y54) a ZK proof that timed out as PROOF_TIMEOUT, and a
+// contract run's transaction the node refused as TX_REJECTED whatever its
+// reason's words. A test checks that every row that changed says so.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { classifyByCode, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { CancelledError, CommandFailedError, DustRequiredError, InsufficientBalanceError, ProofTimeoutError, SyncTimeoutError, TransactionRefusedError, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { createApiError, OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core/lib/connector-api';
 import { withEngineCode } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
@@ -33,6 +33,12 @@ import { FORK_SCHEDULE } from '@kuiralabs/midnight-engine-rc/fork-schedule';
 import { NO_TERMINAL, TEST_NETWORK_CONFIG, connectorStub } from './helpers/connector-stub.ts';
 import { agentPaysMerchant, unsealedBytes } from './helpers/ledger-tx.ts';
 import { scriptFailureAtServe } from './helpers/serve-script-failure.ts';
+import { closedPort } from './helpers/closed-port.ts';
+import { SCRIPT_PRELUDE, executeScript, rpcClientCode } from '../lib/contract/runner.ts';
+import { withTransportCode } from '@kuiralabs/midnight-cli-core/lib/transport-failure';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { WebSocket } from 'ws';
 import { parseArgs, requireFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { dustShortError } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
 import { ProgramTimedOutError } from '@kuiralabs/midnight-cli-core/lib/exec-program';
@@ -160,6 +166,24 @@ const connectorRefusal = async (reason: string) => {
   return withEngineCode(new Error(`Transaction submission failed: [SubmissionError] Transaction submission error → ${reason}`, { cause: thrown }));
 };
 
+/** A socket's refusal: what a WebSocket to a closed port fails with (ECONNREFUSED its code). */
+async function refusedSocket(): Promise<Error> {
+  const port = await closedPort();
+  return new Promise((resolve) => { new WebSocket(`ws://127.0.0.1:${port}`).on('error', resolve); });
+}
+/** What the runner rejects with when a generated script, its prelude first, runs `body` and fails. */
+async function scriptFailing(body: (port: number) => string): Promise<never> {
+  const dir = mkdtempSync(join(tmpdir(), 'mn-code-parity-script-'));
+  try {
+    const wsModule = pathToFileURL(createRequire(import.meta.url).resolve('ws')).href;
+    const port = await closedPort();
+    await executeScript({ dir, script: SCRIPT_PRELUDE + rpcClientCode(port, wsModule) + body(port), overlaySdk: false, packages: { packages: [], packageFolder: () => null, set: 'rc' } });
+    throw new Error('expected the script to fail');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 /** What the function throws; fails the test when it throws nothing. */
 async function thrownBy(run: () => unknown): Promise<Error> {
   try {
@@ -178,8 +202,8 @@ const TWENTY_NIGHT = { dust: { generatedNow: 337_954_960_000_000n, rate: 165_340
 type Classified = { errorCode: string; exitCode: number };
 const as = (errorCode: string, exitCode: number): Classified => ({ errorCode, exitCode });
 
-/** [where it is thrown, how to throw it, without the registry, with it, by its code alone (as with it, unless given)]. */
-type Row = [string, () => unknown, Classified, Classified, Classified?];
+/** [where it is thrown, how to throw it, what mn reported before codes were owned per package (a record), what it reports]. */
+type Row = [string, () => unknown, Classified, Classified];
 const ROWS: Row[] = [
   // The caller's to fix: exit 2.
   ['a usage error', () => { throw new UsageError('Missing required flag: --to'); }, as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
@@ -228,6 +252,12 @@ const ROWS: Row[] = [
   ['an indexer subscription refused', () => subscribeGraphqlWs(CLOSED_WS, { query: 'subscription { x }', variables: {}, timeoutMs: 5_000, idleMs: 1_000, onNext: () => true, buildResult: () => undefined }), as('NETWORK_ERROR', 4), as('NETWORK_ERROR', 4)],
   ['a balance read refused', () => checkBalance(ADDRESSES.undeployed, CLOSED_WS), as('NETWORK_ERROR', 4), as('NETWORK_ERROR', 4)],
   ['an indexer query refused (approved: was UNKNOWN)', () => queryIndexer(`${CLOSED_HTTP}/`, '{ x }', undefined, 5_000), as('UNKNOWN', 1), as('NETWORK_ERROR', 4)],
+  // Connections the SDK, a contract script or the account package could not make, named where they are met.
+  ["a socket's refusal, through the engine", throughRcEngine(async () => { throw await refusedSocket(); }), as('NETWORK_ERROR', 4), as('NETWORK_ERROR', 4)],
+  ['fetch failing, through the engine (approved Y53: was UNKNOWN)', throughRcEngine(async () => { await fetch(`http://127.0.0.1:${await closedPort()}/`); throw new Error('expected fetch to fail'); }), as('UNKNOWN', 1), as('NETWORK_ERROR', 4)],
+  ['a contract script that cannot reach mn serve', () => scriptFailing(() => 'await rpcConnect();\n'), as('NETWORK_ERROR', 4), as('NETWORK_ERROR', 4)],
+  ["a contract script's fetch failing (approved Y53: was UNKNOWN)", () => scriptFailing((port) => `await fetch('http://127.0.0.1:${port}/');\n`), as('UNKNOWN', 1), as('NETWORK_ERROR', 4)],
+  ["the account package's refused connection, at grant's boundary", async () => { throw withTransportCode(await refusedSocket()); }, as('NETWORK_ERROR', 4), as('NETWORK_ERROR', 4)],
   // Approved: a program that ran past its limit keeps NETWORK_ERROR, which its message (ETIMEDOUT) gave it.
   ['a program past its time limit', () => { throw new ProgramTimedOutError('docker compose ps', 10_000); }, as('NETWORK_ERROR', 4), as('NETWORK_ERROR', 4)],
 
@@ -285,10 +315,13 @@ const ROWS: Row[] = [
 ];
 
 describe('the code and exit code of each typed error', () => {
-  it.each(ROWS)('%s', async (_where, throwIt, before, now, byCode = now) => {
-    const err = await thrownBy(throwIt);
-    expect(classifyError(err)).toStrictEqual(before);
-    expect(classifyError(err, installedCommands)).toStrictEqual(now);
-    expect(classifyByCode(err, installedCommands)).toStrictEqual(byCode);
+  it.each(ROWS)('%s', async (_where, throwIt, _before, now) => {
+    expect(classifyError(await thrownBy(throwIt), installedCommands)).toStrictEqual(now);
+  });
+
+  it('marks every row whose code changed as approved', () => {
+    const changed = ROWS.filter(([, , before, now]) => before.errorCode !== now.errorCode || before.exitCode !== now.exitCode);
+    expect(changed.length).toBeGreaterThan(0);
+    for (const [where] of changed) expect(where).toMatch(/\(approved\b/);
   });
 });

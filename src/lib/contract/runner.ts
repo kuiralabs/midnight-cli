@@ -20,6 +20,7 @@ import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
 import { coerceArg } from './arg-coerce.ts';
 import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
 import { CancelledError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { isTransportFailure } from '@kuiralabs/midnight-cli-core/lib/transport-failure';
 
 // The generated deploy/call script imports SDK packages by bare specifier
 // (`@midnight-ntwrk/midnight-js-contracts`, `ws`, etc.); without help, Node
@@ -182,7 +183,7 @@ async function rpcConnect() {
   return new Promise((resolve, reject) => {
     rpcWs = new WebSocket(RPC_URL);
     rpcWs.on('open', () => resolve(rpcWs));
-    rpcWs.on('error', (err) => reject(new Error('Cannot connect to mn serve at ' + RPC_URL + ': ' + err.message)));
+    rpcWs.on('error', (err) => reject(new Error('Cannot connect to mn serve at ' + RPC_URL + ': ' + err.message, { cause: err })));
     setTimeout(() => reject(new Error('Timeout connecting to mn serve at ' + RPC_URL)), 5000);
   });
 }
@@ -256,15 +257,24 @@ const PRIVATE_STATE_SECRET_FN = `\nconst resolvePrivateStateSecretKey = (${resol
 /** Marks the line a generated script reports its failure on, so mn can tell it from progress and warnings. */
 export const SCRIPT_ERROR_MARKER = '__MN_ERROR__';
 
+// isTransportFailure serialized for the generated script (the same
+// .toString()-inlining trick as ARG_COERCE_FN): the script names a connection
+// it could not make (to mn serve, the indexer, the proof server) itself.
+const TRANSPORT_FAILURE_FN = `\nconst isTransportFailure = (${isTransportFailure.toString()});\n`;
+
 /**
  * First in every generated script: report any failure (a rejected top-level
- * await included) as one marked line, its message and the code it carries (mn
- * serve's code for a failure there), then exit 1. Without it Node prints the
- * uncaught exception with its source context, and that became mn's error.
+ * await included) as one marked line, its message and its code, then exit 1:
+ * the code it carries (mn serve's code for a failure there), or NETWORK_ERROR
+ * for a connection that could not be made, which carries only the socket's
+ * (ECONNREFUSED) or none. Without it Node prints the uncaught exception with
+ * its source context, and that became mn's error.
  */
-export const SCRIPT_PRELUDE = `
+export const SCRIPT_PRELUDE = `${TRANSPORT_FAILURE_FN}
 const fail = (e) => {
-  const failure = { message: String(e?.message ?? e), ...(typeof e?.code === 'string' ? { code: e.code } : {}) };
+  const carried = typeof e?.code === 'string' && !isTransportFailure({ code: e.code }) ? e.code : undefined;
+  const code = carried ?? (isTransportFailure(e) ? 'NETWORK_ERROR' : undefined);
+  const failure = { message: String(e?.message ?? e), ...(code === undefined ? {} : { code }) };
   process.stderr.write('\\n${SCRIPT_ERROR_MARKER} ' + JSON.stringify(failure) + '\\n');
   process.exit(1);
 };

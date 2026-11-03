@@ -15,7 +15,7 @@ import { agentPaysMerchant, unsealedBytes } from './helpers/ledger-tx.ts';
 import { Effect } from 'effect';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import { DustRequiredError, TransactionRefusedError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { classifyByCode } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { installedCommands } from '../lib/installed-commands.ts';
 
 const { WALLET_SHIELDED, WALLET_UNSHIELDED, createBundleStub, mockState } = connectorStub({
@@ -223,7 +223,7 @@ describe('wallet session', () => {
 
       expect(err).toBeInstanceOf(TransactionRefusedError);
       expect((err as Error).message).toBe('The node refused the transaction: 1010: Invalid Transaction: Custom error: 115');
-      expect(classifyByCode(err as Error, installedCommands)).toStrictEqual({ errorCode: 'STALE_UTXO', exitCode: 6 });
+      expect(classifyError(err as Error, installedCommands)).toStrictEqual({ errorCode: 'STALE_UTXO', exitCode: 6 });
       await session.close();
     });
 
@@ -237,7 +237,7 @@ describe('wallet session', () => {
 
         expect(err).toBeInstanceOf(DustRequiredError);
         expect((err as Error).message).toContain("The wallet has no Dust available that covers this transaction's fee (No dust tokens found in the wallet state)");
-        expect(classifyByCode(err as Error, installedCommands)).toStrictEqual({ errorCode: 'DUST_REQUIRED', exitCode: 5 });
+        expect(classifyError(err as Error, installedCommands)).toStrictEqual({ errorCode: 'DUST_REQUIRED', exitCode: 5 });
         await session.close();
       } finally {
         vi.useRealTimers();

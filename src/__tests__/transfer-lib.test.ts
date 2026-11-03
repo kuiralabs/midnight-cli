@@ -6,6 +6,7 @@ import { deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-ad
 import { GENESIS_SEED, SYNC_ATTEMPT_TIMEOUT_MS, SYNC_ATTEMPT_REMOTE_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { ERROR_CODES, EXIT_INVALID_ARGS, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 describe('nightToMicro', () => {
   it('converts whole NIGHT to micro-NIGHT', () => {
@@ -100,7 +101,7 @@ describe('parseAmount', () => {
     for (const amount of ['0', '-5', 'abc', 'Infinity']) {
       const refused = (() => { try { parseAmount(amount); } catch (err) { return err as Error; } throw new Error(`${amount} was accepted`); })();
       expect(refused).toBeInstanceOf(UsageError);
-      expect(classifyError(refused)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.INVALID_ARGS });
+      expect(classifyError(refused, installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.INVALID_ARGS });
     }
   });
 });

@@ -18,10 +18,15 @@ export function readmeCommandTable(registry: Pick<CommandRegistry, 'commands'>):
   return ['| Command | Description |', '|---------|-------------|', ...rows].join('\n') + '\n';
 }
 
+/** `doc` (the file `name`) with what is between its markers `startMarker` and `endMarker` replaced by `content`. */
+export function withGeneratedBlock(doc: string, name: string, startMarker: string, endMarker: string, content: string): string {
+  const start = doc.indexOf(startMarker);
+  const end = doc.indexOf(endMarker);
+  if (start === -1 || end < start) throw new Error(`${name} has no ${startMarker} … ${endMarker} markers`);
+  return doc.slice(0, start + startMarker.length) + '\n' + content + doc.slice(end);
+}
+
 /** The README with the table between its markers replaced by `table`. */
 export function withReadmeCommandTable(readme: string, table: string): string {
-  const start = readme.indexOf(README_COMMANDS_START);
-  const end = readme.indexOf(README_COMMANDS_END);
-  if (start === -1 || end < start) throw new Error(`README.md has no ${README_COMMANDS_START} … ${README_COMMANDS_END} markers`);
-  return readme.slice(0, start + README_COMMANDS_START.length) + '\n' + table + readme.slice(end);
+  return withGeneratedBlock(readme, 'README.md', README_COMMANDS_START, README_COMMANDS_END, table);
 }

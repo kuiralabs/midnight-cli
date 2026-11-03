@@ -3,6 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { ERROR_CODES, EXIT_INSUFFICIENT_BALANCE, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { MEASURED_ACCOUNT_DEPLOY, deployShortOfDustNote } from '../lib/grant/deploy-cost.ts';
+import { DustRequiredError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 describe('deployShortOfDustNote', () => {
   it('says what a deploy takes, what the wallet had, and that running again carries on', () => {
@@ -30,7 +32,8 @@ describe('deployShortOfDustNote', () => {
 
   it('leaves the error it is added to a Dust shortage, with the same exit code', () => {
     const fromServe = 'The wallet has no Dust available that covers this transaction\'s fee (Insufficient Funds: could not balance dust), and no balanced transaction is holding any back on this server.';
-    expect(classifyError(new Error(`${fromServe}\n\n${deployShortOfDustNote(0n)}`)))
+    // As grant deploy throws it: the shortage, with the note.
+    expect(classifyError(new DustRequiredError(`${fromServe}\n\n${deployShortOfDustNote(0n)}`), installedCommands))
       .toEqual({ exitCode: EXIT_INSUFFICIENT_BALANCE, errorCode: ERROR_CODES.DUST_REQUIRED });
   });
 });
