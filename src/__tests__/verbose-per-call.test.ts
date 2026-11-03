@@ -73,7 +73,7 @@ describe('verbose, per call', () => {
   it("a library writes its diagnostics to the log of the call that reached it, and only a verbose call's shows them", async () => {
     const network: NetworkConfig = { indexer: 'http://test/indexer', indexerWS: 'ws://test/indexer/ws', node: 'ws://test/node', proofServer: 'http://test/proof', networkId: 'Undeployed' };
     // The chain's tip can't be read, which the repository notes as a diagnostic.
-    const repo = new WalletDataRepository({
+    const repo = new WalletDataRepository(testHost(), {
       fetchProtocolVersion: async () => 2001000n,
       fetchTip: async () => { throw new Error('node unreachable'); },
       fetchUnshielded: async () => ({ balances: new Map(), utxoCount: 0, txCount: 0, highestTxId: 0, registeredUtxos: 0, unregisteredUtxos: 0 }),

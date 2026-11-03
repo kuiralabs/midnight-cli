@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Engine } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { Engine, EngineHost } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { assertOneSdkCopy } from '@kuiralabs/midnight-cli-core/lib/sdk-layout';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { checkRuntimeVersion, versionString as compactRuntimeVersion } from '@midnight-ntwrk/compact-runtime';
@@ -15,7 +15,8 @@ import { rawContractState } from './contract-providers.ts';
 import { assertAddress } from './addresses.ts';
 import { inspectTxHex } from './tx-inspect.ts';
 import { readOffer, spentNullifiers } from './offer-reader.ts';
-import { betaWallet } from './wallet.ts';
+import { createBetaWallet } from './wallet.ts';
+import { WalletDataRepository, type RepoDeps } from './wallet-data-repository.ts';
 import { SCRIPT_PACKAGES, generateCallScript, generateDeployScript, generateStateScript, packageFolder } from './contract-scripts.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
 import { readShieldedBalanceCached, shieldedCoinPublicKeyHexFromSeed } from './shielded-direct-cache.ts';
@@ -28,7 +29,23 @@ const SDK_DEPENDENCIES = Object.keys((JSON.parse(readFileSync(join(ENGINE_DIR, '
   .filter((name) => /^@midnight(ntwrk|-ntwrk)\//.test(name));
 assertOneSdkCopy("mn's beta engine", ENGINE_DIR, SDK_DEPENDENCIES, ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4']);
 
-export const betaEngine: Engine = {
+/** What an beta engine is made with besides its host. */
+export interface BetaEngineOptions {
+  /** Its wallet repository's seams (the clock, the chain's and the indexer's reads), for a test standing in for the network. */
+  readonly repository?: RepoDeps;
+}
+
+/**
+ * The beta engine for a host: its own wallet repository (the in-memory caches),
+ * reading the host's settings and telling the host's notices. Each host gets
+ * one of its own; the work every engine does alike is shared.
+ */
+export function createBetaEngine(host: EngineHost, options: BetaEngineOptions = {}): Engine {
+  return { ...SHARED, wallet: createBetaWallet(new WalletDataRepository(host, options.repository)) };
+}
+
+// The parts that keep no state: the same for every host's engine.
+const SHARED: Omit<Engine, 'wallet'> = {
   set: 'beta',
   keys: {
     unshieldedAddress: deriveUnshieldedAddress,
@@ -78,5 +95,4 @@ export const betaEngine: Engine = {
   readers: {
     shieldedBalance: readShieldedBalanceCached,
   },
-  wallet: betaWallet,
 };

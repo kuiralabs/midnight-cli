@@ -6,7 +6,7 @@
 //   - a notice sink: stderr;
 //   - settings, read from the environment as each is needed;
 //   - the state root, ~/.midnight, read as each path is built;
-//   - the SDK engines this build ships.
+//   - the SDK engines this build ships, as its engine loader.
 // The prompter is the CLI's alone: the MCP server has no terminal to ask at.
 
 import { homedir } from 'node:os';
@@ -15,7 +15,7 @@ import { installSdkNoiseFilters } from './sdk-noise.ts';
 import { setSettingsSource, settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
 import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { setEngineLoader } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { bridgeEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { loadInstalledEngine } from './installed-engines.ts';
 
@@ -31,8 +31,10 @@ export function createCliHost({ prompter }: { prompter: Prompter | null }): Host
     notice: (line) => process.stderr.write(line + '\n'),
     prompter,
     sdkWarnings: installSdkNoiseFilters(),
+    engineLoader: loadInstalledEngine,
   });
   setSettingsSource(host.settings);
-  setEngineLoader(loadInstalledEngine);
+  // The libraries that don't take the host's engines yet reach these, so the process has one engine.
+  bridgeEngines(host.engines);
   return host;
 }

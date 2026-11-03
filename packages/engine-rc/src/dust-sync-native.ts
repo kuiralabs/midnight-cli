@@ -19,7 +19,7 @@ import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { collapseForeignGenerations } from './dust-collapse.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
-import { settings } from '@kuiralabs/midnight-cli-core/lib/settings';
+import type { Settings } from '@kuiralabs/midnight-cli-core/lib/settings';
 import { cacheRootDir, networkCacheFolder } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
 import { nativeCheckpointName } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
 
@@ -43,15 +43,17 @@ interface NativeFetchOptions {
   onProgress?: (applied: number, max: number) => void;
   /** The state root: the checkpoint lives beside the other Dust caches under it. */
   root: string;
+  /** The engine's host's settings: the sidecar to run, and whether to collapse its state. */
+  settings: Settings;
 }
 
 /**
- * Locate the sidecar binary. Order: explicit env override → the (Phase 3)
- * optional platform package → the dev build under sidecar/dust-sync. Returns
- * null when none resolve (→ WASM fallback).
+ * Locate the sidecar binary. Order: the settings' override (MN_DUST_SYNC_BIN) →
+ * the (Phase 3) optional platform package → the dev build under
+ * sidecar/dust-sync. Returns null when none resolve (→ WASM fallback).
  */
-export function resolveSidecarBinary(): string | null {
-  const fromEnv = settings().dustSyncBin;
+export function resolveSidecarBinary(settings: Pick<Settings, 'dustSyncBin'>): string | null {
+  const fromEnv = settings.dustSyncBin;
   if (fromEnv && existsSync(fromEnv)) return fromEnv;
 
   const exe = process.platform === 'win32' ? 'dust-sync.exe' : 'dust-sync';
@@ -94,10 +96,10 @@ const SIDECAR_LEDGER: number = 8;
 /** The ledger this build of mn targets. */
 const MN_LEDGER: number = 9;
 
-export function nativeDustSyncAvailable(): boolean {
+export function nativeDustSyncAvailable(settings: Pick<Settings, 'isNativeDustOff' | 'dustSyncBin'>): boolean {
   if (SIDECAR_LEDGER !== MN_LEDGER) return false;
-  if (settings().isNativeDustOff) return false;
-  return resolveSidecarBinary() !== null;
+  if (settings.isNativeDustOff) return false;
+  return resolveSidecarBinary(settings) !== null;
 }
 
 /**
@@ -144,7 +146,7 @@ export function runDustSyncNative(
   opts: NativeFetchOptions,
 ): Promise<DustDirectResult> {
   return new Promise((resolve, reject) => {
-    const bin = resolveSidecarBinary();
+    const bin = resolveSidecarBinary(opts.settings);
     if (!bin) { reject(new Error('dust-sync sidecar not found')); return; }
     assertEndpointUsable(network.indexerWS);
 
@@ -214,7 +216,7 @@ export function runDustSyncNative(
         const cp: SidecarCheckpoint = lastLine
           ? JSON.parse(lastLine)
           : JSON.parse(readFileSync(out, 'utf-8'));
-        resolve(adaptResult(cp));
+        resolve(adaptResult(cp, opts.settings));
       } catch (err) {
         reject(new Error(`dust-sync output parse failed: ${(err as Error).message}`));
       }
@@ -222,8 +224,8 @@ export function runDustSyncNative(
   });
 }
 
-/** Map the sidecar's checkpoint JSON to a `DustDirectResult`. Exported for tests. */
-export function adaptResult(cp: SidecarCheckpoint): DustDirectResult {
+/** Map the sidecar's checkpoint JSON to a `DustDirectResult`, collapsed unless the settings say not to. Exported for tests. */
+export function adaptResult(cp: SidecarCheckpoint, settings: Pick<Settings, 'isDustCollapseOff'>): DustDirectResult {
   const now = new Date();
   let state = ledger.DustLocalState.deserialize(new Uint8Array(Buffer.from(cp.dust_state, 'hex')));
   // The Rust sidecar doesn't collapse the generation tree, so a native sync would
@@ -231,7 +233,7 @@ export function adaptResult(cp: SidecarCheckpoint): DustDirectResult {
   // vs ~23 KB collapsed). Apply the same TS collapse the WASM reader uses, reusing
   // the owned-indices + frontier the checkpoint already carries. Idempotent, and it
   // fails safe to the uncollapsed state via the balance+root guard.
-  if (!settings().isDustCollapseOff) {
+  if (!settings.isDustCollapseOff) {
     const owned = new Set(cp.owned_generation_indices.map((i) => BigInt(i)));
     state = collapseForeignGenerations(state, owned, BigInt(cp.generation_frontier)).state;
   }

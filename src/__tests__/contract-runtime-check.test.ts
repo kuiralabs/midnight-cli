@@ -7,9 +7,13 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
-import { rcEngine } from '@kuiralabs/midnight-engine-rc';
+import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import { assertContractRunsOn } from '../lib/contract/runtime-check.ts';
 import { runDeploy } from '../lib/contract/runner.ts';
+
+// An rc engine, for what every host's has alike: its keys, ledger and contracts.
+const rcEngine = createRcEngine(createHost());
 
 const contract = (runtimeVersion: string, compilerVersion = '0.30.0') => ({ name: 'counter', compilerVersion, runtimeVersion });
 // A state root with no config: undeployed on the set the table names.

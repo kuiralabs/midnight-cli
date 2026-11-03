@@ -1,7 +1,7 @@
 // Wallet data repository — single owner of cache + tip-aware invalidation.
 //
 // What this hides from callers:
-//   • In-memory layer (per-process; matters for the long-lived MCP server)
+//   • In-memory layer (the engine's, so one per host; matters for the long-lived MCP server)
 //   • On-disk layer (shared across `mn` shell invocations)
 //   • Tip-aware invalidation (cache valid iff chain tip unchanged)
 //   • Force-fresh override
@@ -55,7 +55,7 @@ import { callNodeRpc } from '@kuiralabs/midnight-chain/lib/node-rpc';
 import { deriveDustSeed } from './derivation.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
 import { fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain/lib/event-tip';
-import type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { CachedReadOptions, DustBalance, EngineHost, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/lib/engine';
 export type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 // ── Public types ──────────────────────────────────────────
@@ -136,8 +136,6 @@ export interface RepoDeps {
       onCheckpoint?: (state: ledger.DustLocalState, lastAppliedEventId: number, retention: DustRetention) => void;
       /** The state root of the caches; the native sidecar keeps its checkpoint beside them. */
       root: string;
-      /** Where the read's lines for the person go (the host's notices). */
-      notice: NoticeSink;
       /** The call's verbose lines. */
       log?: VerboseLog;
     },
@@ -198,11 +196,12 @@ export class WalletDataRepository {
   private readonly unshieldedMemo = new Map<string, MemoEntry<UnshieldedView>>();
   private readonly tipMemo = new Map<string, { tip: TipFingerprint; fetchedAt: number }>();
 
-  constructor(deps: RepoDeps = {}) {
+  /** A repository for an engine: its host's settings choose how Dust is read, and its notices go to the host. */
+  constructor(host: EngineHost, deps: RepoDeps = {}) {
     this.now = deps.now ?? Date.now;
     this.fetchTip = deps.fetchTip ?? defaultTipFetcher;
     this.fetchUnshielded = deps.fetchUnshielded ?? defaultUnshieldedFetcher;
-    this.fetchDust = deps.fetchDust ?? nativeOrWasmDustFetcher;
+    this.fetchDust = deps.fetchDust ?? nativeOrWasmDustFetcher(host);
     this.fetchChainId = deps.fetchChainId ?? getChainGenesisHash;
     this.fetchEventTip = deps.fetchEventTip ?? fetchEventTip;
     this.fetchProtocolVersion = deps.fetchProtocolVersion ?? fetchProtocolVersion;
@@ -304,7 +303,6 @@ export class WalletDataRepository {
 
       result = await this.fetchDust(seed, network, {
         root: opts.root,
-        notice: opts.notice,
         startFromId,
         initialState: cached?.state,
         initialRetention: cached?.retention,
@@ -683,39 +681,40 @@ function defaultDustFetcher(
     root: string;
     log?: VerboseLog;
   },
+  collapse: boolean,
 ): Promise<DustDirectResult> {
   const dustSeed = deriveDustSeed(seed);
   const dustSecretKey = ledger.DustSecretKey.fromSeed(dustSeed);
-  return readDustBalanceDirect(dustSecretKey, network.indexerWS, opts);
+  return readDustBalanceDirect(dustSecretKey, network.indexerWS, { ...opts, collapse });
 }
-
-// Said once per process: the first sync from the start of a chain's Dust history.
-let saidWasmDust = false;
 
 /**
  * Prefer the native sidecar (~5x faster cold dust sync) when it's available;
  * fall back to the WASM reader on a missing binary or any failure. The sidecar
  * is an optional accelerator, so a fallback is a slowdown, never a break.
- * No sidecar replays ledger 9 yet, so this engine reads Dust in WASM, and says
- * so before a sync from the start of the chain's history.
+ * Each sync reads the host's settings: the sidecar to run, whether to run it,
+ * and whether to collapse the generation tree.
+ * No sidecar replays ledger 9 yet, so this engine reads Dust in WASM, and tells
+ * its host so once, before its first sync from the start of a chain's history.
  */
-async function nativeOrWasmDustFetcher(
-  seed: Buffer,
-  network: NetworkConfig,
-  opts: Parameters<NonNullable<RepoDeps['fetchDust']>>[2],
-): Promise<DustDirectResult> {
-  if (!nativeDustSyncAvailable() && opts.startFromId === 0 && !saidWasmDust) {
-    saidWasmDust = true;
-    opts.notice(`  Reading ${network.networkId}'s Dust history in WASM: no native sidecar runs ledger 9 yet, so a first sync takes a few minutes (about 2.5 on stagenet), then it is cached.`);
-  }
-  if (nativeDustSyncAvailable()) {
-    try {
-      return await runDustSyncNative(seed, network, opts);
-    } catch (err) {
-      opts.log?.('dust', `native sidecar failed, using WASM: ${(err as Error).message}`);
+function nativeOrWasmDustFetcher(host: EngineHost): NonNullable<RepoDeps['fetchDust']> {
+  let saidWasmDust = false;
+  return async (seed, network, opts) => {
+    const settings = host.settings();
+    const native = nativeDustSyncAvailable(settings);
+    if (!native && opts.startFromId === 0 && !saidWasmDust) {
+      saidWasmDust = true;
+      host.notice(`  Reading ${network.networkId}'s Dust history in WASM: no native sidecar runs ledger 9 yet, so a first sync takes a few minutes (about 2.5 on stagenet), then it is cached.`);
     }
-  }
-  return defaultDustFetcher(seed, network, opts);
+    if (native) {
+      try {
+        return await runDustSyncNative(seed, network, { ...opts, settings });
+      } catch (err) {
+        opts.log?.('dust', `native sidecar failed, using WASM: ${(err as Error).message}`);
+      }
+    }
+    return defaultDustFetcher(seed, network, opts, !settings.isDustCollapseOff);
+  };
 }
 
 // ── Helpers ───────────────────────────────────────────────
@@ -724,22 +723,4 @@ function networkNameOf(network: NetworkConfig): NetworkName {
   const lower = network.networkId.toLowerCase();
   if (isValidNetworkName(lower)) return lower;
   throw new Error(`Unsupported network: ${network.networkId}`);
-}
-
-// ── Process-wide singleton ────────────────────────────────
-
-let defaultRepo: WalletDataRepository | null = null;
-
-/**
- * Process-wide repository instance. Long-lived MCP sessions share this so
- * the in-memory cache layer is meaningful across tool calls.
- */
-export function defaultRepository(): WalletDataRepository {
-  if (!defaultRepo) defaultRepo = new WalletDataRepository();
-  return defaultRepo;
-}
-
-/** Test/diagnostic: replace the process singleton (e.g. with different fetchers). */
-export function setDefaultRepository(repo: WalletDataRepository | null): void {
-  defaultRepo = repo;
 }

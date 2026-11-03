@@ -1,9 +1,9 @@
 // The Midnight SDK, behind one interface. Everything that touches an SDK set
 // is an engine's; the rest of mn reaches it through the engine for its
-// network, and names no SDK type. One engine today, for the SDK's release
-// candidates (rc). Which engines there are is the host's: it installs a
-// loader at start (the shell, the engines it ships), as it does the settings.
-// Loading an engine loads its SDK, so the loader imports it only when asked.
+// network, and names no SDK type. Which engines there are is the host's: its
+// engine loader makes each host an engine of its own (the shell's loader, the
+// engines it ships). Loading an engine loads its SDK, so the loader imports it
+// only when asked. What stays process-wide is which SDK set the process runs.
 
 import type { OfferContents } from './swap-offer.ts';
 import type { OpenOffer } from './open-offers.ts';
@@ -15,6 +15,7 @@ import type { NoticeSink } from './notices.ts';
 import type { FeeLimits } from './fee-limits.ts';
 import type { RpcHandler } from './connector-api.ts';
 import type { Spinner } from '../ui/spinner.ts';
+import type { Host } from './host.ts';
 
 /** An SDK set mn runs on: the SDK's release candidates, or the beta set stagenet runs. */
 export type SdkSet = 'rc' | 'beta';
@@ -472,18 +473,27 @@ export function sdkSetOf(network: NetworkName, root: string): SdkSet {
   return sdkSetOfNetwork(network, root);
 }
 
-/** Loads the engine for an SDK set: the host's, which knows the engines it ships. */
-export type EngineLoader = (set: SdkSet) => Promise<Engine>;
+/** What an engine takes from the host that loads it: its settings, and where its notices go. */
+export type EngineHost = Pick<Host, 'settings' | 'notice'>;
 
-let loader: EngineLoader | undefined;
+/** Makes the engine for an SDK set, for the host that asks: the program's, which knows the engines it ships. */
+export type EngineLoader = (set: SdkSet, host: Host) => Promise<Engine>;
 
-// The engine this process has loaded: one per process, since two SDK sets'
-// WASM ledgers can't share one.
-let loaded: Promise<Engine> | undefined;
-
-// The set work every set does alike loads while nothing is loaded: the set of
-// the network the call is for, so it doesn't commit the process to another.
-let preferred: SdkSet | undefined;
+/** A host's engines: one engine of the host's own, loaded on first use. */
+export interface HostEngines {
+  /** The engine for an SDK set. Rejects with OtherSdkSetError when this host or this process has the other set. */
+  load(set: SdkSet): Promise<Engine>;
+  /** The engine for a network's SDK set, by the network table and the config under the host's state root. */
+  for(network: NetworkName): Promise<Engine>;
+  /**
+   * An engine for work every set does alike, such as deriving addresses: the
+   * one the host has loaded, else the set of the network the call is for (the
+   * rc set's when none was said).
+   */
+  any(): Promise<Engine>;
+  /** The network a call is for, whose set any() loads while the host has loaded none. */
+  prefer(network: NetworkName): void;
+}
 
 /** A call on a network whose SDK set isn't the one this process has loaded. */
 export class OtherSdkSetError extends Error {
@@ -502,36 +512,37 @@ export class OtherSdkSetError extends Error {
   }
 }
 
-/** The host's loader of engines, set once at start; a new loader forgets the engine an old one loaded. */
-export function setEngineLoader(next: EngineLoader): void {
-  loader = next;
-  loaded = undefined;
+// The SDK set this process loads, whichever host loaded it first: two sets'
+// WASM ledgers can't share a process, so it is the process's, not a host's.
+let loadedSet: SdkSet | undefined;
+
+/** Records that this process loads `set`; throws OtherSdkSetError when it has loaded the other. */
+export function claimSdkSet(set: SdkSet): void {
+  if (loadedSet !== undefined && loadedSet !== set) throw new OtherSdkSetError(loadedSet, set);
+  loadedSet = set;
 }
 
-function loadEngine(set: SdkSet): Promise<Engine> {
-  if (loader === undefined) throw new Error('No SDK engine is installed: the host sets an engine loader at start (setEngineLoader)');
-  loaded ??= loader(set);
-  return loaded.then((engine) => {
-    if (engine.set !== set) throw new OtherSdkSetError(engine.set, set);
-    return engine;
-  });
+// A temporary bridge, gone once every library takes its host's engines: the
+// engines of the host the shell bridges to, for the libraries that don't yet.
+// The shell sets it once at start, so the CLI process has one engine.
+let bridged: HostEngines | undefined;
+
+/** Gives engineFor and anyEngine the engines of the host they serve: the shell's, set once at start. */
+export function bridgeEngines(engines: HostEngines): void {
+  bridged = engines;
 }
 
-/** The engine for a network's SDK set (by the config under the state root `root`), loaded on first use. */
+function bridgedEngines(): HostEngines {
+  if (bridged === undefined) throw new Error('No SDK engine is installed: the shell bridges its host\'s engines at start (bridgeEngines)');
+  return bridged;
+}
+
+/** The bridged host's engine for a network's SDK set (by the config under the state root `root`), loaded on first use. */
 export function engineFor(network: NetworkName, root: string): Promise<Engine> {
-  return loadEngine(sdkSetOf(network, root));
+  return bridgedEngines().load(sdkSetOf(network, root));
 }
 
-/** The network a call is for, whose set work every set does alike loads while no engine is loaded. */
-export function preferEngineOf(network: NetworkName, root: string): void {
-  preferred = sdkSetOf(network, root);
-}
-
-/**
- * An engine for work every set does alike, such as deriving addresses: the
- * one this process has loaded, else the set of the network the call is for
- * (the rc set's when none was said).
- */
+/** The bridged host's engine for work every set does alike (see HostEngines.any). */
 export function anyEngine(): Promise<Engine> {
-  return loaded ?? loadEngine(preferred ?? 'rc');
+  return bridgedEngines().any();
 }

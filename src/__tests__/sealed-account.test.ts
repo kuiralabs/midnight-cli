@@ -7,7 +7,8 @@
 // node:test as that suite is written.
 
 import { execFileSync } from 'node:child_process';
-import { rcEngine } from '@kuiralabs/midnight-engine-rc';
+import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -25,6 +26,9 @@ import {
   sealedOwnerStore,
   sealedPrivateStatePassword,
 } from '../lib/grant/sealed-account.ts';
+
+// An rc engine, for what every host's has alike: its keys, ledger and contracts.
+const rcEngine = createRcEngine(createHost());
 
 const PASSPHRASE = 'correct horse battery staple';
 const RECORD = { contractAddress: 'ab'.repeat(32), bootSalt: 'ef'.repeat(32), encryptionSecret: '12'.repeat(32) };

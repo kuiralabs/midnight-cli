@@ -98,6 +98,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { exportDustSnapshot } from '@kuiralabs/midnight-engine-rc/dust-export';
 import { WalletDataRepository } from '@kuiralabs/midnight-engine-rc/wallet-data-repository';
+import { testHost } from './helpers/test-host.ts';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { DustDirectResult } from '@kuiralabs/midnight-engine-rc/dust-direct';
 
@@ -123,7 +124,7 @@ function fakeDust(state: ledger.DustLocalState, over: Partial<DustDirectResult> 
 }
 
 function fakeRepo(result: DustDirectResult): WalletDataRepository {
-  return new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+  return new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
     now: () => 1_000_000,
     fetchTip: async () => 'tip-A',
     fetchChainId: async () => null,           // skip the node RPC (offline)

@@ -18,6 +18,7 @@ import { waitForAddressFunded } from '@kuiralabs/midnight-chain/lib/indexer-read
 import { waitForProofServerReady } from '@kuiralabs/midnight-chain/lib/proof-server-ready';
 import { sleep } from '@kuiralabs/midnight-cli-core/lib/sleep';
 import { WalletDataRepository } from '@kuiralabs/midnight-engine-rc/wallet-data-repository';
+import { testHost } from './helpers/test-host.ts';
 import { getNetworkConfig, type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { BalanceSummary } from '@kuiralabs/midnight-chain/lib/balance-subscription';
 
@@ -119,7 +120,7 @@ describe('the wallet data repository, cancelled while it checks a memoized read'
     const summary: BalanceSummary = { balances: new Map(), utxoCount: 0, txCount: 0, highestTxId: 0, registeredUtxos: 0, unregisteredUtxos: 0 };
     const call = new AbortController();
     let tipChecks = 0;
-    const repo = new WalletDataRepository({
+    const repo = new WalletDataRepository(testHost(), {
       now: () => clock,
       // The first check answers; the second waits until its call is cancelled, as a node that doesn't answer.
       fetchTip: (_network, signal) => {
@@ -142,7 +143,7 @@ describe('the wallet data repository, cancelled while it checks a memoized read'
 
   it('passes the call\'s signal on to its unshielded fetch', async () => {
     const seen: Array<AbortSignal | undefined> = [];
-    const repo = new WalletDataRepository({
+    const repo = new WalletDataRepository(testHost(), {
       fetchTip: async () => 'tip',
       fetchUnshielded: async (_address, _network, _onProgress, signal) => {
         seen.push(signal);

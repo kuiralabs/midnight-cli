@@ -4,7 +4,7 @@
 import { waitForLiteSyncedState } from './facade.ts';
 import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { ensureDust } from './transfer.ts';
-import { defaultRepository } from './wallet-data-repository.ts';
+import type { WalletDataRepository } from './wallet-data-repository.ts';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
@@ -12,12 +12,12 @@ import type { DustRegisterOptions, DustRegistration } from '@kuiralabs/midnight-
 export type { DustRegisterOptions, DustRegistration } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 
-
-export async function registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions): Promise<DustRegistration> {
+/** Registers a seed's NIGHT for Dust on the engine's repository `repo`, unless it has Dust already. */
+export async function registerDust(repo: WalletDataRepository, seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions): Promise<DustRegistration> {
   const { signal, onStatus, onSyncProgress, onSyncDetail, onSyncWarning, sdkWarnings, log, root, notice } = options;
   const stopListening = sdkWarnings.listen(onSyncWarning);
   try {
-    const { result, dustBalance } = await defaultRepository().withFacade(
+    const { result, dustBalance } = await repo.withFacade(
       seed,
       networkConfig,
       async ({ bundle, state }) => {

@@ -12,6 +12,10 @@ import {
   type SidecarCheckpoint,
 } from '@kuiralabs/midnight-engine-rc/dust-sync-native';
 import { DUST_STATE_OWNED_HEX } from './fixtures/dust-state-owned.ts';
+import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
+
+// The settings a host reading the environment gives its engine: what each test sets there.
+const envSettings = () => settingsFromEnvironment(process.env);
 
 describe('resumeDecision (kill-safe resume)', () => {
   it('resumes from an existing checkpoint that already reaches the cursor', () => {
@@ -54,7 +58,7 @@ describe('adaptResult (sidecar checkpoint → DustDirectResult)', () => {
     // depends on time; read it at the state's own sync time.
     vi.useFakeTimers({ now: new Date('2026-10-05T06:14:30.000Z') });
     let r: ReturnType<typeof adaptResult>;
-    try { r = adaptResult(cpFor(DUST_STATE_OWNED_HEX)); } finally { vi.useRealTimers(); }
+    try { r = adaptResult(cpFor(DUST_STATE_OWNED_HEX), envSettings()); } finally { vi.useRealTimers(); }
     expect(r.balance).toBe(1_436_566_695_496_744n);
     expect(r.availableCoins).toBe(1);
     expect(r.ownedUtxoCount).toBe(1);
@@ -72,7 +76,7 @@ describe('adaptResult (sidecar checkpoint → DustDirectResult)', () => {
   it('maps an empty state to a zero balance', () => {
     const empty = new ledger.DustLocalState(new ledger.DustParameters(5_000_000_000n, 8_267n, 10_800n));
     const hex = Buffer.from(empty.serialize()).toString('hex');
-    const r = adaptResult(cpFor(hex, { partial: true, last_applied_event_id: -1 }));
+    const r = adaptResult(cpFor(hex, { partial: true, last_applied_event_id: -1 }), envSettings());
     expect(r.balance).toBe(0n);
     expect(r.availableCoins).toBe(0);
     expect(r.partial).toBe(true);
@@ -95,14 +99,14 @@ describe('binary resolution + gating', () => {
       const bin = join(dir, 'dust-sync');
       writeFileSync(bin, '#!/bin/sh\n');
       process.env.MN_DUST_SYNC_BIN = bin;
-      expect(resolveSidecarBinary()).toBe(bin);
+      expect(resolveSidecarBinary(envSettings())).toBe(bin);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
   it('ignores a non-existent override path', () => {
     process.env.MN_DUST_SYNC_BIN = '/no/such/dust-sync-binary';
     // Falls through to the dev build or null — never returns the bad override.
-    expect(resolveSidecarBinary()).not.toBe('/no/such/dust-sync-binary');
+    expect(resolveSidecarBinary(envSettings())).not.toBe('/no/such/dust-sync-binary');
   });
 
   it('never selects the ledger-8 sidecar on this ledger-9 build, even with a resolvable binary', () => {
@@ -112,8 +116,8 @@ describe('binary resolution + gating', () => {
       writeFileSync(bin, '#!/bin/sh\n');
       process.env.MN_DUST_SYNC_BIN = bin;
       delete process.env.MN_DISABLE_NATIVE_DUST;
-      expect(resolveSidecarBinary()).toBe(bin);
-      expect(nativeDustSyncAvailable()).toBe(false);
+      expect(resolveSidecarBinary(envSettings())).toBe(bin);
+      expect(nativeDustSyncAvailable(envSettings())).toBe(false);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
@@ -124,7 +128,7 @@ describe('binary resolution + gating', () => {
       writeFileSync(bin, '#!/bin/sh\n');
       process.env.MN_DUST_SYNC_BIN = bin;
       process.env.MN_DISABLE_NATIVE_DUST = '1';
-      expect(nativeDustSyncAvailable()).toBe(false); // gated off despite a resolvable binary
+      expect(nativeDustSyncAvailable(envSettings())).toBe(false); // gated off despite a resolvable binary
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
@@ -164,7 +168,7 @@ describe('runDustSyncNative exit handling (fake sidecar binary)', () => {
 
   it('accepts the checkpoint from a clean exit (control: the fake binary works)', async () => {
     fakeSidecar(0);
-    const r = await runDustSyncNative(seed, network, { root: join(dir, '.midnight'), startFromId: 0 });
+    const r = await runDustSyncNative(seed, network, { root: join(dir, '.midnight'), startFromId: 0, settings: envSettings() });
     expect(r.lastAppliedEventId).toBe(7);
   });
 
@@ -172,7 +176,7 @@ describe('runDustSyncNative exit handling (fake sidecar binary)', () => {
     // A ledger-8 sidecar on a ledger-9 chain dies like this (exit 2) after a
     // checkpoint already sits at --out; parsing it as success froze dust.
     fakeSidecar(2);
-    await expect(runDustSyncNative(seed, network, { root: join(dir, '.midnight'), startFromId: 0 })).rejects.toThrow('dust-sync exited 2');
+    await expect(runDustSyncNative(seed, network, { root: join(dir, '.midnight'), startFromId: 0, settings: envSettings() })).rejects.toThrow('dust-sync exited 2');
   });
 });
 
@@ -209,10 +213,8 @@ describe('adaptResult — native-path generation-tree collapse', () => {
     const hex = Buffer.from(stateWithForeignLeaves(8, 3).serialize()).toString('hex');
     const cp = cpFor(hex, { owned_generation_indices: [3], generation_frontier: 8 });
 
-    const on = adaptResult(cp);
-    process.env.MN_DISABLE_DUST_COLLAPSE = '1';
-    let off: ReturnType<typeof adaptResult>;
-    try { off = adaptResult(cp); } finally { delete process.env.MN_DISABLE_DUST_COLLAPSE; }
+    const on = adaptResult(cp, { isDustCollapseOff: false });
+    const off = adaptResult(cp, { isDustCollapseOff: true });
 
     expect(on.balance).toBe(off.balance);                                   // collapse never moves the balance
     expect(on.retention.ownedGenerationIndices).toEqual([3]);              // owned indices pass through

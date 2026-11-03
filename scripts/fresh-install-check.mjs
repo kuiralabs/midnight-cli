@@ -236,11 +236,12 @@ try {
     }
   }
   writeFileSync(join(outside, 'load.mjs'), `
-    import { engineFor, setEngineLoader } from '@kuiralabs/midnight-cli-core/lib/engine';
-    import { setHostPathsSource } from '@kuiralabs/midnight-cli-core/lib/state-root';
-    setHostPathsSource(() => ({ stateRoot: ${JSON.stringify(join(outside, 'state'))}, home: ${JSON.stringify(outside)} }));
-    setEngineLoader(async (set) => set === 'beta' ? (await import('@kuiralabs/midnight-engine-beta')).betaEngine : (await import('@kuiralabs/midnight-engine-rc')).rcEngine);
-    try { console.log((await engineFor(process.argv[2])).set); } catch (error) { console.log(error.code ?? error.message); }
+    import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+    const host = createHost({
+      paths: { stateRoot: ${JSON.stringify(join(outside, 'state'))}, home: ${JSON.stringify(outside)} },
+      engineLoader: async (set, host) => set === 'beta' ? (await import('@kuiralabs/midnight-engine-beta')).createBetaEngine(host) : (await import('@kuiralabs/midnight-engine-rc')).createRcEngine(host),
+    });
+    try { console.log((await host.engines.for(process.argv[2])).set); } catch (error) { console.log(error.code ?? error.message); }
   `);
   for (const [network, set] of [['undeployed', 'rc'], ['stagenet', 'beta']]) {
     const loaded = run(process.execPath, ['load.mjs', network], outside).trim();
