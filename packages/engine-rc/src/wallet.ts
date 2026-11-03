@@ -35,7 +35,7 @@ import { createDAppConnector } from './dapp-connector.ts';
 const HOUR_MS = 60 * 60 * 1000;
 
 async function shieldedTransfer(params: ShieldedTransferParams): Promise<string> {
-  const { seed, root, network, networkConfig, amount, progress, signal } = params;
+  const { seed, root, notice, network, networkConfig, amount, progress, signal } = params;
   const networkId = getNetworkId(networkConfig.networkId);
   const nightToken = ledger.unshieldedToken().raw;
   const receiverAddress = decodeShieldedAddress(params.recipient, network);
@@ -98,6 +98,7 @@ async function shieldedTransfer(params: ShieldedTransferParams): Promise<string>
     },
     {
       root,
+      notice,
       syncMode: 'full',
       log: params.log,
       requireStrictSync: true,
@@ -112,7 +113,7 @@ async function shieldedTransfer(params: ShieldedTransferParams): Promise<string>
 /** The wallet a test's preparation checks, built from its saved state and synced quickly (no shielded sync). */
 async function syncedPrepWallet(wallet: PrepWallet, reportSync: boolean, beforeSync?: () => void) {
   bindCachesToIndexer(wallet.network, wallet.networkConfig.indexerWS, wallet.root);
-  const bundle = await buildFacade(wallet.seed, wallet.networkConfig, wallet.root, loadWalletCache(wallet.address, wallet.network, wallet.root));
+  const bundle = await buildFacade(wallet.seed, wallet.networkConfig, wallet.root, wallet.notice, loadWalletCache(wallet.address, wallet.network, wallet.root));
   try {
     beforeSync?.();
     const state = await startAndSyncFacade(bundle, {
@@ -177,7 +178,7 @@ async function prepDust(wallet: PrepWallet, waitMs: number): Promise<{ alreadyAv
 }
 
 const openConnector: EngineWallet['openConnector'] = async (options): Promise<OpenedConnector> => {
-  const { seed, root, network, networkConfig, address, syncMode, signal, onMessage } = options;
+  const { seed, root, notice, network, networkConfig, address, syncMode, signal, onMessage } = options;
   // On a ledger-8 chain the SDK's sync would retry forever.
   await assertLedgerSupported(network, networkConfig, undefined, signal);
   // A failure before the connector is handed back stops what was started, so
@@ -195,12 +196,12 @@ const openConnector: EngineWallet['openConnector'] = async (options): Promise<Op
     const repo = defaultRepository();
     // Best-effort, as there: a failed warm-up leaves the sync below to do it.
     try {
-      await repo.dust(seed, networkConfig, { root, signal, onStatus: onMessage });
+      await repo.dust(seed, networkConfig, { root, notice, signal, onStatus: onMessage });
     } catch {
       throwIfCancelled(signal); // a cancel is not a failed warm-up
     }
-    const cache = await repo.walletStateToRestore(seed, networkConfig, network, root);
-    const built = await buildFacade(seed, networkConfig, root, cache);
+    const cache = await repo.walletStateToRestore(seed, networkConfig, network, root, notice);
+    const built = await buildFacade(seed, networkConfig, root, notice, cache);
     bundle = built;
 
     onMessage('Syncing wallet...');
@@ -228,7 +229,9 @@ const openConnector: EngineWallet['openConnector'] = async (options): Promise<Op
     connector = createDAppConnector({
       bundle: built,
       networkConfig,
-      approvalOptions: { approveAll: true, autoApproveReads: true },
+      // Approves every request: nobody is asked.
+      approvalOptions: { approveAll: true, autoApproveReads: true, prompter: null, notice },
+      notice,
       // Reads answer from the state this sync ended on, and from every later
       // one that is synced by the rule the sync used.
       initialState: syncedState,
@@ -259,7 +262,7 @@ const openConnector: EngineWallet['openConnector'] = async (options): Promise<Op
 };
 
 const serveWallet: EngineWallet['serveWallet'] = (options, serve) => {
-  const { seed, root, networkConfig, network, address, syncMode } = options;
+  const { seed, root, notice, networkConfig, network, address, syncMode } = options;
   // The repository owns validating the caches, priming Dust, building the
   // facade, syncing (with retries) and stopping it. Its save is skipped: mn
   // serve saves only when no transaction is pending, since the SDK drops
@@ -278,6 +281,7 @@ const serveWallet: EngineWallet['serveWallet'] = (options, serve) => {
         bundle,
         networkConfig,
         approvalOptions,
+        notice,
         feeLimits,
         callbacks,
         // Reads answer from the state this sync ended on, and from every later
@@ -290,6 +294,7 @@ const serveWallet: EngineWallet['serveWallet'] = (options, serve) => {
     return serve(session);
   }, {
     root,
+    notice,
     syncMode,
     // serve accepts write requests from dApps — must be strictly synced.
     requireStrictSync: true,

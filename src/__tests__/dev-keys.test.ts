@@ -34,7 +34,7 @@ describe('startKeyDispatcher', () => {
   it('returns a no-op dispatcher when stdin is not a TTY', async () => {
     (process.stdin as any).isTTY = false;
     const { startKeyDispatcher } = await import('../ui/dev-keys.ts');
-    const d = startKeyDispatcher({ actions: { d: () => {} }, onInterrupt: () => {} });
+    const d = startKeyDispatcher({ actions: { d: () => {} }, onInterrupt: () => {}, notice: () => {} });
     expect(typeof d.stop).toBe('function');
     d.stop(); // must not throw
   });
@@ -45,6 +45,7 @@ describe('startKeyDispatcher', () => {
     const d = startKeyDispatcher({
       actions: { d: dAction },
       onInterrupt: vi.fn(),
+      notice: () => {},
     });
     process.stdin.emit('data', 'D');
     await Promise.resolve();
@@ -55,7 +56,7 @@ describe('startKeyDispatcher', () => {
   it('calls onInterrupt on Ctrl+C', async () => {
     const { startKeyDispatcher } = await loadWithRawSupport();
     const onInterrupt = vi.fn();
-    const d = startKeyDispatcher({ actions: {}, onInterrupt });
+    const d = startKeyDispatcher({ actions: {}, onInterrupt, notice: () => {} });
     process.stdin.emit('data', '\u0003');
     expect(onInterrupt).toHaveBeenCalledTimes(1);
     d.stop();
@@ -64,7 +65,7 @@ describe('startKeyDispatcher', () => {
   it('invokes onUnknown for unbound keys', async () => {
     const { startKeyDispatcher } = await loadWithRawSupport();
     const onUnknown = vi.fn();
-    const d = startKeyDispatcher({ actions: { d: () => {} }, onInterrupt: () => {}, onUnknown });
+    const d = startKeyDispatcher({ actions: { d: () => {} }, onInterrupt: () => {}, onUnknown, notice: () => {} });
     process.stdin.emit('data', 'x');
     expect(onUnknown).toHaveBeenCalledWith('x');
     d.stop();
@@ -77,6 +78,7 @@ describe('startKeyDispatcher', () => {
       actions: { d: async () => { throw new Error('boom'); } },
       onInterrupt: () => {},
       onError,
+      notice: () => {},
     });
     process.stdin.emit('data', 'd');
     // Wait for the microtask queue to drain so the promise catch fires.
@@ -89,7 +91,7 @@ describe('startKeyDispatcher', () => {
 
   it('stop() is idempotent', async () => {
     const { startKeyDispatcher } = await loadWithRawSupport();
-    const d = startKeyDispatcher({ actions: {}, onInterrupt: () => {} });
+    const d = startKeyDispatcher({ actions: {}, onInterrupt: () => {}, notice: () => {} });
     d.stop();
     d.stop(); // should not throw
   });

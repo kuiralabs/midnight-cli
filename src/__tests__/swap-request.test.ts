@@ -13,6 +13,10 @@ import { NotAnOfferError, TermsMismatchError } from '@kuiralabs/midnight-cli-cor
 import { readOffer } from '@kuiralabs/midnight-engine-rc/offer-reader';
 import { DEFAULT_OFFER_LIFETIME_S, prepareMake, prepareTake, termsOf } from '../lib/swap/request.ts';
 import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from './fixtures/swap-offer.ts';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+
+// The host the tests' calls run in: nobody to ask, notices dropped.
+const host = createHost();
 
 const NOW = new Date('2026-11-02T12:00:00.000Z');
 // A state root with no config: the networks' own endpoints.
@@ -41,9 +45,9 @@ describe('the terms', () => {
 
 describe('make', () => {
   it('expires a day on unless --expires-in says', () => {
-    expect(prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed']), ROOT, NOW).expiresAt).toEqual(new Date(NOW.getTime() + DEFAULT_OFFER_LIFETIME_S * 1000));
-    expect(prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed', '--expires-in', '60']), ROOT, NOW).expiresAt).toEqual(new Date(NOW.getTime() + 60_000));
-    expect(() => prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed', '--expires-in', 'soon']), ROOT, NOW)).toThrow('--expires-in must be a whole number of seconds');
+    expect(prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed']), ROOT, host, NOW).expiresAt).toEqual(new Date(NOW.getTime() + DEFAULT_OFFER_LIFETIME_S * 1000));
+    expect(prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed', '--expires-in', '60']), ROOT, host, NOW).expiresAt).toEqual(new Date(NOW.getTime() + 60_000));
+    expect(() => prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed', '--expires-in', 'soon']), ROOT, host, NOW)).toThrow('--expires-in must be a whole number of seconds');
   });
 });
 
@@ -61,7 +65,7 @@ describe('take', () => {
     }));
     return file;
   };
-  const take = (file: string, terms = TERMS) => prepareTake(parseArgs(['swap', 'take', file, ...terms, '--network', 'undeployed']), ROOT, NOW);
+  const take = (file: string, terms = TERMS) => prepareTake(parseArgs(['swap', 'take', file, ...terms, '--network', 'undeployed']), ROOT, host, NOW);
 
   it('reads a real offer file at the agreed terms', async () => {
     const { offer, agreed, target } = await take(offerFile());

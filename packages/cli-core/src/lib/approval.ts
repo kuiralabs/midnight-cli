@@ -1,8 +1,8 @@
 // Terminal approval prompts for DApp Connector write operations
-// Asks through the prompter the host sets (the CLI's uses readline, per project constraints — no inquirer)
+// Asks through the prompter its caller gives (the CLI's uses readline, per project constraints — no inquirer)
 
-import { notice } from './notices.ts';
-import { currentPrompter, PromptBusyError } from './prompter.ts';
+import type { NoticeSink } from './notices.ts';
+import { PromptBusyError, type Prompter } from './prompter.ts';
 import { box } from '../ui/format.ts';
 import { bold, teal, dim, yellow, green, red } from '../ui/colors.ts';
 import type { FeeLimits } from './fee-limits.ts';
@@ -44,6 +44,10 @@ export interface ApprovalOptions {
    * terminal gets it rejected.
    */
   approveFees?: boolean;
+  /** Who is asked to approve (the host's prompter); null when nobody can, and every request that needs asking is rejected. */
+  prompter: Prompter | null;
+  /** Where what was approved without asking, and why a request was rejected, is said (the host's notices). */
+  notice: NoticeSink;
 }
 
 /** What a server approves without asking, as `mn serve` reports it. */
@@ -62,7 +66,7 @@ export interface ApprovalPolicy {
   feeLimits?: { maxFeeSpecks: string; maxPending: number };
 }
 
-export function describeApprovalPolicy(options: ApprovalOptions, feeLimits: FeeLimits): ApprovalPolicy {
+export function describeApprovalPolicy(options: Omit<ApprovalOptions, 'prompter' | 'notice'>, feeLimits: FeeLimits): ApprovalPolicy {
   if (options.approveAll) return { reads: 'auto', balancing: 'auto', writes: 'auto' };
   if (options.approveFees) {
     return {
@@ -141,7 +145,7 @@ export function renderApprovalBox(request: ApprovalRequest): string {
 // ── Prompt ──
 
 /** What a server without a terminal can do about a request it can't prompt for. */
-function nonInteractiveHint(request: ApprovalRequest, options: ApprovalOptions): string {
+function nonInteractiveHint(request: ApprovalRequest, options: Pick<ApprovalOptions, 'approveFees'>): string {
   if (options.approveFees) {
     return `--approve-fees approves only paying the Dust fee for an agent's own balanced transaction (and its submit); ${request.method} needs a terminal to approve`;
   }
@@ -163,8 +167,9 @@ function nonInteractiveHint(request: ApprovalRequest, options: ApprovalOptions):
  */
 export async function promptApproval(
   request: ApprovalRequest,
-  options: ApprovalOptions = {},
+  options: ApprovalOptions,
 ): Promise<ApprovalResult> {
+  const { notice } = options;
   // Auto-approve checks
   if (options.approveAll) {
     notice(dim(`  Auto-approved: ${request.method}`));
@@ -182,10 +187,10 @@ export async function promptApproval(
   }
 
   // Non-interactive environment — reject by default
-  const prompter = currentPrompter();
+  const { prompter } = options;
   if (prompter === null || !prompter.isInteractive()) {
     notice(red(prompter === null
-      ? '  Cannot prompt for approval: the host set no prompter (setPrompter)'
+      ? '  Cannot prompt for approval: the host gave no prompter (createHost prompter)'
       : '  Cannot prompt for approval: stdin is not a TTY'));
     notice(dim(`  ${nonInteractiveHint(request, options)}`));
     return 'reject';

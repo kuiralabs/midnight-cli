@@ -13,6 +13,7 @@
 
 import { engineFor, type DAppConnector, type OpenedConnector, type TransactionDetail } from './engine.ts';
 import type { NetworkConfig, NetworkName } from './network.ts';
+import type { NoticeSink } from './notices.ts';
 import { resolveNetwork } from './resolve-network.ts';
 import { shieldedSyncEnabled } from './shielded-policy.ts';
 import { throwIfCancelled } from './errors.ts';
@@ -223,6 +224,8 @@ export interface OpenWalletSessionOptions {
   network: NetworkName;
   /** The state root the wallet's config and caches live under. */
   root: string;
+  /** Where the wallet's lines for the person go (a cache it can't restore from, the connector's waits for Dust). */
+  notice: NoticeSink;
   /** The network's endpoints; when absent, as a command without endpoint flags resolves them (the saved config, then the defaults). */
   networkConfig?: NetworkConfig;
   /** Whether to sync the shielded wallet; off where the network has no shielded faucet, unless forced. */
@@ -249,6 +252,7 @@ export async function openWalletSession(options: OpenWalletSessionOptions): Prom
   const open = () => engine.wallet.openConnector({
     seed,
     root,
+    notice: options.notice,
     network,
     networkConfig,
     address: engine.keys.unshieldedAddress(seed, network),

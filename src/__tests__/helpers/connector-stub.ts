@@ -9,6 +9,9 @@ import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { ApprovalOptions } from '@kuiralabs/midnight-cli-core/lib/approval';
 import type { RpcHandlerContext } from '@kuiralabs/midnight-cli-core/lib/connector-api';
 
+/** A connector test's host: nobody at a terminal to ask, and the connector's lines dropped. */
+export const NO_TERMINAL = { prompter: null, notice: (_line: string): void => {} } as const;
+
 /** A DApp connector, as both engines make one. */
 export interface StubConnector {
   handlers: Record<string, (params: any, ctx: RpcHandlerContext) => Promise<unknown>>;
@@ -139,11 +142,14 @@ export function connectorStub(engine: StubEngine) {
     bundleOverrides?: BundleOverrides;
     networkConfig?: NetworkConfig;
     approvalOptions?: ApprovalOptions;
+    /** Where the connector's lines go; dropped when not given. */
+    notice?: (line: string) => void;
   }): StubConnector {
     return engine.createDAppConnector({
       bundle: createBundleStub(overrides?.bundleOverrides),
       networkConfig: overrides?.networkConfig ?? TEST_NETWORK_CONFIG,
-      approvalOptions: overrides?.approvalOptions ?? { approveAll: true },
+      approvalOptions: overrides?.approvalOptions ?? { ...NO_TERMINAL, approveAll: true },
+      notice: overrides?.notice ?? NO_TERMINAL.notice,
     });
   }
 

@@ -11,7 +11,7 @@
 
 import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { resolveWalletPath, saveShieldedAddress, walletAddress, walletShieldedAddress } from '../lib/wallet-config.ts';
+import { resolveWalletPath, saveShieldedAddress, walletAddress, walletShieldedAddress, type UnlockHost } from '../lib/wallet-config.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
@@ -61,7 +61,7 @@ export default async function airdropCommand(args: ParsedArgs, ctx: CallContext)
   const walletFlag = getFlag(args, 'wallet');
   const isShielded = hasFlag(args, 'shielded') ||
     (walletFlag !== undefined && walletFlag.startsWith('mn_shield-addr_'));
-  const destination = await resolveDestination(args, root, networkName, networkConfig, isShielded);
+  const destination = await resolveDestination(args, root, networkName, networkConfig, isShielded, ctx.host);
 
   if (isShielded) {
     return shieldedAirdrop(args, destination as ShieldedDestination, amountNight, networkName, networkConfig, ctx);
@@ -93,6 +93,7 @@ async function resolveDestination(
   networkName: NetworkName,
   networkConfig: NetworkConfig,
   isShielded: boolean,
+  host: UnlockHost,
 ): Promise<UnshieldedDestination | ShieldedDestination> {
   const walletFlag = getFlag(args, 'wallet');
 
@@ -106,13 +107,13 @@ async function resolveDestination(
   if (isShielded) {
     // The wallet's own shielded address, as its file keeps it: receiving needs no passphrase
     // (unless the network was added after the wallet was written).
-    const stored = await walletShieldedAddress(walletPath, networkName, root);
+    const stored = await walletShieldedAddress(walletPath, networkName, root, host);
     if (stored === undefined) throw new Error(`Wallet ${walletPath} keeps no shielded address for ${networkName}.`);
     const decoded = await resolveAddressDestination(stored, root, networkName, true) as ShieldedDestination;
     return { kind: 'wallet', bech32m: decoded.bech32m, walletPath };
   }
 
-  return { kind: 'address', address: await walletAddress(walletPath, networkName, root) };
+  return { kind: 'address', address: await walletAddress(walletPath, networkName, root, host) };
 }
 
 async function resolveAddressDestination(
@@ -181,6 +182,7 @@ async function unshieldedAirdrop(
   try {
     const result = await (await engineFor(networkName, ctx.config.paths.stateRoot)).wallet.airdrop({
       root: ctx.config.paths.stateRoot,
+      notice: ctx.host.notice,
       networkConfig,
       recipientAddress,
       amountNight,
@@ -283,6 +285,7 @@ async function shieldedAirdrop(
     const txHash = await (await engineFor(networkName, ctx.config.paths.stateRoot)).wallet.shieldedTransfer({
       seed: genesisSeedBuffer,
       root: ctx.config.paths.stateRoot,
+      notice: ctx.host.notice,
       network: networkName,
       networkConfig,
       recipient: userShieldedAddrStr,

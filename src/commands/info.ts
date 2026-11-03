@@ -14,7 +14,7 @@ export default async function infoCommand(args: ParsedArgs, ctx: CallContext): P
   const resolvedPath = resolveWalletPath(root, getFlag(args, 'wallet'));
   const config = await loadWalletConfig(resolvedPath);
   const activeNetwork = resolveNetworkName({ args, configDir: root });
-  const activeAddress = await walletAddress(resolvedPath, activeNetwork, root);
+  const activeAddress = await walletAddress(resolvedPath, activeNetwork, root, ctx.host);
 
   // JSON mode
   if (hasFlag(args, 'json')) {

@@ -42,7 +42,7 @@ describe('a library with no settings source', () => {
     process.env.MN_PASSPHRASE = 'set in the environment';
     try {
       setSettingsSource(null);
-      await expect(readPassphrase({ prompter: null })).rejects.toThrow(NoPassphraseError);
+      await expect(readPassphrase(null)).rejects.toThrow(NoPassphraseError);
     } finally {
       delete process.env.MN_PASSPHRASE;
     }

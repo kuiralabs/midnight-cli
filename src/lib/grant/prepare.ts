@@ -6,6 +6,7 @@
 import { type ParsedArgs, getFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { type PayingTarget, resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
+import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { assertWalletFileExists, getActiveWalletName, resolveWalletPath } from '../wallet-config.ts';
 import { assertAccountNetwork, assertNodeRunsAccount } from './account.ts';
 import { accountRecordsDir, accountWalletName, ensureAccountRecordsDir } from './account-records.ts';
@@ -49,10 +50,10 @@ export async function accountOnRecord(recordsDir: string): Promise<AccountOnReco
   return record === undefined ? null : { address: record.contractAddress };
 }
 
-export async function prepareGrant(args: ParsedArgs, root: string): Promise<PreparedGrant> {
+export async function prepareGrant(args: ParsedArgs, root: string, host: Host): Promise<PreparedGrant> {
   const request = resolveGrantRequest(args);
   assertNodeRunsAccount();
-  const target = resolvePayingTarget(args, 'grant', request.subcommand, root);
+  const target = resolvePayingTarget(args, 'grant', request.subcommand, root, host);
   // Refuses a network the account can't reach before anything is created.
   assertAccountNetwork(target.networkConfig, root);
   const walletName = accountWalletName(getFlag(args, 'wallet'), () => getActiveWalletName(root));

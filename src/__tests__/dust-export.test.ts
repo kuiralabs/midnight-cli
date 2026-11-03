@@ -141,6 +141,7 @@ describe('exportDustSnapshot', () => {
     const repo = fakeRepo(fakeDust(ownedState, { lastAppliedEventId: 42, balance: 500n, partial: true }));
     const res = await exportDustSnapshot(EXPORT_SEED, 'undeployed', EXPORT_NETWORK, {
       root: EXPORT_TMP,
+      notice: () => {},
       repository: repo,
       buildBaseDust: async () => baseSnapshot('0'),
     });
@@ -159,6 +160,7 @@ describe('exportDustSnapshot', () => {
     const repo = fakeRepo(fakeDust(ownedState, { lastAppliedEventId: 100, eventCount: 100, partial: false }));
     const res = await exportDustSnapshot(EXPORT_SEED, 'undeployed', EXPORT_NETWORK, {
       root: EXPORT_TMP,
+      notice: () => {},
       repository: repo,
       buildBaseDust: async () => baseSnapshot('0'),
     });
@@ -173,6 +175,7 @@ describe('exportDustSnapshot', () => {
     const base = baseSnapshot('0');
     const res = await exportDustSnapshot(EXPORT_SEED, 'undeployed', EXPORT_NETWORK, {
       root: EXPORT_TMP,
+      notice: () => {},
       repository: repo,
       buildBaseDust: async () => base,
     });

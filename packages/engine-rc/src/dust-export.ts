@@ -22,6 +22,7 @@ import { buildFacade, stopFacade, overlayDustDirectSnapshot } from './facade.ts'
 import { type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { defaultRepository, type WalletDataRepository } from './wallet-data-repository.ts';
 import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
+import type { NoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 import type { DustExportResult } from '@kuiralabs/midnight-cli-core/lib/engine';
 export type { DustExportResult } from '@kuiralabs/midnight-cli-core/lib/engine';
 
@@ -29,6 +30,8 @@ export type { DustExportResult } from '@kuiralabs/midnight-cli-core/lib/engine';
 export interface DustExportOptions {
   /** The state root the Dust cache lives under. */
   root: string;
+  /** Where the export's lines for the person go (the host's notices). */
+  notice: NoticeSink;
   onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
   signal?: AbortSignal;
   /** Injectable for tests; defaults to the process-wide repository. */
@@ -39,14 +42,14 @@ export interface DustExportOptions {
    * The default touches the node relay (building a facade opens its API-WS), so
    * tests stub this to stay offline.
    */
-  buildBaseDust?: (seed: Buffer, networkConfig: NetworkConfig, root: string, log?: VerboseLog) => Promise<string>;
+  buildBaseDust?: (seed: Buffer, networkConfig: NetworkConfig, root: string, notice: NoticeSink, log?: VerboseLog) => Promise<string>;
   /** The call's verbose lines. */
   log?: VerboseLog;
 }
 
 /** Build a fresh facade from keys and read its base (empty) dust snapshot. */
-async function defaultBuildBaseDust(seedBuffer: Buffer, networkConfig: NetworkConfig, root: string, log?: VerboseLog): Promise<string> {
-  const bundle = await buildFacade(seedBuffer, networkConfig, root, null, log);
+async function defaultBuildBaseDust(seedBuffer: Buffer, networkConfig: NetworkConfig, root: string, notice: NoticeSink, log?: VerboseLog): Promise<string> {
+  const bundle = await buildFacade(seedBuffer, networkConfig, root, notice, null, log);
   try {
     return await (bundle.facade as unknown as {
       dust: { serializeState(): Promise<string> };
@@ -78,12 +81,13 @@ export async function exportDustSnapshot(
 
   const view = await repo.dust(seedBuffer, networkConfig, {
     root: options.root,
+    notice: options.notice,
     signal: options.signal,
     onProgress: options.onProgress,
     log: options.log,
   });
 
-  const baseDust = await (options.buildBaseDust ?? defaultBuildBaseDust)(seedBuffer, networkConfig, options.root, options.log);
+  const baseDust = await (options.buildBaseDust ?? defaultBuildBaseDust)(seedBuffer, networkConfig, options.root, options.notice, options.log);
 
   // Overlay whenever at least one event has been folded in. For a wallet with no
   // dust events yet (lastAppliedEventId -1) the fresh base snapshot is already the

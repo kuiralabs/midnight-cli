@@ -34,7 +34,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
 
   switch (args.subcommand) {
     case 'make': {
-      const { target, terms, expiresAt, out } = prepareMake(args, root, now);
+      const { target, terms, expiresAt, out } = prepareMake(args, root, ctx.host, now);
       if (out !== undefined && existsSync(out)) throw new UsageError(`${out} already exists; an offer file is never written over another`);
       if (!jsonMode) {
         ctx.output.stderr('\n' + header('Swap: make an offer') + '\n\n');
@@ -42,7 +42,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
         ctx.output.stderr(keyValue('Gives', legText(terms.give)) + '\n');
         ctx.output.stderr(keyValue('Wants', legText(terms.want)) + '\n\n');
       }
-      const address = await walletAddress(resolveWalletPath(root, walletFlag), target.network, root);
+      const address = await walletAddress(resolveWalletPath(root, walletFlag), target.network, root, ctx.host);
       const session = await payerFor('swap make', ctx).connect(target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal, SHIELDED);
       try {
         const spinner = spinnerFor('Making the offer (proving its half)...');
@@ -66,7 +66,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
     }
 
     case 'inspect': {
-      const target = resolvePayingTarget(args, 'swap', 'inspect', root);
+      const target = resolvePayingTarget(args, 'swap', 'inspect', root, ctx.host);
       const offer = await readOfferArg(args, target);
       const spinner = spinnerFor('Asking the indexer whether it is still live...');
       const { expired, spends } = await standingOf(offer, target.networkConfig, now, ctx.signal);
@@ -87,7 +87,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
     }
 
     case 'take': {
-      const { target, offer, agreed } = await prepareTake(args, root, now);
+      const { target, offer, agreed } = await prepareTake(args, root, ctx.host, now);
       if (!jsonMode) {
         ctx.output.stderr('\n' + header('Swap: take an offer') + '\n\n');
         ctx.output.stderr(keyValue('Offer', offer.envelope.id) + '\n');
@@ -117,8 +117,8 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
     case 'cancel': {
       const id = args.positionals[0];
       if (id === undefined) throw new UsageError('swap cancel needs the offer\'s id (8 characters of it at least): midnight swap cancel <id>');
-      const target = resolvePayingTarget(args, 'swap', 'cancel', root);
-      const address = await walletAddress(resolveWalletPath(root, walletFlag), target.network, root);
+      const target = resolvePayingTarget(args, 'swap', 'cancel', root, ctx.host);
+      const address = await walletAddress(resolveWalletPath(root, walletFlag), target.network, root, ctx.host);
       const session = await payerFor('swap cancel', ctx).connect(target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal, SHIELDED);
       try {
         const spinner = spinnerFor('Spending the offer\'s coins back to this wallet...');
@@ -143,8 +143,8 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
     }
 
     case 'list': {
-      const target = resolvePayingTarget(args, 'swap', 'list', root);
-      const address = await walletAddress(resolveWalletPath(root, walletFlag), target.network, root);
+      const target = resolvePayingTarget(args, 'swap', 'list', root, ctx.host);
+      const address = await walletAddress(resolveWalletPath(root, walletFlag), target.network, root, ctx.host);
       const spinner = spinnerFor('Asking the indexer about each open offer...');
       const listed = await listOffers(root, target.network, target.networkConfig, address, now, ctx.signal);
       spinner.stop(`${listed.length} offer${listed.length === 1 ? '' : 's'}`);

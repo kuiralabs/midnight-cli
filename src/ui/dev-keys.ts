@@ -1,4 +1,4 @@
-import { notice } from '@kuiralabs/midnight-cli-core/lib/notices';
+import type { NoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 // Raw-mode single-keystroke dispatcher for `mn dev`.
 // Registers {key → handler} pairs; reads one char at a time from stdin.
 // Always restores the terminal's cooked mode on stop() so a crash or Ctrl+C
@@ -13,8 +13,10 @@ export interface KeyDispatcherOptions {
   onInterrupt: () => void;
   /** Called on an unbound key. Defaults to a silent no-op. */
   onUnknown?: (key: string) => void;
-  /** Called when any action handler throws. Defaults to printing to stderr. */
+  /** Called when any action handler throws. Defaults to saying it through `notice`. */
   onError?: (key: string, err: Error) => void;
+  /** Where a failed action is said when there is no `onError` (the host's notices). */
+  notice: NoticeSink;
 }
 
 export interface KeyDispatcher {
@@ -59,7 +61,7 @@ export function startKeyDispatcher(opts: KeyDispatcherOptions): KeyDispatcher {
       .catch((err) => {
         const error = err instanceof Error ? err : new Error(String(err));
         if (opts.onError) opts.onError(key, error);
-        else notice(`key handler error (${key}): ${error.message}`);
+        else opts.notice(`key handler error (${key}): ${error.message}`);
       });
   };
 

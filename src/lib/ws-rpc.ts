@@ -2,7 +2,7 @@
 // Transport layer for the DApp Connector — dispatches RPC calls to handler functions
 
 import { WebSocketServer, WebSocket } from 'ws';
-import { notice } from '@kuiralabs/midnight-cli-core/lib/notices';
+import { defineHostSlot, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import type { APIError, RpcHandler, RpcHandlerContext } from '@kuiralabs/midnight-cli-core/lib/connector-api';
 
 // The wire types the connector's handlers use, from where every package can reach them.
@@ -131,6 +131,8 @@ export interface RpcConnection {
 // ── Server options ──
 
 export interface RpcServerOptions {
+  /** The host the server runs in: its notices, and the count its connection ids come from. */
+  host: Pick<Host, 'notice' | 'slot'>;
   port: number;
   handlers: Record<string, RpcHandler>;
   /**
@@ -196,10 +198,11 @@ function parseRequest(data: string): JsonRpcRequest {
 
 // ── Create server ──
 
-let connectionCounter = 0;
+// The connections a host's servers have accepted: ids are unique across its servers.
+const CONNECTIONS = defineHostSlot('ws-rpc.connections', () => ({ count: 0 }));
 
 export function createRpcServer(options: RpcServerOptions): RpcServer {
-  const { port, handlers, onConnect, onDisconnect, onRequest, onResponse, refuseBrowsers = false } = options;
+  const { host, port, handlers, onConnect, onDisconnect, onRequest, onResponse, refuseBrowsers = false } = options;
   const connections = new Map<string, RpcConnection>();
 
   // Bind to loopback only — prevents remote machines on the network from connecting.
@@ -220,11 +223,11 @@ export function createRpcServer(options: RpcServerOptions): RpcServer {
   wss.on('error', (err: Error) => {
     // Callers handle this via the close() method or process-level error handling
     // We just need to prevent the uncaught exception
-    notice(`WebSocket server error: ${err.message}`);
+    host.notice(`WebSocket server error: ${err.message}`);
   });
 
   wss.on('connection', (ws: WebSocket) => {
-    const id = `conn_${++connectionCounter}`;
+    const id = `conn_${++host.slot(CONNECTIONS).count}`;
     const connection: RpcConnection = {
       ws,
       id,

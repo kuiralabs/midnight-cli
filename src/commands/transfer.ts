@@ -17,7 +17,7 @@ import { receiptText } from '../ui/receipt.ts';
 
 export default async function transferCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
-  const request = await resolveTransferRequest(args, ctx.config.paths.stateRoot);
+  const request = await resolveTransferRequest(args, ctx.config.paths.stateRoot, ctx.host);
   return request.shielded ? shieldedTransfer(args, request, ctx) : unshieldedTransfer(args, request, ctx);
 }
 
@@ -29,7 +29,7 @@ async function unshieldedTransfer(
   ctx: CallContext,
 ): Promise<void> {
   const root = ctx.config.paths.stateRoot;
-  const seedBuffer = Buffer.from((await unlockWallet(walletPath, { root })).seed, 'hex');
+  const seedBuffer = Buffer.from((await unlockWallet(walletPath, { root, host: ctx.host })).seed, 'hex');
 
   const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
   const address = config.addresses[networkName];
@@ -52,6 +52,7 @@ async function unshieldedTransfer(
   try {
     const result = await (await engineFor(networkName, root)).wallet.transfer({
       root,
+      notice: ctx.host.notice,
       seedBuffer,
       networkConfig,
       recipientAddress,
@@ -127,7 +128,7 @@ async function shieldedTransfer(
 ): Promise<void> {
   const amount = nightToMicro(amountNight);
   const root = ctx.config.paths.stateRoot;
-  const seedBuffer = Buffer.from((await unlockWallet(walletPath, { root })).seed, 'hex');
+  const seedBuffer = Buffer.from((await unlockWallet(walletPath, { root, host: ctx.host })).seed, 'hex');
 
   const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
 
@@ -152,6 +153,7 @@ async function shieldedTransfer(
     const txHash = await (await engineFor(networkName, root)).wallet.shieldedTransfer({
       seed: seedBuffer,
       root,
+      notice: ctx.host.notice,
       network: networkName,
       networkConfig,
       recipient: recipientAddress,

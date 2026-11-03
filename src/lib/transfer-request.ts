@@ -4,7 +4,7 @@
 
 import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { loadWalletConfig, resolveWalletPath, walletAddress, walletShieldedAddress, type WalletConfig } from './wallet-config.ts';
+import { loadWalletConfig, resolveWalletPath, walletAddress, walletShieldedAddress, type UnlockHost, type WalletConfig } from './wallet-config.ts';
 import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { engineFor, type EngineKeys } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { shieldedSyncEnabled, shieldedDisabledReason } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
@@ -21,8 +21,8 @@ export interface TransferRequest {
   shielded: boolean;
 }
 
-/** `transfer <to> <amount> [--shielded] [--wallet] [--network]`, checked without touching the chain, against the wallets and config under the state root `root`. */
-export async function resolveTransferRequest(args: ParsedArgs, root: string): Promise<TransferRequest> {
+/** `transfer <to> <amount> [--shielded] [--wallet] [--network]`, checked without touching the chain, against the wallets and config under the state root `root`; a sealed recipient wallet is unlocked through `host`. */
+export async function resolveTransferRequest(args: ParsedArgs, root: string, host: UnlockHost): Promise<TransferRequest> {
   const recipientInput = args.subcommand;
   const amountStr = args.positionals[0];
 
@@ -44,7 +44,7 @@ export async function resolveTransferRequest(args: ParsedArgs, root: string): Pr
   }
 
   const shielded = hasFlag(args, 'shielded');
-  const recipientAddress = await resolveRecipient(recipientInput, args, shielded, root);
+  const recipientAddress = await resolveRecipient(recipientInput, args, shielded, root, host);
   const amountNight = parseAmount(amountStr);
   const walletPath = resolveWalletPath(root, getFlag(args, 'wallet'));
   const walletConfig = await loadWalletConfig(walletPath);
@@ -75,7 +75,7 @@ function assertRecipient(keys: EngineKeys, address: string, shielded: boolean, n
  * An address (mn_addr_ or mn_shield-addr_ prefix) is used as given. Anything
  * else is a wallet name, and the address comes from that wallet's file.
  */
-async function resolveRecipient(input: string, args: ParsedArgs, shielded: boolean, root: string): Promise<string> {
+async function resolveRecipient(input: string, args: ParsedArgs, shielded: boolean, root: string, host: UnlockHost): Promise<string> {
   if (input.startsWith('mn_addr_') || input.startsWith('mn_shield-addr_')) {
     return input;
   }
@@ -84,7 +84,7 @@ async function resolveRecipient(input: string, args: ParsedArgs, shielded: boole
   const networkName = resolveNetworkName({ args, configDir: root });
 
   if (shielded) {
-    const shieldedAddr = await walletShieldedAddress(recipientPath, networkName, root);
+    const shieldedAddr = await walletShieldedAddress(recipientPath, networkName, root, host);
     if (!shieldedAddr) {
       throw new Error(
         `Wallet "${input}" has no shielded address for network "${networkName}".\n` +
@@ -94,7 +94,7 @@ async function resolveRecipient(input: string, args: ParsedArgs, shielded: boole
     return shieldedAddr;
   }
 
-  const address = await walletAddress(recipientPath, networkName, root);
+  const address = await walletAddress(recipientPath, networkName, root, host);
   if (!address) {
     throw new Error(`Wallet "${input}" has no address for network "${networkName}". Regenerate the wallet to derive one.`);
   }

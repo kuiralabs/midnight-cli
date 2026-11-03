@@ -73,6 +73,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
       amountNight: DEFAULT_DEV_AIRDROP_AMOUNT,
       signal,
       sdkWarnings: ctx.sdkWarnings,
+      host: ctx.host,
       onProgress: (name, phase) => {
         const label = {
           creating: 'generating',
@@ -155,7 +156,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
   // Unlock mn's passphrase now, while stdin is still a plain terminal: once the
   // dispatcher reads keys in raw mode, a passphrase typed for [d]'s deploy would
   // be read as dev keystrokes too. Asked once per run; MN_PASSPHRASE asks nothing.
-  if (isPassphraseSet(ctx.config.paths.stateRoot)) await unlockPassphrase(ctx.config.paths.stateRoot);
+  if (isPassphraseSet(ctx.config.paths.stateRoot)) await unlockPassphrase(ctx.host, ctx.config.paths.stateRoot);
 
   const abortController = new AbortController();
   const stopRequest = () => {
@@ -211,6 +212,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
       q: () => stopRequest(),
     },
     onInterrupt: stopRequest,
+    notice: ctx.host.notice,
   });
 
   await new Promise<void>((resolvePromise) => {
@@ -245,7 +247,7 @@ async function deployContract(project: ProjectInfo, ctx: CallContext): Promise<v
   try {
     const { deployDevContract } = await import('../lib/dev/deploy.ts');
     // The payer is the caller's (the CLI passes the serve payer), as for contract and grant.
-    const deployed = await deployDevContract(ctx.config.paths.stateRoot, project.projectRoot, DEPLOY_WALLET, DEPLOY_NETWORK, payerFor('dev deploy', ctx), ctx.progress.silent(), ctx.sdkWarnings, ctx.signal);
+    const deployed = await deployDevContract(ctx.config.paths.stateRoot, ctx.host, project.projectRoot, DEPLOY_WALLET, DEPLOY_NETWORK, payerFor('dev deploy', ctx), ctx.progress.silent(), ctx.sdkWarnings, ctx.signal);
     spinner.stop(`Deployed`);
     ctx.output.stderr(`  ${dim('address')}  ${teal(deployed.address)}\n`);
   } catch (err) {

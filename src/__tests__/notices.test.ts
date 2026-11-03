@@ -1,13 +1,13 @@
-// What a library has for the person at the terminal goes to the notice sink
-// its host sets, never to stderr directly: with no sink it is dropped, and
-// the CLI's sink writes it to stderr as before. HOME is a temporary folder.
+// What a library has for the person at the terminal goes to the notices its
+// host takes, never to stderr directly: a host that takes none drops it, and
+// the CLI's host writes it to stderr as before. HOME is a temporary folder.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { notice, setNoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import { unlockWallet } from '../lib/wallet-config.ts';
 import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
@@ -23,7 +23,6 @@ beforeEach(() => {
   process.env.HOME = home;
 });
 afterEach(() => {
-  setNoticeSink(null);
   process.env.HOME = originalHome;
   fs.rmSync(home, { recursive: true, force: true });
 });
@@ -32,21 +31,13 @@ const plainWallet = (name: string): string =>
   saveWalletConfig({ seed: SEED, addresses: deriveAllAddresses(Buffer.from(SEED, 'hex')), createdAt: '2026-10-19T00:00:00.000Z' }, path.join(home, '.midnight', 'wallets', `${name}.json`));
 
 describe('notices', () => {
-  it('reach the sink that is set, and are dropped with none', () => {
+  it("carry a library's warning to its host's notices when its caller gives no warn of its own, and nowhere when the host takes none", async () => {
     const lines: string[] = [];
-    notice('before any sink');
-    setNoticeSink((line) => lines.push(line));
-    notice('one line');
-    setNoticeSink(null);
-    notice('after the sink is gone');
-    expect(lines).toEqual(['one line']);
-  });
-
-  it("carry a library's warning when its caller gives no warn of its own", async () => {
-    const lines: string[] = [];
-    setNoticeSink((line) => lines.push(line));
-    await unlockWallet(plainWallet('notice-alice'), { root: path.join(home, '.midnight') });
-    expect(lines.join('\n')).toMatch(/not protected: its seed is in plain text/);
+    const wallet = plainWallet('notice-alice');
+    await unlockWallet(wallet, { root: path.join(home, '.midnight'), host: createHost() });
+    await unlockWallet(wallet, { root: path.join(home, '.midnight'), host: createHost({ notice: (line) => lines.push(line) }) });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/not protected: its seed is in plain text/);
   });
 
   it('reach stderr through the CLI, as before', () => {

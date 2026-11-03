@@ -70,6 +70,8 @@ export declare function parseAmount(amountStr: string): number;
 ## `@kuiralabs/midnight-cli-core/lib/approval`
 
 ```ts
+import type { NoticeSink } from "./notices.ts";
+import { type Prompter } from "./prompter.ts";
 import type { FeeLimits } from "./fee-limits.ts";
 export interface ApprovalDetail {
     label: string;
@@ -87,6 +89,8 @@ export interface ApprovalOptions {
     autoApproveReads?: boolean;
     approveAll?: boolean;
     approveFees?: boolean;
+    prompter: Prompter | null;
+    notice: NoticeSink;
 }
 export interface ApprovalPolicy {
     reads: "auto";
@@ -97,11 +101,11 @@ export interface ApprovalPolicy {
         maxPending: number;
     };
 }
-export declare function describeApprovalPolicy(options: ApprovalOptions, feeLimits: FeeLimits): ApprovalPolicy;
+export declare function describeApprovalPolicy(options: Omit<ApprovalOptions, "prompter" | "notice">, feeLimits: FeeLimits): ApprovalPolicy;
 export declare function isReadOnlyMethod(method: string): boolean;
 export declare function isPrepMethod(method: string): boolean;
 export declare function renderApprovalBox(request: ApprovalRequest): string;
-export declare function promptApproval(request: ApprovalRequest, options?: ApprovalOptions): Promise<ApprovalResult>;
+export declare function promptApproval(request: ApprovalRequest, options: ApprovalOptions): Promise<ApprovalResult>;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/argv`
@@ -640,6 +644,7 @@ import { type NetworkConfig, type NetworkName } from "./network.ts";
 import type { CallSdkWarnings } from "./sdk-warnings.ts";
 import type { VerboseLog } from "./verbose.ts";
 import type { ApprovalOptions } from "./approval.ts";
+import type { NoticeSink } from "./notices.ts";
 import type { FeeLimits } from "./fee-limits.ts";
 import type { RpcHandler } from "./connector-api.ts";
 import type { Spinner } from "../ui/spinner.ts";
@@ -775,6 +780,7 @@ export interface TransferParams {
     sdkWarnings: CallSdkWarnings;
     log?: VerboseLog;
     root: string;
+    notice: NoticeSink;
 }
 export interface TransferResult {
     txHash: string;
@@ -794,6 +800,7 @@ export interface DustRegisterOptions {
     sdkWarnings: CallSdkWarnings;
     log?: VerboseLog;
     root: string;
+    notice: NoticeSink;
 }
 export interface DustRegistration {
     alreadyAvailable: boolean;
@@ -823,6 +830,7 @@ export interface ReadOptions {
 }
 export interface CachedReadOptions extends ReadOptions {
     root: string;
+    notice: NoticeSink;
 }
 export interface DustBalance {
     balance: bigint;
@@ -845,6 +853,7 @@ export interface WalletSyncHooks {
 export interface ShieldedTransferParams extends WalletSyncHooks {
     seed: Buffer;
     root: string;
+    notice: NoticeSink;
     network: NetworkName;
     networkConfig: NetworkConfig;
     recipient: string;
@@ -857,6 +866,7 @@ export interface ShieldedTransferParams extends WalletSyncHooks {
 export interface PrepWallet {
     seed: Buffer;
     root: string;
+    notice: NoticeSink;
     network: NetworkName;
     networkConfig: NetworkConfig;
     address: string;
@@ -898,6 +908,7 @@ export interface EngineWallet {
     registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions): Promise<DustRegistration>;
     exportDust(seed: Buffer, network: string, networkConfig: NetworkConfig, options: {
         root: string;
+        notice: NoticeSink;
         signal?: AbortSignal;
         log?: VerboseLog;
         onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
@@ -910,6 +921,7 @@ export interface EngineWallet {
     openConnector(options: {
         seed: Buffer;
         root: string;
+        notice: NoticeSink;
         network: NetworkName;
         networkConfig: NetworkConfig;
         address: string;
@@ -921,6 +933,7 @@ export interface EngineWallet {
     serveWallet<T>(options: {
         seed: Buffer;
         root: string;
+        notice: NoticeSink;
         networkConfig: NetworkConfig;
         network: NetworkName;
         address: string;
@@ -1221,9 +1234,7 @@ export declare function networkIdForName(name: NetworkName): MidnightNetworkId;
 ## `@kuiralabs/midnight-cli-core/lib/notices`
 
 ```ts
-type NoticeSink = (line: string) => void;
-export declare function setNoticeSink(next: NoticeSink | null): void;
-export declare function notice(line: string): void;
+export type NoticeSink = (line: string) => void;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/offer-envelope`
@@ -1282,13 +1293,15 @@ import { type EndpointOverrides, type NetworkConfig, type NetworkName } from "./
 import type { Spinner } from "../ui/spinner.ts";
 import type { CallSdkWarnings } from "./sdk-warnings.ts";
 import type { WalletSession } from "./wallet-session.ts";
+import type { Host } from "./host.ts";
 export interface PayingTarget {
     network: NetworkName;
     root: string;
+    host: Host;
     networkConfig: NetworkConfig;
     endpoints: EndpointOverrides;
 }
-export declare function resolvePayingTarget(args: ParsedArgs, command: string, subcommand: string, root: string): PayingTarget;
+export declare function resolvePayingTarget(args: ParsedArgs, command: string, subcommand: string, root: string, host: Host): PayingTarget;
 export interface ServedWallet {
     port: number;
     stop: () => Promise<void>;
@@ -1345,8 +1358,6 @@ export interface Prompter {
 export declare class PromptBusyError extends Error {
     constructor();
 }
-export declare function setPrompter(next: Prompter | null): void;
-export declare function currentPrompter(): Prompter | null;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/reader-cache-files`
@@ -1579,6 +1590,7 @@ export declare function clearWalletCache(address: string | undefined, network: s
 ```ts
 import { type OpenedConnector, type TransactionDetail } from "./engine.ts";
 import type { NetworkConfig, NetworkName } from "./network.ts";
+import type { NoticeSink } from "./notices.ts";
 import type { SwapLeg } from "./swap-offer.ts";
 import type { OpenOffer } from "./open-offers.ts";
 export interface WalletAddresses {
@@ -1631,6 +1643,7 @@ export interface OpenWalletSessionOptions {
     seed: Buffer;
     network: NetworkName;
     root: string;
+    notice: NoticeSink;
     networkConfig?: NetworkConfig;
     forceShielded?: boolean;
     dustWaitMs?: number;

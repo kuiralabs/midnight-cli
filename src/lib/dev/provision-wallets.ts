@@ -4,7 +4,7 @@
 // left untouched (the user can `mn wallet remove <name>` to force re-setup).
 
 import { existsSync } from 'node:fs';
-import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet } from '../wallet-config.ts';
+import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet, type UnlockHost } from '../wallet-config.ts';
 import { createWallet, walletFilePath, walletSecretFrom } from '../wallet-create.ts';
 import { passphraseForNewSecret } from '../passphrase.ts';
 import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
@@ -45,15 +45,15 @@ interface ProvisionRun {
   signal?: AbortSignal;
 }
 
-/** The steps to run; without them, the wallet functions, whose SDK runs keep their warnings to the provisioning call's `sdkWarnings`. */
-export type ProvisionOptions = ProvisionRun & ({ steps: ProvisionSteps } | { sdkWarnings: CallSdkWarnings });
+/** The steps to run; without them, the wallet functions, run in `host`, whose SDK runs keep their warnings to the provisioning call's `sdkWarnings`. */
+export type ProvisionOptions = ProvisionRun & ({ steps: ProvisionSteps } | { sdkWarnings: CallSdkWarnings; host: UnlockHost });
 
 /** The steps through the wallet functions, on `network` (resolved once, for every wallet). */
-function walletSteps(root: string, network: NetworkConfig, sdkWarnings: CallSdkWarnings): ProvisionSteps {
+function walletSteps(root: string, host: UnlockHost, network: NetworkConfig, sdkWarnings: CallSdkWarnings): ProvisionSteps {
   return {
-    generate: (name, signal) => generateWallet(root, name, signal),
-    airdrop: (name, amountNight, signal) => airdropToWallet(root, network, name, amountNight, signal, sdkWarnings),
-    registerDust: (name, signal) => registerWalletDust(root, network, name, signal, sdkWarnings),
+    generate: (name, signal) => generateWallet(root, host, name, signal),
+    airdrop: (name, amountNight, signal) => airdropToWallet(root, host, network, name, amountNight, signal, sdkWarnings),
+    registerDust: (name, signal) => registerWalletDust(root, host, network, name, signal, sdkWarnings),
     needsDust: (name, signal) => walletNeedsDust(root, network, name, signal),
   };
 }
@@ -70,7 +70,7 @@ function walletSteps(root: string, network: NetworkConfig, sdkWarnings: CallSdkW
  */
 export async function provisionDevWallets(opts: ProvisionOptions): Promise<ProvisionedWallet[]> {
   const { root } = opts;
-  const steps = 'steps' in opts ? opts.steps : walletSteps(root, undeployedNetwork(root), opts.sdkWarnings);
+  const steps = 'steps' in opts ? opts.steps : walletSteps(root, opts.host, undeployedNetwork(root), opts.sdkWarnings);
   const results: ProvisionedWallet[] = [];
   const created: string[] = [];
 
@@ -147,17 +147,17 @@ function undeployedNetwork(root: string): NetworkConfig {
   }).config;
 }
 
-async function generateWallet(root: string, name: string, signal?: AbortSignal): Promise<void> {
-  const passphrase = await passphraseForNewSecret(root);
+async function generateWallet(root: string, host: UnlockHost, name: string, signal?: AbortSignal): Promise<void> {
+  const passphrase = await passphraseForNewSecret(host, root);
   // Cancelled while the passphrase was asked for: no wallet is written.
   throwIfCancelled(signal);
   await createWallet(root, name, walletSecretFrom(), passphrase);
 }
 
-async function airdropToWallet(root: string, network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
+async function airdropToWallet(root: string, host: UnlockHost, network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
   const recipientAddress = (await loadWalletConfig(resolveWalletPath(root, name))).addresses.undeployed;
   // dev's wallets live on the local chain.
-  await (await engineFor('undeployed', root)).wallet.airdrop({ networkConfig: network, recipientAddress, amountNight, signal, sdkWarnings, root });
+  await (await engineFor('undeployed', root)).wallet.airdrop({ networkConfig: network, recipientAddress, amountNight, signal, sdkWarnings, root, notice: host.notice });
 }
 
 async function walletNeedsDust(root: string, network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<boolean> {
@@ -166,7 +166,7 @@ async function walletNeedsDust(root: string, network: NetworkConfig, name: strin
   return registeredUtxos === 0 && unregisteredUtxos > 0;
 }
 
-async function registerWalletDust(root: string, network: NetworkConfig, name: string, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
-  const { seed } = await unlockWallet(resolveWalletPath(root, name), { root });
-  await (await engineFor('undeployed', root)).wallet.registerDust(Buffer.from(seed, 'hex'), network, { signal, sdkWarnings, root });
+async function registerWalletDust(root: string, host: UnlockHost, network: NetworkConfig, name: string, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
+  const { seed } = await unlockWallet(resolveWalletPath(root, name), { root, host });
+  await (await engineFor('undeployed', root)).wallet.registerDust(Buffer.from(seed, 'hex'), network, { signal, sdkWarnings, root, notice: host.notice });
 }

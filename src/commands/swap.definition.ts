@@ -10,7 +10,7 @@ function describeTerms(params: Readonly<Record<string, unknown>>): string {
 /** A take can run: the offer file is one, for this network, with the agreed terms, not expired. */
 async function checkTake(call: ToolCheckCall) {
   const { prepareTake } = await import('../lib/swap/request.ts');
-  return prepareTake(call.argv(), call.host.paths().stateRoot, new Date());
+  return prepareTake(call.argv(), call.host.paths().stateRoot, call.host, new Date());
 }
 
 export const swapDefinition: CommandDefinition = {
@@ -167,7 +167,7 @@ export const swapDefinition: CommandDefinition = {
           },
           async check(_params, call) {
             const { prepareMake } = await import('../lib/swap/request.ts');
-            prepareMake(call.argv(), call.host.paths().stateRoot, new Date());
+            prepareMake(call.argv(), call.host.paths().stateRoot, call.host, new Date());
           },
         },
         order: 40,

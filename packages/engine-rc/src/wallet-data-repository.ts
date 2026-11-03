@@ -50,6 +50,7 @@ import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from
 import { bindCachesToIndexer, describeIndexerChange } from '@kuiralabs/midnight-cli-core/lib/cache-indexer';
 import { nativeDustSyncAvailable, runDustSyncNative } from './dust-sync-native.ts';
 import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
+import type { NoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 import { callNodeRpc } from '@kuiralabs/midnight-chain/lib/node-rpc';
 import { deriveDustSeed } from './derivation.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
@@ -230,15 +231,15 @@ export class WalletDataRepository {
    * read under the state root `root`. Building that new wallet's diagnostics
    * go to `log`.
    */
-  async walletStateToRestore(seed: Buffer, network: NetworkConfig, networkName: NetworkName, root: string, log?: VerboseLog): Promise<WalletCacheData | null> {
+  async walletStateToRestore(seed: Buffer, network: NetworkConfig, networkName: NetworkName, root: string, notice: NoticeSink, log?: VerboseLog): Promise<WalletCacheData | null> {
     return loadWalletCache(deriveUnshieldedAddress(seed, networkName), networkName, root)
-      ?? await this.freshWalletOnDustCheckpoint(seed, network, networkName, root, log);
+      ?? await this.freshWalletOnDustCheckpoint(seed, network, networkName, root, notice, log);
   }
 
-  private async freshWalletOnDustCheckpoint(seed: Buffer, network: NetworkConfig, networkName: NetworkName, root: string, log?: VerboseLog): Promise<WalletCacheData | null> {
+  private async freshWalletOnDustCheckpoint(seed: Buffer, network: NetworkConfig, networkName: NetworkName, root: string, notice: NoticeSink, log?: VerboseLog): Promise<WalletCacheData | null> {
     const checkpoint = loadDustCache(networkName, dustPublicKeyHexFromSeed(seed), root);
     if (!checkpoint || checkpoint.lastAppliedEventId < 0) return null;
-    const fresh = await buildFacade(seed, network, root, null, log);
+    const fresh = await buildFacade(seed, network, root, notice, null, log);
     try {
       const { shielded, unshielded, dust } = fresh.facade as unknown as Record<'shielded' | 'unshielded' | 'dust', { serializeState(): Promise<string> }>;
       const [shieldedState, unshieldedState, dustState] = await Promise.all([shielded.serializeState(), unshielded.serializeState(), dust.serializeState()]);
@@ -437,7 +438,7 @@ export class WalletDataRepository {
     // near-tip. Read-only borrowers skip it.
     if (writeMode && !opts.noPrime && !opts.forceFresh) {
       try {
-        await this.dust(seed, network, { root: opts.root, signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
+        await this.dust(seed, network, { root: opts.root, notice: opts.notice, signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
       } catch (err) {
         // Pre-prime is best-effort — the actual sync below will re-attempt
         // anyway. Surface the error only via onSyncWarning if anyone cares.
@@ -460,8 +461,8 @@ export class WalletDataRepository {
         throwIfCancelled(opts.signal);
         const cacheBeforeBuild = opts.forceFresh
           ? null
-          : await this.walletStateToRestore(seed, network, networkName, opts.root, opts.log);
-        bundle = await buildFacade(seed, network, opts.root, cacheBeforeBuild, opts.log);
+          : await this.walletStateToRestore(seed, network, networkName, opts.root, opts.notice, opts.log);
+        bundle = await buildFacade(seed, network, opts.root, opts.notice, cacheBeforeBuild, opts.log);
         try {
           syncedState = await startAndSyncFacade(bundle, {
             onProgress: opts.onSyncProgress,
@@ -484,7 +485,7 @@ export class WalletDataRepository {
             // Re-prime the dust cache so the next attempt restores from a
             // current checkpoint instead of a full SDK resync.
             try {
-              await this.dust(seed, network, { root: opts.root, signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
+              await this.dust(seed, network, { root: opts.root, notice: opts.notice, signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
             } catch { /* best-effort */ }
             continue;
           }
@@ -529,7 +530,7 @@ export class WalletDataRepository {
           await new Promise((r) => setTimeout(r, COLD_START_DELAY_MS));
           throwIfCancelled(opts.signal);
           const retryCache = loadWalletCache(address, networkName, opts.root);
-          bundle = await buildFacade(seed, network, opts.root, retryCache, opts.log);
+          bundle = await buildFacade(seed, network, opts.root, opts.notice, retryCache, opts.log);
           syncedState = await startAndSyncFacade(bundle, {
             onProgress: opts.onSyncProgress,
             onSyncDetail: opts.onSyncDetail,

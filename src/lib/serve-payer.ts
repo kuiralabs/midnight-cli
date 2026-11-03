@@ -19,10 +19,11 @@ import { assertWalletCanPay } from './wallet-can-pay.ts';
  * running there is reused (its stop does nothing); one on another network
  * refuses, saying what to do.
  */
-async function serveWallet(port: number, { network, root, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<ServedWallet> {
+async function serveWallet(port: number, { network, root, host, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<ServedWallet> {
   const { startServeOrReuse } = await import('./serve-manager.ts');
   const handle = await startServeOrReuse({
     root,
+    host,
     port,
     network,
     endpoints,
@@ -42,10 +43,10 @@ async function serveWallet(port: number, { network, root, endpoints }: PayingTar
  * server that is running already is reused. Closing it reverts what it
  * balanced but never submitted.
  */
-async function connectWallet({ network, root, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined, options: ConnectOptions = {}): Promise<WalletSession> {
+async function connectWallet({ network, root, host, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined, options: ConnectOptions = {}): Promise<WalletSession> {
   const { openConnector } = await import('./serve-manager.ts');
   const engine = await engineFor(network, root);
-  const open = () => openConnector({ root, network, endpoints, wallet, onMessage: (msg) => progress.update(msg), dustWaitMs: OWN_COMMAND_DUST_WAIT_MS, sdkWarnings, forceShielded: options.shielded, signal });
+  const open = () => openConnector({ root, host, network, endpoints, wallet, onMessage: (msg) => progress.update(msg), dustWaitMs: OWN_COMMAND_DUST_WAIT_MS, sdkWarnings, forceShielded: options.shielded, signal });
   return sessionOver(network, await open(), (tx, stage) => engine.ledger.readTransaction(tx, stage), { reopen: open, onMessage: (msg) => progress.update(msg) });
 }
 

@@ -22,6 +22,10 @@ import { createPendingDevice, openAccountKey, ownDeviceCode, sealedDeviceList } 
 import { parseDeviceCode } from '../lib/grant/device-code.ts';
 import { createAccountKey, sealedDeviceKeys, sealedOwnerStore, sealedPrivateStatePassword } from '../lib/grant/sealed-account.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+
+// The host the tests' calls run in: nobody to ask, notices dropped.
+const host = createHost();
 
 const PASSPHRASE = 'correct horse battery staple';
 const ACCOUNT = '5e'.repeat(32);
@@ -37,11 +41,11 @@ let there: string;
 let fromDir: string;
 let toDir: string;
 let backup: string;
-const source = (passphrase = PASSPHRASE) => ({ env: { [PASSPHRASE_ENV]: passphrase }, prompter: null });
+const source = (passphrase = PASSPHRASE) => ({ env: { [PASSPHRASE_ENV]: passphrase } });
 const accountsOf = (home: string) => path.join(home, '.midnight', 'accounts', 'undeployed', 'alice');
 
 const privateStateIn = async (home: string, dir: string) => {
-  const account = await openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), source: source() });
+  const account = await openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), host, source: source() });
   const providers = accountProviders(account.context, wallet, privateStateLocationOf(dir, () => account.location.password() as string));
   providers.privateStateProvider.setContractAddress(ACCOUNT);
   return { account, privateState: providers.privateStateProvider };
@@ -87,7 +91,7 @@ describe("an account's backup", () => {
     establishPassphrase(stateRootIn(there), PASSPHRASE);
     expect(await importAccount(toDir, 'undeployed', PASSPHRASE, backup)).toEqual({ contractAddress: ACCOUNT });
     const { account, privateState } = await privateStateIn(there, toDir);
-    const original = await openGrantAccount(NETWORK, fromDir, () => {}, { root: stateRootIn(here), source: source() });
+    const original = await openGrantAccount(NETWORK, fromDir, () => {}, { root: stateRootIn(here), host, source: source() });
     expect(account.store.readOwner()).toEqual(RECORD);
     expect(account.store.readRoster()).toEqual(ROSTER);
     expect(account.keys.read()?.pk).toEqual(original.keys.read()?.pk);
@@ -117,7 +121,7 @@ describe("a backup made for another device", () => {
     await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup, { forDevice: parseDeviceCode(pendingCode) });
     await importAccount(toDir, 'undeployed', PASSPHRASE, backup);
     const { account, privateState } = await privateStateIn(there, toDir);
-    const original = await openGrantAccount(NETWORK, fromDir, () => {}, { root: stateRootIn(here), source: source() });
+    const original = await openGrantAccount(NETWORK, fromDir, () => {}, { root: stateRootIn(here), host, source: source() });
     expect(account.store.readOwner()).toEqual(RECORD);
     expect(account.keys.read()?.pk).toEqual(pending.pk);
     expect(account.keys.read()?.pk).not.toEqual(original.keys.read()?.pk);

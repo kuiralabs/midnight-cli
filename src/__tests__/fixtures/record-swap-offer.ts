@@ -40,7 +40,7 @@ setEngineLoader(loadInstalledEngine);
 const engine = await engineFor('undeployed', root);
 const ctx = { notify: () => {}, connectionId: 'record', requestId: 1, metadata: {} };
 const open = (seed: Buffer) => engine.wallet.openConnector({
-  seed, root, network: 'undeployed', networkConfig, address: engine.keys.unshieldedAddress(seed, 'undeployed'), syncMode: 'full',
+  seed, root, notice: () => {}, network: 'undeployed', networkConfig, address: engine.keys.unshieldedAddress(seed, 'undeployed'), syncMode: 'full',
   onMessage: (m) => { if (!/\d+\/\d+/.test(m)) process.stderr.write(`  ${m}\n`); },
 });
 

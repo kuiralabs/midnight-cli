@@ -1,5 +1,5 @@
 import { ShieldedWallet } from '@midnightntwrk/wallet-sdk-shielded';
-import { notice } from '@kuiralabs/midnight-cli-core/lib/notices';
+import type { NoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 import {
   UnshieldedWallet,
   createKeystore,
@@ -75,12 +75,14 @@ export interface FacadeBundle {
  * since the last checkpoint, with the Dust checkpoint kept under the state
  * root `root` bridged in when it is ahead.
  *
- * Its diagnostics go to `log`, the call's verbose lines.
+ * Its diagnostics go to `log`, the call's verbose lines; a cache it can't
+ * restore from is said through `notice` before it builds from scratch.
  */
 export async function buildFacade(
   seedBuffer: Buffer,
   networkConfig: NetworkConfig,
   root: string,
+  notice: NoticeSink,
   cache?: WalletCacheData | null,
   log?: VerboseLog,
 ): Promise<FacadeBundle> {

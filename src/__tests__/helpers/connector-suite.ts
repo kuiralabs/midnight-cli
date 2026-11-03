@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vite
 import * as rx from 'rxjs';
 // The wallet SDK's copy of Effect (both engines' SDKs share it): its submit runs on it.
 import { Effect } from 'effect';
-import { HISTORY, TEST_NETWORK_CONFIG, connectorStub, type BundleOverrides, type StubConnector, type StubEngine } from './connector-stub.ts';
+import { HISTORY, NO_TERMINAL, TEST_NETWORK_CONFIG, connectorStub, type BundleOverrides, type StubConnector, type StubEngine } from './connector-stub.ts';
 import { startLocalIndexer, type LocalIndexer } from './local-indexer.ts';
 import { ledgerTx, type Ledger } from './ledger-tx.ts';
 import { SWAP_OFFER_HEX, OFFER_GIVE } from '../fixtures/swap-offer.ts';
@@ -28,7 +28,6 @@ import { withDustShortfall } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import type { FeeLimits } from '@kuiralabs/midnight-cli-core/lib/fee-limits';
 import type { ApprovalOptions } from '@kuiralabs/midnight-cli-core/lib/approval';
-import { setNoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 
 /** What the suite takes from an engine. */
@@ -269,9 +268,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
         function connectorWith(history: unknown[], indexerUrl = TEST_NETWORK_CONFIG.indexer): StubConnector {
           return engine.createDAppConnector({
+            notice: NO_TERMINAL.notice,
             bundle: createBundleStub({ getAllFromTxHistory: () => Promise.resolve(history as any[]) }),
             networkConfig: { ...TEST_NETWORK_CONFIG, indexer: indexerUrl },
-            approvalOptions: { approveAll: true },
+            approvalOptions: { ...NO_TERMINAL, approveAll: true },
           });
         }
 
@@ -381,7 +381,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
         it.each(calls(() => AGENT_TX))('%s refuses as Disconnected, naming the wallet behind the ledger-9 fork, before touching the facade', async (method, params) => {
           const bundle = createBundleStub({ stateFn: () => rx.of(mockState({ protocolVersion: DUST_BEHIND })) });
-          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
           const err: any = await (connector.handlers as any)[method](params(), ctx()).catch((e: any) => e);
 
@@ -393,7 +393,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         it('accepts transactions once the lagging wallet crosses the fork', async () => {
           const states = new rx.BehaviorSubject(mockState({ protocolVersion: DUST_BEHIND }));
           const bundle = createBundleStub({ stateFn: () => states });
-          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
           await expect(connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx())).rejects.toMatchObject({ code: 'Disconnected' });
 
           states.next(mockState());
@@ -404,7 +404,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         // The beta SDK has one ledger: there is no fork to wait for, only the wallet's first state.
         it.each(calls(() => AGENT_TX))('%s refuses as Disconnected before the wallet\'s first state, before touching the facade', async (method, params) => {
           const bundle = createBundleStub({ stateFn: () => rx.NEVER });
-          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
           const err: any = await (connector.handlers as any)[method](params(), ctx()).catch((e: any) => e);
 
@@ -416,7 +416,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         it('accepts transactions once the first state comes', async () => {
           const states = new rx.Subject<any>();
           const bundle = createBundleStub({ stateFn: () => states.asObservable() });
-          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
           await expect(connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx())).rejects.toMatchObject({ code: 'Disconnected' });
 
           states.next(mockState());
@@ -427,7 +427,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
       it('does not require a strictly synced state, which an idle chain\'s dust wallet never reports', async () => {
         const bundle = createBundleStub({ stateFn: () => rx.of(mockState({ isSynced: false })) });
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         await expect(connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx())).resolves.toHaveProperty('tx');
       });
@@ -451,9 +451,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const quiet = new rx.Subject<any>();
         const synced = { unshielded: { balances: { ['00'.repeat(32)]: 5n } } };
         connector = engine.createDAppConnector({
+          notice: NO_TERMINAL.notice,
           bundle: createBundleStub({ stateFn: () => quiet.asObservable() }),
           networkConfig: TEST_NETWORK_CONFIG,
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
           initialState: synced as any,
         });
         expect(await connector.handlers.getUnshieldedBalances({}, ctx())).toEqual({ ['00'.repeat(32)]: 5n });
@@ -462,9 +463,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
       it('moves on to each later state that is current by the caller\'s rule, not only by the SDK\'s', async () => {
         const states = new rx.Subject<any>();
         connector = engine.createDAppConnector({
+          notice: NO_TERMINAL.notice,
           bundle: createBundleStub({ stateFn: () => states.asObservable() }),
           networkConfig: TEST_NETWORK_CONFIG,
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
           initialState: { unshielded: { balances: {} } } as any,
           isCurrent: (state: any) => state.caughtUp === true,
         });
@@ -495,7 +497,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
     describe('write method approval', () => {
       it('proceeds when approveAll is true', async () => {
-        connector = createConnector({ approvalOptions: { approveAll: true } });
+        connector = createConnector({ approvalOptions: { ...NO_TERMINAL, approveAll: true } });
         const result = await connector.handlers.signData({
           data: 'deadbeef',
           options: { encoding: 'hex', keyType: 'unshielded' },
@@ -511,7 +513,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         process.stderr.write = (() => true) as any;
 
         try {
-          connector = createConnector({ approvalOptions: {} });
+          connector = createConnector({ approvalOptions: { ...NO_TERMINAL } });
           await expect(connector.handlers.signData({
             data: 'deadbeef',
             options: { encoding: 'hex', keyType: 'unshielded' },
@@ -527,7 +529,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         process.stderr.write = (() => true) as any;
 
         try {
-          connector = createConnector({ approvalOptions: {} });
+          connector = createConnector({ approvalOptions: { ...NO_TERMINAL } });
           try {
             await connector.handlers.submitTransaction({ tx: 'aabb' }, ctx());
             expect.unreachable('should have thrown');
@@ -546,7 +548,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
     describe('signData', () => {
       it('refuses data that is not valid in its encoding before the operator is asked', async () => {
         // No approveAll and no TTY: reaching the approval step would fail as Rejected instead.
-        connector = createConnector({ approvalOptions: {} });
+        connector = createConnector({ approvalOptions: { ...NO_TERMINAL } });
         const origIsTTY = process.stdin.isTTY;
         Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
         try {
@@ -562,9 +564,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
       it('handles hex encoding', async () => {
         const bundle = createBundleStub();
         connector = engine.createDAppConnector({
+          notice: NO_TERMINAL.notice,
           bundle,
           networkConfig: TEST_NETWORK_CONFIG,
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
         });
 
         const result = await connector.handlers.signData({
@@ -581,9 +584,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
       it('handles base64 encoding', async () => {
         const bundle = createBundleStub();
         connector = engine.createDAppConnector({
+          notice: NO_TERMINAL.notice,
           bundle,
           networkConfig: TEST_NETWORK_CONFIG,
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
         });
 
         const b64Data = Buffer.from('hello world').toString('base64');
@@ -601,9 +605,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
       it('handles text encoding', async () => {
         const bundle = createBundleStub();
         connector = engine.createDAppConnector({
+          notice: NO_TERMINAL.notice,
           bundle,
           networkConfig: TEST_NETWORK_CONFIG,
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
         });
 
         const result = await connector.handlers.signData({
@@ -629,7 +634,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const spendData = intent.signatureData(1);
         const bundle = createBundleStub();
         (bundle as any).keystore = keystore;
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         const result = await connector.handlers.signData({
           data: Buffer.from(spendData).toString('hex'), options: { encoding: 'hex', keyType: 'unshielded' },
@@ -736,7 +741,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         ['an address for another network', output({ recipient: engine.deriveUnshieldedAddress(RECIPIENT_SEED, 'preprod') }), 'is not an unshielded address on Undeployed'],
       ])('makeTransfer refuses %s as InvalidRequest without prompting', async (_name, desired, message) => {
         const transfer = vi.fn();
-        const c = connector = createConnector({ bundleOverrides: { transferTransaction: transfer }, approvalOptions: {} });
+        const c = connector = createConnector({ bundleOverrides: { transferTransaction: transfer }, approvalOptions: { ...NO_TERMINAL } });
 
         const err: any = await withoutOperator(() => c.handlers.makeTransfer({ desiredOutputs: [desired] }, ctx()).catch((e: any) => e));
 
@@ -761,7 +766,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         ['an input token type that is not hex', { kind: 'unshielded', type: 'night', value: '5' }, 'Invalid token type: "night"'],
       ])('makeIntent refuses %s as InvalidRequest without building a swap', async (_name, input, message) => {
         const initSwap = vi.fn();
-        const c = connector = createConnector({ bundleOverrides: { initSwap }, approvalOptions: {} });
+        const c = connector = createConnector({ bundleOverrides: { initSwap }, approvalOptions: { ...NO_TERMINAL } });
 
         const err: any = await withoutOperator(() => c.handlers.makeIntent({
           desiredInputs: [input], desiredOutputs: [], options: { intentId: 'random', payFees: true },
@@ -808,7 +813,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
       ] as const)('%s reads the hex at stage %s and balances that handle', async (method, stage, sdkMethod) => {
         const balance = vi.fn().mockResolvedValue({ type: 'RECIPE' });
         const bundle = createBundleStub({ [sdkMethod]: balance });
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
         const tx = stage === 'Unbound' ? AGENT_TX : SEALED_AGENT_TX;
 
         await connector.handlers[method]({ tx }, ctx());
@@ -824,7 +829,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
       it('submitTransaction reads the hex as a finalized transaction and submits that handle', async () => {
         const submit = vi.fn().mockResolvedValue('tx-id');
         const bundle = createBundleStub({ submitTransaction: submit });
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         const result = await connector.handlers.submitTransaction({ tx: SEALED_AGENT_TX }, ctx());
 
@@ -842,7 +847,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const sdkFailure = Effect.runPromise(Effect.fail(new engine.SubmissionError({ message: 'Transaction submission error', cause: nodeAnswer })));
         sdkFailure.catch(() => {});
         const bundle = createBundleStub({ submitTransaction: () => sdkFailure });
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         const err: any = await connector.handlers.submitTransaction({ tx: SEALED_AGENT_TX }, ctx()).catch((e: any) => e);
 
@@ -855,7 +860,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const bundle = createBundleStub({ balanceUnboundTransaction: balance });
         // The rc SDK's reader, as it refuses another ledger version's bytes; the beta engine's ledger refuses these on its own.
         if (engine.readsThroughFacade) (bundle.facade as any).adoptTransaction = () => { throw new Error('unknown tag midnight:transaction[v99]'); };
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         const err: any = await connector.handlers.balanceUnsealedTransaction({ tx: 'aabb' }, ctx()).catch((e: any) => e);
 
@@ -867,7 +872,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
       it('rejects non-hex input before it reaches the SDK', async () => {
         const bundle = createBundleStub();
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         const err: any = await connector.handlers.balanceUnsealedTransaction({ tx: 'not-hex' }, ctx()).catch((e: any) => e);
 
@@ -921,7 +926,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         // Tests the error path through processRecipe — finalizeRecipe rejection
         // propagates correctly through Promise.race and surfaces to the caller.
         connector = createConnector({
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
           bundleOverrides: {
             finalizeRecipe: () => Promise.reject(new Error('ZK proof generation timed out')),
           },
@@ -933,7 +938,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
       it('returns serialized tx when finalizeRecipe resolves', async () => {
         connector = createConnector({
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
           bundleOverrides: {
             finalizeRecipe: () => Promise.resolve(sealedTx(6)),
           },
@@ -945,7 +950,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
       it('propagates signRecipe errors', async () => {
         connector = createConnector({
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
           bundleOverrides: {
             signRecipe: () => Promise.reject(new Error('signing failed')),
           },
@@ -957,7 +962,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
       it('propagates finalizeRecipe errors', async () => {
         connector = createConnector({
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
           bundleOverrides: {
             finalizeRecipe: () => Promise.reject(new Error('proof generation failed')),
           },
@@ -1023,7 +1028,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         process.stderr.write = (() => true) as any;
         let callCount = 0;
         connector = createConnector({
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
           bundleOverrides: {
             balanceUnboundTransaction: () => {
               callCount++;
@@ -1049,7 +1054,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         });
         let callCount = 0;
         connector = createConnector({
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
           bundleOverrides: {
             balanceUnboundTransaction: () => (++callCount === 1 ? Promise.reject(dustShortage) : Promise.resolve({ type: 'UNBOUND' })),
           },
@@ -1068,7 +1073,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
           _tag: 'Wallet.InsufficientFunds', tokenType: '00',
         });
         const balance = vi.fn().mockRejectedValue(nightShortage);
-        connector = createConnector({ approvalOptions: { approveAll: true }, bundleOverrides: { balanceUnboundTransaction: balance } });
+        connector = createConnector({ approvalOptions: { ...NO_TERMINAL, approveAll: true }, bundleOverrides: { balanceUnboundTransaction: balance } });
 
         await expect(connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx())).rejects.toBe(nightShortage);
         expect(balance).toHaveBeenCalledTimes(1);
@@ -1077,7 +1082,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
       it('does not retry on non-dust errors', async () => {
         process.stderr.write = (() => true) as any;
         connector = createConnector({
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
           bundleOverrides: {
             balanceUnboundTransaction: () => Promise.reject(new Error('some other error')),
           },
@@ -1092,7 +1097,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         process.stderr.write = (() => true) as any;
         let callCount = 0;
         connector = createConnector({
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
           bundleOverrides: {
             balanceUnboundTransaction: () => {
               callCount++;
@@ -1133,10 +1138,9 @@ export function connectorSuite(engine: ConnectorEngine): void {
         it('waits the time the wallet takes to generate the rest, then pays', async () => {
           vi.useFakeTimers();
           const written: string[] = [];
-          setNoticeSink((line) => written.push(line));
           // 1 DUST: 0.65 more and a little over, 89 seconds at this rate.
           const balance = vi.fn().mockRejectedValueOnce(shortOf(SPECK)).mockResolvedValue({ type: 'UNBOUND' });
-          connector = createConnector({ bundleOverrides: { stateFn: growingFrom(Date.now()), balanceUnboundTransaction: balance } });
+          connector = createConnector({ bundleOverrides: { stateFn: growingFrom(Date.now()), balanceUnboundTransaction: balance }, notice: (line) => written.push(line) });
 
           const paid = connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx());
           await vi.advanceTimersByTimeAsync(88_000);
@@ -1146,7 +1150,6 @@ export function connectorSuite(engine: ConnectorEngine): void {
           expect(balance).toHaveBeenCalledTimes(2);
           expect(written.join('')).toContain('Dust: 0.35 of the 1.00 DUST this fee takes; waiting about 2 minutes for the rest...');
           vi.useRealTimers();
-          setNoticeSink(null);
         });
 
         it('refuses at once, with the time, when that is longer than a request waits', async () => {
@@ -1169,9 +1172,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
           process.stderr.write = (() => true) as any;
           const balance = vi.fn().mockRejectedValueOnce(shortOf(2n * SPECK)).mockResolvedValue({ type: 'UNBOUND' });
           connector = engine.createDAppConnector({
+            notice: NO_TERMINAL.notice,
             bundle: createBundleStub({ stateFn: growingFrom(Date.now()), balanceUnboundTransaction: balance }),
             networkConfig: TEST_NETWORK_CONFIG,
-            approvalOptions: { approveAll: true },
+            approvalOptions: { ...NO_TERMINAL, approveAll: true },
             dustWaitMs: 5 * 60_000,
           });
 
@@ -1232,7 +1236,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const attemptedAt: number[] = [];
         const started = Date.now();
         connector = createConnector({
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
           bundleOverrides: {
             // No Dust coin is free until one second in, when a pending transaction lands and releases its coin.
             stateFn: () => rx.concat(rx.of(mockState({ dustBalance: 0n })), rx.timer(1_000).pipe(rx.map(() => mockState({ dustBalance: 1000n })))),
@@ -1260,7 +1264,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const attemptedAt: number[] = [];
         const started = Date.now();
         connector = createConnector({
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
           bundleOverrides: {
             // The wallet state shows Dust throughout; the fourth attempt finds it has grown enough.
             balanceUnboundTransaction: () => {
@@ -1325,12 +1329,12 @@ export function connectorSuite(engine: ConnectorEngine): void {
       /** A connector in fee-wallet mode over a bundle whose unshielded key is WALLET_VK. */
       function feeWallet(
         overrides?: BundleOverrides,
-        approvalOptions: ApprovalOptions = { approveFees: true, autoApproveReads: true },
+        approvalOptions: ApprovalOptions = { ...NO_TERMINAL, approveFees: true, autoApproveReads: true },
         feeLimits?: FeeLimits,
       ) {
         const bundle = createBundleStub(overrides);
         (bundle.keystore as any).getPublicKey = () => WALLET_VK;
-        const feeConnector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions, feeLimits });
+        const feeConnector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions, feeLimits, notice: NO_TERMINAL.notice });
         connector = feeConnector;
         return { bundle, connector: feeConnector };
       }
@@ -1445,7 +1449,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
           const estimate = vi.fn().mockResolvedValue(10n * ONE_DUST);
           const balance = vi.fn().mockResolvedValue({ type: 'RECIPE' });
           const { connector } = feeWallet({ balanceUnboundTransaction: balance, estimateTransactionFee: estimate },
-            { approveAll: true }, { maxFeeSpecks: 1n, maxPending: 1 });
+            { ...NO_TERMINAL, approveAll: true }, { maxFeeSpecks: 1n, maxPending: 1 });
 
           await connector.handlers.balanceUnsealedTransaction({ tx: hex(await unsealedBytes(agentPaysMerchant())) }, ctx());
           expect(estimate).not.toHaveBeenCalled();
@@ -1469,7 +1473,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
       it('approves a fee-only balance as fee-only, not as a prep step, so it holds with --no-auto-approve-reads', async () => {
         const balance = vi.fn().mockResolvedValue({ type: 'RECIPE' });
-        const { connector } = feeWallet({ balanceUnboundTransaction: balance }, { approveFees: true, autoApproveReads: false });
+        const { connector } = feeWallet({ balanceUnboundTransaction: balance }, { ...NO_TERMINAL, approveFees: true, autoApproveReads: false });
 
         const result = await connector.handlers.balanceUnsealedTransaction({ tx: hex(await unsealedBytes(agentPaysMerchant())) }, ctx()) as any;
 
@@ -1511,7 +1515,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
       it('rejects submitting a transaction this server balanced, but not fee-only', async () => {
         const submit = vi.fn();
-        const opts: ApprovalOptions = { approveAll: true };
+        const opts: ApprovalOptions = { ...NO_TERMINAL, approveAll: true };
         const { connector } = feeWallet({ submitTransaction: submit }, opts);
 
         const balanced = await connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx('agent')) as any;
@@ -1602,7 +1606,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const validate = vi.fn().mockResolvedValue(undefined);
         const balance = vi.fn().mockResolvedValue({ type: 'RECIPE', blockData: 'block' });
         const bundle = createBundleStub({ validateTransaction: validate, balanceFinalizedTransaction: balance });
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         expect(await connector.takeOffer('taker', SWAP_OFFER_HEX)).toBe(FINALIZED_HEX);
 
@@ -1619,7 +1623,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
       it('refuses an offer whose signatures or proofs don\'t check, before building anything', async () => {
         const balance = vi.fn();
         const bundle = createBundleStub({ validateTransaction: vi.fn().mockRejectedValue(new Error('invalid proof')), balanceFinalizedTransaction: balance });
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         const err = await connector.takeOffer('taker', SWAP_OFFER_HEX).catch((e: unknown) => e);
 
@@ -1630,7 +1634,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
       it('refuses a transaction that is no offer before validating anything', async () => {
         const validate = vi.fn();
-        connector = engine.createDAppConnector({ bundle: createBundleStub({ validateTransaction: validate }), networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle: createBundleStub({ validateTransaction: validate }), networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         await expect(connector.takeOffer('taker', SEALED_AGENT_TX)).rejects.toBeInstanceOf(NotAnOfferError);
         expect(validate).not.toHaveBeenCalled();
@@ -1641,7 +1645,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const built = offerTx();
         const bundle = createBundleStub({ finalizeRecipe: () => Promise.resolve(built) });
         (bundle.facade as any).revert = revertFn;
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true }, openOffers: () => [openOffer()] });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, openOffers: () => [openOffer()], notice: NO_TERMINAL.notice });
 
         const err = await connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx()).catch((e: unknown) => e);
 
@@ -1657,7 +1661,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
           transferTransaction: transfer,
           finalizeRecipe: () => Promise.resolve(offerTx()),
         });
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true }, openOffers: () => [openOffer()] });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, openOffers: () => [openOffer()], notice: NO_TERMINAL.notice });
 
         expect(await connector.cancelOffers('maker', [openOffer()])).toBe(SWAP_OFFER_HEX);
         const [[outputs]] = transfer.mock.calls;
@@ -1676,7 +1680,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
           finalizeRecipe: () => Promise.resolve(sealedTx(5)),
         });
         (bundle.facade as any).revert = revertFn;
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         await expect(connector.cancelOffers('maker', [openOffer()])).rejects.toMatchObject({ code: 'InvalidRequest' });
         expect(revertFn).toHaveBeenCalled();
@@ -1698,9 +1702,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
         (bundle.facade as any).revert = revertFn;
 
         connector = engine.createDAppConnector({
+          notice: NO_TERMINAL.notice,
           bundle,
           networkConfig: TEST_NETWORK_CONFIG,
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
         });
 
         const connId = 'conn_hex_test';
@@ -1731,9 +1736,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
         (bundle.facade as any).revert = revertFn;
 
         connector = engine.createDAppConnector({
+          notice: NO_TERMINAL.notice,
           bundle,
           networkConfig: TEST_NETWORK_CONFIG,
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
         });
 
         const connId = 'conn_revert_test';
@@ -1753,7 +1759,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
           process.stderr.write = (() => true) as any;
           const bundle = createBundleStub({ finalizeRecipe: () => Promise.resolve(sealedTx(5)) });
           (bundle.facade as any).revert = revertFn;
-          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
           const built = await connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx('conn_offer')) as { tx: string };
           expect(connector.handOffPendingTx('conn_offer', built.tx)).toBe(true);
@@ -1781,8 +1787,9 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
         // Use a single connector — approvalOptions is a mutable object reference.
         // Balance with approveAll, then remove it so submit rejects via non-TTY.
-        const opts: Record<string, any> = { approveAll: true };
+        const opts: Record<string, any> = { ...NO_TERMINAL, approveAll: true };
         connector = engine.createDAppConnector({
+          notice: NO_TERMINAL.notice,
           bundle,
           networkConfig: TEST_NETWORK_CONFIG,
           approvalOptions: opts,
@@ -1825,7 +1832,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const balance = vi.fn();
         const bundle = createBundleStub({ balanceUnboundTransaction: balance });
         // No approveAll and no TTY: reaching the approval step would fail as Rejected instead.
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: {} });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL }, notice: NO_TERMINAL.notice });
         const origIsTTY = process.stdin.isTTY;
         Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
         try {
@@ -1863,7 +1870,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const balance = vi.fn().mockResolvedValue({ type: 'RECIPE' });
         const bundle = createBundleStub({ balanceUnboundTransaction: balance });
         (bundle.keystore as any).getPublicKey = () => WALLET_VK;
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveFees: true, autoApproveReads: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveFees: true, autoApproveReads: true }, notice: NO_TERMINAL.notice });
 
         await connector.handlers.balanceUnsealedTransaction({ tx: await signedWithSurplus() }, ctx());
 
@@ -1878,7 +1885,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
           signRecipe: () => Promise.reject(new engine.PartlySignedTransactionError()),
         });
         (bundle.facade as any).revert = revertFn;
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         const err: any = await connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx()).catch((e: any) => e);
 
@@ -1901,7 +1908,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         }))).toString('hex');
         const balance = vi.fn();
         const bundle = createBundleStub({ [balanceMethod]: balance });
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { autoApproveReads: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, autoApproveReads: true }, notice: NO_TERMINAL.notice });
         const origIsTTY = process.stdin.isTTY;
         Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
         try {
@@ -1945,7 +1952,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
           signRecipe: () => Promise.reject(new Error('signer unavailable')),
         });
         (bundle.facade as any).revert = revertFn;
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         await expect(connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx())).rejects.toThrow('signer unavailable');
         expect(revertFn).toHaveBeenCalledWith(recipe);
@@ -1962,7 +1969,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
           finalizeRecipe: () => Promise.reject(new Error('proof server unreachable')),
         });
         (bundle.facade as any).revert = revertFn;
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         await expect(connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx())).rejects.toThrow('proof server unreachable');
         expect(revertFn).toHaveBeenCalledWith(recipe);
@@ -1980,7 +1987,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
             finalizeRecipe: () => new Promise((resolve) => { finishProof = resolve; }),
           });
           (bundle.facade as any).revert = revertFn;
-          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
           const call = connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx());
           const outcome = expect(call).rejects.toThrow('ZK proof generation timed out');
@@ -2012,9 +2019,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
         (bundle.facade as any).revert = revertFn;
 
         connector = engine.createDAppConnector({
+          notice: NO_TERMINAL.notice,
           bundle,
           networkConfig: TEST_NETWORK_CONFIG,
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
         });
 
         const connId = 'conn_abandon';
@@ -2040,9 +2048,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
         (bundle.facade as any).revert = revertFn;
 
         connector = engine.createDAppConnector({
+          notice: NO_TERMINAL.notice,
           bundle,
           networkConfig: TEST_NETWORK_CONFIG,
-          approvalOptions: { approveAll: true },
+          approvalOptions: { ...NO_TERMINAL, approveAll: true },
         });
 
         await connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx('conn_dispose'));

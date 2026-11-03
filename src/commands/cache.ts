@@ -29,7 +29,7 @@ export default async function cacheCommand(args: ParsedArgs, ctx: CallContext): 
   if (walletFlag) {
     // Clear cache for a specific wallet
     const walletPath = resolveWalletPath(root, walletFlag);
-    const config = await unlockWallet(walletPath, { root });
+    const config = await unlockWallet(walletPath, { root, host: ctx.host });
     // Cancelled while the wallet was unlocked: no cache is cleared.
     throwIfCancelled(ctx.signal);
     const networkName = resolveNetworkName({ args, configDir: root });

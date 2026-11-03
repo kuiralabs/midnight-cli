@@ -11,6 +11,7 @@ import type { FacadeBundle } from '@kuiralabs/midnight-engine-beta/facade';
 import { deriveShieldedAddress } from '@kuiralabs/midnight-engine-beta/derive-address';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { RpcHandlerContext } from '@kuiralabs/midnight-cli-core/lib/connector-api';
+import { NO_TERMINAL } from './helpers/connector-stub.ts';
 
 // The beta set's own address classes, as the engine resolves them: the
 // repository's root holds the rc set's.
@@ -75,7 +76,7 @@ describe('the beta engine', () => {
 
 describe('the beta engine\'s connector', () => {
   it('refuses transaction work before the wallet\'s first state, as the rc engine does', async () => {
-    const connector = createDAppConnector({ bundle: bundleWith(rx.NEVER), networkConfig: STAGENET, approvalOptions: { approveAll: true } });
+    const connector = createDAppConnector({ bundle: bundleWith(rx.NEVER), networkConfig: STAGENET, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
     try {
       await expect(connector.handlers.makeTransfer({ desiredOutputs: [{ kind: 'unshielded', type: NIGHT, value: '1', recipient: RECIPIENT }] }, ctx()))
         .rejects.toMatchObject({ code: 'Disconnected', reason: 'Wallet not synced yet' });
@@ -87,7 +88,7 @@ describe('the beta engine\'s connector', () => {
 
   it('hands the facade the wallet\'s secret keys to build a transfer and a swap', async () => {
     const bundle = bundleWith(rx.of(stateWithFunds()));
-    const connector = createDAppConnector({ bundle, networkConfig: STAGENET, approvalOptions: { approveAll: true } });
+    const connector = createDAppConnector({ bundle, networkConfig: STAGENET, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
     try {
       const output = { kind: 'unshielded', type: NIGHT, value: '1', recipient: RECIPIENT };
       await expect(connector.handlers.makeTransfer({ desiredOutputs: [output] }, ctx())).resolves.toEqual({ tx: 'abcd' });
@@ -100,7 +101,7 @@ describe('the beta engine\'s connector', () => {
   });
 
   it('refuses a transaction it can\'t read as ledger 9 as the caller\'s mistake', async () => {
-    const connector = createDAppConnector({ bundle: bundleWith(rx.of(stateWithFunds())), networkConfig: STAGENET, approvalOptions: { approveAll: true } });
+    const connector = createDAppConnector({ bundle: bundleWith(rx.of(stateWithFunds())), networkConfig: STAGENET, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
     try {
       await expect(connector.handlers.balanceUnsealedTransaction({ tx: 'beef' }, ctx())).rejects.toMatchObject({ code: 'InvalidRequest' });
     } finally {

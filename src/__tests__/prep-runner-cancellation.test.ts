@@ -6,6 +6,10 @@ import { runPrepSteps } from '../lib/test/prep-runner.ts';
 import { createPrepContext, type DappTestConfig } from '../lib/test/types.ts';
 import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+
+// The host the tests' calls run in: nobody to ask, notices dropped.
+const host = createHost();
 
 const config = { network: 'undeployed', prep: ['dust', 'mn-serve'] } as unknown as DappTestConfig;
 
@@ -14,7 +18,7 @@ describe('runPrepSteps', () => {
     const controller = new AbortController();
     controller.abort();
     const started: string[] = [];
-    await expect(runPrepSteps(config, '/nonexistent', createPrepContext('/nonexistent/.midnight', createSdkWarningRouter().openCall().warnings, controller.signal), {
+    await expect(runPrepSteps(config, '/nonexistent', createPrepContext('/nonexistent/.midnight', host, createSdkWarningRouter().openCall().warnings, controller.signal), {
       onStepStart: (step) => started.push(step),
       onStepComplete: () => {},
       onMessage: () => {},

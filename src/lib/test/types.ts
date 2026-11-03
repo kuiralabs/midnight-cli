@@ -1,6 +1,7 @@
 // Test framework types — schemas for dapp.test.json, suite configs, assertions, and results.
 
 import type { ServeHandle } from '../serve-manager.ts';
+import type { UnlockHost } from '../wallet-config.ts';
 import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 
@@ -146,6 +147,8 @@ export interface BuildHandle {
 export interface PrepContext {
   /** The state root the wallets, config and caches live under. */
   root: string;
+  /** The host the run is in: who unlocks the wallet, and where the steps' notices go. */
+  host: UnlockHost;
   /** The SDK warnings of the call that runs the prep: the steps that run the SDK listen to them. */
   sdkWarnings: CallSdkWarnings;
   /** The run's cancellation: no step starts after it aborts, and the waits inside a step stop. */
@@ -156,10 +159,11 @@ export interface PrepContext {
   addCleanup(fn: () => Promise<void>): void;
 }
 
-export function createPrepContext(root: string, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): PrepContext {
+export function createPrepContext(root: string, host: UnlockHost, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): PrepContext {
   const cleanups: (() => Promise<void>)[] = [];
   return {
     root,
+    host,
     sdkWarnings,
     signal,
     cleanups,

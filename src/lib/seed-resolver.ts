@@ -5,7 +5,7 @@
 
 import { getFlag, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { resolveWalletPath, unlockWallet, type WalletConfig } from './wallet-config.ts';
+import { resolveWalletPath, unlockWallet, type UnlockHost, type WalletConfig } from './wallet-config.ts';
 import { settings } from '@kuiralabs/midnight-cli-core/lib/settings';
 
 export interface ResolvedSeed {
@@ -54,7 +54,7 @@ export function parseSeedHex(input: string, label: string): Buffer {
  * source), so a caller that caches to the wallet file can skip that when there is none.
  * Wallets are the ones under the state root `root`.
  */
-export async function resolveSeedSource(args: ParsedArgs, root: string, opts: ResolveSeedOptions = {}): Promise<ResolvedSeed> {
+export async function resolveSeedSource(args: ParsedArgs, root: string, host: UnlockHost, opts: ResolveSeedOptions = {}): Promise<ResolvedSeed> {
   const seedFlag = getFlag(args, 'seed');
   const seedSource = seedFlag ?? settings().seed;
   if (seedSource) {
@@ -76,11 +76,11 @@ export async function resolveSeedSource(args: ParsedArgs, root: string, opts: Re
   }
 
   const walletPath = resolveWalletPath(root, walletName);
-  const { seed, mnemonic: _mnemonic, ...config } = await unlockWallet(walletPath, { root });
+  const { seed, mnemonic: _mnemonic, ...config } = await unlockWallet(walletPath, { root, host });
   return { seed: Buffer.from(seed, 'hex'), walletPath, config };
 }
 
 /** Just the seed — for commands that don't touch the wallet file. */
-export async function resolveSeed(args: ParsedArgs, root: string, opts?: ResolveSeedOptions): Promise<Buffer> {
-  return (await resolveSeedSource(args, root, opts)).seed;
+export async function resolveSeed(args: ParsedArgs, root: string, host: UnlockHost, opts?: ResolveSeedOptions): Promise<Buffer> {
+  return (await resolveSeedSource(args, root, host, opts)).seed;
 }
