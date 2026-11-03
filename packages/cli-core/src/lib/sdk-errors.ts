@@ -1,9 +1,23 @@
-// SDK error classifiers — pattern-match opaque SDK / chain errors into
-// categories the rest of the codebase can branch on. Pure functions, no
-// side effects, no I/O. Lives in its own file so both transfer.ts and
-// wallet-data-repository.ts can import without a circular dependency.
+// The engine contract's reading of the SDK's and the node's errors: the one
+// place mn recognises their shapes and words. An engine reports each failure
+// it can name as a typed error carrying its code (toEngineError), and its DApp
+// connector marks the errors it answers with by their code, keeping their
+// messages (withEngineCode). Only the engines, and in core the wallet session and the Dust wait, import
+// this module (scripts/check-layering.mjs holds it). Pure functions, no I/O.
 
-import { TransactionRefusedError } from './errors.ts';
+import {
+  DustRequiredError,
+  EngineError,
+  InsufficientBalanceError,
+  InvalidDustProofError,
+  ProofFailureError,
+  ProofTimeoutError,
+  StaleUtxoError,
+  StaleWalletStateError,
+  SyncTimeoutError,
+  TransactionRefusedError,
+  type RefusalCode,
+} from './errors.ts';
 
 /**
  * The chain rejected the transaction outright. Most commonly: balance check
@@ -171,5 +185,144 @@ export function nodeRefusalOf(err: unknown): string | undefined {
 export function withNodeReason(err: Error): Error {
   if (err instanceof TransactionRefusedError) return err;
   const reason = nodeRefusalOf(err);
-  return reason === undefined ? err : new TransactionRefusedError(reason, { cause: err });
+  return reason === undefined ? err : new TransactionRefusedError(reason, { cause: err, code: refusalCodeOf(reason) });
+}
+
+// The node's words for a coin another transaction spent (substrate "Custom error: 115"), and for a malformed Dust spend proof (170).
+const STALE_UTXO_WORDS: readonly string[] = ['stale utxo', 'error code 115', 'custom error: 115', 'errorcode: 115'];
+const INVALID_DUST_PROOF_WORDS: readonly string[] = ['error 170', 'error: 170', 'errorcode: 170', 'invaliddustspendproof'];
+// The SDK refusing to resume a wallet's state on a chain it doesn't fit; "inserted non-linearly": an indexer that numbers its events differently.
+const STALE_STATE_WORDS: readonly string[] = ['stale cache', 'chain reset', 'chainid mismatch', 'applied > highest', 'inserted non-linearly'];
+const SYNC_TIMEOUT_WORDS: readonly string[] = ['sync timed out', 'timed out waiting for dust'];
+
+const saysAny = (text: string, words: readonly string[]): boolean => words.some((word) => text.includes(word));
+
+/** The code a node's refusal is reported with, from its reason. */
+export function refusalCodeOf(reason: string): RefusalCode {
+  const said = reason.toLowerCase();
+  if (saysAny(said, STALE_UTXO_WORDS)) return 'STALE_UTXO';
+  if (saysAny(said, INVALID_DUST_PROOF_WORDS)) return 'INVALID_DUST_PROOF';
+  return 'TX_REJECTED';
+}
+
+/**
+ * The engine contract's code for an SDK or node failure, from its shape and
+ * then its words, in the order mn has always told them apart (a proof that
+ * timed out before a refusal's number; a Dust shortage before a shortage of
+ * anything else); undefined for a failure it doesn't name.
+ */
+function engineCodeOf(err: unknown): string | undefined {
+  const reason = nodeRefusalOf(err);
+  if (reason !== undefined) return refusalCodeOf(reason);
+  if (!(err instanceof Error)) return undefined;
+  const said = err.message.toLowerCase();
+  if (said.includes('proof') && said.includes('timeout')) return 'PROOF_TIMEOUT';
+  if (saysAny(said, STALE_UTXO_WORDS)) return 'STALE_UTXO';
+  if (saysAny(said, INVALID_DUST_PROOF_WORDS)) return 'INVALID_DUST_PROOF';
+  if (saysAny(said, STALE_STATE_WORDS)) return 'STALE_CACHE';
+  // The proof server's refusal: the SDK's ClientError "Failed to prove transaction".
+  if (said.includes('failed to prove')) return 'PROOF_FAILURE';
+  if (saysAny(said, SYNC_TIMEOUT_WORDS)) return 'SYNC_TIMEOUT';
+  if (isDustShortage(err) || said.includes('no dust') || (said.includes('dust') && (said.includes('required') || said.includes('available') || said.includes('insufficient')))) return 'DUST_REQUIRED';
+  if (isSdkInsufficientFundsError(err) || said.includes('insufficient') || said.includes('not enough')) return 'INSUFFICIENT_BALANCE';
+  if (said.includes('rejected') || said.includes('transaction failed')) return 'TX_REJECTED';
+  return undefined;
+}
+
+/** The typed error for an engine code, with the failure's message and the failure as its cause. */
+function typedEngineError(code: string, message: string, cause: unknown): Error {
+  const options = { cause };
+  switch (code) {
+    case 'PROOF_TIMEOUT': return new ProofTimeoutError(message, options);
+    case 'PROOF_FAILURE': return new ProofFailureError(message, options);
+    case 'STALE_UTXO': return new StaleUtxoError(message, options);
+    case 'INVALID_DUST_PROOF': return new InvalidDustProofError(message, options);
+    case 'STALE_CACHE': return new StaleWalletStateError(message, options);
+    case 'SYNC_TIMEOUT': return new SyncTimeoutError(message, options);
+    case 'DUST_REQUIRED': return new DustRequiredError(message, options);
+    case 'INSUFFICIENT_BALANCE': return new InsufficientBalanceError(message, options);
+    default: return new EngineError(code, message, options);
+  }
+}
+
+/** Where a DApp connector's error carries mn's code beside its own: an API error's `code` is the connector API's. */
+const MN_CODE = 'mnCode';
+
+/** The mn code a connector error was marked with (withEngineCode, or an API error made with one); undefined when it has none. */
+export function mnCodeOf(err: unknown): string | undefined {
+  const code = err !== null && typeof err === 'object' ? (err as Record<string, unknown>)[MN_CODE] : undefined;
+  return typeof code === 'string' ? code : undefined;
+}
+
+const isConnectorApiError = (err: unknown): boolean =>
+  err !== null && typeof err === 'object' && (err as { type?: unknown }).type === 'DAppConnectorAPIError';
+
+/** Whether the error already carries a code of its own (mn's typed errors do); a connector API error's code is the API's, not mn's. */
+const carriesCode = (err: unknown): boolean =>
+  !isConnectorApiError(err) && err !== null && typeof err === 'object' && typeof (err as { code?: unknown }).code === 'string';
+
+/**
+ * The failure as an engine reports it to mn: a node's refusal as a
+ * TransactionRefusedError (in the node's words, coded by its reason); an SDK
+ * failure mn names as the typed error for its code, with the SDK's message and
+ * the SDK's error as its cause; a connector error marked with mn's code as the
+ * typed error for that code. Anything else (an error that carries its own
+ * code, a failure mn doesn't name) as it is.
+ */
+export function toEngineError(err: unknown): unknown {
+  if (err instanceof TransactionRefusedError) return err;
+  const reason = nodeRefusalOf(err);
+  if (reason !== undefined) return new TransactionRefusedError(reason, { cause: err, code: refusalCodeOf(reason) });
+  const marked = mnCodeOf(err);
+  if (marked !== undefined && err instanceof Error) return typedEngineError(marked, err.message, err);
+  if (isConnectorApiError(err) || carriesCode(err)) return err;
+  const code = engineCodeOf(err);
+  return code === undefined || !(err instanceof Error) ? err : typedEngineError(code, err.message, err);
+}
+
+/**
+ * The failure as a DApp connector answers with it: the same error, its message
+ * and causes as they were (a dApp reads them), marked with mn's code when the
+ * engine contract names it, so the code crosses the wire beside the API's own.
+ */
+export function withEngineCode(err: unknown): unknown {
+  if (err === null || typeof err !== 'object' || isConnectorApiError(err) || carriesCode(err) || mnCodeOf(err) !== undefined) return err;
+  const code = engineCodeOf(err);
+  if (code !== undefined) Object.defineProperty(err, MN_CODE, { value: code, enumerable: false, configurable: true, writable: true });
+  return err;
+}
+
+/**
+ * An engine's operations, each reporting its failures as toEngineError does:
+ * what the engine hands the rest of mn. Every operation is asynchronous.
+ */
+export function reportingEngineErrors<T extends object>(operations: T): T {
+  const reporting: Record<string, unknown> = {};
+  for (const [name, operation] of Object.entries(operations)) {
+    reporting[name] = typeof operation !== 'function'
+      ? operation
+      : async (...args: unknown[]) => {
+        try {
+          return await (operation as (...a: unknown[]) => unknown)(...args);
+        } catch (err) {
+          throw toEngineError(err);
+        }
+      };
+  }
+  return reporting as T;
+}
+
+/** A DApp connector's handlers, each answering with its failures marked by mn's code (withEngineCode). */
+export function markingEngineCodes<T extends Record<string, (...args: never[]) => Promise<unknown>>>(handlers: T): T {
+  const marking: Record<string, unknown> = {};
+  for (const [name, handler] of Object.entries(handlers)) {
+    marking[name] = async (...args: never[]) => {
+      try {
+        return await handler(...args);
+      } catch (err) {
+        throw withEngineCode(err);
+      }
+    };
+  }
+  return marking as T;
 }

@@ -198,7 +198,8 @@ function rpcCall(method, params = {}) {
         if (msg.id === id) {
           clearTimeout(timeout);
           rpcWs.removeListener('message', handler);
-          if (msg.error) reject(new Error(msg.error.message || JSON.stringify(msg.error)));
+          // mn serve's failure, with mn's code for it when the server gave one.
+          if (msg.error) reject(Object.assign(new Error(msg.error.message || JSON.stringify(msg.error)), typeof msg.error.data?.mnCode === 'string' ? { code: msg.error.data.mnCode } : {}));
           else resolve(msg.result);
         }
       } catch {}
@@ -257,25 +258,54 @@ export const SCRIPT_ERROR_MARKER = '__MN_ERROR__';
 
 /**
  * First in every generated script: report any failure (a rejected top-level
- * await included) as one marked line, then exit 1. Without it Node prints the
+ * await included) as one marked line, its message and the code it carries (mn
+ * serve's code for a failure there), then exit 1. Without it Node prints the
  * uncaught exception with its source context, and that became mn's error.
  */
 export const SCRIPT_PRELUDE = `
 const fail = (e) => {
-  process.stderr.write('\\n${SCRIPT_ERROR_MARKER} ' + JSON.stringify(String(e?.message ?? e)) + '\\n');
+  const failure = { message: String(e?.message ?? e), ...(typeof e?.code === 'string' ? { code: e.code } : {}) };
+  process.stderr.write('\\n${SCRIPT_ERROR_MARKER} ' + JSON.stringify(failure) + '\\n');
   process.exit(1);
 };
 process.on('uncaughtException', fail);
 process.on('unhandledRejection', fail);
 `;
 
-/** The failure a generated script reported, or its whole stderr when it reported none. */
-export function scriptFailureMessage(stderr: string, exitCode: number | null): string {
+/** What a generated script reported failing with: its message, and the code the failure carried. */
+export interface ScriptFailure {
+  message: string;
+  code?: string;
+}
+
+/** The failure a generated script reported (a script of an older mn reported its message alone), or its whole stderr when it reported none. */
+export function scriptFailureOf(stderr: string, exitCode: number | null): ScriptFailure {
   const marked = new RegExp(`^${SCRIPT_ERROR_MARKER} (.*)$`, 'm').exec(stderr);
   if (marked) {
-    try { return JSON.parse(marked[1]!) as string; } catch { return marked[1]!; }
+    let reported: unknown;
+    try { reported = JSON.parse(marked[1]!); } catch { return { message: marked[1]! }; }
+    if (typeof reported === 'string') return { message: reported };
+    const { message, code } = (reported ?? {}) as { message?: unknown; code?: unknown };
+    return { message: typeof message === 'string' ? message : marked[1]!, ...(typeof code === 'string' ? { code } : {}) };
   }
-  return stderr.trim() || `Script exited with code ${exitCode}`;
+  return { message: stderr.trim() || `Script exited with code ${exitCode}` };
+}
+
+/** The message of the failure a generated script reported, or its whole stderr when it reported none. */
+export function scriptFailureMessage(stderr: string, exitCode: number | null): string {
+  return scriptFailureOf(stderr, exitCode).message;
+}
+
+/** A generated script failed: its message, and the code its failure carried across the process (undefined when it carried none). */
+export class ContractScriptError extends Error {
+  readonly code: string | undefined;
+
+  constructor({ message, code }: ScriptFailure) {
+    super(message);
+    this.code = code;
+    this.name = 'ContractScriptError';
+    Object.setPrototypeOf(this, ContractScriptError.prototype);
+  }
 }
 
 /** What every SDK set's script shares, for the engine to write it with. */
@@ -579,7 +609,7 @@ export async function executeScript({ dir: dappDir, script, packages, onMessage,
         return;
       }
       if (code !== 0) {
-        reject(new Error(scriptFailureMessage(stderrRaw, code)));
+        reject(new ContractScriptError(scriptFailureOf(stderrRaw, code)));
         return;
       }
       resolve(stdout.trim());

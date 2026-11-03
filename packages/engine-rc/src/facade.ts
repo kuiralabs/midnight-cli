@@ -33,7 +33,7 @@ import {
 import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
 import { assertNetworkAnswers } from '@kuiralabs/midnight-chain/lib/endpoint-check';
 import { isStreamEmpty } from '@kuiralabs/midnight-chain/lib/event-tip';
-import { CancelledError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { CancelledError, SyncTimeoutError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export type SyncMode = 'full' | 'lite' | 'no-dust';
 // full    = shielded + unshielded + dust
@@ -464,7 +464,7 @@ export async function startAndSyncFacade(
             }
           } catch { /* best-effort */ }
         }
-        reject(new Error('Wallet sync timed out'));
+        reject(new SyncTimeoutError('Wallet sync timed out'));
       }
     }, effectiveTimeout);
 

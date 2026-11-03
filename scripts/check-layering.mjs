@@ -106,6 +106,13 @@ const ENGINE_LOADER = 'lib/installed-engines.ts';
 
 const ACCOUNT_CHAIN = /^@kuiralabs\/midnight-account/;
 
+// The engine contract's reading of the SDK's and the node's errors: an engine
+// turns them into typed errors, so only the engines read them, and in core
+// only the wallet session (the DApp connector in a program's process) and the
+// Dust wait (what a shortage says the wallet is short by).
+const SDK_ERRORS = 'lib/sdk-errors.ts';
+const SDK_ERROR_READERS = /^lib\/(sdk-errors|wallet-session|dust-wait)\.ts$/;
+
 // import ... from 'x', export ... from 'x', import 'x', import('x').
 const IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+)(['"])([^'"]+)\1/gm;
 
@@ -186,6 +193,7 @@ export function importRule(fromRel, toRel) {
     return fromRel === ENGINE_LOADER ? undefined : `${home} → engine (reach it through ${ENGINE_LOADER})`;
   }
   if (!MAY_IMPORT[home].includes(targetHome)) return `${home} → ${targetHome}`;
+  if (toRel === SDK_ERRORS && home !== 'engine' && !SDK_ERROR_READERS.test(fromRel)) return `${home} → the SDK's errors (only an engine reads them)`;
   return undefined;
 }
 

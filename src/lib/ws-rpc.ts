@@ -69,6 +69,19 @@ function isApiError(err: unknown): err is APIError {
   );
 }
 
+/**
+ * mn's code for the failure, which the wire carries as `data.mnCode`: the one
+ * the connector marked it with (an API error's own `code` is the API's), or
+ * the code a typed error of mn's carries. Undefined when it has none.
+ */
+function mnCodeOf(err: unknown): string | undefined {
+  if (typeof err !== 'object' || err === null) return undefined;
+  const marked = (err as { mnCode?: unknown }).mnCode;
+  if (typeof marked === 'string') return marked;
+  const code = (err as { code?: unknown }).code;
+  return !isApiError(err) && typeof code === 'string' ? code : undefined;
+}
+
 /** Walk an error's cause chain and extract structured data for the JSON-RPC error response. */
 function extractErrorData(err: unknown): Record<string, unknown> | undefined {
   if (!(err instanceof Error) && !(typeof err === 'object' && err !== null && '_tag' in err)) {
@@ -305,9 +318,10 @@ export function createRpcServer(options: RpcServerOptions): RpcServer {
         const durationMs = Date.now() - startTime;
         const rpcCode = (err as any)?.rpcCode ?? mapErrorToRpcCode(err);
         const message = err instanceof Error ? err.message : 'Internal error';
-        const data = isApiError(err)
-          ? { type: err.type, code: err.code }
-          : extractErrorData(err);
+        // The API's own error data as the specification has it, with mn's code beside it (an additive key).
+        const mnCode = mnCodeOf(err);
+        const described = isApiError(err) ? { type: err.type, code: err.code } : extractErrorData(err);
+        const data = mnCode === undefined ? described : { ...described, mnCode };
 
         const response: JsonRpcErrorResponse = {
           jsonrpc: '2.0',

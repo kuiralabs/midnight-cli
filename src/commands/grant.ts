@@ -10,8 +10,7 @@ import { existsSync } from 'node:fs';
 // this process: no server, no port.
 
 import { type ParsedArgs, hasFlag, getFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { ERROR_CODES, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { DustRequiredError, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { type GrantAccount, openGrantAccount, ownerDeviceOf } from '../lib/grant/account.ts';
 import { deployShortOfDustNote } from '../lib/grant/deploy-cost.ts';
 import { type OwnerCommandOutput, grantRequestOf, grantsOf, issue, issuePreview, revoke, revokeAll, statusOf } from '../lib/grant/owner-commands.ts';
@@ -38,9 +37,10 @@ const SPINNER_LABEL: Record<GrantRequest['subcommand'], string> = {
   device: 'Working on the account\'s devices...',
 };
 
+/** Whether the failure is a shortage of Dust or NIGHT, by the code it carries. */
 function isShortOfDust(err: Error): boolean {
-  const { errorCode } = classifyError(err);
-  return errorCode === ERROR_CODES.DUST_REQUIRED || errorCode === ERROR_CODES.INSUFFICIENT_BALANCE;
+  const { code } = err as { code?: unknown };
+  return code === 'DUST_REQUIRED' || code === 'INSUFFICIENT_BALANCE';
 }
 
 /** A deposit is refused before anything is built when the wallet's synced shielded NIGHT is short: the SDK's own refusal names neither the token nor the amounts. */
@@ -295,8 +295,9 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   } catch (err) {
     spinner.fail(`${request.subcommand} failed`);
     // A deploy costs far more Dust than a transfer: say how much when that is what stopped it.
+    // With the note, the failure is a Dust shortage: DUST_REQUIRED, as the note's words always made it.
     if (request.subcommand === 'deploy' && funds !== undefined && err instanceof Error && isShortOfDust(err)) {
-      throw new Error(`${err.message}\n\n${deployShortOfDustNote(funds.dustBalance)}`);
+      throw new DustRequiredError(`${err.message}\n\n${deployShortOfDustNote(funds.dustBalance)}`, { cause: err });
     }
     throw err;
   }

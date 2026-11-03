@@ -8,7 +8,14 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SCRIPT_PRELUDE, scriptFailureMessage } from '../lib/contract/runner.ts';
+import { Effect } from 'effect';
+import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
+import { ContractScriptError, SCRIPT_PRELUDE, scriptFailureMessage, scriptFailureOf } from '../lib/contract/runner.ts';
+import { createApiError } from '../lib/ws-rpc.ts';
+import { scriptFailureAtServe } from './helpers/serve-script-failure.ts';
+import { classifyByCode, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { withEngineCode } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 function runScript(body: string): { stderr: string; status: number | null } {
   const dir = mkdtempSync(join(tmpdir(), 'mn-script-'));
@@ -49,4 +56,41 @@ await Promise.reject(new TypeError('Expected an input string with byte length of
     expect(scriptFailureMessage('', 2)).toBe('Script exited with code 2');
   });
 
+  it('reports the code its failure carries beside the message', () => {
+    const { stderr, status } = runScript(`throw Object.assign(new Error('Dust not available'), { code: 'DUST_REQUIRED' });`);
+    expect(scriptFailureOf(stderr, status)).toStrictEqual({ message: 'Dust not available', code: 'DUST_REQUIRED' });
+    expect(scriptFailureOf(runScript(`throw new Error('no code');`).stderr, 1)).toStrictEqual({ message: 'no code' });
+  });
+
+  it("reads an older mn's script, which reported its message alone", () => {
+    expect(scriptFailureOf('__MN_ERROR__ "the message"\n', 1)).toStrictEqual({ message: 'the message' });
+  });
+});
+
+// The whole way a failure at mn serve takes, run for real: helpers/serve-script-failure.ts.
+describe("a failure at mn serve, across the wire and the script's process", () => {
+  const failedRun = scriptFailureAtServe;
+
+  it("carries the connector's Dust refusal as DUST_REQUIRED, in the connector's words", async () => {
+    const message = "Not enough Dust available for this transaction's fee: the wallet has 0.35 DUST and the fee takes 2.00.";
+    const err = await failedRun(() => createApiError('InternalError', message, 'DUST_REQUIRED'));
+    expect(err).toBeInstanceOf(ContractScriptError);
+    expect(err.message).toBe(message);
+    expect(classifyByCode(err, installedCommands)).toStrictEqual({ errorCode: 'DUST_REQUIRED', exitCode: 5 });
+  });
+
+  it("carries a node's refusal by its reason (approved Y54: one with no rule's words was UNKNOWN)", async () => {
+    const refused = async (reason: string) => {
+      const sdkFailure = Effect.runPromise(Effect.fail(new SubmissionError({ message: 'Transaction submission error', cause: new Error(reason) })));
+      const thrown = await sdkFailure.catch((e: Error) => e);
+      // As the connector answers: its own words over the SDK's error, marked with mn's code.
+      return failedRun(() => withEngineCode(new Error(`Transaction submission failed: [SubmissionError] Transaction submission error → ${reason}`, { cause: thrown })));
+    };
+    const other = await refused('1010: Invalid Transaction: Custom error: 199');
+    expect(other.message).toBe('Transaction submission failed: [SubmissionError] Transaction submission error → 1010: Invalid Transaction: Custom error: 199');
+    expect(classifyError(other)).toStrictEqual({ errorCode: 'UNKNOWN', exitCode: 1 });
+    expect(classifyByCode(other, installedCommands)).toStrictEqual({ errorCode: 'TX_REJECTED', exitCode: 6 });
+    expect(classifyByCode(await refused('1010: Invalid Transaction: Custom error: 115'), installedCommands)).toStrictEqual({ errorCode: 'STALE_UTXO', exitCode: 6 });
+    expect(classifyByCode(await refused('1010: Invalid Transaction: Custom error: 170'), installedCommands)).toStrictEqual({ errorCode: 'INVALID_DUST_PROOF', exitCode: 6 });
+  });
 });

@@ -16,7 +16,8 @@ import { createApiError, type RpcHandler, type RpcHandlerContext } from '@kuiral
 import { createPhaseTracker, type PhaseTracker } from '@kuiralabs/midnight-cli-core/lib/phase-tracker';
 import { toHex, fromHex } from '@kuiralabs/midnight-cli-core/lib/tx-serde';
 import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
-import { isDustShortage } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { isDustShortage, markingEngineCodes } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { ProofTimeoutError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits } from '@kuiralabs/midnight-cli-core/lib/fee-limits';
 import { inspectTxHex } from './tx-inspect.ts';
 import { readOffer, spentNullifiers } from './offer-reader.ts';
@@ -339,7 +340,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       finalized = await Promise.race([
         finalizing,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('ZK proof generation timed out')), PROOF_TIMEOUT_MS);
+          timer = setTimeout(() => reject(new ProofTimeoutError()), PROOF_TIMEOUT_MS);
         }),
       ]);
     } catch (err) {
@@ -402,7 +403,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       throw createApiError('Rejected', approvalOptions.approveFees
         ? `${OPERATOR_REJECTED_MESSAGE}: this fee wallet (--approve-fees) approves without the operator only paying the `
           + 'Dust fee for an agent\'s own transaction and submitting a transaction it balanced that way on the same connection'
-        : OPERATOR_REJECTED_MESSAGE);
+        : OPERATOR_REJECTED_MESSAGE, 'TX_REJECTED');
     }
   }
 
@@ -758,13 +759,13 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       return createApiError('InternalError',
         `The wallet has no Dust available that covers this transaction's fee (${extractErrorDetail(err)}), and no balanced `
         + 'transaction is holding any back on this server. Dust builds up with time from the NIGHT registered for it: '
-        + 'retry later, or register more NIGHT for Dust generation.');
+        + 'retry later, or register more NIGHT for Dust generation.', 'DUST_REQUIRED');
     }
     return createApiError('InternalError',
       `No Dust is free to pay the fee (${extractErrorDetail(err)}). Each balanced transaction reserves a whole Dust coin `
       + `until it is submitted and on chain, or released when its connection closes or it expires; ${pending} `
       + 'balanced transaction(s) are waiting to be submitted on this server. Retry once they settle. To pay for more '
-      + 'transactions at once, the wallet needs more Dust coins: one per NIGHT UTXO registered for Dust generation.');
+      + 'transactions at once, the wallet needs more Dust coins: one per NIGHT UTXO registered for Dust generation.', 'DUST_REQUIRED');
   }
 
   /** The fee takes more Dust than the wallet's NIGHT generates in the time a request waits (`waitMs` null: within a day). */
@@ -773,7 +774,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       ? "Its registered NIGHT won't generate that within a day: register more NIGHT for Dust generation."
       : `Its registered NIGHT generates the rest in ${formatWait(waitMs)}: retry then, or register more NIGHT to get there sooner.`;
     return createApiError('InternalError',
-      `Not enough Dust available for this transaction's fee: the wallet has ${roughDust(have)} DUST and the fee takes ${roughDust(needed, true)}. ${when}`);
+      `Not enough Dust available for this transaction's fee: the wallet has ${roughDust(have)} DUST and the fee takes ${roughDust(needed, true)}. ${when}`, 'DUST_REQUIRED');
   }
 
   /**
@@ -1122,5 +1123,6 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     return false;
   }
 
-  return { handlers, revertPendingTxs, handOffPendingTx, takeOffer, cancelOffers, hasPendingTxs, dispose };
+  // Each handler answers with its failure marked by mn's code, its message and causes as they were.
+  return { handlers: markingEngineCodes(handlers), revertPendingTxs, handOffPendingTx, takeOffer, cancelOffers, hasPendingTxs, dispose };
 }

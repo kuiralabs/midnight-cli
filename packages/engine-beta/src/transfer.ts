@@ -2,7 +2,7 @@
 // Handles: facade lifecycle, sync, balance check, dust, tx build/sign/prove/submit, retries
 
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { DustRequiredError, InsufficientBalanceError, ProofTimeoutError, SyncTimeoutError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { MidnightBech32m, UnshieldedAddress, type DustAddress } from '@midnightntwrk/wallet-sdk-address-format';
 import { type FacadeState, type UtxoWithMeta } from '@midnightntwrk/wallet-sdk-facade';
 import * as rx from 'rxjs';
@@ -95,7 +95,7 @@ async function submitDustRegistration(
   await Promise.race([
     bundle.facade.dust.waitForSyncedState(),
     new Promise<never>((_, reject) => setTimeout(() =>
-      reject(new Error('Insufficient funds: dust wallet sync timed out')), SYNC_ATTEMPT_TIMEOUT_MS)),
+      reject(new SyncTimeoutError('Insufficient funds: dust wallet sync timed out')), SYNC_ATTEMPT_TIMEOUT_MS)),
   ]);
 
   // The registration pays its own fee from the dust these coins generate, so
@@ -227,7 +227,7 @@ export async function ensureDust(
 
   // No NIGHT at all, not even in flight: there is nothing to register and no Dust will be generated.
   if (state.unshielded.availableCoins.length === 0 && (state.unshielded.pendingCoins?.length ?? 0) === 0) {
-    throw new Error(
+    throw new DustRequiredError(
       'This wallet has no NIGHT, so it generates no Dust to pay fees. Fund it first '
       + '(on undeployed: midnight airdrop <amount>), then run: midnight dust register',
     );
@@ -259,7 +259,7 @@ export async function ensureDust(
       const pollState = await Promise.race([
         bundle.facade.waitForSyncedState(),
         new Promise<never>((_, reject) => setTimeout(() =>
-          reject(new Error('Poll sync timed out')), SYNC_ATTEMPT_TIMEOUT_MS)),
+          reject(new SyncTimeoutError('Poll sync timed out')), SYNC_ATTEMPT_TIMEOUT_MS)),
       ]);
       if (pollState.dust.balance(new Date()) > 0n) {
         onStatus?.('Dust available');
@@ -270,7 +270,7 @@ export async function ensureDust(
     }
     await new Promise(resolve => setTimeout(resolve, 5_000));
   }
-  throw new Error(
+  throw new SyncTimeoutError(
     'Timed out waiting for dust tokens. ' +
     'Try running: midnight dust register'
   );
@@ -338,7 +338,7 @@ async function buildAndSubmitTransfer(
       const finalizedTx = await Promise.race([
         bundle.facade.finalizeRecipe(signedRecipe),
         new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('ZK proof generation timed out')), PROOF_TIMEOUT_MS);
+          setTimeout(() => reject(new ProofTimeoutError()), PROOF_TIMEOUT_MS);
         }),
       ]);
 
@@ -460,7 +460,7 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
         log?.('transfer', `Balance: ${Number(unshieldedBalance) / TOKEN_MULTIPLIER} NIGHT, coins: ${availableCoinCount}`);
         if (unshieldedBalance < amount) {
           const haveNight = Number(unshieldedBalance) / TOKEN_MULTIPLIER;
-          throw new Error(
+          throw new InsufficientBalanceError(
             `Insufficient balance: ${haveNight.toFixed(6)} NIGHT available, ` +
             `${amountNight} NIGHT requested`
           );

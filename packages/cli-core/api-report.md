@@ -676,7 +676,7 @@ export interface RpcHandlerContext {
     metadata: Record<string, unknown>;
 }
 export type RpcHandler = (params: Record<string, unknown>, context: RpcHandlerContext) => Promise<unknown>;
-export declare function createApiError(code: ErrorCode, reason: string): APIError;
+export declare function createApiError(code: ErrorCode, reason: string, mnCode?: string): APIError;
 export declare const OPERATOR_REJECTED_MESSAGE = "User rejected the request";
 ```
 
@@ -1199,21 +1199,62 @@ export declare class CancelledError extends Error {
 }
 export declare class TransactionRefusedError extends Error {
     readonly reason: string;
+    readonly code: RefusalCode;
     constructor(reason: string, options?: {
+        cause?: unknown;
+        code?: RefusalCode;
+    });
+}
+export type RefusalCode = "TX_REJECTED" | "STALE_UTXO" | "INVALID_DUST_PROOF";
+export declare function asReported(err: Error): Error;
+export declare class EngineError extends Error {
+    readonly code: string;
+    constructor(code: string, message: string, options?: {
+        cause?: unknown;
+    });
+}
+export declare class ProofTimeoutError extends EngineError {
+    constructor(message?: string, options?: {
+        cause?: unknown;
+    });
+}
+export declare class ProofFailureError extends EngineError {
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
+}
+export declare class StaleUtxoError extends EngineError {
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
+}
+export declare class InvalidDustProofError extends EngineError {
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
+}
+export declare class StaleWalletStateError extends EngineError {
+    constructor(message: string, options?: {
         cause?: unknown;
     });
 }
 export declare class DustRequiredError extends Error {
     readonly code = "DUST_REQUIRED";
-    constructor(message: string);
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
 }
 export declare class InsufficientBalanceError extends Error {
     readonly code = "INSUFFICIENT_BALANCE";
-    constructor(message: string);
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
 }
 export declare class SyncTimeoutError extends Error {
     readonly code = "SYNC_TIMEOUT";
-    constructor(message: string);
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
 }
 export declare class NetworkError extends Error {
     readonly code = "NETWORK_ERROR";
@@ -1643,6 +1684,7 @@ export declare function resolveNetwork(ctx: NetworkResolutionContext, settings: 
 ## `@kuiralabs/midnight-cli-core/lib/sdk-errors`
 
 ```ts
+import { type RefusalCode } from "./errors.ts";
 export declare function isTransactionRejectedError(err: any): boolean;
 export declare function isDustShortage(err: unknown): boolean;
 export interface DustShortfall {
@@ -1656,6 +1698,12 @@ export declare function isSdkInsufficientFundsError(err: any): boolean;
 export declare function isColdStartRace(err: unknown): boolean;
 export declare function nodeRefusalOf(err: unknown): string | undefined;
 export declare function withNodeReason(err: Error): Error;
+export declare function refusalCodeOf(reason: string): RefusalCode;
+export declare function mnCodeOf(err: unknown): string | undefined;
+export declare function toEngineError(err: unknown): unknown;
+export declare function withEngineCode(err: unknown): unknown;
+export declare function reportingEngineErrors<T extends object>(operations: T): T;
+export declare function markingEngineCodes<T extends Record<string, (...args: never[]) => Promise<unknown>>>(handlers: T): T;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/sdk-layout`

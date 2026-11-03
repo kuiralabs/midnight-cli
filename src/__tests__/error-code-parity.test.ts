@@ -6,7 +6,9 @@
 // NO_NODE_RUNTIME by name instead of UNKNOWN, an escaped stale cache as
 // STALE_CACHE, and a failed command run through MCP as COMMAND_FAILED; and
 // (Y53) a wallet with no NIGHT as INSUFFICIENT_BALANCE and an unreachable
-// indexer as NETWORK_ERROR, whatever their messages say. A third
+// indexer as NETWORK_ERROR, whatever their messages say; and (Y54) a ZK proof
+// that timed out as PROOF_TIMEOUT, and a contract run's transaction the node
+// refused as TX_REJECTED whatever its reason's words. A third
 // classification reads the error's code alone, with no message rule: what the
 // shell and the MCP server report once the rules are gone.
 
@@ -15,7 +17,22 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { classifyByCode, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
-import { CancelledError, CommandFailedError, DustRequiredError, InsufficientBalanceError, TransactionRefusedError, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { CancelledError, CommandFailedError, DustRequiredError, InsufficientBalanceError, ProofTimeoutError, SyncTimeoutError, TransactionRefusedError, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { createApiError, OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core/lib/connector-api';
+import { withEngineCode } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { sessionOver } from '@kuiralabs/midnight-cli-core/lib/wallet-session';
+import { Effect } from 'effect';
+import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
+import { ProvingError } from '@midnightntwrk/wallet-sdk/capabilities/proving';
+import { InsufficientFundsError as NoCoinsCoverIt } from '@midnightntwrk/wallet-sdk/capabilities';
+import { WalletError } from '@midnightntwrk/wallet-sdk/dust/v2';
+import { DustAddress, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
+import { createDAppConnector } from '@kuiralabs/midnight-engine-rc/dapp-connector';
+import { deriveShieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { FORK_SCHEDULE } from '@kuiralabs/midnight-engine-rc/fork-schedule';
+import { NO_TERMINAL, TEST_NETWORK_CONFIG, connectorStub } from './helpers/connector-stub.ts';
+import { agentPaysMerchant, unsealedBytes } from './helpers/ledger-tx.ts';
+import { scriptFailureAtServe } from './helpers/serve-script-failure.ts';
 import { parseArgs, requireFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { dustShortError } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
 import { ProgramTimedOutError } from '@kuiralabs/midnight-cli-core/lib/exec-program';
@@ -52,6 +69,7 @@ import { StaleCacheError } from '@kuiralabs/midnight-engine-rc/facade';
 import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
 import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import * as ledger from '@midnightntwrk/ledger-v9';
+import * as rx from 'rxjs';
 import { readPassphrase } from '../lib/passphrase.ts';
 import { assertWalletFileExists, assertWalletRemovable, setActiveWallet } from '../lib/wallet-config.ts';
 import { walletSecretFrom } from '../lib/wallet-create.ts';
@@ -111,6 +129,36 @@ const holding = (night: bigint) => createHost({
     },
   }),
 });
+
+/** The SDK's promise rejection for a failed Effect: a FiberFailure holding the error. */
+function sdkRejection(error: Error): Promise<never> {
+  const failure = Effect.runPromise(Effect.fail(error));
+  failure.catch(() => {});
+  return failure as Promise<never>;
+}
+const nodeRefusal = (reason: string) => () => sdkRejection(new SubmissionError({ message: 'Transaction submission error', cause: new Error(reason) }));
+/** The rc engine's wallet reading a balance when the SDK fails with `failure` under it, at its repository's indexer seam. */
+const throughRcEngine = (failure: () => Promise<never>) => () => createRcEngine(createHost({ paths: { stateRoot: root, home: root } }), {
+  repository: { fetchUnshielded: failure, fetchTip: async () => 'tip-1' },
+}).wallet.unshieldedBalance(ADDRESSES.undeployed, STAND_IN, { forceFresh: true });
+/** A program's wallet session over the rc engine's connector, its facade stubbed at the SDK boundary, submitting what the node refuses with `reason`. */
+const { createBundleStub, mockState } = connectorStub({ createDAppConnector, deriveShieldedAddress, DustAddress, UnshieldedAddress, ledger9ProtocolVersion: FORK_SCHEDULE.v9 });
+const throughSession = (reason: string) => async () => {
+  const bundle = createBundleStub({ stateFn: () => rx.of(mockState({})), submitTransaction: nodeRefusal(reason) });
+  (bundle.facade as unknown as { revert: () => Promise<void> }).revert = async () => {};
+  const connector = createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+  const session = sessionOver('undeployed', { connector, stop: async () => { connector.dispose(); } }, () => []);
+  try {
+    await session.submit(await session.balanceTransaction(Buffer.from(await unsealedBytes(agentPaysMerchant())).toString('hex')));
+  } finally {
+    await session.close();
+  }
+};
+/** The connector's answer to a submission the node refused with `reason`: its own words over the SDK's error, marked with mn's code. */
+const connectorRefusal = async (reason: string) => {
+  const thrown = await nodeRefusal(reason)().catch((e: Error) => e);
+  return withEngineCode(new Error(`Transaction submission failed: [SubmissionError] Transaction submission error → ${reason}`, { cause: thrown }));
+};
 
 /** What the function throws; fails the test when it throws nothing. */
 async function thrownBy(run: () => unknown): Promise<Error> {
@@ -189,6 +237,9 @@ const ROWS: Row[] = [
   ['a paying wallet with no NIGHT (approved: was UNKNOWN)', () => assertWalletCanPay({ network: 'undeployed', root, host: holding(0n), networkConfig: STAND_IN, endpoints: {} }, 'alice', silentSpinner()), as('UNKNOWN', 1), as('INSUFFICIENT_BALANCE', 5)],
   ['a paying wallet with no Dust', () => assertWalletCanPay({ network: 'undeployed', root, host: holding(5_000_000n), networkConfig: STAND_IN, endpoints: {} }, 'alice', silentSpinner()), as('DUST_REQUIRED', 5), as('DUST_REQUIRED', 5)],
   // A test run's Dust step, and an engine's shielded transfer, need a chain: their errors as those sites throw them.
+  ['the SDK short of Dust, through the engine', throughRcEngine(() => sdkRejection(new WalletError.InsufficientFundsError({ message: new NoCoinsCoverIt('dust').message, tokenType: 'dust' }))), as('DUST_REQUIRED', 5), as('DUST_REQUIRED', 5)],
+  ['the SDK short of NIGHT, through the engine', throughRcEngine(() => sdkRejection(new WalletError.InsufficientFundsError({ message: new NoCoinsCoverIt(NATIVE_TOKEN_TYPE).message, tokenType: NATIVE_TOKEN_TYPE }))), as('INSUFFICIENT_BALANCE', 5), as('INSUFFICIENT_BALANCE', 5)],
+  ['a contract run short of Dust at mn serve', () => scriptFailureAtServe(() => createApiError('InternalError', "Not enough Dust available for this transaction's fee: the wallet has 0.35 DUST and the fee takes 2.00.", 'DUST_REQUIRED')).then((err) => { throw err; }), as('DUST_REQUIRED', 5), as('DUST_REQUIRED', 5)],
   ["a test run's Dust not available", () => { throw new DustRequiredError('Dust not available after 90s. The chain may be slow — try again.'); }, as('DUST_REQUIRED', 5), as('DUST_REQUIRED', 5)],
   ["a test run's wallet with no NIGHT (approved: was UNKNOWN)", () => { throw new InsufficientBalanceError('Wallet has 0 NIGHT on preprod. Fund your wallet before running tests:\n  mn airdrop 100   (if faucet available)\n  Or transfer NIGHT from another wallet.'); }, as('UNKNOWN', 1), as('INSUFFICIENT_BALANCE', 5)],
   // A failed prep step reports its step's code.
@@ -197,8 +248,22 @@ const ROWS: Row[] = [
   ["the genesis wallet's shielded NIGHT short of an airdrop", () => { throw new InsufficientBalanceError('Genesis wallet has insufficient shielded balance: 1.000000 NIGHT available, 2 NIGHT requested'); }, as('INSUFFICIENT_BALANCE', 5), as('INSUFFICIENT_BALANCE', 5)],
 
   // Refused transactions and stale state: exit 6.
-  // It carries no code yet: its name and the node's words in its message classify it.
-  ["the node's refusal", () => { throw new TransactionRefusedError('Invalid transaction'); }, as('TX_REJECTED', 6), as('TX_REJECTED', 6), as('UNKNOWN', 1)],
+  ["the node's refusal", () => { throw new TransactionRefusedError('Invalid transaction'); }, as('TX_REJECTED', 6), as('TX_REJECTED', 6)],
+  // The engine's boundary: the SDK's own errors, reported by the rc engine's wallet.
+  ['the node refusing a spent coin, through the engine', throughRcEngine(nodeRefusal('1010: Invalid Transaction: Custom error: 115')), as('STALE_UTXO', 6), as('STALE_UTXO', 6)],
+  ['the node refusing a Dust proof, through the engine', throughRcEngine(nodeRefusal('1010: Invalid Transaction: Custom error: 170')), as('INVALID_DUST_PROOF', 6), as('INVALID_DUST_PROOF', 6)],
+  ['the node refusing for another reason, through the engine', throughRcEngine(nodeRefusal('1010: Invalid Transaction: Custom error: 199')), as('TX_REJECTED', 6), as('TX_REJECTED', 6)],
+  ['the proof server failing, through the engine', throughRcEngine(() => sdkRejection(new ProvingError({ message: 'Failed to prove transaction', cause: new Error('connect ECONNREFUSED 127.0.0.1:6300') }))), as('PROOF_FAILURE', 6), as('PROOF_FAILURE', 6)],
+  ["a saved state the indexer's events don't fit, through the engine", throughRcEngine(() => Promise.reject(new Error('Failed applying dust events: commitment inserted non-linearly'))), as('STALE_CACHE', 6), as('STALE_CACHE', 6)],
+  ['a wallet sync past its deadline, in the engine', () => { throw new SyncTimeoutError('Wallet sync timed out'); }, as('SYNC_TIMEOUT', 4), as('SYNC_TIMEOUT', 4)],
+  ['a ZK proof that timed out, in the engine (approved Y54: was UNKNOWN)', () => { throw new ProofTimeoutError(); }, as('UNKNOWN', 1), as('PROOF_TIMEOUT', 6)],
+  // A program's wallet session: the connector in this process, reporting as the engine does.
+  ["the node refusing a spent coin, through a program's wallet session", throughSession('1010: Invalid Transaction: Custom error: 115'), as('STALE_UTXO', 6), as('STALE_UTXO', 6)],
+  // A contract run: the connector at mn serve, the wire, and the script's process.
+  ['a contract run the node refused at mn serve (approved Y54: was UNKNOWN)', async () => { const refusal = await connectorRefusal('1010: Invalid Transaction: Custom error: 199'); return scriptFailureAtServe(() => refusal).then((err) => { throw err; }); }, as('UNKNOWN', 1), as('TX_REJECTED', 6)],
+  ['a contract run refused a spent coin at mn serve', async () => { const refusal = await connectorRefusal('1010: Invalid Transaction: Custom error: 115'); return scriptFailureAtServe(() => refusal).then((err) => { throw err; }); }, as('STALE_UTXO', 6), as('STALE_UTXO', 6)],
+  ['a contract run whose proof timed out at mn serve (approved Y54: was UNKNOWN)', () => scriptFailureAtServe(() => new ProofTimeoutError()).then((err) => { throw err; }), as('UNKNOWN', 1), as('PROOF_TIMEOUT', 6)],
+  ['a contract run the operator refused at mn serve', () => scriptFailureAtServe(() => createApiError('Rejected', OPERATOR_REJECTED_MESSAGE, 'TX_REJECTED')).then((err) => { throw err; }), as('TX_REJECTED', 6), as('TX_REJECTED', 6)],
   ['a stale cache that escapes (approved: was UNKNOWN)', () => { throw new StaleCacheError('applied 120 of 80 events'); }, as('UNKNOWN', 1), as('STALE_CACHE', 6)],
 
   // Cancelled: exit 7.

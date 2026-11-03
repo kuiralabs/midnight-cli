@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
 import { createRpcServer, createApiError, type RpcServer } from '../lib/ws-rpc.ts';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { DustRequiredError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 // The host the servers run in: notices dropped.
 const host = createHost();
@@ -230,6 +231,49 @@ describe('ws-rpc', () => {
         type: 'DAppConnectorAPIError',
         code: 'Rejected',
       });
+    });
+
+    it("carries mn's code for an APIError beside the API's own, as an additive key", async () => {
+      const port = nextPort();
+      server = createRpcServer({
+        host,
+        port,
+        handlers: {
+          short: async () => { throw createApiError('InternalError', "Not enough Dust available for this transaction's fee", 'DUST_REQUIRED'); },
+        },
+      });
+
+      const ws = await connectClient(port);
+      clients.push(ws);
+
+      const responsePromise = waitForMessage(ws);
+      sendRpc(ws, 1, 'short');
+      const response = await responsePromise;
+
+      expect(response.error.code).toBe(-32603);
+      expect(response.error.message).toBe("Not enough Dust available for this transaction's fee");
+      expect(response.error.data).toEqual({ type: 'DAppConnectorAPIError', code: 'InternalError', mnCode: 'DUST_REQUIRED' });
+    });
+
+    it("carries the code of mn's typed error as mnCode, beside its causes", async () => {
+      const port = nextPort();
+      server = createRpcServer({
+        host,
+        port,
+        handlers: {
+          short: async () => { throw new DustRequiredError('Dust not available', { cause: new Error('the wallet SDK said so') }); },
+        },
+      });
+
+      const ws = await connectClient(port);
+      clients.push(ws);
+
+      const responsePromise = waitForMessage(ws);
+      sendRpc(ws, 1, 'short');
+      const response = await responsePromise;
+
+      expect(response.error.code).toBe(-32603);
+      expect(response.error.data).toEqual({ causes: ['the wallet SDK said so'], mnCode: 'DUST_REQUIRED' });
     });
 
     it('tracks connections', async () => {
