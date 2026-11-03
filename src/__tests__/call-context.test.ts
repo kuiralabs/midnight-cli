@@ -14,8 +14,9 @@ import {
 } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { hostPaths } from '@kuiralabs/midnight-cli-core/lib/state-root';
-import { settings } from '@kuiralabs/midnight-cli-core/lib/settings';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
+import { testHost } from './helpers/test-host.ts';
 import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
 
 const recordingSink = () => {
@@ -78,20 +79,37 @@ describe("a call's diagnostics", () => {
 describe("a call's context", () => {
   const payer = { name: 'test payer' } as unknown as Payer;
 
-  it('holds its signal, --verbose, the payer and protectors given, and the configuration the host gives at its start', () => {
+  it('holds its signal, --verbose, the payer and protectors given, its host, and the configuration the host gives at its start', () => {
     const controller = new AbortController();
     const { sink } = recordingSink();
-    const ctx = createCallContext({ args: parseArgs(['balance', '--verbose']), signal: controller.signal, output: sink, payer, protectors: ['p'] });
+    const host = createHost({ paths: { stateRoot: '/call-state', home: '/call-home' }, settings: settingsFromEnvironment({ MN_NO_LOCAL_DETECT: '1' }) });
+    const ctx = createCallContext({ host, args: parseArgs(['balance', '--verbose']), signal: controller.signal, output: sink, payer, protectors: ['p'] });
     expect(ctx.signal).toBe(controller.signal);
     expect(ctx.diagnostics.isVerbose).toBe(true);
     expect(ctx.payer).toBe(payer);
     expect(ctx.protectors).toEqual(['p']);
-    expect(ctx.config).toStrictEqual({ settings: settings(), paths: hostPaths() });
+    expect(ctx.host).toBe(host);
+    expect(ctx.config).toStrictEqual({ settings: settingsFromEnvironment({ MN_NO_LOCAL_DETECT: '1' }), paths: { stateRoot: '/call-state', home: '/call-home' } });
+  });
+
+  it("writes its verbose lines through its own host's notices", () => {
+    const { sink } = recordingSink();
+    const lines: string[] = [];
+    const ctx = createCallContext({ host: createHost({ paths: { stateRoot: '/s', home: '/h' }, notice: (line) => lines.push(line) }), args: parseArgs(['balance', '--verbose']), signal: new AbortController().signal, output: sink });
+    ctx.diagnostics.line('sync', 'started');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('started');
+  });
+
+  it('gives two calls of two hosts each its own configuration', () => {
+    const { sink } = recordingSink();
+    const call = (stateRoot: string) => createCallContext({ host: createHost({ paths: { stateRoot, home: '/h' } }), args: parseArgs(['info']), signal: new AbortController().signal, output: sink });
+    expect([call('/a').config.paths.stateRoot, call('/b').config.paths.stateRoot]).toEqual(['/a', '/b']);
   });
 
   it('has no payer or protectors when none are given', () => {
     const { sink } = recordingSink();
-    const ctx = createCallContext({ args: parseArgs(['info']), signal: new AbortController().signal, output: sink });
+    const ctx = createCallContext({ host: testHost(), args: parseArgs(['info']), signal: new AbortController().signal, output: sink });
     expect('payer' in ctx).toBe(false);
     expect('protectors' in ctx).toBe(false);
     expect(ctx.diagnostics.isVerbose).toBe(false);
@@ -100,7 +118,7 @@ describe("a call's context", () => {
   it('runs the handler and gives back the exit code it returns', async () => {
     const { sink } = recordingSink();
     const args = parseArgs(['test', 'run']);
-    const ctx = createCallContext({ args, signal: new AbortController().signal, output: sink });
+    const ctx = createCallContext({ host: testHost(), args, signal: new AbortController().signal, output: sink });
     let given: CallContext | undefined;
     const outcome = await runHandler(async (_args, c) => { given = c; return { exitCode: 1 }; }, args, ctx);
     expect(outcome).toEqual({ exitCode: 1 });
@@ -112,7 +130,7 @@ describe("a call's context", () => {
     controller.abort();
     const { seen, sink } = recordingSink();
     const args = parseArgs(['info']);
-    const ctx = createCallContext({ args, signal: controller.signal, output: sink });
+    const ctx = createCallContext({ host: testHost(), args, signal: controller.signal, output: sink });
     let ran = false;
     await expect(runHandler(async (_a, c) => { ran = true; c.output.result({}); }, args, ctx)).rejects.toThrow(CancelledError);
     expect(ran).toBe(false);

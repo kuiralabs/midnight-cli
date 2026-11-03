@@ -193,8 +193,9 @@ export declare function describeIndexerChange(network: string, change: IndexerCh
 ```ts
 import { type ParsedArgs } from "./argv.ts";
 import type { Payer } from "./payer.ts";
-import { type Settings } from "./settings.ts";
-import { type HostPaths } from "./state-root.ts";
+import type { Settings } from "./settings.ts";
+import type { HostPaths } from "./state-root.ts";
+import type { Host } from "./host.ts";
 import { type CallSdkWarnings } from "./sdk-warnings.ts";
 import { type Progress, type ProgressReport } from "../ui/spinner.ts";
 export interface CallOutput {
@@ -219,6 +220,7 @@ export interface CallContext<Protector = unknown> {
     readonly diagnostics: CallDiagnostics;
     readonly sdkWarnings: CallSdkWarnings;
     readonly config: CallConfig;
+    readonly host: Host;
     readonly payer?: Payer;
     readonly protectors?: readonly Protector[];
 }
@@ -231,8 +233,8 @@ export declare class SecondResultError extends Error {
 }
 export declare function callOutput(sink: CallOutput): CallOutput;
 export declare function callDiagnostics(verbose: boolean, write: (line: string) => void): CallDiagnostics;
-export declare function hostCallConfig(): CallConfig;
 export interface CallParts<Protector = unknown> {
+    readonly host: Host;
     readonly args: ParsedArgs;
     readonly signal: AbortSignal;
     readonly output: CallOutput;

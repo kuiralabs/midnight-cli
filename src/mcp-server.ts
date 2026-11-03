@@ -159,14 +159,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
  */
 function toolCall(progressToken: ProgressToken | undefined, extra: RequestHandlerExtra<ServerRequest, ServerNotification>): CommandRun {
   if (host === null) throw new Error('The MCP server took a call before its host was installed');
-  const { sdkWarnings } = host;
-  if (progressToken === undefined) return { signal: extra.signal, payer: servePayer, sdkWarnings };
+  if (progressToken === undefined) return { signal: extra.signal, payer: servePayer, host };
   let progress = 0;
   let last: string | undefined;
   return {
     signal: extra.signal,
     payer: servePayer,
-    sdkWarnings,
+    host,
     onProgress: (message) => {
       if (message === last) return;
       last = message;

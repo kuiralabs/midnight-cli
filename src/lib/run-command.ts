@@ -4,7 +4,7 @@
 import { type ParsedArgs, MINIMAL_FLAG } from '@kuiralabs/midnight-cli-core/lib/argv';
 import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
 import { createCallContext, runHandler, type CommandHandler, type CallOutput } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import type { SdkWarningCalls } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { CommandFailedError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export interface CommandRun {
@@ -15,11 +15,10 @@ export interface CommandRun {
   /** What a command that submits a transaction pays with. */
   payer?: Payer;
   /**
-   * The calls the command runs in, which give it its own SDK warnings: the
-   * host's, so the host's filters report the SDK's warnings to this call.
-   * Required, so a host can't leave its calls without them unnoticed.
+   * The host the command runs in. Its calls give the command its own SDK
+   * warnings, so the host's filters report the SDK's warnings to this call.
    */
-  sdkWarnings: SdkWarningCalls;
+  host: Host;
 }
 
 /** The server's stderr: where a call's text for the person goes, never the protocol channel on stdout. */
@@ -54,7 +53,7 @@ const serverStderr = (text: string): void => { process.stderr.write(text); };
 export async function captureCommand(
   handler: CommandHandler,
   args: ParsedArgs,
-  { signal, onProgress, payer, sdkWarnings }: CommandRun,
+  { signal, onProgress, payer, host }: CommandRun,
 ): Promise<Record<string, unknown>> {
   let result: Record<string, unknown> = {};
   const output: CallOutput = {
@@ -71,7 +70,8 @@ export async function captureCommand(
   let running = true;
   const report = onProgress === undefined ? undefined : (message: string): void => { if (running) onProgress(message); };
   try {
-    const outcome = await sdkWarnings.run((warnings) => runHandler(handler, args, createCallContext({
+    const outcome = await host.sdkWarnings.run((warnings) => runHandler(handler, args, createCallContext({
+      host,
       args,
       signal: signal ?? new AbortController().signal,
       output,

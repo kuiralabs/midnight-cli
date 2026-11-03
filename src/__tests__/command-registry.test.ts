@@ -26,6 +26,7 @@ import {
 import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
 import { CONFIRM_TOOL, listedTools } from '../lib/mcp/registry-tools.ts';
 import { commandNeedsWalletSdk, dispatchCommand, type ShellProvisions } from '../lib/command-dispatch.ts';
+import { testHost } from './helpers/test-host.ts';
 import { FULL_FLAG, parseArgs, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { CancelledError, isUsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { classifyError, EXIT_CANCELLED } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
@@ -110,7 +111,7 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => 
   const provisions: ShellProvisions = {
     signal: controller.signal,
     output,
-    sdkWarnings: sdkWarningCallsOn(createSdkWarningRouter()),
+    host: testHost(),
     loadPayer: async () => payer,
     loadProtectors: async () => [protector],
   };
