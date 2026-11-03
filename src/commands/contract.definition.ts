@@ -220,7 +220,7 @@ export const contractDefinition: CommandDefinition = {
           async check(params, call) {
             const { resolveContractDeployRequest } = await import('../lib/contract/request.ts');
             const args = call.argv();
-            const { info } = resolveContractDeployRequest(args);
+            const { info } = resolveContractDeployRequest(args, process.cwd());
             const { resolvePayingTarget } = await import('@kuiralabs/midnight-cli-core/lib/payer');
             const { assertContractRunsOn } = await import('../lib/contract/runtime-check.ts');
             const root = call.host.paths().stateRoot;
@@ -255,7 +255,7 @@ export const contractDefinition: CommandDefinition = {
           async check(params, call) {
             const { resolveContractCallRequest } = await import('../lib/contract/request.ts');
             const args = call.argv();
-            const { info } = resolveContractCallRequest(args);
+            const { info } = resolveContractCallRequest(args, process.cwd());
             const { resolvePayingTarget } = await import('@kuiralabs/midnight-cli-core/lib/payer');
             const { assertContractRunsOn } = await import('../lib/contract/runtime-check.ts');
             const root = call.host.paths().stateRoot;

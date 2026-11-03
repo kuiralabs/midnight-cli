@@ -29,21 +29,38 @@ export function termsOf(args: ParsedArgs): SwapTerms {
   return terms;
 }
 
-export interface MakeRequest {
-  target: PayingTarget;
+/** What `swap make` asks for besides its network: the terms, the expiry, and where the offer file goes. */
+export interface MakeTerms {
   terms: SwapTerms;
   expiresAt: Date;
   /** Where to write the offer file; offer-<id>.json in the working folder when not given. */
   out: string | undefined;
 }
 
-export function prepareMake(args: ParsedArgs, root: string, host: Host, now: Date): MakeRequest {
+export interface MakeRequest extends MakeTerms {
+  target: PayingTarget;
+}
+
+/** --expires-in seconds on from `now`, a day when not given. */
+function expiryOf(args: ParsedArgs, now: Date): Date {
   const lifetime = getFlag(args, 'expires-in') ?? String(DEFAULT_OFFER_LIFETIME_S);
   if (!/^[1-9][0-9]*$/.test(lifetime)) throw new UsageError(`--expires-in must be a whole number of seconds above 0, not "${lifetime}"`);
+  return new Date(now.getTime() + Number(lifetime) * 1000);
+}
+
+/** The terms, the expiry from `now` and the offer file `swap make` names, without its network. */
+export function makeTermsOf(args: ParsedArgs, now: Date): MakeTerms {
+  const expiresAt = expiryOf(args, now);
+  return { terms: termsOf(args), expiresAt, out: getFlag(args, 'out') };
+}
+
+/** A make, checked as far as it can be without a wallet: the expiry, the network and the terms. */
+export function prepareMake(args: ParsedArgs, root: string, host: Host, now: Date): MakeRequest {
+  const expiresAt = expiryOf(args, now);
   return {
     target: resolvePayingTarget(args, 'swap', 'make', root, host),
     terms: termsOf(args),
-    expiresAt: new Date(now.getTime() + Number(lifetime) * 1000),
+    expiresAt,
     out: getFlag(args, 'out'),
   };
 }
@@ -54,17 +71,20 @@ export interface TakeRequest {
   agreed: SwapTerms;
 }
 
-/** The offer file named by the first positional, read for the network. */
-export async function readOfferArg(args: ParsedArgs, target: PayingTarget): Promise<ReadOffer> {
+/** The text of the offer file the first positional names. */
+export function readOfferText(args: ParsedArgs): string {
   const file = args.positionals[0];
   if (file === undefined) throw new UsageError(`swap ${args.subcommand} needs the offer file: midnight swap ${args.subcommand} <file>`);
-  let text: string;
   try {
-    text = readFileSync(file, 'utf-8');
+    return readFileSync(file, 'utf-8');
   } catch (err) {
     throw new UsageError(`Can't read the offer file ${file}: ${(err as Error).message}`);
   }
-  return readOfferFile(target.root, text, target.network, target.host.engines);
+}
+
+/** The offer file named by the first positional, read for the network. */
+export async function readOfferArg(args: ParsedArgs, target: PayingTarget): Promise<ReadOffer> {
+  return readOfferFile(target.root, readOfferText(args), target.network, target.host.engines);
 }
 
 /** A take, checked as far as it can be without the chain: the file, its network, the agreed terms and the expiry. */

@@ -3,29 +3,31 @@
 // wallets on the local network. What its steps say goes to `progress`; the
 // SDK's warnings go to the deploying call's `sdkWarnings`.
 
-import type { ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { deployContract, type DeployedContract } from '../contract/deploy.ts';
-import { resolveContractDeployRequest } from '../contract/request.ts';
-import { resolvePayingTarget, type Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
+import { contractDeployRequest } from '../contract/request.ts';
+import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
 import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
+import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 
-export async function deployDevContract(root: string, host: Host, projectRoot: string, wallet: string, network: string, payer: Payer, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<DeployedContract> {
-  // The deploy as `mn contract deploy --path <projectRoot> --wallet <wallet> --network <network>` reads it.
-  const args: ParsedArgs = {
-    command: 'contract',
-    subcommand: 'deploy',
-    positionals: [],
-    flags: { path: projectRoot, wallet, network },
-  };
-  return deployContract({
-    request: resolveContractDeployRequest(args),
-    target: resolvePayingTarget(args, 'contract', 'deploy', root, host),
+/**
+ * Deploys the contract compiled in `projectRoot` on `network`, paid by
+ * `payer` from `wallet`. Every step reports on the one line `progress`: its
+ * updates, its end and its failure, as each step's own line would.
+ */
+export async function deployDevContract(host: Host, projectRoot: string, wallet: string, network: NetworkName, payer: Payer, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<DeployedContract> {
+  return deployContract(host, {
+    request: contractDeployRequest({ dappDir: projectRoot }),
+    network,
     wallet,
     payer,
-    progress: () => progress,
     sdkWarnings,
     signal,
+    onProgress: (event) => {
+      if (event.kind === 'update') progress.update(event.message);
+      else if (event.kind === 'done') progress.stop(event.message);
+      else if (event.kind === 'step-failed') progress.fail(event.message);
+    },
   });
 }

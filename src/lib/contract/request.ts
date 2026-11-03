@@ -1,6 +1,8 @@
-// A contract deploy or call, read from its arguments and checked against the
+// A contract deploy or call, built from plain values and checked against the
 // compiled contract before anything starts: the CLI checks it before the
-// wallet syncs, the MCP server before it issues a confirmation token.
+// wallet syncs, the MCP server before it issues a confirmation token. The
+// argument readers below build the same from a command's flags, with the
+// working directory the caller gives as their default folder.
 
 import { resolve } from 'node:path';
 import { type ParsedArgs, getFlag, requireFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
@@ -26,21 +28,25 @@ export interface ContractCallRequest {
   callArgs: unknown[];
 }
 
-/**
- * Where contract-info.json is looked for: --managed (a managed/<name>/ dir),
- * else --path (the dApp root), else the working directory. --managed wins as
- * the more specific of the two.
- */
-export function resolveScanDir(args: ParsedArgs): string {
-  return resolve(getFlag(args, 'managed') ?? getFlag(args, 'path') ?? process.cwd());
+/** Where a contract is: its dApp, and the compiled contract in it. */
+export interface ContractLocation {
+  /** The dApp's root, where witnesses.js and the runner's cache are. */
+  dappDir: string;
+  /** Where contract-info.json is looked for, when not in `dappDir`: a managed/<name>/ folder, or a folder above one. */
+  managedDir?: string;
+  /** Which of the dApp's compiled contracts, when it has more than one; the first by name when not given. */
+  name?: string;
 }
 
-/** `deploy [--args <json>] [--secret-key <hex>]` for the contract found from --managed/--path. */
-export function resolveContractDeployRequest(args: ParsedArgs): ContractDeployRequest {
-  // --managed only says where contract-info.json lives; the runner still
-  // needs the project root (--path or cwd) for witnesses.js.
-  const dappDir = resolve(getFlag(args, 'path') ?? process.cwd());
-  const { info } = findContractInfo(resolveScanDir(args), getFlag(args, 'name'));
+/**
+ * A deploy of the compiled contract at `location`, its constructor given
+ * `args` in order. Refuses a contract that declares witnesses without a
+ * compiled witnesses.js in the dApp, and a `secretKey` that is not 32 bytes
+ * of hex.
+ */
+export function contractDeployRequest(location: ContractLocation & { args?: unknown[]; secretKey?: string }): ContractDeployRequest {
+  const { dappDir } = location;
+  const { info } = findContractInfo(location.managedDir ?? dappDir, location.name);
 
   // A contract that declares witnesses needs its compiled witnesses.js: without
   // it the SDK fails mid-deploy, after a long wait, with "first (witnesses)
@@ -50,28 +56,75 @@ export function resolveContractDeployRequest(args: ParsedArgs): ContractDeployRe
     throw new Error(buildMissingWitnessError({ projectRoot: dappDir, witnessNames: declaredWitnesses }));
   }
 
-  const constructorArgs = parseArgsJson(getFlag(args, 'args'));
-
   // For a contract whose constructor derives its owner from a witness
   // (owner = public_key(secret_key())); without it the owner comes from the deploy wallet.
-  const privateStateSecretKey = getFlag(args, 'secret-key');
+  const privateStateSecretKey = location.secretKey;
   if (privateStateSecretKey !== undefined && !/^[0-9a-fA-F]{64}$/.test(privateStateSecretKey)) {
     throw new UsageError('--secret-key must be 32 bytes of hex (64 chars)');
   }
 
-  return { dappDir, info, constructorArgs, privateStateSecretKey };
+  return { dappDir, info, constructorArgs: location.args ?? [], privateStateSecretKey };
 }
 
-/** `call --address <hex> --circuit <name> [--args <json>]` for the contract found from --managed/--path. */
-export function resolveContractCallRequest(args: ParsedArgs): ContractCallRequest {
-  const dappDir = resolve(getFlag(args, 'path') ?? process.cwd());
-  const address = requireFlag(args, 'address', 'contract address');
-  const circuit = requireFlag(args, 'circuit', 'circuit name');
-  const { info } = findContractInfo(resolveScanDir(args), getFlag(args, 'name'));
-  const callArgs = parseArgsJson(getFlag(args, 'args'));
+/**
+ * A call of `circuit` on the contract deployed at `address` (64 hex
+ * characters), compiled at `location`, given `args` in order. Refuses a
+ * circuit the contract can't call and a count of arguments it doesn't take.
+ */
+export function contractCallRequest(location: ContractLocation & { address: string; circuit: string; args?: unknown[] }): ContractCallRequest {
+  const { dappDir, address, circuit } = location;
+  const { info } = findContractInfo(location.managedDir ?? dappDir, location.name);
+  const callArgs = location.args ?? [];
   validateContractAddress(address);
   validateCallRequest(info, circuit, callArgs);
   return { dappDir, info, address, circuit, callArgs };
+}
+
+/**
+ * Where contract-info.json is looked for: --managed (a managed/<name>/ dir),
+ * else --path (the dApp root), else `cwd`. --managed wins as the more
+ * specific of the two.
+ */
+export function resolveScanDir(args: ParsedArgs, cwd: string): string {
+  return resolve(cwd, getFlag(args, 'managed') ?? getFlag(args, 'path') ?? '.');
+}
+
+/** The dApp's root a command names: --path, else `cwd`. */
+export function resolveDappDir(args: ParsedArgs, cwd: string): string {
+  return resolve(cwd, getFlag(args, 'path') ?? '.');
+}
+
+/** --managed, read from `cwd`, when given. */
+function managedDirOf(args: ParsedArgs, cwd: string): string | undefined {
+  const managed = getFlag(args, 'managed');
+  return managed === undefined ? undefined : resolve(cwd, managed);
+}
+
+/** `deploy [--args <json>] [--secret-key <hex>]` for the contract found from --managed/--path, else `cwd`. */
+export function resolveContractDeployRequest(args: ParsedArgs, cwd: string): ContractDeployRequest {
+  // --managed only says where contract-info.json lives; the runner still
+  // needs the project root (--path or cwd) for witnesses.js.
+  return contractDeployRequest({
+    dappDir: resolveDappDir(args, cwd),
+    managedDir: managedDirOf(args, cwd),
+    name: getFlag(args, 'name'),
+    args: parseArgsJson(getFlag(args, 'args')),
+    secretKey: getFlag(args, 'secret-key'),
+  });
+}
+
+/** `call --address <hex> --circuit <name> [--args <json>]` for the contract found from --managed/--path, else `cwd`. */
+export function resolveContractCallRequest(args: ParsedArgs, cwd: string): ContractCallRequest {
+  const address = requireFlag(args, 'address', 'contract address');
+  const circuit = requireFlag(args, 'circuit', 'circuit name');
+  return contractCallRequest({
+    dappDir: resolveDappDir(args, cwd),
+    managedDir: managedDirOf(args, cwd),
+    name: getFlag(args, 'name'),
+    address,
+    circuit,
+    args: parseArgsJson(getFlag(args, 'args')),
+  });
 }
 
 /** --args '<json>': an array is passed positionally, an object as its values in order. */

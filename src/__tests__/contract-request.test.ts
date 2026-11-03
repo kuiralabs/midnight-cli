@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { resolveContractCallRequest, resolveContractDeployRequest } from '../lib/contract/request.ts';
+import { contractCallRequest, contractDeployRequest, resolveContractCallRequest, resolveContractDeployRequest, resolveScanDir } from '../lib/contract/request.ts';
 import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
@@ -27,8 +27,9 @@ function compiledContract(name: string, witnesses: { name: string }[] = []): voi
   }));
 }
 
-const call = (...flags: string[]) => resolveContractCallRequest(parseArgs(['contract', 'call', '--path', dir, ...flags]));
-const deploy = (...flags: string[]) => resolveContractDeployRequest(parseArgs(['contract', 'deploy', '--path', dir, ...flags]));
+// The working directory the readers are given is not the dApp: --path names it.
+const call = (...flags: string[]) => resolveContractCallRequest(parseArgs(['contract', 'call', '--path', dir, ...flags]), tmpdir());
+const deploy = (...flags: string[]) => resolveContractDeployRequest(parseArgs(['contract', 'deploy', '--path', dir, ...flags]), tmpdir());
 
 beforeEach(() => {
   dir = join(tmpdir(), `mn-contract-request-${process.pid}-${Date.now()}`);
@@ -82,5 +83,37 @@ describe('resolveContractDeployRequest', () => {
     mkdirSync(join(dir, 'dist'), { recursive: true });
     writeFileSync(join(dir, 'dist', 'witnesses.js'), 'export const witnesses = {};\n');
     expect(deploy().info.name).toBe('owned');
+  });
+});
+
+describe('the plain builders', () => {
+  it('build the same request from plain values a program holds, with no flags and no working directory', () => {
+    expect(contractCallRequest({ dappDir: dir, address: ADDRESS, circuit: 'add', args: [1, 2] }))
+      .toEqual(call('--address', ADDRESS, '--circuit', 'add', '--args', '[1,2]'));
+    const key = 'ab'.repeat(32);
+    expect(contractDeployRequest({ dappDir: dir, args: [7], secretKey: key })).toEqual(deploy('--args', '[7]', '--secret-key', key));
+    expect(contractDeployRequest({ dappDir: dir })).toMatchObject({ constructorArgs: [], privateStateSecretKey: undefined });
+  });
+
+  it('look for the compiled contract in managedDir when given, and pick one by name', () => {
+    compiledContract('token');
+    const managedDir = join(dir, 'managed', 'token');
+    expect(contractDeployRequest({ dappDir: tmpdir(), managedDir }).info.name).toBe('token');
+    expect(contractDeployRequest({ dappDir: dir, name: 'token' }).info.name).toBe('token');
+    expect(contractDeployRequest({ dappDir: dir }).info.name).toBe('counter');
+  });
+
+  it('refuse a call\'s bad address, unknown circuit and wrong count of arguments as usage mistakes', () => {
+    expect(() => contractCallRequest({ dappDir: dir, address: 'deadbeef', circuit: 'increment' })).toThrow(UsageError);
+    expect(() => contractCallRequest({ dappDir: dir, address: ADDRESS, circuit: 'decrement' })).toThrow('counter has no circuit "decrement"');
+    expect(() => contractCallRequest({ dappDir: dir, address: ADDRESS, circuit: 'add', args: [1] })).toThrow('add takes 2 arguments (x, y); --args gave 1.');
+  });
+});
+
+describe('the argument readers\' working directory', () => {
+  it('is where the contract is looked for when neither --path nor --managed is given', () => {
+    expect(resolveContractDeployRequest(parseArgs(['contract', 'deploy']), dir)).toMatchObject({ dappDir: dir, info: { name: 'counter' } });
+    expect(resolveScanDir(parseArgs(['contract', 'inspect']), dir)).toBe(dir);
+    expect(resolveScanDir(parseArgs(['contract', 'inspect', '--managed', 'managed/counter']), dir)).toBe(join(dir, 'managed', 'counter'));
   });
 });

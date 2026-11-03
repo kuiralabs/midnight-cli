@@ -1,50 +1,63 @@
 // Deploying a compiled contract: the deploy script, run against the wallet
 // the payer serves (served-wallet.ts). `mn contract deploy` and `mn dev` both deploy through here.
 
-import type { Payer, PayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
+import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import { networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
+import { withCallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import { networkChoiceOf } from '../wallet/wallet-call.ts';
+import { stepSpinner, type PaidCallOptions } from '../wallet/paid-call.ts';
 import { withServedWallet } from './served-wallet.ts';
-import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import { assertContractRunsOn, type ContractChecked } from './runtime-check.ts';
 import type { ContractDeployRequest } from './request.ts';
 
-export interface DeployContractParams {
+export interface DeployContractOptions extends PaidCallOptions<ContractChecked> {
+  /** What to deploy (contractDeployRequest). */
   request: ContractDeployRequest;
-  target: PayingTarget;
-  /** The wallet that pays; the active wallet when undefined. */
-  wallet: string | undefined;
-  payer: Payer;
-  /** Starts the progress line for each step, given its first message. */
-  progress: (message: string) => Spinner;
-  /** The paying call's SDK warnings, which a wallet served in this process keeps to. */
-  sdkWarnings: CallSdkWarnings;
-  signal?: AbortSignal;
 }
 
+/** A deployed contract. */
 export interface DeployedContract {
-  contractName: string;
-  address: string;
-  network: string;
+  readonly network: NetworkName;
+  readonly contractName: string;
+  /** The contract's address on the network, 64 hex characters. */
+  readonly address: string;
 }
 
-export async function deployContract({ request, target, wallet, payer, progress, sdkWarnings, signal }: DeployContractParams): Promise<DeployedContract> {
+/**
+ * Deploys the request's contract on the network, paid by the payer's wallet:
+ * refuses a contract compiled for another runtime than the network's, then
+ * the payer checks its wallet has NIGHT and Dust, serves it, and the deploy
+ * script runs against it in the dApp's folder; the wallet stops being served
+ * whatever happens.
+ */
+export async function deployContract(host: Host, options: DeployContractOptions): Promise<DeployedContract> {
+  const { request, payer, wallet, signal, onProgress } = options;
   const { dappDir, info, constructorArgs, privateStateSecretKey } = request;
+  throwIfCancelled(signal);
+  const target = networkTargetOf(host, networkChoiceOf(options));
+  const { network } = target;
+  await assertContractRunsOn(info, network, target.root, host.engines);
+  onProgress?.({ kind: 'contract-checked', network });
   const { runDeploy } = await import('./runner.ts');
 
-  return withServedWallet({ target, wallet, payer, progress, sdkWarnings, signal }, { running: 'Deploying contract...', done: 'Contract deployed', failed: 'Deploy failed' }, async (servePort, spinner) => {
-    const result = await runDeploy({
-      dappDir,
-      network: target.network,
-      root: target.root,
-      engines: target.host.engines,
-      networkConfig: target.networkConfig,
-      managedDir: info.managedDir,
-      contractName: info.name,
-      servePort,
-      args: constructorArgs,
-      privateStateSecretKey,
-      onMessage: (msg) => spinner.update(msg),
-      signal,
-    });
-    return { contractName: info.name, address: result.contractAddress, network: target.network };
-  });
+  return withCallSdkWarnings(host.sdkWarnings, options.sdkWarnings, (sdkWarnings) =>
+    withServedWallet({ target, wallet, payer, progress: (message) => stepSpinner(onProgress, message), sdkWarnings, signal }, { running: 'Deploying contract...', done: 'Contract deployed', failed: 'Deploy failed' }, async (servePort, spinner) => {
+      const result = await runDeploy({
+        dappDir,
+        network,
+        root: target.root,
+        engines: host.engines,
+        networkConfig: target.networkConfig,
+        managedDir: info.managedDir,
+        contractName: info.name,
+        servePort,
+        args: constructorArgs,
+        privateStateSecretKey,
+        onMessage: (msg) => spinner.update(msg),
+        signal,
+      });
+      return { network, contractName: info.name, address: result.contractAddress };
+    }));
 }

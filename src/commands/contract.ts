@@ -1,20 +1,20 @@
 // Contract commands — inspect, deploy, call, and query state for compiled Midnight contracts.
 
-import { resolve } from 'node:path';
 import { type ParsedArgs, getFlag, hasFlag, requireFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { CancelledError, UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { untilCancelled } from '@kuiralabs/midnight-cli-core/lib/sleep';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import type { CallContext, CallOutput } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { networkChoiceFromArgs } from '@kuiralabs/midnight-cli-core/lib/network-target';
 import { header, keyValue } from '@kuiralabs/midnight-cli-core/ui/format';
 import { bold, dim, teal, yellow, green } from '@kuiralabs/midnight-cli-core/ui/colors';
+import { spinnerReporter } from '@kuiralabs/midnight-cli-core/ui/spinner';
 
-import { type Payer, payerFor, resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
+import { type Payer, payerFor } from '@kuiralabs/midnight-cli-core/lib/payer';
 import { deployContract } from '../lib/contract/deploy.ts';
 import { callContract } from '../lib/contract/call.ts';
-import { validateContractAddress } from '../lib/contract/validate.ts';
+import { readContractState } from '../lib/contract/state.ts';
+import { showPaidStep } from '../lib/wallet/paid-call.ts';
 import type { RawStateValue } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { resolveContractCallRequest, resolveContractDeployRequest, resolveScanDir } from '../lib/contract/request.ts';
-import { assertContractRunsOn } from '../lib/contract/runtime-check.ts';
+import { resolveContractCallRequest, resolveContractDeployRequest, resolveDappDir, resolveScanDir } from '../lib/contract/request.ts';
 import {
   findContractInfo,
   formatCircuitSignature,
@@ -60,7 +60,7 @@ export default async function contractCommand(args: ParsedArgs, ctx: CallContext
 
 async function handleInspect(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
-  const startDir = resolveScanDir(args);
+  const startDir = resolveScanDir(args, process.cwd());
   const contractName = getFlag(args, 'name');
 
   const { info } = findContractInfo(startDir, contractName);
@@ -111,34 +111,31 @@ async function handleInspect(args: ParsedArgs, ctx: CallContext): Promise<void> 
 
 async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
-  const request = resolveContractDeployRequest(args);
+  const request = resolveContractDeployRequest(args, process.cwd());
   const { info, constructorArgs } = request;
 
   if (!jsonMode) {
     ctx.output.stderr('\n' + header('Contract Deploy') + '\n\n');
   }
 
-  const target = resolvePayingTarget(args, 'contract', 'deploy', ctx.config.paths.stateRoot, ctx.host);
-  const { network } = target;
-  await assertContractRunsOn(info, network, target.root, ctx.host.engines);
-
-  if (!jsonMode) {
-    ctx.output.stderr(keyValue('Contract', info.name) + '\n');
-    ctx.output.stderr(keyValue('Network', network) + '\n');
-    if (constructorArgs.length > 0) {
-      ctx.output.stderr(keyValue('Constructor args', String(constructorArgs.length)) + '\n');
-    }
-    ctx.output.stderr('\n');
-  }
-
-  const deployed = await deployContract({
+  const progress = spinnerReporter(ctx.progress, jsonMode);
+  const deployed = await deployContract(ctx.host, {
+    ...networkChoiceFromArgs(args),
     request,
-    target,
-    wallet: getFlag(args, 'wallet'),
     payer,
-    progress: (message) => jsonMode ? ctx.progress.silent() : ctx.progress.start(message),
+    wallet: getFlag(args, 'wallet'),
     sdkWarnings: ctx.sdkWarnings,
     signal: ctx.signal,
+    onProgress: (event) => {
+      if (event.kind !== 'contract-checked') return showPaidStep(progress, event);
+      if (jsonMode) return;
+      ctx.output.stderr(keyValue('Contract', info.name) + '\n');
+      ctx.output.stderr(keyValue('Network', event.network) + '\n');
+      if (constructorArgs.length > 0) {
+        ctx.output.stderr(keyValue('Constructor args', String(constructorArgs.length)) + '\n');
+      }
+      ctx.output.stderr('\n');
+    },
   });
 
   if (jsonMode) {
@@ -149,13 +146,13 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
       subcommand: 'deploy',
       contractName: deployed.contractName,
       address: deployed.address,
-      network,
+      network: deployed.network,
     });
   } else {
     ctx.output.stderr('\n');
     ctx.output.stderr(keyValue('Address', deployed.address) + '\n');
     ctx.output.stderr('\n' + green('  ✓ Deploy successful') + '\n');
-    writeNextStepsHint(ctx.output, deployed.address, info.circuits, network);
+    writeNextStepsHint(ctx.output, deployed.address, info.circuits, deployed.network);
     // Pipeable address on stdout for shell composition (e.g. `addr=$(mn contract deploy)`).
     ctx.output.stdout(deployed.address + '\n');
   }
@@ -185,31 +182,28 @@ function writeNextStepsHint(output: CallOutput, address: string, circuits: { nam
 
 async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
-  const request = resolveContractCallRequest(args);
+  const request = resolveContractCallRequest(args, process.cwd());
   const { info, address, circuit } = request;
 
   if (!jsonMode) {
     ctx.output.stderr('\n' + header('Contract Call') + '\n\n');
   }
 
-  const target = resolvePayingTarget(args, 'contract', 'call', ctx.config.paths.stateRoot, ctx.host);
-  const { network } = target;
-  await assertContractRunsOn(info, network, target.root, ctx.host.engines);
-
-  if (!jsonMode) {
-    ctx.output.stderr(keyValue('Contract', info.name) + '\n');
-    ctx.output.stderr(keyValue('Circuit', circuit) + '\n');
-    ctx.output.stderr(keyValue('Address', address.slice(0, 20) + '...') + '\n\n');
-  }
-
-  const called = await callContract({
+  const progress = spinnerReporter(ctx.progress, jsonMode);
+  const called = await callContract(ctx.host, {
+    ...networkChoiceFromArgs(args),
     request,
-    target,
-    wallet: getFlag(args, 'wallet'),
     payer,
-    progress: (message) => jsonMode ? ctx.progress.silent() : ctx.progress.start(message),
+    wallet: getFlag(args, 'wallet'),
     sdkWarnings: ctx.sdkWarnings,
     signal: ctx.signal,
+    onProgress: (event) => {
+      if (event.kind !== 'contract-checked') return showPaidStep(progress, event);
+      if (jsonMode) return;
+      ctx.output.stderr(keyValue('Contract', info.name) + '\n');
+      ctx.output.stderr(keyValue('Circuit', circuit) + '\n');
+      ctx.output.stderr(keyValue('Address', address.slice(0, 20) + '...') + '\n\n');
+    },
   });
 
   if (jsonMode) {
@@ -218,7 +212,7 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
       contractName: called.contractName,
       circuit,
       address,
-      network,
+      network: called.network,
       status: called.status,
     });
   } else {
@@ -230,90 +224,66 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
 
 async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
-  const dappDir = resolve(getFlag(args, 'path') ?? process.cwd());
-  const scanDir = resolveScanDir(args);
-  const contractName = getFlag(args, 'name');
+  const cwd = process.cwd();
+  const dappDir = resolveDappDir(args, cwd);
+  const scanDir = resolveScanDir(args, cwd);
   const address = requireFlag(args, 'address', 'contract address');
-  validateContractAddress(address);
 
-  const { runState } = await import('../lib/contract/runner.ts');
+  const progress = spinnerReporter(ctx.progress, jsonMode);
+  const state = await readContractState(ctx.host, {
+    ...networkChoiceFromArgs(args),
+    dappDir,
+    scanDir,
+    name: getFlag(args, 'name'),
+    address,
+    signal: ctx.signal,
+    onProgress: (event) => {
+      if (event.kind === 'state-reading') {
+        if (jsonMode) return;
+        ctx.output.stderr('\n' + header('Contract State') + '\n\n');
+        ctx.output.stderr(keyValue('Address', address.slice(0, 20) + '...') + '\n');
+        ctx.output.stderr(keyValue('Network', event.network) + '\n\n');
+      } else if (event.kind === 'fallback') {
+        progress.report({ kind: 'done', message: yellow('⚠') + ' Parsed state unavailable, showing raw' });
+      } else {
+        progress.report(event);
+      }
+    },
+  });
 
-  const { network, root, networkConfig } = resolvePayingTarget(args, 'contract', 'state', ctx.config.paths.stateRoot, ctx.host);
+  if (state.kind === 'parsed') {
+    const { network, fields, maps } = state;
+    if (jsonMode) {
+      ctx.output.result({ subcommand: 'state', address, network, fields, maps });
+      return;
+    }
+    // Display scalar fields
+    const hasFields = Object.keys(fields).length > 0;
+    const hasMaps = Object.keys(maps).length > 0;
 
-  if (!jsonMode) {
-    ctx.output.stderr('\n' + header('Contract State') + '\n\n');
-    ctx.output.stderr(keyValue('Address', address.slice(0, 20) + '...') + '\n');
-    ctx.output.stderr(keyValue('Network', network) + '\n\n');
+    if (hasFields || hasMaps) {
+      ctx.output.stderr(bold('  Ledger State') + '\n');
+      for (const [key, value] of Object.entries(fields)) {
+        ctx.output.stderr(`    ${key}: ${teal(value)}` + '\n');
+      }
+      for (const [key, info] of Object.entries(maps)) {
+        ctx.output.stderr(`    ${key}: ${dim(`Map (${info.size} entries)`)}` + '\n');
+      }
+    } else {
+      ctx.output.stderr(dim('  (no ledger fields found)') + '\n');
+    }
+    ctx.output.stderr('\n');
+    return;
   }
 
-  // Try parsed ledger state via runner (needs compiled contract in dApp)
-  const spinner = jsonMode ? ctx.progress.silent() : ctx.progress.start('Querying contract state...');
-
-  try {
-    const { info } = findContractInfo(scanDir, contractName);
-
-    const result = await runState({
-      dappDir,
-      network,
-      root,
-      engines: ctx.host.engines,
-      networkConfig,
-      managedDir: info.managedDir,
-      contractName: info.name,
-      contractAddress: address,
-      onMessage: (msg) => spinner.update(msg),
-      signal: ctx.signal,
-    });
-
-    spinner.stop('State retrieved');
-
-    if (jsonMode) {
-      ctx.output.result({
-        subcommand: 'state',
-        address,
-        network,
-        ...result,
-      });
-    } else {
-      // Display scalar fields
-      const hasFields = Object.keys(result.fields).length > 0;
-      const hasMaps = Object.keys(result.maps).length > 0;
-
-      if (hasFields || hasMaps) {
-        ctx.output.stderr(bold('  Ledger State') + '\n');
-        for (const [key, value] of Object.entries(result.fields)) {
-          ctx.output.stderr(`    ${key}: ${teal(value)}` + '\n');
-        }
-        for (const [key, info] of Object.entries(result.maps)) {
-          ctx.output.stderr(`    ${key}: ${dim(`Map (${(info as any).size} entries)`)}` + '\n');
-        }
-      } else {
-        ctx.output.stderr(dim('  (no ledger fields found)') + '\n');
-      }
-      ctx.output.stderr('\n');
-    }
-  } catch (err) {
-    // A cancelled call stops here; it doesn't fall back to the raw state.
-    if (err instanceof CancelledError) throw err;
-    throwIfCancelled(ctx.signal);
-    // If runner fails (no compiled contract in cwd), fall back to raw state
-    spinner.stop(yellow('⚠') + ' Parsed state unavailable, showing raw');
-
-    // The engine's query takes no signal: the call stops waiting for it when cancelled.
-    const raw = await untilCancelled((await ctx.host.engines.for(network)).contracts.rawState(networkConfig, address), ctx.signal);
-
-    if (!raw) {
-      throw new Error(`No contract found at address ${address} on ${network}`);
-    }
-
-    if (jsonMode) {
-      ctx.output.result({ subcommand: 'state', address, network, raw });
-    } else {
-      ctx.output.stderr(bold('  Raw State') + '\n');
-      ctx.output.stderr(dim('    (run from dApp root for parsed ledger fields)') + '\n');
-      for (const line of rawStateLines(raw, '    ')) ctx.output.stderr(line + '\n');
-      ctx.output.stderr('\n');
-    }
+  const { network, raw } = state;
+  if (jsonMode) {
+    ctx.output.result({ subcommand: 'state', address, network, raw });
+  } else {
+    ctx.output.stderr(bold('  Raw State') + '\n');
+    ctx.output.stderr(dim('    (run from dApp root for parsed ledger fields)') + '\n');
+    for (const line of rawStateLines(raw, '    ')) ctx.output.stderr(line + '\n');
+    ctx.output.stderr('\n');
   }
 }
 
