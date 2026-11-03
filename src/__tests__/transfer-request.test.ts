@@ -57,7 +57,7 @@ afterEach(() => {
 describe('resolveTransferRequest', () => {
   it('takes an address and an amount, on the network asked for', async () => {
     const r = await request(RECIPIENT.preprod, '1.5', '--wallet', 'sender', '--network', 'preprod');
-    expect(r).toMatchObject({ recipientAddress: RECIPIENT.preprod, amountNight: 1.5, shielded: false, networkName: 'preprod' });
+    expect(r).toMatchObject({ recipientAddress: RECIPIENT.preprod, amount: 1_500_000n, shielded: false, networkName: 'preprod' });
     expect(r.walletPath).toBe(path.join(WALLETS, 'sender.json'));
     // The request is checked without the passphrase: it carries the wallet's addresses, never its seed.
     expect(r.walletConfig).not.toHaveProperty('seed');

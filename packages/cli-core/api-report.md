@@ -305,7 +305,9 @@ export declare function codeGuidancePieces(codes: readonly CodeDefinition[]): Gu
 
 ```ts
 export declare function nightToMicro(amountNight: number): bigint;
-export declare function parseAmount(amountStr: string): number;
+export declare function parseAmount(amountStr: string): bigint;
+export declare function nightAmountText(micro: bigint): string;
+export declare function nightAmountJson(micro: bigint): number;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/approval`
@@ -1033,7 +1035,7 @@ export interface TransferParams {
     seedBuffer: Buffer;
     networkConfig: NetworkConfig;
     recipientAddress: string;
-    amountNight: number;
+    amount: bigint;
     signal?: AbortSignal;
     onSync?: (applied: number, highest: number) => void;
     onSyncDetail?: (walletsStillSyncing: string) => void;

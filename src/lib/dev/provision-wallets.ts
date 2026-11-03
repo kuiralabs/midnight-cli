@@ -13,6 +13,7 @@ import { resolveNetwork, type NetworkSettings } from '@kuiralabs/midnight-cli-co
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { nightToMicro } from '@kuiralabs/midnight-cli-core/lib/amount';
 
 /** Default dev wallet names — one per common test persona. */
 export const DEFAULT_DEV_WALLET_NAMES = ['dev-alice', 'dev-bob', 'dev-carol'] as const;
@@ -157,7 +158,7 @@ async function generateWallet(root: string, host: UnlockHost, name: string, sign
 async function airdropToWallet(root: string, host: UnlockHost, network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
   const recipientAddress = (await loadWalletConfig(resolveWalletPath(root, name), host.engines)).addresses.undeployed;
   // dev's wallets live on the local chain.
-  await (await host.engines.load(sdkSetOf('undeployed', root))).wallet.airdrop({ networkConfig: network, recipientAddress, amountNight, signal, sdkWarnings, root, notice: host.notice });
+  await (await host.engines.load(sdkSetOf('undeployed', root))).wallet.airdrop({ networkConfig: network, recipientAddress, amount: nightToMicro(amountNight), signal, sdkWarnings, root, notice: host.notice });
 }
 
 async function walletNeedsDust(root: string, host: UnlockHost, network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<boolean> {

@@ -5,7 +5,7 @@
 import { parseDeviceCode } from './device-code.ts';
 import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { nightToMicro, parseAmount } from '@kuiralabs/midnight-cli-core/lib/amount';
+import { parseAmount } from '@kuiralabs/midnight-cli-core/lib/amount';
 
 export const GRANT_SUBCOMMANDS = ['deploy', 'deposit', 'status', 'list', 'issue', 'revoke', 'revoke-all', 'export', 'import', 'device'] as const;
 
@@ -95,7 +95,7 @@ export function resolveGrantRequest(args: ParsedArgs): GrantRequest {
     case 'deposit': {
       const [amount] = positionalsFor(args, subcommand, 1, 'one amount of NIGHT');
       if (amount === undefined) throw new UsageError('Missing the amount of NIGHT to deposit.\nUsage: midnight grant deposit <amount>');
-      return { subcommand, amount, value: nightToMicro(parseAmount(amount)).toString() };
+      return { subcommand, amount, value: parseAmount(amount).toString() };
     }
     case 'status':
     case 'list':

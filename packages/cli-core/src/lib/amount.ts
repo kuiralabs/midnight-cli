@@ -4,10 +4,11 @@ import { UsageError } from './errors.ts';
 
 /** NIGHT's smallest unit is 10^-6 NIGHT. */
 const NIGHT_DECIMALS = 6;
+const MICRO_PER_NIGHT = 10n ** BigInt(NIGHT_DECIMALS);
 
 /**
- * Convert NIGHT amount to micro-NIGHT (bigint).
- * Rounds to 6 decimals: amounts from parseAmount never need rounding (it refuses those that would).
+ * Convert NIGHT amount to micro-NIGHT (bigint), for amounts mn's own code
+ * holds as numbers (a default, a count from a config). Rounds to 6 decimals.
  */
 export function nightToMicro(amountNight: number): bigint {
   if (amountNight <= 0) {
@@ -29,9 +30,10 @@ export function nightToMicro(amountNight: number): bigint {
 
 /**
  * Parse and validate amount string from CLI input: a plain decimal with at
- * most 6 decimals, which a number carries exactly. Returns it in NIGHT.
+ * most 6 decimals. Returns it exactly, in micro-NIGHT: the digits are read as
+ * an integer, never through a number, so no amount loses its last digits.
  */
-export function parseAmount(amountStr: string): number {
+export function parseAmount(amountStr: string): bigint {
   const text = amountStr.trim();
   const match = /^(\d*)(?:\.(\d*))?$/.exec(text);
   if (!match || (match[1] === '' && !match[2])) {
@@ -41,14 +43,30 @@ export function parseAmount(amountStr: string): number {
   if (decimals.length > NIGHT_DECIMALS) {
     throw new UsageError(`Invalid amount: "${amountStr}" — NIGHT has ${NIGHT_DECIMALS} decimals, this has ${decimals.length}`);
   }
-  const amount = Number(text);
-  if (amount <= 0) {
+  const micro = BigInt((match[1] || '0') + decimals.padEnd(NIGHT_DECIMALS, '0'));
+  if (micro <= 0n) {
     throw new UsageError(`Invalid amount: "${amountStr}" — must be greater than 0`);
   }
-  // Amounts travel as numbers; refuse one a number can't carry to the exact smallest unit.
-  const exact = BigInt((match[1] || '0') + decimals.padEnd(NIGHT_DECIMALS, '0'));
-  if (nightToMicro(amount) !== exact) {
-    throw new UsageError(`Invalid amount: "${amountStr}" — too many digits to handle exactly`);
-  }
-  return amount;
+  return micro;
+}
+
+/**
+ * An amount of micro-NIGHT in NIGHT, as a person writes it: no trailing zeros
+ * and no point for a whole amount (1500000n is "1.5", 100000000n is "100").
+ * The words mn prints for an amount it was given.
+ */
+export function nightAmountText(micro: bigint): string {
+  const sign = micro < 0n ? '-' : '';
+  const abs = micro < 0n ? -micro : micro;
+  const fraction = (abs % MICRO_PER_NIGHT).toString().padStart(NIGHT_DECIMALS, '0').replace(/0+$/, '');
+  return `${sign}${abs / MICRO_PER_NIGHT}${fraction ? `.${fraction}` : ''}`;
+}
+
+/**
+ * An amount of micro-NIGHT as a command's `--json` output carries it: a JSON
+ * number of NIGHT. Exact to the smallest unit up to 2^53 micro-NIGHT (about
+ * 9e9 NIGHT); past that, the nearest number.
+ */
+export function nightAmountJson(micro: bigint): number {
+  return Number(nightAmountText(micro));
 }
