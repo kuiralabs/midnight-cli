@@ -7,8 +7,12 @@
 //   creating one NIGHT UTXO, `delayMs` apart.
 // - An endpoint that refuses every connection: it listens (so no other test
 //   can take its port) and drops each connection at once.
+// - An indexer of a ledger-8 chain: its HTTP GraphQL endpoint answers every
+//   query with a protocol version below the ledger-9 fork, which mn refuses
+//   before a wallet syncs (lib/ledger-guard.ts).
 
 import { createServer, type Server, type Socket } from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core/lib/constants';
@@ -107,6 +111,39 @@ export async function startRefusingEndpoint(): Promise<{ readonly port: number; 
     port,
     close: () => new Promise<void>((resolve) => {
       for (const socket of sockets) socket.destroy();
+      server.close(() => resolve());
+    }),
+  };
+}
+
+/** A ledger-8 chain's indexer, as its HTTP GraphQL endpoint answers. */
+export interface Ledger8Indexer {
+  /** Its WebSocket URL, as `--indexer-ws` takes it; mn reads the HTTP endpoint beside it. */
+  readonly url: string;
+  /** The queries it was asked, in order. */
+  readonly queries: string[];
+  close(): Promise<void>;
+}
+
+/** An indexer whose chain is on ledger 8 (protocol version 1000000): every query is answered with that block. */
+export async function startLedger8Indexer(): Promise<Ledger8Indexer> {
+  const queries: string[] = [];
+  const server = createHttpServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      queries.push((JSON.parse(body) as { query: string }).query);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ data: { block: { protocolVersion: 1_000_000 } } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `ws://127.0.0.1:${port}/api/v4/graphql/ws`,
+    queries,
+    close: () => new Promise<void>((resolve) => {
+      server.closeAllConnections();
       server.close(() => resolve());
     }),
   };

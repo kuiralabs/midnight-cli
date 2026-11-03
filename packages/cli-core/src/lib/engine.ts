@@ -201,7 +201,8 @@ export interface TransferParams {
   seedBuffer: Buffer;
   networkConfig: NetworkConfig;
   recipientAddress: string;
-  amountNight: number;
+  /** In NIGHT's smallest unit; more than 0. */
+  amount: bigint;
   signal?: AbortSignal;
   onSync?: (applied: number, highest: number) => void;
   onSyncDetail?: (walletsStillSyncing: string) => void;

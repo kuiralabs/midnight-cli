@@ -12,7 +12,7 @@ import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
 import { type FacadeBundle, hasDustAvailable, quickSync } from './facade.ts';
 import type { WalletDataRepository } from './wallet-data-repository.ts';
 import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
-import { nightToMicro } from '@kuiralabs/midnight-cli-core/lib/amount';
+import { nightAmountText } from '@kuiralabs/midnight-cli-core/lib/amount';
 import {
   NATIVE_TOKEN_TYPE,
   TOKEN_MULTIPLIER,
@@ -424,7 +424,7 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
     seedBuffer,
     networkConfig,
     recipientAddress,
-    amountNight,
+    amount,
     signal,
     onSync,
     onSyncDetail,
@@ -439,7 +439,9 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
     notice,
   } = params;
 
-  const amount = nightToMicro(amountNight);
+  if (amount <= 0n) {
+    throw new Error('Amount must be greater than 0');
+  }
   const decodedAddress = validateRecipientAddress(recipientAddress, networkConfig);
 
   // Suppress SDK transient errors + polkadot-js RPC noise for the duration
@@ -461,7 +463,7 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
           const haveNight = Number(unshieldedBalance) / TOKEN_MULTIPLIER;
           throw new InsufficientBalanceError(
             `Insufficient balance: ${haveNight.toFixed(6)} NIGHT available, ` +
-            `${amountNight} NIGHT requested`
+            `${nightAmountText(amount)} NIGHT requested`
           );
         }
 

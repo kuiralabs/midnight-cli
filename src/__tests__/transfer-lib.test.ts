@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateRecipientAddress, isDustRelatedError } from '@kuiralabs/midnight-engine-rc/transfer';
-import { nightToMicro, parseAmount } from '@kuiralabs/midnight-cli-core/lib/amount';
+import { nightAmountJson, nightAmountText, nightToMicro, parseAmount } from '@kuiralabs/midnight-cli-core/lib/amount';
 import { getNetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { GENESIS_SEED, SYNC_ATTEMPT_TIMEOUT_MS, SYNC_ATTEMPT_REMOTE_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/lib/constants';
@@ -54,28 +54,34 @@ describe('parseAmount: exact amounts only (NIGHT has 6 decimals)', () => {
     expect(() => parseAmount(input)).toThrow(`Invalid amount: "${input}" — must be a positive number, e.g. 1.5`);
   });
 
-  it('refuses an amount a number cannot carry to the exact smallest unit', () => {
-    expect(() => parseAmount('24000000000.000001')).toThrow('too many digits to handle exactly');
+  it.each([
+    ['1.000001', 1_000_001n], ['.5', 500_000n], ['1.', 1_000_000n], [' 2 ', 2_000_000n], ['007', 7_000_000n], ['999999999.999999', 999_999_999_999_999n],
+  ] as const)('accepts %j as exactly %s micro-NIGHT', (input, micro) => {
+    expect(parseAmount(input)).toBe(micro);
   });
 
+  // A JS number carries 2^53 (about 9.007e15 micro-NIGHT, 9.007e9 NIGHT) exactly; the digits are read as an integer instead.
   it.each([
-    ['1.000001', 1_000_001n], ['.5', 500_000n], ['1.', 1_000_000n], [' 2 ', 2_000_000n], ['999999999.999999', 999_999_999_999_999n],
-  ] as const)('accepts %j as exactly %s micro-NIGHT', (input, micro) => {
-    expect(nightToMicro(parseAmount(input))).toBe(micro);
+    ['24000000000.000001', 24_000_000_000_000_001n],
+    ['9007199254.740993', 9_007_199_254_740_993n],
+    ['123456789012345678.123456', 123_456_789_012_345_678_123_456n],
+  ] as const)('accepts %j, above what a number carries, as exactly %s micro-NIGHT', (input, micro) => {
+    expect(parseAmount(input)).toBe(micro);
+    expect(nightAmountText(parseAmount(input))).toBe(input);
   });
 });
 
 describe('parseAmount', () => {
   it('parses integer amounts', () => {
-    expect(parseAmount('100')).toBe(100);
-    expect(parseAmount('1')).toBe(1);
-    expect(parseAmount('1000000')).toBe(1_000_000);
+    expect(parseAmount('100')).toBe(100_000_000n);
+    expect(parseAmount('1')).toBe(1_000_000n);
+    expect(parseAmount('1000000')).toBe(1_000_000_000_000n);
   });
 
   it('parses decimal amounts', () => {
-    expect(parseAmount('0.5')).toBe(0.5);
-    expect(parseAmount('1.23')).toBe(1.23);
-    expect(parseAmount('0.000001')).toBe(0.000001);
+    expect(parseAmount('0.5')).toBe(500_000n);
+    expect(parseAmount('1.23')).toBe(1_230_000n);
+    expect(parseAmount('0.000001')).toBe(1n);
   });
 
   it('throws for non-numeric strings', () => {
@@ -103,6 +109,20 @@ describe('parseAmount', () => {
       expect(refused).toBeInstanceOf(UsageError);
       expect(classifyError(refused, installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.INVALID_ARGS });
     }
+  });
+});
+
+describe('nightAmountText and nightAmountJson: an amount as mn prints it', () => {
+  // The words the commands printed when amounts were numbers, String(Number(text)), for amounts a number carried exactly (all parseAmount took then).
+  it.each(['100', '1.5', '0.5', '0.000001', '1.000001', '123.45', '999999999.999999', '4000000000.000001', '8000000000.000011', '7', '0.1'])('%s as written, and as the number --json has always carried', (text) => {
+    expect(nightAmountText(parseAmount(text))).toBe(String(Number(text)));
+    expect(nightAmountJson(parseAmount(text))).toBe(Number(text));
+  });
+
+  it('drops trailing zeros and a bare point, as a number did', () => {
+    expect(nightAmountText(parseAmount('1.50'))).toBe('1.5');
+    expect(nightAmountText(parseAmount('2.'))).toBe('2');
+    expect(nightAmountText(parseAmount('.25'))).toBe('0.25');
   });
 });
 

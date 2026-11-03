@@ -14,6 +14,7 @@ import { OWN_COMMAND_DUST_WAIT_MS } from '@kuiralabs/midnight-cli-core/lib/dust-
 import { startBuild } from './build-manager.ts';
 import { DustRequiredError, InsufficientBalanceError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { sdkSetOf } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { nightToMicro } from '@kuiralabs/midnight-cli-core/lib/amount';
 
 /** A prep step failed: the step's own error is its cause, and its code (DUST_REQUIRED, …) is this one's. */
 export class PrepStepFailedError extends Error {
@@ -159,7 +160,7 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
   await engine.wallet.airdrop({
     networkConfig,
     recipientAddress: address,
-    amountNight: amount,
+    amount: nightToMicro(amount),
     onSync(_applied, _highest) {},
     onDust(status) { callbacks.onMessage(`Dust: ${status}`); },
     onProving() { callbacks.onMessage('Generating ZK proof...'); },

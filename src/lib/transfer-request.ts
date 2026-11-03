@@ -7,8 +7,8 @@ import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { loadWalletConfig, resolveWalletPath, walletAddress, walletShieldedAddress, type UnlockHost, type WalletConfig } from './wallet-config.ts';
 import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { sdkSetOf, type EngineKeys } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { shieldedSyncEnabled, shieldedDisabledReason } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
 import { parseAmount } from '@kuiralabs/midnight-cli-core/lib/amount';
+import { assertShieldedTransferAllowed } from './wallet/transfer.ts';
 import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 
 export interface TransferRequest {
@@ -17,7 +17,8 @@ export interface TransferRequest {
   networkName: NetworkName;
   /** The recipient's bech32m address; a wallet name given as the recipient is resolved to it. */
   recipientAddress: string;
-  amountNight: number;
+  /** In NIGHT's smallest unit, exactly as written. */
+  amount: bigint;
   shielded: boolean;
 }
 
@@ -45,19 +46,16 @@ export async function resolveTransferRequest(args: ParsedArgs, root: string, hos
 
   const shielded = hasFlag(args, 'shielded');
   const recipientAddress = await resolveRecipient(recipientInput, args, shielded, root, host);
-  const amountNight = parseAmount(amountStr);
+  const amount = parseAmount(amountStr);
   const walletPath = resolveWalletPath(root, getFlag(args, 'wallet'));
   const walletConfig = await loadWalletConfig(walletPath, host.engines);
   const networkName = resolveNetworkName({ args, configDir: root });
 
-  if (shielded) {
-    if (!shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded'))) {
-      throw new UsageError(shieldedDisabledReason(networkName));
-    }
-  }
+  // transferNight refuses it too; refused here before the wallet is opened, and before MCP issues a confirmation.
+  if (shielded) assertShieldedTransferAllowed(networkName, hasFlag(args, 'force-shielded'));
   assertRecipient((await host.engines.load(sdkSetOf(networkName, root))).keys, recipientAddress, shielded, networkName);
 
-  return { walletPath, walletConfig, networkName, recipientAddress, amountNight, shielded };
+  return { walletPath, walletConfig, networkName, recipientAddress, amount, shielded };
 }
 
 /** Refuses, as a usage mistake, a recipient that is not an address of that kind on the network. */

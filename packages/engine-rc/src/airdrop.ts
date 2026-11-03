@@ -11,7 +11,7 @@ import type { WalletDataRepository } from './wallet-data-repository.ts';
 export type { AirdropParams } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 
-/** Sends `amountNight` NIGHT from genesis to `recipientAddress`, on the engine's repository `repo`. */
+/** Sends `amount` micro-NIGHT from genesis to `recipientAddress`, on the engine's repository `repo`. */
 export async function airdropNight(repo: WalletDataRepository, params: AirdropParams): Promise<TransferResult> {
   try {
     return await executeTransfer(repo, { ...params, seedBuffer: Buffer.from(GENESIS_SEED, 'hex') });
