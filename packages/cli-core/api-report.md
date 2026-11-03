@@ -1060,6 +1060,37 @@ export declare function feeLimitRefusal(feeSpecks: bigint, limits: FeeLimits): s
 export declare function pendingLimitRefusal(pendingCount: number, limits: FeeLimits): string | undefined;
 ```
 
+## `@kuiralabs/midnight-cli-core/lib/host`
+
+```ts
+import type { HostPaths } from "./state-root.ts";
+import { type Settings } from "./settings.ts";
+import type { Prompter } from "./prompter.ts";
+import { type SdkWarningCalls } from "./sdk-warnings.ts";
+export interface HostSlot<T> {
+    readonly name: string;
+    readonly init: () => T;
+}
+export declare function defineHostSlot<T>(name: string, init: () => T): HostSlot<T>;
+export interface Host {
+    settings(): Settings;
+    paths(): HostPaths;
+    notice(line: string): void;
+    readonly prompter: Prompter | null;
+    readonly sdkWarnings: SdkWarningCalls;
+    slot<T>(key: HostSlot<T>): T;
+}
+export type Supplied<T> = T | (() => T);
+export interface HostOptions {
+    readonly paths?: Supplied<HostPaths>;
+    readonly settings?: Supplied<Settings>;
+    readonly notice?: (line: string) => void;
+    readonly prompter?: Prompter | null;
+    readonly sdkWarnings?: SdkWarningCalls;
+}
+export declare function createHost(options?: HostOptions): Host;
+```
+
 ## `@kuiralabs/midnight-cli-core/lib/json-output`
 
 ```ts
