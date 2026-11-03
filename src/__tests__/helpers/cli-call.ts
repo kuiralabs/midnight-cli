@@ -6,21 +6,26 @@ import type { ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { createCallContext, runHandler, type CommandHandler, type CommandOutcome } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { processOutput } from '../../lib/command-dispatch.ts';
 import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
+import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
+import { testHost } from './test-host.ts';
 
 export interface CliCallOptions<Protector> {
   /** The call's cancellation; none: it is never cancelled. */
   signal?: AbortSignal;
   payer?: Payer;
   protectors?: readonly Protector[];
+  /** The host the call runs in; a test host when not given. */
+  host?: Host;
 }
 
 /** Runs `handler` with `args` as the CLI does, and returns the exit code it gives. */
 export function cliCall<Protector = unknown>(
   handler: CommandHandler<Protector>,
   args: ParsedArgs,
-  { signal, payer, protectors }: CliCallOptions<Protector> = {},
+  { signal, payer, protectors, host }: CliCallOptions<Protector> = {},
 ): Promise<CommandOutcome | void> {
   const ctx = createCallContext<Protector>({
+    host: host ?? testHost(),
     args,
     signal: signal ?? new AbortController().signal,
     output: processOutput,

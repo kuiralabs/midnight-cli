@@ -18,6 +18,10 @@ import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import balanceCommand from '../commands/balance.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { ownCall } from './helpers/own-call.ts';
+import { testHost } from './helpers/test-host.ts';
+
+// One host for every call, as the MCP server has: its notices are where verbose lines go.
+const host = testHost({ notice: (line) => notices.push(line) });
 
 // Nothing listens here: each call fails at its first connection, after its first diagnostic.
 const UNREACHABLE = ['--indexer-ws', 'ws://127.0.0.1:1/api/v4/graphql/ws', '--node', 'ws://127.0.0.1:1', '--proof-server', 'http://127.0.0.1:1'];
@@ -48,8 +52,8 @@ afterEach(() => {
 
 describe('verbose, per call', () => {
   it('two balance calls at once, one --verbose: only the verbose one writes diagnostic lines', async () => {
-    const verboseCall = captureCommand(balanceCommand, parseArgs(['balance', VERBOSE_ADDRESS, '--verbose', ...UNREACHABLE]), ownCall());
-    const quietCall = captureCommand(balanceCommand, parseArgs(['balance', QUIET_ADDRESS, ...UNREACHABLE]), ownCall());
+    const verboseCall = captureCommand(balanceCommand, parseArgs(['balance', VERBOSE_ADDRESS, '--verbose', ...UNREACHABLE]), ownCall({ host }));
+    const quietCall = captureCommand(balanceCommand, parseArgs(['balance', QUIET_ADDRESS, ...UNREACHABLE]), ownCall({ host }));
     const outcomes = await Promise.allSettled([verboseCall, quietCall]);
     // Neither reaches an indexer; both fail, each with its own error.
     expect(outcomes.map((o) => o.status)).toEqual(['rejected', 'rejected']);
@@ -58,11 +62,11 @@ describe('verbose, per call', () => {
   });
 
   it('a call after a verbose one is quiet', async () => {
-    const verbose = await captureCommand(balanceCommand, parseArgs(['balance', VERBOSE_ADDRESS, '--verbose', ...UNREACHABLE]), ownCall()).then(() => null, (err: unknown) => err);
+    const verbose = await captureCommand(balanceCommand, parseArgs(['balance', VERBOSE_ADDRESS, '--verbose', ...UNREACHABLE]), ownCall({ host })).then(() => null, (err: unknown) => err);
     // It got as far as its first diagnostic, and failed connecting.
     expect(notices.some((line) => line.includes(`balance: address=${VERBOSE_ADDRESS}`))).toBe(true);
     notices = [];
-    const quiet = await captureCommand(balanceCommand, parseArgs(['balance', QUIET_ADDRESS, ...UNREACHABLE]), ownCall()).then(() => null, (err: unknown) => err);
+    const quiet = await captureCommand(balanceCommand, parseArgs(['balance', QUIET_ADDRESS, ...UNREACHABLE]), ownCall({ host })).then(() => null, (err: unknown) => err);
     // It got as far too, failing the same way, past where the verbose one wrote its diagnostic.
     expect(quiet).toBeInstanceOf(Error);
     expect((quiet as Error).message).toBe((verbose as Error).message.replace(VERBOSE_ADDRESS, QUIET_ADDRESS));

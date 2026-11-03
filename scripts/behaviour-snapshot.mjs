@@ -325,7 +325,8 @@ if (mode === 'record') {
 } else {
   const fresh = mkdtempSync(join(tmpdir(), 'mn-snapshot-fresh-'));
   await record(fresh);
-  const diff = spawnSync('diff', ['-ru', resolve(target), fresh], { encoding: 'utf8' });
+  // Finder's .DS_Store in a snapshot folder someone opened is no behaviour of mn's.
+  const diff = spawnSync('diff', ['-ru', '-x', '.DS_Store', resolve(target), fresh], { encoding: 'utf8' });
   if (diff.status === 0) {
     process.stdout.write('Behaviour unchanged.\n');
     rmSync(fresh, { recursive: true, force: true });

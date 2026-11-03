@@ -9,7 +9,8 @@ import type { CommandDefinition, CommandRegistry } from '@kuiralabs/midnight-cli
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { writeJsonResult } from '@kuiralabs/midnight-cli-core/lib/json-output';
 import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
-import type { CallSdkWarnings, SdkWarningCalls } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import type { WalletProtector } from './wallet-protector.ts';
 
 /** What the shell can give a handler: its call's signal and output, and, as its definition's `shell` field asks, the payer or protectors, loaded only then. */
@@ -17,8 +18,8 @@ export interface ShellProvisions {
   readonly signal: AbortSignal;
   /** Where the call's output goes; a definition's notice goes to its stderr, before the handler loads. */
   readonly output: CallOutput;
-  /** The host's calls: each call runs in one, with its own SDK warnings. */
-  readonly sdkWarnings: SdkWarningCalls;
+  /** The host the call runs in; each call runs in one of its calls, with its own SDK warnings. */
+  readonly host: Host;
   readonly loadPayer: () => Promise<Payer>;
   readonly loadProtectors: () => Promise<readonly WalletProtector[]>;
 }
@@ -51,6 +52,7 @@ export function findInstalledCommand(registry: CommandRegistry, name: string): C
 async function cliCallContext(definition: CommandDefinition, args: ParsedArgs, provisions: ShellProvisions, sdkWarnings: CallSdkWarnings): Promise<CallContext<WalletProtector>> {
   const { payer, protectors } = definition.shell;
   return createCallContext({
+    host: provisions.host,
     args,
     signal: provisions.signal,
     output: provisions.output,
@@ -71,5 +73,5 @@ export async function dispatchCommand(registry: CommandRegistry, name: string, a
   if (definition.shell.unavailable !== undefined) throw new Error(definition.shell.unavailable);
   if (definition.shell.notice !== undefined) provisions.output.stderr(definition.shell.notice);
   const { default: handler } = await definition.load();
-  return provisions.sdkWarnings.run(async (sdkWarnings) => runHandler(handler, args, await cliCallContext(definition, args, provisions, sdkWarnings)));
+  return provisions.host.sdkWarnings.run(async (sdkWarnings) => runHandler(handler, args, await cliCallContext(definition, args, provisions, sdkWarnings)));
 }

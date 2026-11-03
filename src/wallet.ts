@@ -98,7 +98,7 @@ async function run(): Promise<CommandOutcome | void> {
   return dispatchCommand(installedCommands, command, args, {
     signal,
     output: processOutput,
-    sdkWarnings: host.sdkWarnings,
+    host,
     loadPayer: async () => (await import('./lib/serve-payer.ts')).servePayer,
     // wallet protect also seals grant's accounts, through the protector grant provides.
     loadProtectors: async () => [(await import('./lib/grant/account-protector.ts')).accountProtector],

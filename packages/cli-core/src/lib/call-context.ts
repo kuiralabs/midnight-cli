@@ -16,9 +16,9 @@ import { CancelledError } from './errors.ts';
 import { preferEngineOf } from './engine.ts';
 import { resolveNetworkName } from './resolve-network.ts';
 import type { Payer } from './payer.ts';
-import { settings, type Settings } from './settings.ts';
-import { hostPaths, type HostPaths } from './state-root.ts';
-import { notice } from './notices.ts';
+import type { Settings } from './settings.ts';
+import type { HostPaths } from './state-root.ts';
+import type { Host } from './host.ts';
 import { verboseLine } from './verbose.ts';
 import { createSdkWarningRouter, type CallSdkWarnings } from './sdk-warnings.ts';
 import { createProgress, type Progress, type ProgressReport } from '../ui/spinner.ts';
@@ -67,6 +67,8 @@ export interface CallContext<Protector = unknown> {
   readonly diagnostics: CallDiagnostics;
   readonly sdkWarnings: CallSdkWarnings;
   readonly config: CallConfig;
+  /** The host the call runs in: what its libraries are given. */
+  readonly host: Host;
   /** What a command that submits a transaction pays with, when its caller gives one. */
   readonly payer?: Payer;
   /** What `wallet protect` seals besides the wallets, when its caller gives them. */
@@ -114,13 +116,10 @@ export function callDiagnostics(verbose: boolean, write: (line: string) => void)
   };
 }
 
-/** The configuration the host gives now: its settings and its paths. */
-export function hostCallConfig(): CallConfig {
-  return { settings: settings(), paths: hostPaths() };
-}
-
 /** What a runner gives a call; the rest of its context comes from the host. */
 export interface CallParts<Protector = unknown> {
+  /** The host the call runs in. */
+  readonly host: Host;
   readonly args: ParsedArgs;
   readonly signal: AbortSignal;
   readonly output: CallOutput;
@@ -138,9 +137,10 @@ export function createCallContext<Protector = unknown>(parts: CallParts<Protecto
     signal: parts.signal,
     output: callOutput(parts.output),
     progress: createProgress(parts.onProgress),
-    diagnostics: callDiagnostics(isVerbose(parts.args), notice),
+    diagnostics: callDiagnostics(isVerbose(parts.args), parts.host.notice),
     sdkWarnings: parts.sdkWarnings ?? createSdkWarningRouter().openCall().warnings,
-    config: hostCallConfig(),
+    config: { settings: parts.host.settings(), paths: parts.host.paths() },
+    host: parts.host,
     ...(parts.payer === undefined ? {} : { payer: parts.payer }),
     ...(parts.protectors === undefined ? {} : { protectors: parts.protectors }),
   };

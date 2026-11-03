@@ -2,8 +2,8 @@
 // outside any host: no host's filters report to it.
 
 import type { CommandRun } from '../../lib/run-command.ts';
-import { createSdkWarningRouter, sdkWarningCallsOn } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import { testHost } from './test-host.ts';
 
-export function ownCall(run: Omit<CommandRun, 'sdkWarnings'> = {}): CommandRun {
-  return { ...run, sdkWarnings: sdkWarningCallsOn(createSdkWarningRouter()) };
+export function ownCall(run: Omit<CommandRun, 'host'> & { host?: CommandRun['host'] } = {}): CommandRun {
+  return { ...run, host: run.host ?? testHost() };
 }
