@@ -9,7 +9,6 @@ import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network
 import { applyEndpointOverrides } from '@kuiralabs/midnight-cli-core/lib/network';
 import { shieldedSyncEnabled, shieldedDisabledReason } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
 import { isNativeToken } from '@kuiralabs/midnight-chain/lib/balance-subscription';
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { assertLedgerSupported, fetchProtocolVersion } from '@kuiralabs/midnight-chain/lib/ledger-guard';
 import { getChainGenesisHash } from '@kuiralabs/midnight-chain/lib/chain-id';
 import { createEtaEstimator, formatSyncStatus } from '../lib/sync-eta.ts';
@@ -73,7 +72,7 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
   // wallets we have the seed → run the full wallet sync (which shows shielded).
   // Otherwise there's nothing to decrypt with → fail with a clear, actionable error.
   if (hasFlag(args, 'shielded')) {
-    const owned = await findWalletByAddress(root, address);
+    const owned = await findWalletByAddress(root, address, ctx.host.engines);
     if (owned) {
       ctx.diagnostics.line('balance', `shielded positional → wallet ${owned.wallet.name} on ${owned.network}`);
       const delegated: ParsedArgs = {
@@ -99,7 +98,7 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
   const spinner = ctx.progress.start(`Checking balance on ${networkName}...`);
 
   try {
-    const result = await (await engineFor(networkName, root)).wallet.unshieldedBalance(address, networkConfig, {
+    const result = await (await ctx.host.engines.for(networkName)).wallet.unshieldedBalance(address, networkConfig, {
       forceFresh: hasFlag(args, 'no-cache'),
       signal: ctx.signal,
       log: ctx.diagnostics.line,
@@ -180,7 +179,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
   ctx.diagnostics.line('balance', `wallet path=${walletPath ?? '(from --seed/MN_SEED)'}`);
   // Derive the unshielded address from the seed so a --seed/MN_SEED caller (no wallet
   // file) behaves identically to a named wallet — for a wallet this equals the stored one.
-  const engine = await engineFor(networkName, root);
+  const engine = await ctx.host.engines.for(networkName);
   const address = config?.addresses[networkName] ?? engine.keys.unshieldedAddress(seedBuffer, networkName);
   const shieldedAddrStr = config?.shieldedAddresses?.[networkName] ?? '';
 
@@ -214,7 +213,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
     // ── Phase 1: fast unshielded via GraphQL (no facade, no proof server) ──
     if (!isJson) activeSpinner = ctx.progress.start('Checking unshielded...');
     ctx.diagnostics.line('balance', `phase=unshielded forceFresh=${noCache}`);
-    const unshieldedResult = await (await engineFor(networkName, root)).wallet.unshieldedBalance(address, networkConfig, {
+    const unshieldedResult = await (await ctx.host.engines.for(networkName)).wallet.unshieldedBalance(address, networkConfig, {
       forceFresh: noCache,
       signal: ctx.signal,
       log: ctx.diagnostics.line,

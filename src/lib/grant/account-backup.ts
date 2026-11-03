@@ -10,7 +10,7 @@
 // a second device (`midnight grant device add`).
 
 import * as fs from 'node:fs';
-import { anyEngine } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
 import * as path from 'node:path';
 import type { Arm } from '@kuiralabs/midnight-account';
 import { type OwnerRecord, type Roster, ownerDeviceFromSecret } from '@kuiralabs/midnight-account-chain/owner';
@@ -84,9 +84,10 @@ const sealedAccountIn = (dir: string, passphrase: string) => {
  * Writes the account in `dir` on `network` to `file`, sealed under
  * `passphrase`. Never over a file that exists. With `forDevice`, the backup
  * is for that device, just added to the account: it carries everything but
- * this machine's owner key.
+ * this machine's owner key. Its private-state password is read under the
+ * policy of an engine of `engines`.
  */
-export async function exportAccount(dir: string, network: string, passphrase: string, file: string, { forDevice }: { forDevice?: DeviceIdentity } = {}): Promise<{ contractAddress: string; file: string }> {
+export async function exportAccount(dir: string, network: string, passphrase: string, file: string, engines: HostEngines, { forDevice }: { forDevice?: DeviceIdentity } = {}): Promise<{ contractAddress: string; file: string }> {
   const key = sealedAccountIn(dir, passphrase);
   const record = sealedOwnerStore(dir, key).readOwner();
   const device = sealedDeviceKeys(dir, key).read();
@@ -97,7 +98,7 @@ export async function exportAccount(dir: string, network: string, passphrase: st
     roster: sealedOwnerStore(dir, key).readRoster(),
     ...(forDevice === undefined ? { device: { arm: device.arm, secret: device.secretText(), readSecret: Buffer.from(sealedDeviceReadSecret(dir, key)).toString('hex') } } : {}),
     devices: [...new Set([...knownDevices(dir, key, device), ...(forDevice === undefined ? [] : [deviceCodeOf(forDevice, forDevice.readKey)])])],
-    privateStatePassword: sealedPrivateStatePassword(dir, key, (await anyEngine()).contracts.acceptsPrivateStatePassword),
+    privateStatePassword: sealedPrivateStatePassword(dir, key, (await engines.any()).contracts.acceptsPrivateStatePassword),
     privateState: fs.existsSync(database) ? Object.fromEntries(filesUnder(database).map((f) => [f, fs.readFileSync(path.join(database, f)).toString('base64')])) : {},
   };
   const backup: AccountBackupFile = {

@@ -13,7 +13,7 @@
 // never opened under the public password its private state has left.
 
 import * as fs from 'node:fs';
-import { anyEngine } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
 import * as path from 'node:path';
 import type { Arm } from '@kuiralabs/midnight-account';
 import { changePrivateStatePassword, directoryOwnerStore, ownerDeviceFromSecret } from '@kuiralabs/midnight-account-chain/owner';
@@ -45,10 +45,11 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 /**
  * Seals the account in `dir` under `passphrase`, if it is in plain text. Its
  * private state is scoped to the paying wallet's shielded coin public key,
- * `coinPublicKey` (hex). `stopBeforeSealing` stops after step 4, as an
- * interrupted run would, for the tests.
+ * `coinPublicKey` (hex); its new password is one an engine of `engines`
+ * accepts. `stopBeforeSealing` stops after step 4, as an interrupted run
+ * would, for the tests.
  */
-export async function protectAccount(dir: string, passphrase: string, coinPublicKey: string, { stopBeforeSealing = false }: { stopBeforeSealing?: boolean } = {}): Promise<AccountProtectOutcome> {
+export async function protectAccount(dir: string, passphrase: string, coinPublicKey: string, engines: HostEngines, { stopBeforeSealing = false }: { stopBeforeSealing?: boolean } = {}): Promise<AccountProtectOutcome> {
   if (isSealedAccount(dir)) {
     // A run that stopped after sealing, before the plain text was removed.
     for (const file of [PLAIN_OWNER_FILE, PLAIN_ROSTER_FILE]) fs.rmSync(path.join(dir, file), { force: true });
@@ -73,7 +74,7 @@ export async function protectAccount(dir: string, passphrase: string, coinPublic
   if (device !== undefined && keys.read() === undefined) keys.keep(device);
 
   // 3
-  const password = sealedPrivateStatePassword(dir, key, (await anyEngine()).contracts.acceptsPrivateStatePassword);
+  const password = sealedPrivateStatePassword(dir, key, (await engines.any()).contracts.acceptsPrivateStatePassword);
   const location = privateStateLocationOf(dir, () => LEGACY_STORE_PASSWORD);
   if (record !== undefined && fs.existsSync(location.database)) {
     await changePrivateStatePassword({ getCoinPublicKey: () => coinPublicKey }, record.contractAddress, location, () => password);
@@ -100,10 +101,11 @@ export type ProtectedAccount =
 /**
  * Seals every plain-text account under the state root `stateRootDir`, in network and wallet order.
  * `coinKeyOf` names the shielded coin public key of the wallet an account
- * belongs to. An account that cannot be sealed is named with why, and the
- * others are still sealed.
+ * belongs to; `engines` are the host's, as protectAccount takes them. An
+ * account that cannot be sealed is named with why, and the others are still
+ * sealed.
  */
-export async function protectAllAccounts(stateRootDir: string, passphrase: string, coinKeyOf: (wallet: string) => Promise<string>): Promise<ProtectedAccount[]> {
+export async function protectAllAccounts(stateRootDir: string, passphrase: string, coinKeyOf: (wallet: string) => Promise<string>, engines: HostEngines): Promise<ProtectedAccount[]> {
   const root = path.join(stateRootDir, ACCOUNTS_DIR_NAME);
   const report: ProtectedAccount[] = [];
   const dirsIn = (dir: string): string[] => (fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort() : []);
@@ -114,8 +116,8 @@ export async function protectAllAccounts(stateRootDir: string, passphrase: strin
       if (fs.readdirSync(dir).length === 0) continue;
       try {
         const outcome = isSealedAccount(dir)
-          ? await protectAccount(dir, passphrase, '')
-          : await protectAccount(dir, passphrase, await coinKeyOf(wallet));
+          ? await protectAccount(dir, passphrase, '', engines)
+          : await protectAccount(dir, passphrase, await coinKeyOf(wallet), engines);
         if (outcome !== 'nothing') report.push({ network, wallet, outcome });
       } catch (error) {
         report.push({ network, wallet, error: error instanceof Error ? error.message : String(error) });

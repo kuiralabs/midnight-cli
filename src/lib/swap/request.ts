@@ -64,7 +64,7 @@ export async function readOfferArg(args: ParsedArgs, target: PayingTarget): Prom
   } catch (err) {
     throw new UsageError(`Can't read the offer file ${file}: ${(err as Error).message}`);
   }
-  return readOfferFile(target.root, text, target.network);
+  return readOfferFile(target.root, text, target.network, target.host.engines);
 }
 
 /** A take, checked as far as it can be without the chain: the file, its network, the agreed terms and the expiry. */

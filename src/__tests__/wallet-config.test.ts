@@ -9,9 +9,10 @@ import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants'
 import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { stateRootIn } from './helpers/state-root-in.ts';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped.
-const host = createHost();
+// The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
+const host = createHost({ engineLoader: loadInstalledEngine });
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-wallet-test-${process.pid}`);
 
@@ -75,7 +76,7 @@ describe('loadWalletConfig', () => {
   it('loads a plain-text wallet an earlier mn wrote, without its secrets', async () => {
     const filePath = path.join(TEST_DIR, 'wallet.json');
     saveWalletConfig(VALID_CONFIG, filePath);
-    const loaded = await loadWalletConfig(filePath);
+    const loaded = await loadWalletConfig(filePath, host.engines);
     expect(loaded).not.toHaveProperty('seed');
     expect(loaded.isSealed).toBe(false);
     expect(loaded.addresses).toEqual(VALID_CONFIG.addresses);
@@ -84,23 +85,23 @@ describe('loadWalletConfig', () => {
 
   it('throws when file does not exist', async () => {
     const filePath = path.join(TEST_DIR, 'nonexistent.json');
-    await expect(loadWalletConfig(filePath)).rejects.toThrow('Wallet file not found');
+    await expect(loadWalletConfig(filePath, host.engines)).rejects.toThrow('Wallet file not found');
   });
 
   it('includes actionable recovery guidance in missing file error', async () => {
     const filePath = path.join(TEST_DIR, 'nonexistent.json');
-    await expect(loadWalletConfig(filePath)).rejects.toThrow('midnight wallet generate');
+    await expect(loadWalletConfig(filePath, host.engines)).rejects.toThrow('midnight wallet generate');
   });
 
   it('includes the file path in missing file error', async () => {
     const filePath = path.join(TEST_DIR, 'nonexistent.json');
-    await expect(loadWalletConfig(filePath)).rejects.toThrow(filePath);
+    await expect(loadWalletConfig(filePath, host.engines)).rejects.toThrow(filePath);
   });
 
   it('throws on invalid JSON', async () => {
     const filePath = path.join(TEST_DIR, 'bad.json');
     fs.writeFileSync(filePath, 'not json at all');
-    await expect(loadWalletConfig(filePath)).rejects.toThrow('Invalid JSON');
+    await expect(loadWalletConfig(filePath, host.engines)).rejects.toThrow('Invalid JSON');
   });
 
   it('throws when seed is missing', async () => {
@@ -109,7 +110,7 @@ describe('loadWalletConfig', () => {
       addresses: VALID_ADDRESSES,
       createdAt: '2025-01-01T00:00:00.000Z',
     }));
-    await expect(loadWalletConfig(filePath)).rejects.toThrow('seed');
+    await expect(loadWalletConfig(filePath, host.engines)).rejects.toThrow('seed');
   });
 
   it('throws when address and addresses are both missing', async () => {
@@ -118,7 +119,7 @@ describe('loadWalletConfig', () => {
       seed: VALID_SEED,
       createdAt: '2025-01-01T00:00:00.000Z',
     }));
-    await expect(loadWalletConfig(filePath)).rejects.toThrow('address');
+    await expect(loadWalletConfig(filePath, host.engines)).rejects.toThrow('address');
   });
 
   it('throws when createdAt is missing', async () => {
@@ -127,7 +128,7 @@ describe('loadWalletConfig', () => {
       seed: 'aabb00',
       addresses: VALID_ADDRESSES,
     }));
-    await expect(loadWalletConfig(filePath)).rejects.toThrow('createdAt');
+    await expect(loadWalletConfig(filePath, host.engines)).rejects.toThrow('createdAt');
   });
 
   it('throws on non-hex seed', async () => {
@@ -137,7 +138,7 @@ describe('loadWalletConfig', () => {
       addresses: VALID_ADDRESSES,
       createdAt: '2025-01-01T00:00:00.000Z',
     }));
-    await expect(loadWalletConfig(filePath)).rejects.toThrow('Invalid seed format');
+    await expect(loadWalletConfig(filePath, host.engines)).rejects.toThrow('Invalid seed format');
   });
 
   it('auto-migrates old format with address and network fields', async () => {
@@ -148,7 +149,7 @@ describe('loadWalletConfig', () => {
       address: 'mn_addr_preprod1oldaddress',
       createdAt: '2025-01-01T00:00:00.000Z',
     }));
-    const loaded = await loadWalletConfig(filePath);
+    const loaded = await loadWalletConfig(filePath, host.engines);
     // Should have derived all addresses from the seed
     expect(loaded.addresses).toEqual(VALID_ADDRESSES);
     expect((loaded as any).network).toBeUndefined();
@@ -237,7 +238,7 @@ describe('a wallet written before stagenet', () => {
   it('gets its stagenet address derived and saved when a plain-text wallet is read', async () => {
     const filePath = path.join(TEST_DIR, 'plain.json');
     fs.writeFileSync(filePath, JSON.stringify({ seed: VALID_SEED, addresses: earlierAddresses, createdAt: VALID_CONFIG.createdAt }));
-    const config = await loadWalletConfig(filePath);
+    const config = await loadWalletConfig(filePath, host.engines);
     expect(config.addresses.stagenet).toBe(stagenetAddress);
     expect(JSON.parse(fs.readFileSync(filePath, 'utf-8')).addresses).toEqual(VALID_ADDRESSES);
     expect(await walletAddress(filePath, 'stagenet', stateRootIn(TEST_DIR), host)).toBe(stagenetAddress);
@@ -248,7 +249,7 @@ describe('a wallet written before stagenet', () => {
     writeSealedWallet(filePath, { addresses: earlierAddresses as typeof VALID_ADDRESSES, shieldedAddresses: earlierShielded as typeof VALID_ADDRESSES, createdAt: VALID_CONFIG.createdAt }, { seed: VALID_SEED }, PASSPHRASE);
     const sealedBefore = JSON.parse(fs.readFileSync(filePath, 'utf-8')).sealed;
 
-    expect((await loadWalletConfig(filePath)).addresses.stagenet).toBeUndefined();
+    expect((await loadWalletConfig(filePath, host.engines)).addresses.stagenet).toBeUndefined();
 
     const unlocked = await unlockWallet(filePath, UNLOCK);
     expect(unlocked.addresses.stagenet).toBe(stagenetAddress);
@@ -258,6 +259,6 @@ describe('a wallet written before stagenet', () => {
     expect(saved.shieldedAddresses.stagenet).toBe(stagenetShielded);
     expect(saved.sealed).toEqual(sealedBefore);
     expect(saved.seed).toBeUndefined();
-    expect((await loadWalletConfig(filePath)).addresses.stagenet).toBe(stagenetAddress);
+    expect((await loadWalletConfig(filePath, host.engines)).addresses.stagenet).toBe(stagenetAddress);
   });
 });

@@ -19,9 +19,10 @@ import { AccountMigrationInterruptedError, protectAccount } from '../lib/grant/p
 import { isSealedAccount } from '../lib/grant/sealed-account.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped.
-const host = createHost();
+// The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
+const host = createHost({ engineLoader: loadInstalledEngine });
 
 const PASSPHRASE = 'correct horse battery staple';
 const ACCOUNT = '5e'.repeat(32);
@@ -70,7 +71,7 @@ afterEach(() => {
 describe('protecting an account an earlier mn made in plain text', () => {
   it('seals its records, roster and owner key, and leaves nothing secret in plain text', async () => {
     await writePlainAccount();
-    expect(await protectAccount(dir, PASSPHRASE, COIN_KEY)).toBe('sealed-now');
+    expect(await protectAccount(dir, PASSPHRASE, COIN_KEY, host.engines)).toBe('sealed-now');
     expect(isSealedAccount(dir)).toBe(true);
     expect(plainTextLeft()).toEqual([]);
     const account = await openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), host, source: { env: { [PASSPHRASE_ENV]: PASSPHRASE } } });
@@ -82,7 +83,7 @@ describe('protecting an account an earlier mn made in plain text', () => {
 
   it('moves its private state onto a password of its own, off the public one', async () => {
     await writePlainAccount();
-    await protectAccount(dir, PASSPHRASE, COIN_KEY);
+    await protectAccount(dir, PASSPHRASE, COIN_KEY, host.engines);
     const account = await openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), host, source: { env: { [PASSPHRASE_ENV]: PASSPHRASE } } });
     const own = await account.location.password();
     expect(own).not.toBe(LEGACY_STORE_PASSWORD);
@@ -92,22 +93,22 @@ describe('protecting an account an earlier mn made in plain text', () => {
 
   it('is left as it is once sealed', async () => {
     await writePlainAccount();
-    await protectAccount(dir, PASSPHRASE, COIN_KEY);
-    expect(await protectAccount(dir, PASSPHRASE, COIN_KEY)).toBe('already-sealed');
+    await protectAccount(dir, PASSPHRASE, COIN_KEY, host.engines);
+    expect(await protectAccount(dir, PASSPHRASE, COIN_KEY, host.engines)).toBe('already-sealed');
   });
 
   it('has nothing to protect where there is no account', async () => {
     fs.mkdirSync(dir, { recursive: true });
-    expect(await protectAccount(dir, PASSPHRASE, COIN_KEY)).toBe('nothing');
+    expect(await protectAccount(dir, PASSPHRASE, COIN_KEY, host.engines)).toBe('nothing');
   });
 
   it('is refused while caught half way, and finished by the next run', async () => {
     await writePlainAccount();
     // A run that stopped after moving the private state, before the account was sealed.
-    await protectAccount(dir, PASSPHRASE, COIN_KEY, { stopBeforeSealing: true });
+    await protectAccount(dir, PASSPHRASE, COIN_KEY, host.engines, { stopBeforeSealing: true });
     expect(isSealedAccount(dir)).toBe(false);
     await expect(openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), host, warn: () => {} })).rejects.toThrow(AccountMigrationInterruptedError);
-    expect(await protectAccount(dir, PASSPHRASE, COIN_KEY)).toBe('sealed-now');
+    expect(await protectAccount(dir, PASSPHRASE, COIN_KEY, host.engines)).toBe('sealed-now');
     const account = await openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), host, source: { env: { [PASSPHRASE_ENV]: PASSPHRASE } } });
     expect(await (await privateStateUnder(await account.location.password())).get(PRIVATE_STATE_ID)).toEqual(PRIVATE_STATE);
     expect(plainTextLeft()).toEqual([]);
@@ -116,7 +117,7 @@ describe('protecting an account an earlier mn made in plain text', () => {
   it('seals the records of a deploy that never landed, kept aside in plain text', async () => {
     await writePlainAccount();
     fs.writeFileSync(path.join(dir, 'owner.unlanded-1790000000000.json'), JSON.stringify({ ...RECORD, deviceArm: 'k1', deviceSk: DEVICE_SECRET }));
-    await protectAccount(dir, PASSPHRASE, COIN_KEY);
+    await protectAccount(dir, PASSPHRASE, COIN_KEY, host.engines);
     expect(plainTextLeft()).toEqual([]);
     expect(fs.readdirSync(dir).some((f) => f.startsWith('owner.unlanded-1790000000000') && f.endsWith('.sealed.json'))).toBe(true);
   });

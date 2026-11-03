@@ -4,7 +4,7 @@ import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MO
 import { getValidNetworkNames, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { loadCliConfig, saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
 import { getWalletsDir } from './wallet-paths.ts';
-import { anyEngine, type EngineKeys } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { EngineKeys, HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { isSealedSecret, openSecret, sealSecret } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import { FileExistsError, writeJsonDurably } from '@kuiralabs/midnight-cli-core/lib/durable-file';
 import { type PassphraseHost, type PassphraseSource, unlockPassphrase } from './passphrase.ts';
@@ -81,13 +81,13 @@ export function getAddress(config: WalletConfig, network: NetworkName): string {
  * saves it.
  */
 export async function walletAddress(walletPath: string, network: NetworkName, root: string, host: UnlockHost): Promise<string> {
-  const config = await loadWalletConfig(walletPath);
+  const config = await loadWalletConfig(walletPath, host.engines);
   return config.addresses[network] ?? (await unlockWallet(walletPath, { root, host })).addresses[network];
 }
 
 /** A wallet's shielded address on `network`, unlocking a sealed wallet that has none saved yet (see walletAddress); undefined when the wallet keeps no shielded addresses. */
 export async function walletShieldedAddress(walletPath: string, network: NetworkName, root: string, host: UnlockHost): Promise<string | undefined> {
-  const config = await loadWalletConfig(walletPath);
+  const config = await loadWalletConfig(walletPath, host.engines);
   if (config.shieldedAddresses === undefined || config.shieldedAddresses[network] !== undefined) return config.shieldedAddresses?.[network];
   return (await unlockWallet(walletPath, { root, host })).shieldedAddresses?.[network];
 }
@@ -97,12 +97,12 @@ function missingNetworks(map: Partial<Record<NetworkName, string>> | undefined):
   return (getValidNetworkNames() as NetworkName[]).filter((network) => typeof map?.[network] !== 'string' || map[network] === '');
 }
 
-/** The wallet's address maps with every network's address, derived from its seed where missing; null when none was missing. */
-async function completedAddresses(config: WalletConfig, seed: Buffer): Promise<Pick<WalletConfig, 'addresses' | 'shieldedAddresses'> | null> {
+/** The wallet's address maps with every network's address, derived from its seed (by an engine of `engines`) where missing; null when none was missing. */
+async function completedAddresses(config: WalletConfig, seed: Buffer, engines: HostEngines): Promise<Pick<WalletConfig, 'addresses' | 'shieldedAddresses'> | null> {
   const lacksUnshielded = missingNetworks(config.addresses).length > 0;
   const lacksShielded = config.shieldedAddresses !== undefined && missingNetworks(config.shieldedAddresses).length > 0;
   if (!lacksUnshielded && !lacksShielded) return null;
-  const { keys } = await anyEngine();
+  const { keys } = await engines.any();
   return {
     // Saved addresses win: they are what the wallet has shown so far.
     addresses: { ...keys.unshieldedAddresses(seed), ...config.addresses },
@@ -170,16 +170,17 @@ export function setActiveWallet(root: string, name: string): void {
 }
 
 /**
- * List all wallets in the wallets folder under the state root `root`.
+ * List all wallets in the wallets folder under the state root `root`; an old
+ * wallet's missing addresses are derived by an engine of `engines`.
  */
-export async function listWallets(root: string): Promise<WalletInfo[]> {
+export async function listWallets(root: string, engines: HostEngines): Promise<WalletInfo[]> {
   const walletsDir = getWalletsDir(root);
   if (!fs.existsSync(walletsDir)) {
     return [];
   }
   // Only a plain-text wallet's missing addresses are derived, and so need the SDK.
   let keys: EngineKeys | undefined;
-  const engineKeys = async (): Promise<EngineKeys> => (keys ??= (await anyEngine()).keys);
+  const engineKeys = async (): Promise<EngineKeys> => (keys ??= (await engines.any()).keys);
 
   const activeName = getActiveWalletName(root);
   const files = fs.readdirSync(walletsDir).filter(f => f.endsWith('.json')).sort();
@@ -261,8 +262,9 @@ export function matchWalletAddress(
 export async function findWalletByAddress(
   root: string,
   address: string,
+  engines: HostEngines,
 ): Promise<{ wallet: WalletInfo; network: NetworkName } | undefined> {
-  return matchWalletAddress(await listWallets(root), address);
+  return matchWalletAddress(await listWallets(root, engines), address);
 }
 
 /**
@@ -324,9 +326,11 @@ export function assertWalletFileExists(resolvedPath: string): void {
 /**
  * Load wallet config from a file.
  * Throws with an actionable message if file is missing or invalid.
- * Callers should use resolveWalletPath() to get the path first.
+ * Callers should use resolveWalletPath() to get the path first. A plain-text
+ * wallet's addresses missing from the file are derived by an engine of
+ * `engines`, and saved.
  */
-export async function loadWalletConfig(walletPath: string): Promise<WalletConfig> {
+export async function loadWalletConfig(walletPath: string, engines: HostEngines): Promise<WalletConfig> {
   const resolvedPath = path.resolve(walletPath);
 
   assertWalletFileExists(resolvedPath);
@@ -384,14 +388,14 @@ export async function loadWalletConfig(walletPath: string): Promise<WalletConfig
     }
     // Old format — derive all addresses from seed
     const seedBuffer = Buffer.from(raw.seed, 'hex');
-    const addresses = (await anyEngine()).keys.unshieldedAddresses(seedBuffer);
+    const addresses = (await engines.any()).keys.unshieldedAddresses(seedBuffer);
 
     const config: WalletConfig = {
       addresses,
       createdAt: raw.createdAt,
       isSealed: false,
     };
-    const shieldedAddresses = await resolveShieldedAddresses(raw, seedBuffer);
+    const shieldedAddresses = await resolveShieldedAddresses(raw, seedBuffer, engines);
     if (shieldedAddresses) config.shieldedAddresses = shieldedAddresses;
 
     // Write back migrated format (keep old fields for backwards compat)
@@ -419,7 +423,7 @@ export async function loadWalletConfig(walletPath: string): Promise<WalletConfig
     isSealed: false,
   };
   // A network added since the wallet was written: derive its address and save it.
-  const completed = await completedAddresses(config, seedBuffer);
+  const completed = await completedAddresses(config, seedBuffer, engines);
   if (completed) {
     config.addresses = completed.addresses;
     try {
@@ -428,7 +432,7 @@ export async function loadWalletConfig(walletPath: string): Promise<WalletConfig
     } catch { /* best-effort */ }
   }
 
-  const shieldedAddresses = await resolveShieldedAddresses(raw, seedBuffer);
+  const shieldedAddresses = await resolveShieldedAddresses(raw, seedBuffer, engines);
   if (shieldedAddresses) config.shieldedAddresses = shieldedAddresses;
 
   // One-time backfill: if the file is missing shieldedAddresses (or only has
@@ -461,9 +465,10 @@ export async function loadWalletConfig(walletPath: string): Promise<WalletConfig
 async function resolveShieldedAddresses(
   raw: any,
   seedBuffer: Buffer,
+  engines: HostEngines,
 ): Promise<Record<NetworkName, string> | undefined> {
   let derived: Record<NetworkName, string> | undefined;
-  const { keys } = await anyEngine();
+  const { keys } = await engines.any();
   try {
     derived = keys.shieldedAddresses(seedBuffer);
   } catch { /* derivation can fail on malformed seeds */ }
@@ -508,11 +513,12 @@ export function writeSealedWallet(walletPath: string, wallet: WalletPublic, secr
 /**
  * Seals a plain-text wallet in place under `passphrase`, keeping every other
  * field it holds. What was sealed is opened again before the file is
- * replaced, so a wallet is never left unreadable. A sealed wallet is left as it is.
+ * replaced, so a wallet is never left unreadable. A sealed wallet is left as
+ * it is. Addresses the file lacks are derived by an engine of `engines` first.
  */
-export async function sealWalletInPlace(walletPath: string, passphrase: string): Promise<boolean> {
+export async function sealWalletInPlace(walletPath: string, passphrase: string, engines: HostEngines): Promise<boolean> {
   const resolvedPath = path.resolve(walletPath);
-  const config = await loadWalletConfig(resolvedPath);
+  const config = await loadWalletConfig(resolvedPath, engines);
   if (config.isSealed) return false;
   const raw = JSON.parse(fs.readFileSync(resolvedPath, 'utf-8'));
   const secrets: WalletSecrets = typeof raw.mnemonic === 'string' ? { seed: raw.seed, mnemonic: raw.mnemonic } : { seed: raw.seed };
@@ -535,8 +541,9 @@ export interface ProtectedWallet {
  * Seals every wallet under the state root `root` that is still in plain text,
  * under `passphrase`, in name order. Cancelled (`signal`), it stops between
  * wallets, never in the middle of one: the wallets sealed by then stay sealed.
+ * Addresses a wallet lacks are derived by an engine of `engines`.
  */
-export async function protectAllWallets(root: string, passphrase: string, signal?: AbortSignal): Promise<ProtectedWallet[]> {
+export async function protectAllWallets(root: string, passphrase: string, engines: HostEngines, signal?: AbortSignal): Promise<ProtectedWallet[]> {
   const walletsDir = path.join(root, WALLETS_DIR_NAME);
   const files = fs.existsSync(walletsDir) ? fs.readdirSync(walletsDir).filter((f) => f.endsWith('.json')).sort() : [];
   // A wallet from before named wallets, if it was never moved into wallets/.
@@ -548,13 +555,13 @@ export async function protectAllWallets(root: string, passphrase: string, signal
     // Sealing runs synchronously; a cancellation that came meanwhile lands here, before the next wallet.
     await new Promise<void>((resolve) => setImmediate(resolve));
     throwIfCancelled(signal);
-    report.push({ name, file, sealedNow: await sealWalletInPlace(file, passphrase) });
+    report.push({ name, file, sealedNow: await sealWalletInPlace(file, passphrase, engines) });
   }
   return report;
 }
 
-/** What a wallet is unlocked through: the host's prompter and its record of the passphrase unlocked, its notices, and its record of the plain-text wallets warned about. */
-export type UnlockHost = PassphraseHost & Pick<Host, 'notice'>;
+/** What a wallet is unlocked through: the host's prompter and its record of the passphrase unlocked, its notices, its record of the plain-text wallets warned about, and its engines, which derive the addresses a wallet lacks. */
+export type UnlockHost = PassphraseHost & Pick<Host, 'notice' | 'engines'>;
 
 /** How a wallet is unlocked: the state root holding mn's passphrase check, the host, where the passphrase comes from, and where a warning goes (the host's notices, unless given). */
 export interface UnlockOptions {
@@ -570,7 +577,7 @@ const WARNED_PLAIN = defineHostSlot('wallet-config.warnedPlain', () => new Set<s
 /** A wallet with its secrets: opened with mn's passphrase, or read as it is from a plain-text file an earlier mn wrote. */
 export async function unlockWallet(walletPath: string, options: UnlockOptions): Promise<UnlockedWallet> {
   const resolvedPath = path.resolve(walletPath);
-  const config = await loadWalletConfig(resolvedPath);
+  const config = await loadWalletConfig(resolvedPath, options.host.engines);
   const raw = JSON.parse(fs.readFileSync(resolvedPath, 'utf-8'));
   if (!config.isSealed) {
     const warnedPlain = options.host.slot(WARNED_PLAIN);
@@ -586,7 +593,7 @@ export async function unlockWallet(walletPath: string, options: UnlockOptions): 
   const secrets = JSON.parse(openSecret(raw.sealed, passphrase, 'wallet').toString('utf8')) as WalletSecrets;
   // A network added since the wallet was written: now that its seed is open,
   // derive that network's addresses and save them beside the sealed secrets.
-  const completed = await completedAddresses(config, Buffer.from(secrets.seed, 'hex'));
+  const completed = await completedAddresses(config, Buffer.from(secrets.seed, 'hex'), options.host.engines);
   if (completed) {
     Object.assign(config, completed);
     try {

@@ -6,7 +6,7 @@
 import * as path from 'path';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { anyEngine } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { Engine } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { writeSealedWallet, setActiveWallet, type WalletPublic } from './wallet-config.ts';
 import { isValidWalletName } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { getWalletsDir } from './wallet-paths.ts';
@@ -52,12 +52,12 @@ export function walletSecretFrom(given: { seed?: Buffer; mnemonic?: string } = {
 
 /**
  * Writes the wallet `name` sealed under `passphrase` under the state root
- * `root` and makes it the active wallet. An existing wallet of that name is
- * replaced only with `overwrite`.
+ * `root` and makes it the active wallet; `engine` derives its addresses. An
+ * existing wallet of that name is replaced only with `overwrite`.
  */
-export async function createWallet(root: string, name: string, secret: WalletSecret, passphrase: string, { overwrite = false }: { overwrite?: boolean } = {}): Promise<CreatedWallet> {
+export async function createWallet(root: string, name: string, secret: WalletSecret, passphrase: string, engine: Engine, { overwrite = false }: { overwrite?: boolean } = {}): Promise<CreatedWallet> {
   const targetPath = walletFilePath(root, name);
-  const { keys } = await anyEngine();
+  const { keys } = engine;
   const addresses = keys.unshieldedAddresses(secret.seed);
   const shieldedAddresses = keys.shieldedAddresses(secret.seed);
   const config: WalletPublic = { addresses, shieldedAddresses, createdAt: new Date().toISOString() };

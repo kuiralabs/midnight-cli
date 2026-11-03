@@ -37,6 +37,7 @@ export async function callContract({ request, target, wallet, payer, progress, s
       dappDir,
       network: target.network,
       root: target.root,
+      engines: target.host.engines,
       networkConfig: target.networkConfig,
       managedDir: info.managedDir,
       contractName: info.name,

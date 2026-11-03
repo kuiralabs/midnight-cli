@@ -15,14 +15,13 @@ import { installSdkNoiseFilters } from './sdk-noise.ts';
 import { setSettingsSource, settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
 import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { bridgeEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { loadInstalledEngine } from './installed-engines.ts';
 
 /**
  * The CLI's host, or the MCP server's (`prompter` null: no terminal there).
- * Until every library takes the host it is given, the module-level sources
- * they still read are set from it.
+ * Until every library takes the host's settings, the module-level settings
+ * source they still read is set from it.
  */
 export function createCliHost({ prompter }: { prompter: Prompter | null }): Host {
   const host = createHost({
@@ -34,7 +33,5 @@ export function createCliHost({ prompter }: { prompter: Prompter | null }): Host
     engineLoader: loadInstalledEngine,
   });
   setSettingsSource(host.settings);
-  // The libraries that don't take the host's engines yet reach these, so the process has one engine.
-  bridgeEngines(host.engines);
   return host;
 }

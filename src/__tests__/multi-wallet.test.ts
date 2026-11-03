@@ -27,6 +27,11 @@ import {
   isValidWalletName,
 } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
+
+// The engines the wallet functions derive a wallet's missing addresses with: a host's of the engines the CLI ships.
+const { engines } = createHost({ engineLoader: loadInstalledEngine });
 
 // Use a temp dir that simulates ~/.midnight
 const TEST_HOME = path.join(os.tmpdir(), `midnight-multi-wallet-test-${process.pid}`);
@@ -107,7 +112,7 @@ describe('resolveWalletPath', () => {
 
 describe('listWallets', () => {
   it('returns empty array when wallets dir does not exist', async () => {
-    const wallets = await listWallets(TEST_MIDNIGHT_DIR);
+    const wallets = await listWallets(TEST_MIDNIGHT_DIR, engines);
     expect(wallets).toEqual([]);
   });
 
@@ -174,7 +179,7 @@ describe('migrateOldWallet', () => {
 describe('loadWalletConfig error messages', () => {
   it('suggests "midnight wallet generate" in missing file error', async () => {
     const filePath = path.join(TEST_HOME, 'nonexistent.json');
-    await expect(loadWalletConfig(filePath)).rejects.toThrow('midnight wallet generate');
+    await expect(loadWalletConfig(filePath, engines)).rejects.toThrow('midnight wallet generate');
   });
 });
 
@@ -248,7 +253,7 @@ describe('wallet config round-trip with named wallets', () => {
   it('saves and loads from wallets directory path', async () => {
     const walletPath = path.join(TEST_WALLETS_DIR, 'test.json');
     saveWalletConfig(VALID_WALLET, walletPath);
-    const loaded = await loadWalletConfig(walletPath);
+    const loaded = await loadWalletConfig(walletPath, engines);
     expect(loaded).not.toHaveProperty('seed');
     expect(loaded.isSealed).toBe(false);
     expect(loaded.addresses).toEqual(VALID_WALLET.addresses);

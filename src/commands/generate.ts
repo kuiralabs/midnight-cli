@@ -8,7 +8,6 @@ import * as path from 'path';
 import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { type WalletPublic, writeSealedWallet } from '../lib/wallet-config.ts';
 import { passphraseForNewSecret } from '../lib/passphrase.ts';
@@ -67,7 +66,7 @@ export default async function generateCommand(args: ParsedArgs, ctx: CallContext
     seedBuffer = Buffer.from(mnemonicToSeedSync(mnemonic));
   }
 
-  const addresses = (await engineFor(networkName, root)).keys.unshieldedAddresses(seedBuffer);
+  const addresses = (await ctx.host.engines.for(networkName)).keys.unshieldedAddresses(seedBuffer);
   const activeAddress = addresses[networkName];
 
   const config: WalletPublic = {

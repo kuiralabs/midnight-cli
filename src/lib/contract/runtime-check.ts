@@ -4,20 +4,20 @@
 // its script after the wallet has synced ("Version mismatch").
 
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { sdkSetOf, type HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
 import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { ContractInfo } from './inspect.ts';
 
 /**
- * Throws a UsageError unless the engine for `network` (by the config under
- * the state root `root`) runs a contract
+ * Throws a UsageError unless the engine of `engines` for `network` (by the
+ * config under the state root `root`) runs a contract
  * compiled for `info.runtimeVersion`. A contract from a compiler that records
  * no runtime version is let through: its own code checks the runtime when it
  * loads.
  */
-export async function assertContractRunsOn(info: Pick<ContractInfo, 'name' | 'compilerVersion' | 'runtimeVersion'>, network: NetworkName, root: string): Promise<void> {
+export async function assertContractRunsOn(info: Pick<ContractInfo, 'name' | 'compilerVersion' | 'runtimeVersion'>, network: NetworkName, root: string, engines: HostEngines): Promise<void> {
   if (info.runtimeVersion === 'unknown') return;
-  const { scripts } = (await engineFor(network, root)).contracts;
+  const { scripts } = (await engines.load(sdkSetOf(network, root))).contracts;
   if (scripts.acceptsRuntime(info.runtimeVersion)) return;
   throw new UsageError(
     `${info.name} was compiled by compactc ${info.compilerVersion} for compact-runtime ${info.runtimeVersion}, ` +

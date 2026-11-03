@@ -23,12 +23,13 @@ import { parseDeviceCode } from '../lib/grant/device-code.ts';
 import { createAccountKey, sealedDeviceKeys, sealedOwnerStore, sealedPrivateStatePassword } from '../lib/grant/sealed-account.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 // An rc engine, for what every host's has alike: its keys, ledger and contracts.
 const rcEngine = createRcEngine(createHost());
 
-// The host the tests' calls run in: nobody to ask, notices dropped.
-const host = createHost();
+// The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
+const host = createHost({ engineLoader: loadInstalledEngine });
 
 const PASSPHRASE = 'correct horse battery staple';
 const ACCOUNT = '5e'.repeat(32);
@@ -77,7 +78,7 @@ afterEach(() => {
 
 describe("an account's backup", () => {
   it('holds nothing in the clear but the network and the address', async () => {
-    await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup);
+    await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup, host.engines);
     const text = fs.readFileSync(backup, 'utf8');
     expect(JSON.parse(text)).toMatchObject({ network: 'undeployed', contractAddress: ACCOUNT });
     for (const secret of [RECORD.encryptionSecret, RECORD.bootSalt, 'bb'.repeat(32)]) expect(text).not.toContain(secret);
@@ -86,11 +87,11 @@ describe("an account's backup", () => {
 
   it('is never written over a file that exists', async () => {
     fs.writeFileSync(backup, 'something');
-    await expect(exportAccount(fromDir, 'undeployed', PASSPHRASE, backup)).rejects.toThrow(/already exists/);
+    await expect(exportAccount(fromDir, 'undeployed', PASSPHRASE, backup, host.engines)).rejects.toThrow(/already exists/);
   });
 
   it('imports for a wallet with no account, which then acts as the same owner, its private state with it', async () => {
-    await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup);
+    await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup, host.engines);
     establishPassphrase(stateRootIn(there), PASSPHRASE);
     expect(await importAccount(toDir, 'undeployed', PASSPHRASE, backup)).toEqual({ contractAddress: ACCOUNT });
     const { account, privateState } = await privateStateIn(there, toDir);
@@ -102,13 +103,13 @@ describe("an account's backup", () => {
   });
 
   it('is never imported over an account, nor for another network', async () => {
-    await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup);
+    await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup, host.engines);
     await expect(importAccount(fromDir, 'undeployed', PASSPHRASE, backup)).rejects.toThrow(/already has an account/);
     await expect(importAccount(toDir, 'preview', PASSPHRASE, backup)).rejects.toThrow(/undeployed/);
   });
 
   it('opens only with the passphrase it was made with', async () => {
-    await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup);
+    await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup, host.engines);
     await expect(importAccount(toDir, 'undeployed', 'not the passphrase it was made with', backup)).rejects.toThrow(WrongPassphraseError);
     expect(fs.existsSync(toDir)).toBe(false);
   });
@@ -121,7 +122,7 @@ describe("a backup made for another device", () => {
     const pending = createPendingDevice(toDir, PASSPHRASE);
     expect(pending.arm).toBe('v1');
     const pendingCode = ownDeviceCode(toDir, openAccountKey(toDir, PASSPHRASE), pending);
-    await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup, { forDevice: parseDeviceCode(pendingCode) });
+    await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup, host.engines, { forDevice: parseDeviceCode(pendingCode) });
     await importAccount(toDir, 'undeployed', PASSPHRASE, backup);
     const { account, privateState } = await privateStateIn(there, toDir);
     const original = await openGrantAccount(NETWORK, fromDir, () => {}, { root: stateRootIn(here), host, source: source() });
@@ -143,7 +144,7 @@ describe("a backup made for another device", () => {
     establishPassphrase(stateRootIn(other), PASSPHRASE);
     fs.mkdirSync(otherDir, { recursive: true });
     const stranger = createPendingDevice(otherDir, PASSPHRASE);
-    await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup, { forDevice: parseDeviceCode(ownDeviceCode(otherDir, openAccountKey(otherDir, PASSPHRASE), stranger)) });
+    await exportAccount(fromDir, 'undeployed', PASSPHRASE, backup, host.engines, { forDevice: parseDeviceCode(ownDeviceCode(otherDir, openAccountKey(otherDir, PASSPHRASE), stranger)) });
     await expect(importAccount(toDir, 'undeployed', PASSPHRASE, backup)).rejects.toThrow(/made for another device/);
     const empty = accountsOf(path.join(root, 'empty'));
     await expect(importAccount(empty, 'undeployed', PASSPHRASE, backup)).rejects.toThrow(/device new/);

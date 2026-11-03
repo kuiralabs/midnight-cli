@@ -8,7 +8,6 @@
 // owner key) and roster.json, with the private state in the directory's
 // midnight-level-db under the store name and password it was first made with.
 
-import { anyEngine } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { join } from 'node:path';
 import { artefactCache } from '@kuiralabs/midnight-account-chain/artefacts';
 import { type AccountContext, type ProgressEvent, accountContext, describeProgress, networkOf } from '@kuiralabs/midnight-account-chain/context';
@@ -130,7 +129,7 @@ export interface GrantAccount {
 export interface OpenAccountOptions {
   /** The state root holding mn's passphrase check and the proving artefacts. */
   root: string;
-  /** The host: who is asked for the passphrase, the passphrase it has unlocked, and its notices. */
+  /** The host: who is asked for the passphrase, the passphrase it has unlocked, its notices, and its engines (whose policy the private-state password meets). */
   host: UnlockHost;
   source?: PassphraseSource;
   warn?: (line: string) => void;
@@ -150,7 +149,7 @@ export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir:
   const context = accountContext({ network, artefacts: artefactCache(accountArtifactsDir(root), { progress }), progress });
   const database = join(recordsDir, PRIVATE_STATE_DATABASE);
   // The account's private state is midnight-js's, which the engine's policy checks a new password against.
-  const { contracts } = await anyEngine();
+  const { contracts } = await options.host.engines.any();
 
   const sealed = (key: Buffer): GrantAccount => ({
     context,

@@ -12,7 +12,7 @@ import { type Payer, payerFor, resolvePayingTarget } from '@kuiralabs/midnight-c
 import { deployContract } from '../lib/contract/deploy.ts';
 import { callContract } from '../lib/contract/call.ts';
 import { validateContractAddress } from '../lib/contract/validate.ts';
-import { engineFor, type RawStateValue } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { RawStateValue } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { resolveContractCallRequest, resolveContractDeployRequest, resolveScanDir } from '../lib/contract/request.ts';
 import { assertContractRunsOn } from '../lib/contract/runtime-check.ts';
 import {
@@ -120,7 +120,7 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
 
   const target = resolvePayingTarget(args, 'contract', 'deploy', ctx.config.paths.stateRoot, ctx.host);
   const { network } = target;
-  await assertContractRunsOn(info, network, target.root);
+  await assertContractRunsOn(info, network, target.root, ctx.host.engines);
 
   if (!jsonMode) {
     ctx.output.stderr(keyValue('Contract', info.name) + '\n');
@@ -194,7 +194,7 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
 
   const target = resolvePayingTarget(args, 'contract', 'call', ctx.config.paths.stateRoot, ctx.host);
   const { network } = target;
-  await assertContractRunsOn(info, network, target.root);
+  await assertContractRunsOn(info, network, target.root, ctx.host.engines);
 
   if (!jsonMode) {
     ctx.output.stderr(keyValue('Contract', info.name) + '\n');
@@ -256,6 +256,7 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
       dappDir,
       network,
       root,
+      engines: ctx.host.engines,
       networkConfig,
       managedDir: info.managedDir,
       contractName: info.name,
@@ -299,7 +300,7 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
     spinner.stop(yellow('⚠') + ' Parsed state unavailable, showing raw');
 
     // The engine's query takes no signal: the call stops waiting for it when cancelled.
-    const raw = await untilCancelled((await engineFor(network, root)).contracts.rawState(networkConfig, address), ctx.signal);
+    const raw = await untilCancelled((await ctx.host.engines.for(network)).contracts.rawState(networkConfig, address), ctx.signal);
 
     if (!raw) {
       throw new Error(`No contract found at address ${address} on ${network}`);

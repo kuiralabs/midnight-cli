@@ -6,7 +6,7 @@ import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '@kuir
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { applyEndpointOverrides } from '@kuiralabs/midnight-cli-core/lib/network';
-import { engineFor, type DAppConnector, type DAppConnectorCallbacks } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { DAppConnector, DAppConnectorCallbacks } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core/lib/connector-api';
 import type { PhaseTiming } from '@kuiralabs/midnight-cli-core/lib/phase-tracker';
 import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
@@ -101,7 +101,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
   // preview/preprod). dApps there can only do unshielded + dust anyway.
   const syncMode = shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded')) ? 'full' : 'lite';
 
-  await (await engineFor(networkName, root)).wallet.serveWallet({ seed: seedBuffer, root, notice: ctx.host.notice, networkConfig, network: networkName, address, syncMode, signal: ctx.signal, log: ctx.diagnostics.line,
+  await (await ctx.host.engines.for(networkName)).wallet.serveWallet({ seed: seedBuffer, root, notice: ctx.host.notice, networkConfig, network: networkName, address, syncMode, signal: ctx.signal, log: ctx.diagnostics.line,
     onStatus: (s) => spinner.update(s),
     onSyncProgress: (applied, highest) => {
       if (highest > 0) {

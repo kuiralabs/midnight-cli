@@ -4,6 +4,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import type { TestAction, DappTestConfig } from './types.ts';
 import type { NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import type { HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { runDeploy, runCall, runState, type StateResult } from '../contract/runner.ts';
 import { findContractInfo, type ContractInfo } from '../contract/inspect.ts';
 import { analyzeWitnessDependencies } from './circuit-witness-deps.ts';
@@ -33,6 +34,8 @@ export interface ActionResult {
 export interface ActionsRunnerOptions {
   /** The state root whose config names the network's SDK set. */
   root: string;
+  /** The engines of the host the suite runs in: the network's engine runs each action's script. */
+  engines: HostEngines;
   actions: TestAction[];
   config: DappTestConfig;
   dappDir: string;
@@ -50,7 +53,7 @@ export interface ActionsRunnerOptions {
  * Deploy address flows to subsequent call/state actions automatically.
  */
 export async function runActions(options: ActionsRunnerOptions): Promise<ActionResult[]> {
-  const { root, actions, config, dappDir, suiteName, networkConfig, servePort, redeploy, onActionStart, onActionComplete, onMessage } = options;
+  const { root, engines, actions, config, dappDir, suiteName, networkConfig, servePort, redeploy, onActionStart, onActionComplete, onMessage } = options;
   const results: ActionResult[] = [];
 
   // Load cached contract address (test replay). The address is only as good
@@ -106,6 +109,7 @@ export async function runActions(options: ActionsRunnerOptions): Promise<ActionR
     try {
       const result = await executeAction(action, {
         root,
+        engines,
         dappDir,
         network,
         networkConfig,
@@ -157,6 +161,7 @@ export async function runActions(options: ActionsRunnerOptions): Promise<ActionR
 
 interface ExecutionContext {
   root: string;
+  engines: HostEngines;
   dappDir: string;
   network: NetworkName;
   networkConfig: NetworkConfig;
@@ -202,6 +207,7 @@ async function executeDeploy(action: TestAction, ctx: ExecutionContext): Promise
     dappDir: ctx.dappDir,
     network: ctx.network,
     root: ctx.root,
+    engines: ctx.engines,
     networkConfig: ctx.networkConfig,
     managedDir: ctx.managedDir,
     contractName: ctx.contractName,
@@ -252,6 +258,7 @@ async function executeCall(action: TestAction, ctx: ExecutionContext): Promise<A
       dappDir: ctx.dappDir,
       network: ctx.network,
     root: ctx.root,
+    engines: ctx.engines,
       networkConfig: ctx.networkConfig,
       managedDir: ctx.managedDir,
       contractName: ctx.contractName,
@@ -269,6 +276,7 @@ async function executeCall(action: TestAction, ctx: ExecutionContext): Promise<A
     dappDir: ctx.dappDir,
     network: ctx.network,
     root: ctx.root,
+    engines: ctx.engines,
     networkConfig: ctx.networkConfig,
     managedDir: ctx.managedDir,
     contractName: ctx.contractName,
@@ -286,6 +294,7 @@ async function executeCall(action: TestAction, ctx: ExecutionContext): Promise<A
       dappDir: ctx.dappDir,
       network: ctx.network,
     root: ctx.root,
+    engines: ctx.engines,
       networkConfig: ctx.networkConfig,
       managedDir: ctx.managedDir,
       contractName: ctx.contractName,
@@ -316,6 +325,7 @@ async function executeState(action: TestAction, ctx: ExecutionContext): Promise<
     dappDir: ctx.dappDir,
     network: ctx.network,
     root: ctx.root,
+    engines: ctx.engines,
     networkConfig: ctx.networkConfig,
     managedDir: ctx.managedDir,
     contractName: ctx.contractName,

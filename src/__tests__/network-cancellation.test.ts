@@ -20,6 +20,7 @@ import type { CommandHandler } from '@kuiralabs/midnight-cli-core/lib/call-conte
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
+import { testHost } from './helpers/test-host.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const ACCOUNT = '5e'.repeat(32);
@@ -39,8 +40,9 @@ beforeEach(async () => {
   process.env.HOME = home;
   process.env.MN_PASSPHRASE = PASSPHRASE;
   establishPassphrase(stateRootIn(home), PASSPHRASE);
-  await createWallet(stateRootIn(home), 'alice', walletSecretFrom(), PASSPHRASE);
-  await createWallet(stateRootIn(home), 'bob', walletSecretFrom(), PASSPHRASE);
+  const { engines } = testHost();
+  await createWallet(stateRootIn(home), 'alice', walletSecretFrom(), PASSPHRASE, await engines.any());
+  await createWallet(stateRootIn(home), 'bob', walletSecretFrom(), PASSPHRASE, await engines.any());
   io = captureOutput();
   // Every endpoint: takes HTTP requests and WebSocket upgrades, and answers none.
   requests = 0;

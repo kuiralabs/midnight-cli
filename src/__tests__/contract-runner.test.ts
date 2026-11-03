@@ -43,6 +43,7 @@ const generateStateScript = (opts: StateScript & { dappDir?: string }): string =
 const providerSetupCode = (networkConfig: Parameters<typeof rcScripts.providerSetupCode>[0], key: string): string => rcScripts.providerSetupCode(networkConfig, key, SCRIPT_PARTS);
 
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import { testHost } from './helpers/test-host.ts';
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
   ...params: string[]
@@ -265,7 +266,7 @@ describe('a cancelled run', () => {
     const dappDir = mkdtempSync(join(tmpdir(), 'mn-cancelled-run-'));
     const root = mkdtempSync(join(tmpdir(), 'mn-cancelled-run-root-'));
     try {
-      const common = { dappDir, network: 'undeployed' as const, root, networkConfig: NETWORK, managedDir: join(dappDir, 'managed', 'counter'), contractName: 'counter', signal: AbortSignal.abort() };
+      const common = { dappDir, network: 'undeployed' as const, root, engines: testHost().engines, networkConfig: NETWORK, managedDir: join(dappDir, 'managed', 'counter'), contractName: 'counter', signal: AbortSignal.abort() };
       await expect(runDeploy({ ...common, servePort: 9932 })).rejects.toBeInstanceOf(CancelledError);
       await expect(runCall({ ...common, servePort: 9932, contractAddress: 'ab'.repeat(32), circuit: 'increment' })).rejects.toBeInstanceOf(CancelledError);
       await expect(runState({ ...common, contractAddress: 'ab'.repeat(32) })).rejects.toBeInstanceOf(CancelledError);

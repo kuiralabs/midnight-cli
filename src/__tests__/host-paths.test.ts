@@ -21,6 +21,7 @@ import { createWallet, walletSecretFrom } from '../lib/wallet-create.ts';
 import { getActiveWalletName, listWallets } from '../lib/wallet-config.ts';
 import { PASSPHRASE_ENV, passphraseForNewSecret } from '../lib/passphrase.ts';
 import { clearChainCaches } from '../lib/chain-caches.ts';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const MAKER = 'mn_addr_undeployed1maker';
@@ -39,16 +40,16 @@ let rootB: string;
 let hostA: Host;
 let hostB: Host;
 
-/** A host whose state root is `<home>/.midnight`, and a home of its own. */
+/** A host whose state root is `<home>/.midnight`, a home of its own, and an engine of its own from the engines the CLI ships. */
 function hostAt(home: string): Host {
-  return createHost({ paths: { stateRoot: path.join(home, MIDNIGHT_DIR), home } });
+  return createHost({ paths: { stateRoot: path.join(home, MIDNIGHT_DIR), home }, engineLoader: loadInstalledEngine });
 }
 
 /** A wallet created under `host`'s state root, sealed under the passphrase set there. */
 async function walletIn(host: Host, name: string): Promise<void> {
   const root = host.paths().stateRoot;
   const passphrase = await passphraseForNewSecret(host, root, { env: { [PASSPHRASE_ENV]: PASSPHRASE } });
-  await createWallet(root, name, walletSecretFrom({ seed: Buffer.alloc(32, name.length) }), passphrase);
+  await createWallet(root, name, walletSecretFrom({ seed: Buffer.alloc(32, name.length) }), passphrase, await host.engines.any());
 }
 
 beforeEach(() => {
@@ -84,8 +85,8 @@ describe('two hosts with different state roots', () => {
     await walletIn(hostA, 'alice');
     await walletIn(hostB, 'bob');
 
-    expect((await listWallets(rootA)).map((w) => w.name)).toEqual(['alice']);
-    expect((await listWallets(rootB)).map((w) => w.name)).toEqual(['bob']);
+    expect((await listWallets(rootA, hostA.engines)).map((w) => w.name)).toEqual(['alice']);
+    expect((await listWallets(rootB, hostB.engines)).map((w) => w.name)).toEqual(['bob']);
     expect(getActiveWalletName(rootA)).toBe('alice');
     expect(getActiveWalletName(rootB)).toBe('bob');
     // As the MCP server runs it.

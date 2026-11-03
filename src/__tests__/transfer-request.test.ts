@@ -14,9 +14,10 @@ import { MIDNIGHT_DIR, WALLETS_DIR_NAME } from '@kuiralabs/midnight-cli-core/lib
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped.
-const host = createHost();
+// The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
+const host = createHost({ engineLoader: loadInstalledEngine });
 
 const HOME = path.join(os.tmpdir(), `midnight-transfer-request-test-${process.pid}`);
 const WALLETS = path.join(HOME, MIDNIGHT_DIR, WALLETS_DIR_NAME);

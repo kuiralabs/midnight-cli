@@ -8,6 +8,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { unlockWallet } from '../lib/wallet-config.ts';
 import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
@@ -34,8 +35,8 @@ describe('notices', () => {
   it("carry a library's warning to its host's notices when its caller gives no warn of its own, and nowhere when the host takes none", async () => {
     const lines: string[] = [];
     const wallet = plainWallet('notice-alice');
-    await unlockWallet(wallet, { root: path.join(home, '.midnight'), host: createHost() });
-    await unlockWallet(wallet, { root: path.join(home, '.midnight'), host: createHost({ notice: (line) => lines.push(line) }) });
+    await unlockWallet(wallet, { root: path.join(home, '.midnight'), host: createHost({ engineLoader: loadInstalledEngine }) });
+    await unlockWallet(wallet, { root: path.join(home, '.midnight'), host: createHost({ notice: (line) => lines.push(line), engineLoader: loadInstalledEngine }) });
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/not protected: its seed is in plain text/);
   });

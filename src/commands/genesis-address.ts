@@ -2,7 +2,6 @@
 
 import { type ParsedArgs, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { keyValue, divider, formatAddress } from '@kuiralabs/midnight-cli-core/ui/format';
 import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
@@ -12,7 +11,7 @@ export default async function genesisAddressCommand(args: ParsedArgs, ctx: CallC
   const root = ctx.config.paths.stateRoot;
   const networkName = resolveNetworkName({ args, configDir: root });
   const seedBuffer = Buffer.from(GENESIS_SEED, 'hex');
-  const address = (await engineFor(networkName, root)).keys.unshieldedAddress(seedBuffer, networkName);
+  const address = (await ctx.host.engines.for(networkName)).keys.unshieldedAddress(seedBuffer, networkName);
 
   // JSON mode
   if (hasFlag(args, 'json')) {

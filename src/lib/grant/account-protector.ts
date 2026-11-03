@@ -7,9 +7,9 @@ import type { WalletProtector } from '../wallet-protector.ts';
 
 export const accountProtector: WalletProtector = {
   name: 'accounts',
-  async protect(root, passphrase, coinKeyOf) {
+  async protect(root, passphrase, coinKeyOf, engines) {
     const { protectAllAccounts } = await import('./protect-account.ts');
-    const report = await protectAllAccounts(root, passphrase, coinKeyOf);
+    const report = await protectAllAccounts(root, passphrase, coinKeyOf, engines);
     return {
       report,
       items: report.map((account) => {

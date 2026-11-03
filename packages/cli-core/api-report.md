@@ -965,9 +965,6 @@ export declare class OtherSdkSetError extends Error {
     constructor(loadedSet: SdkSet, wantedSet: SdkSet, message?: string);
 }
 export declare function claimSdkSet(set: SdkSet): void;
-export declare function bridgeEngines(engines: HostEngines): void;
-export declare function engineFor(network: NetworkName, root: string): Promise<Engine>;
-export declare function anyEngine(): Promise<Engine>;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/error-trim`
@@ -1599,7 +1596,7 @@ export declare function clearWalletCache(address: string | undefined, network: s
 ## `@kuiralabs/midnight-cli-core/lib/wallet-session`
 
 ```ts
-import { type OpenedConnector, type TransactionDetail } from "./engine.ts";
+import { type HostEngines, type OpenedConnector, type TransactionDetail } from "./engine.ts";
 import type { NetworkConfig, NetworkName } from "./network.ts";
 import type { NoticeSink } from "./notices.ts";
 import type { SwapLeg } from "./swap-offer.ts";
@@ -1655,6 +1652,7 @@ export interface OpenWalletSessionOptions {
     network: NetworkName;
     root: string;
     notice: NoticeSink;
+    engines: HostEngines;
     networkConfig?: NetworkConfig;
     forceShielded?: boolean;
     dustWaitMs?: number;
