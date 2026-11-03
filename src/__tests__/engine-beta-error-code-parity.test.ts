@@ -10,7 +10,6 @@ import { installedCommands } from '../lib/installed-commands.ts';
 describe("the beta engine's stale cache", () => {
   it('reports STALE_CACHE (exit 6) through the installed codes, where the message alone gave UNKNOWN', () => {
     const err = new StaleCacheError('applied 120 of 80 events');
-    expect(classifyError(err)).toStrictEqual({ exitCode: 1, errorCode: 'UNKNOWN' });
     expect(classifyError(err, installedCommands)).toStrictEqual({ exitCode: 6, errorCode: 'STALE_CACHE' });
   });
 });

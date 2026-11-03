@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { checkTerms, NotAnOfferError, TermsMismatchError, type SwapTerms } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
 import { classifyError, ERROR_CODES, EXIT_INVALID_ARGS } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 const A = '00'.repeat(31) + '01';
 const B = '00'.repeat(31) + '02';
@@ -27,7 +28,7 @@ describe('checkTerms', () => {
   });
 
   it('classifies a terms mismatch and bytes that are no offer as the caller\'s to fix', () => {
-    expect(classifyError(new TermsMismatchError(AGREED, AGREED))).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.TERMS_MISMATCH });
-    expect(classifyError(new NotAnOfferError('it is not hex'))).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.NOT_AN_OFFER });
+    expect(classifyError(new TermsMismatchError(AGREED, AGREED), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.TERMS_MISMATCH });
+    expect(classifyError(new NotAnOfferError('it is not hex'), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.NOT_AN_OFFER });
   });
 });

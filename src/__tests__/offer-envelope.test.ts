@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope, OfferExpiredError, type OfferEnvelope } from '@kuiralabs/midnight-cli-core/lib/offer-envelope';
 import { NotAnOfferError } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
 import { classifyError, ERROR_CODES, EXIT_INVALID_ARGS } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 const A = '00'.repeat(31) + '01';
 const B = '00'.repeat(31) + '02';
@@ -46,6 +47,6 @@ describe('the offer file', () => {
     const err = (() => { try { assertOfferUnexpired(ENVELOPE, ENVELOPE.expiresAt); } catch (e) { return e; } })() as OfferExpiredError;
     expect(err).toBeInstanceOf(OfferExpiredError);
     expect(err.message).toBe(`The offer ${'ab'.repeat(8)}… expired at 2026-11-03T12:00:00.000Z; ask the maker for a new one`);
-    expect(classifyError(err)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.OFFER_EXPIRED });
+    expect(classifyError(err, installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.OFFER_EXPIRED });
   });
 });

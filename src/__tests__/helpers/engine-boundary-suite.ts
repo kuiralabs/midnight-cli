@@ -17,7 +17,7 @@ import { Effect } from 'effect';
 import type { Engine, EngineHost } from '@kuiralabs/midnight-cli-core/lib/engine';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import { classifyByCode } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { DustRequiredError, InsufficientBalanceError, ProofFailureError, TransactionRefusedError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { installedCommands } from '../../lib/installed-commands.ts';
 
@@ -69,26 +69,26 @@ export function engineBoundarySuite(engine: BoundaryEngine): void {
       expect(err).toBeInstanceOf(TransactionRefusedError);
       expect(err.message).toBe(`The node refused the transaction: ${reason}`);
       expect((err as TransactionRefusedError).code).toBe(code);
-      expect(classifyByCode(err, installedCommands)).toStrictEqual({ errorCode: code, exitCode: 6 });
+      expect(classifyError(err, installedCommands)).toStrictEqual({ errorCode: code, exitCode: 6 });
     });
 
     it("reports the proof server's failure as PROOF_FAILURE, with the SDK's message", async () => {
       const err = await reported(() => sdkRejection(new engine.ProvingError({ message: 'Failed to prove transaction', cause: new Error('connect ECONNREFUSED 127.0.0.1:6300') })));
       expect(err).toBeInstanceOf(ProofFailureError);
       expect(err.message).toBe('Failed to prove transaction');
-      expect(classifyByCode(err, installedCommands)).toStrictEqual({ errorCode: 'PROOF_FAILURE', exitCode: 6 });
+      expect(classifyError(err, installedCommands)).toStrictEqual({ errorCode: 'PROOF_FAILURE', exitCode: 6 });
     });
 
     it("reports the SDK's Dust shortage as DUST_REQUIRED, and its shortage of NIGHT as INSUFFICIENT_BALANCE", async () => {
       const dust = await reported(() => sdkRejection(new engine.InsufficientFundsError({ message: engine.couldNotBalance('dust'), tokenType: 'dust' })));
       expect(dust).toBeInstanceOf(DustRequiredError);
       expect(dust.message).toBe(engine.couldNotBalance('dust'));
-      expect(classifyByCode(dust, installedCommands)).toStrictEqual({ errorCode: 'DUST_REQUIRED', exitCode: 5 });
+      expect(classifyError(dust, installedCommands)).toStrictEqual({ errorCode: 'DUST_REQUIRED', exitCode: 5 });
 
       const night = await reported(() => sdkRejection(new engine.InsufficientFundsError({ message: engine.couldNotBalance(NIGHT), tokenType: NIGHT })));
       expect(night).toBeInstanceOf(InsufficientBalanceError);
       expect(night.message).toBe(engine.couldNotBalance(NIGHT));
-      expect(classifyByCode(night, installedCommands)).toStrictEqual({ errorCode: 'INSUFFICIENT_BALANCE', exitCode: 5 });
+      expect(classifyError(night, installedCommands)).toStrictEqual({ errorCode: 'INSUFFICIENT_BALANCE', exitCode: 5 });
     });
 
     it('keeps the SDK\'s error as the cause, and leaves a failure it does not name as it was', async () => {

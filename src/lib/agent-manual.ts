@@ -190,14 +190,6 @@ const SHELL_PIECES: readonly GuidancePiece[] = [
     {
       text: 'agent-manual',
       section: 'error-codes',
-      order: 90,
-      body: `  UNSUPPORTED_NODE        1     Node.js is older than 22 (22.18 for mn grant);
-                                install a current one
-`,
-    },
-    {
-      text: 'agent-manual',
-      section: 'error-codes',
       order: 1000,
       body: `
 `,

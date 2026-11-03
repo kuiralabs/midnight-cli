@@ -15,7 +15,8 @@ import {
   type CommandPackage,
   type CommandRegistry,
 } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { GuidanceError, assembleGuidance, sectionsWithAdded, type GuidancePiece, type GuidanceText } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { GuidanceError, assembleGuidance, manualCodeRow, sectionsWithAdded, type GuidancePiece, type GuidanceText } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { chainCodes } from '@kuiralabs/midnight-chain/commands/chain.codes';
 import { AGENT_MANUAL_SECTIONS, TOOL_GROUPS, agentManual } from '../lib/agent-manual.ts';
 import { SKILL_CORE_SECTIONS, SKILL_FULL_SECTIONS, skillCore, skillFull } from '../lib/mcp/skills.ts';
 import { listedTools } from '../lib/mcp/registry-tools.ts';
@@ -247,7 +248,9 @@ describe('the texts, assembled from the installed packages', () => {
     const manual = agentManual(withoutPackage('dev'));
     const codes = manual.split('ERROR CODES')[1]!.split('MCP SERVER')[0]!;
     expect(codes).not.toContain('LOCALNET_UNAVAILABLE');
-    expect(codes).toContain('UNSUPPORTED_LEDGER      4     The chain is on ledger 8; use mn 0.5.x for it\n  LOCAL_STACK_UNREACHABLE 4');
+    // dev's code (order 160) is gone from between chain's two (150 and 170).
+    const ledger = chainCodes.find((definition) => definition.code === 'UNSUPPORTED_LEDGER')!;
+    expect(codes).toContain(`${manualCodeRow(ledger)}  LOCAL_STACK_UNREACHABLE 4`);
     expect(manual).not.toContain('E2E TESTING');
   });
 });

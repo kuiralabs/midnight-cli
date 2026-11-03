@@ -8,11 +8,11 @@
 export interface CodeDefinition {
   readonly code: string;
   readonly exitCode: number;
-  /** What went wrong, in one line. */
+  /** What went wrong: the meaning the code tables give it (the manuals', the full skill's, docs/JSON_CONTRACT.md's). */
   readonly summary: string;
-  /** What to do about it. */
+  /** What an agent does about it: the full skill's recovery recipe. */
   readonly recovery?: string;
-  /** Its place in the manual's table of codes: rows read in ascending order. */
+  /** Its place in the code tables: rows read in ascending order. A code shown to agents needs it (codeGuidancePieces). */
   readonly order?: number;
 }
 

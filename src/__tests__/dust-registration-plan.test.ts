@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { DustFeeNotGeneratedError, planRegistration } from '@kuiralabs/midnight-cli-core/lib/dust-registration-plan';
 import { formatWait } from '@kuiralabs/midnight-cli-core/lib/duration';
 import { classifyError, EXIT_INSUFFICIENT_BALANCE } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 const FEE = 526_587_115_818_352n;
 const TWENTY_NIGHT = { dust: { generatedNow: 337_954_960_000_000n, rate: 165_340_000_000n, maxCap: 100_000_000_000_000_000n } };
@@ -61,7 +62,7 @@ describe('DustFeeNotGeneratedError', () => {
   });
 
   it('exits as an insufficient balance, with its own error code', () => {
-    expect(classifyError(new DustFeeNotGeneratedError(planRegistration(FEE, [TWENTY_NIGHT]), now)))
+    expect(classifyError(new DustFeeNotGeneratedError(planRegistration(FEE, [TWENTY_NIGHT]), now), installedCommands))
       .toEqual({ exitCode: EXIT_INSUFFICIENT_BALANCE, errorCode: 'DUST_GENERATING' });
   });
 });

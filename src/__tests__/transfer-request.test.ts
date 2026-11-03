@@ -13,6 +13,7 @@ import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midni
 import { MIDNIGHT_DIR, WALLETS_DIR_NAME } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { installedCommands } from '../lib/installed-commands.ts';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
@@ -93,7 +94,7 @@ describe('resolveTransferRequest', () => {
     let err: unknown;
     try { await request(...argv, '--wallet', 'sender'); } catch (e) { err = e; }
     expect(err).toBeInstanceOf(UsageError);
-    expect(classifyError(err as Error).errorCode).toBe('INVALID_ARGS');
+    expect(classifyError(err as Error, installedCommands).errorCode).toBe('INVALID_ARGS');
   });
 
   it('refuses a shielded transfer where shielded is off before reading the address', async () => {

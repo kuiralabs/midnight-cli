@@ -4,5 +4,5 @@ import { defineCodes } from '@kuiralabs/midnight-cli-core/lib/error-codes';
 import { EXIT_WALLET_NOT_FOUND } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 
 export const walletCodes = defineCodes([
-  { code: 'WALLET_NOT_FOUND', exitCode: EXIT_WALLET_NOT_FOUND, summary: 'Wallet file does not exist.', recovery: '`midnight wallet list` shows the wallets there are.' },
+  { code: 'WALLET_NOT_FOUND', exitCode: EXIT_WALLET_NOT_FOUND, order: 20, summary: "Named wallet doesn't exist on disk.", recovery: '`midnight_wallet_list()` — user may have removed it.' },
 ]);

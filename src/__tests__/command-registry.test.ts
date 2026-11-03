@@ -157,7 +157,7 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => 
     cancelled.abort();
     const err = await run('plain', { ...provisions, signal: cancelled.signal }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(CancelledError);
-    expect(classifyError(err as Error)).toStrictEqual({ exitCode: EXIT_CANCELLED, errorCode: 'CANCELLED' });
+    expect(classifyError(err as Error, installedCommands)).toStrictEqual({ exitCode: EXIT_CANCELLED, errorCode: 'CANCELLED' });
     expect(received).toStrictEqual([]);
     expect(results).toStrictEqual([]);
   });

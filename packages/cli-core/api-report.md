@@ -24,184 +24,219 @@ export declare const coreCodes: readonly [
     {
         readonly code: "INVALID_ARGS";
         readonly exitCode: 2;
-        readonly summary: "Missing or invalid arguments.";
-        readonly recovery: "Fix the arguments and run it again; `midnight help <command>` shows them.";
+        readonly order: 10;
+        readonly summary: "Missing/invalid argument.";
+        readonly recovery: "Show the message to the user verbatim \u2014 it names the missing field.";
     },
     {
         readonly code: "WRONG_PASSPHRASE";
         readonly exitCode: 2;
-        readonly summary: "mn's passphrase was wrong, or a sealed secret was changed.";
-        readonly recovery: "Run it again with the passphrase mn was protected with.";
+        readonly order: 220;
+        readonly summary: "`MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed.";
+        readonly recovery: "Ask the user to correct `MN_PASSPHRASE` in the MCP server's environment. Nothing was changed.";
     },
     {
         readonly code: "PASSPHRASE_REQUIRED";
         readonly exitCode: 2;
-        readonly summary: "A secret was needed and no passphrase could be had.";
-        readonly recovery: "Set MN_PASSPHRASE, or run at a terminal.";
+        readonly order: 230;
+        readonly summary: "A tool needed a secret (a wallet's seed, an account's owner key) and no passphrase could be had: `MN_PASSPHRASE` is unset and there is no terminal to ask at (the MCP server has none).";
+        readonly recovery: "Ask the user to set `MN_PASSPHRASE` in the MCP server's environment and restart it. Never ask them to type the passphrase into the chat.";
     },
     {
         readonly code: "NETWORK_ERROR";
         readonly exitCode: 4;
-        readonly summary: "Connection refused, timeout, DNS failure.";
-        readonly recovery: "Check that the node, indexer and proof server at the configured endpoints are running.";
+        readonly order: 30;
+        readonly summary: "Indexer/node/proof-server connection refused or DNS failure.";
+        readonly recovery: "Check `midnight_localnet_status()` or the endpoints the user configured; on this build `midnight_localnet_up()` is refused, so ask the user to start their ledger-9 stack.";
     },
     {
         readonly code: "AMBIGUOUS_LOCAL_STACKS";
         readonly exitCode: 4;
-        readonly summary: "Several local Midnight stacks run and no endpoints were given.";
-        readonly recovery: "Pass endpoint flags or `midnight config set` them.";
+        readonly order: 180;
+        readonly summary: "Several local Midnight stacks are running and no endpoints are configured, so mn won't guess.";
+        readonly recovery: "Ask the user which stack to use; they set its endpoints with `midnight config set`. Don't retry blindly.";
     },
     {
         readonly code: "BLOCKFROST_PROJECT_ID_REQUIRED";
         readonly exitCode: 4;
-        readonly summary: "The network is served by Blockfrost and no project id is set.";
-        readonly recovery: "`mn config set blockfrost-project-id <project id>`.";
+        readonly order: 240;
+        readonly summary: "The network (preprod) is served by Blockfrost and no project id is set.";
+        readonly recovery: "Ask the user to create a Midnight preprod project at https://blockfrost.io and run `midnight config set blockfrost-project-id <project id>` themselves. Never ask them to paste the id into the chat. Don't retry until they have.";
     },
     {
         readonly code: "BLOCKFROST_PROJECT_ID_REJECTED";
         readonly exitCode: 4;
-        readonly summary: "Blockfrost refused the project id.";
-        readonly recovery: "Check it at blockfrost.io and set it again.";
+        readonly order: 250;
+        readonly summary: "Blockfrost refused the project id (HTTP 403): mistyped, revoked, or for another network.";
+        readonly recovery: "Ask the user to check it at blockfrost.io and set it again. Don't retry blindly.";
     },
     {
         readonly code: "BLOCKFROST_LIMIT_REACHED";
         readonly exitCode: 4;
-        readonly summary: "Blockfrost is holding the project back (its plan's daily limit, or too many requests at once).";
-        readonly recovery: "Wait, or see the project's plan.";
+        readonly order: 260;
+        readonly summary: "Blockfrost's plan limit or rate limit.";
+        readonly recovery: "Wait and retry once; if it persists, tell the user it is their Blockfrost plan.";
     },
     {
         readonly code: "ENDPOINT_SHUT_DOWN";
         readonly exitCode: 4;
-        readonly summary: "An endpoint set by flag or config was shut down by its operator.";
-        readonly recovery: "Unset it (`mn config unset indexer-ws`).";
+        readonly order: 270;
+        readonly summary: "An endpoint set by flag or config was shut down by its operator (the old preprod indexer).";
+        readonly recovery: "`midnight_config_unset({ key: \"indexer-ws\" })` (and `node` if set), then retry.";
     },
     {
         readonly code: "CANCELLED";
         readonly exitCode: 7;
-        readonly summary: "Operation cancelled (SIGINT).";
+        readonly order: 370;
+        readonly summary: "Operation was aborted (SIGINT, or the MCP call was cancelled).";
+        readonly recovery: "A transaction already submitted may still have landed: read the state first (`midnight_grant_status`, `midnight_balance`). Don't retry without confirming with the user.";
     },
     {
         readonly code: "OTHER_SDK_SET";
         readonly exitCode: 1;
-        readonly summary: "The process has loaded one SDK set's engine and the call's network runs on the other.";
-        readonly recovery: "Run the call in a process of its own (for MCP, a server for that network).";
+        readonly order: 280;
+        readonly summary: "The process runs one SDK set's engine and the network runs on the other (an MCP server that served rc asked for stagenet).";
+        readonly recovery: "Make the call in a process of its own: ask the user to start an MCP server for that network.";
     },
     {
         readonly code: "MIXED_SDK_LAYOUT";
         readonly exitCode: 1;
-        readonly summary: "An engine's SDK packages reach more than one copy of its ledger: mn was installed without its shrinkwrap (bun's installer).";
-        readonly recovery: "Install mn with npm.";
+        readonly order: 290;
+        readonly summary: "mn was installed without its shrinkwrap (bun's installer): an engine's SDK packages reach more than one copy of its ledger.";
+        readonly recovery: "Ask the user to install mn with npm.";
     },
     {
         readonly code: "UNSUPPORTED_NODE";
         readonly exitCode: 1;
-        readonly summary: "This Node.js is older than mn supports (22).";
-        readonly recovery: "Install a current Node.js.";
+        readonly order: 190;
+        readonly summary: "Node.js is older than 22 (22.18 for mn grant).";
+        readonly recovery: "Ask the user to install a current Node.js.";
     },
     {
         readonly code: "NO_STATE_ROOT";
         readonly exitCode: 1;
-        readonly summary: "The host gave mn no place to keep its state.";
-        readonly recovery: "Give the host its paths (createHost paths).";
+        readonly order: 300;
+        readonly summary: "The host gave mn no place to keep its state (a program's `createHost` without paths).";
+        readonly recovery: "Give the host its paths (`createHost({ paths })`).";
     },
     {
         readonly code: "NO_PAYER";
         readonly exitCode: 1;
+        readonly order: 310;
         readonly summary: "A command that submits a transaction was called without a payer.";
         readonly recovery: "Give the call a payer.";
     },
     {
         readonly code: "COMMAND_FAILED";
         readonly exitCode: 1;
-        readonly summary: "A command ended with a non-zero exit code without throwing (a test run whose tests failed); the message carries its result.";
+        readonly order: 320;
+        readonly summary: "A command ended with a non-zero exit code without throwing (an MCP test run whose tests failed); the message carries its result.";
         readonly recovery: "Read the command's result in the message.";
     },
     {
         readonly code: "UNKNOWN";
         readonly exitCode: 1;
-        readonly summary: "Unclassified error.";
+        readonly order: 380;
+        readonly summary: "Error didn't match any known classifier.";
+        readonly recovery: "Surface the message to the user. If reproducible, a new code may be warranted.";
     },
     {
         readonly code: "PROOF_TIMEOUT";
         readonly exitCode: 6;
-        readonly summary: "ZK proof generation timed out.";
-        readonly recovery: "Retry: proofs can be slow under load.";
+        readonly order: 90;
+        readonly summary: "ZK proof generation didn't finish within the deadline.";
+        readonly recovery: "Retry \u2014 proofs can be slow under load.";
     },
     {
         readonly code: "PROOF_FAILURE";
         readonly exitCode: 6;
-        readonly summary: "Proof server rejected or failed to generate the ZK proof.";
-        readonly recovery: "Ensure the proof server is running, then retry; if persistent, `mn cache clear` to force a fresh sync.";
+        readonly order: 100;
+        readonly summary: "Proof server rejected or failed to generate the ZK proof. Often a stale commitment tree or unreachable proof server.";
+        readonly recovery: "Check that the proof server is running (`midnight_localnet_status()`, or the endpoint the user configured); if it is, `midnight_cache_clear({ wallet: \"<name>\" })` then retry.";
     },
     {
         readonly code: "INVALID_DUST_PROOF";
         readonly exitCode: 6;
-        readonly summary: "Chain rejected the dust spend proof as malformed (substrate \"Custom error 170\").";
-        readonly recovery: "`mn cache clear --wallet <name>` then retry.";
+        readonly order: 110;
+        readonly summary: "Chain rejected the dust spend proof as malformed (substrate \"Custom error 170\"). Stale commitment tree.";
+        readonly recovery: "`midnight_cache_clear({ wallet: \"<name>\" })` then retry.";
     },
     {
         readonly code: "TX_REJECTED";
         readonly exitCode: 6;
-        readonly summary: "Transaction rejected by the node.";
+        readonly order: 60;
+        readonly summary: "Chain rejected the submitted transaction (catch-all when no more specific code applies).";
+        readonly recovery: "Read the message; usually a state mismatch resolved by re-sync + retry.";
     },
     {
         readonly code: "STALE_UTXO";
         readonly exitCode: 6;
-        readonly summary: "UTXOs consumed by another transaction (substrate \"error code 115\").";
-        readonly recovery: "Re-sync (the next call refreshes the state) and retry.";
+        readonly order: 70;
+        readonly summary: "UTXO was already spent on-chain (substrate \"error code 115\").";
+        readonly recovery: "Re-sync (the next call will refresh state) and retry.";
     },
     {
         readonly code: "STALE_CACHE";
         readonly exitCode: 6;
-        readonly summary: "Local wallet cache disagrees with chain state (a localnet reset, a remote testnet re-index).";
-        readonly recovery: "`mn cache clear --wallet <name>` then retry.";
+        readonly order: 80;
+        readonly summary: "Local wallet cache disagrees with chain (e.g. localnet reset, remote testnet re-indexed).";
+        readonly recovery: "`midnight_cache_clear({ wallet: \"<name>\" })` then retry.";
     },
     {
         readonly code: "SYNC_TIMEOUT";
         readonly exitCode: 4;
-        readonly summary: "Wallet sync exceeded its deadline.";
-        readonly recovery: "Retry: the cache resumes from the last applied event.";
+        readonly order: 40;
+        readonly summary: "Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync.";
+        readonly recovery: "Retry; the cache resumes from the last applied event so progress is preserved.";
     },
     {
         readonly code: "DUST_REQUIRED";
         readonly exitCode: 5;
-        readonly summary: "Not enough Dust for the fee.";
-        readonly recovery: "Not registered: `mn dust register`. Generating: retry when the message says, or register more NIGHT.";
+        readonly order: 120;
+        readonly summary: "Wallet has NIGHT but not enough DUST for the fee.";
+        readonly recovery: "Not registered (`midnight_dust_status()` shows `registered: false`): run `midnight_dust_register()`. Registered: its NIGHT is still generating the fee, which happens with time. mn has already waited when the fee was a few minutes away; the message says how long the rest takes (\"generates the rest in about 4 minutes\"). Wait that long and retry, don't retry at once.";
     },
     {
         readonly code: "DUST_GENERATING";
         readonly exitCode: 5;
+        readonly order: 130;
         readonly summary: "A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust.";
-        readonly recovery: "Run `mn dust register` again at the time the message gives, or add NIGHT.";
+        readonly recovery: "The message says when: run `midnight_dust_register()` again then, or add NIGHT.";
     },
     {
         readonly code: "INSUFFICIENT_BALANCE";
         readonly exitCode: 5;
-        readonly summary: "Not enough NIGHT for the operation.";
+        readonly order: 50;
+        readonly summary: "Wallet doesn't have enough NIGHT to cover the requested amount.";
+        readonly recovery: "Show the user. On localnet: `midnight_airdrop({ amount: \"...\" })`. On hosted networks: tell user to fund the address.";
     },
     {
         readonly code: "NOT_AN_OFFER";
         readonly exitCode: 2;
-        readonly summary: "Bytes given as a swap offer are not one.";
+        readonly order: 330;
+        readonly summary: "The bytes given as a swap offer are not one.";
         readonly recovery: "Ask the maker for the offer again.";
     },
     {
         readonly code: "TERMS_MISMATCH";
         readonly exitCode: 2;
+        readonly order: 340;
         readonly summary: "A swap offer's own terms differ from the agreed ones.";
         readonly recovery: "Don't take it; agree the terms again with the maker.";
     },
     {
         readonly code: "OFFER_EXPIRED";
         readonly exitCode: 2;
+        readonly order: 350;
         readonly summary: "A swap offer is past the expiry its maker set.";
         readonly recovery: "Ask the maker for a new one.";
     },
     {
         readonly code: "OFFER_COINS_IN_USE";
         readonly exitCode: 2;
+        readonly order: 360;
         readonly summary: "A spend would use coins an open swap offer of this wallet's holds, cancelling it.";
-        readonly recovery: "Cancel the offer first (mn swap cancel), or wait until it is taken.";
+        readonly recovery: "Cancel the offer first (`mn swap cancel`), or wait until it is taken.";
     }
 ];
 ```
@@ -209,13 +244,14 @@ export declare const coreCodes: readonly [
 ## `@kuiralabs/midnight-cli-core/commands/core.guidance`
 
 ```ts
-import type { PackageGuidance } from "../lib/agent-guidance.ts";
+import { type PackageGuidance } from "../lib/agent-guidance.ts";
 export declare const coreGuidance: PackageGuidance;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/agent-guidance`
 
 ```ts
+import type { CodeDefinition } from "./error-codes.ts";
 export type GuidanceText = "agent-manual" | "skill-core" | "skill-full";
 export interface GuidancePiece {
     readonly text: GuidanceText;
@@ -247,6 +283,10 @@ export declare function unplacedPieces(text: GuidanceText, sections: readonly st
 export declare function sectionsWithAdded(text: GuidanceText, skeleton: readonly string[], added: readonly GuidanceSection[]): string[];
 export declare function assertDistinctPlaces(pieces: readonly GuidancePiece[]): void;
 export declare function assembleGuidance(text: GuidanceText, sections: readonly string[], pieces: readonly GuidancePiece[]): string;
+export declare function wrapWords(text: string, width: number): string[];
+export declare function manualCodeRow(definition: CodeDefinition): string;
+export declare function skillCodeRow(definition: CodeDefinition): string;
+export declare function codeGuidancePieces(codes: readonly CodeDefinition[]): GuidancePiece[];
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/amount`
@@ -1352,7 +1392,7 @@ interface ClassifiedError {
     exitCode: number;
     errorCode: string;
 }
-export declare function classifyError(err: Error, codes?: CodeRegistry): ClassifiedError;
+export declare function classifyError(err: Error, codes: CodeRegistry): ClassifiedError;
 export declare function classifyByCode(err: Error, codes: CodeRegistry): ClassifiedError;
 export declare function humanizeNetworkError(message: string): string;
 ```
@@ -1835,6 +1875,14 @@ export declare class TermsMismatchError extends Error {
 }
 export declare function checkTerms(offered: SwapTerms, agreed: SwapTerms): void;
 export declare function describeLeg(leg: SwapLeg): string;
+```
+
+## `@kuiralabs/midnight-cli-core/lib/transport-failure`
+
+```ts
+export declare function isTransportFailure(failure: unknown): boolean;
+export declare function carriesOwnCode(failure: unknown): boolean;
+export declare function withTransportCode(err: unknown): unknown;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/tx-serde`

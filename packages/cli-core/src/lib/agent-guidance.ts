@@ -7,6 +7,10 @@
 // reads in the order their places give. An error code's row sits with the
 // package whose code raises it; text about no one package's commands
 // (concepts, networks, safety, JSON, the MCP server) stays with the assembler.
+// A package's error-code rows are made from its code definitions
+// (codeGuidancePieces), never written by hand.
+
+import type { CodeDefinition } from './error-codes.ts';
 
 /** The texts agents read: the `help --agent` manual, and the core and full skills. */
 export type GuidanceText = 'agent-manual' | 'skill-core' | 'skill-full';
@@ -116,4 +120,64 @@ export function assembleGuidance(text: GuidanceText, sections: readonly string[]
     .flatMap((section) => own.filter((piece) => piece.section === section).sort((a, b) => a.order - b.order))
     .map((piece) => piece.body)
     .join('');
+}
+
+// The manual's table of codes: the code in a column of 24, its exit code, and
+// the meaning from column 32, wrapped at 48 characters; a code too long for
+// its column puts its exit code beside it and the meaning on the next line.
+const CODE_COLUMN = 24;
+const MEANING_COLUMN = 32;
+const MEANING_WIDTH = 48;
+
+/** `text` in lines of at most `width` characters, broken between words (a word longer than that keeps a line of its own). */
+export function wrapWords(text: string, width: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/).filter((w) => w !== '')) {
+    if (line === '') line = word;
+    else if (line.length + 1 + word.length <= width) line += ' ' + word;
+    else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  if (line !== '') lines.push(line);
+  return lines;
+}
+
+/** A code's row in the `help --agent` manual's table: code, exit code, and its summary as the meaning. */
+export function manualCodeRow(definition: CodeDefinition): string {
+  const [first = '', ...rest] = wrapWords(definition.summary, MEANING_WIDTH);
+  const indent = ' '.repeat(MEANING_COLUMN);
+  const head = definition.code.length < CODE_COLUMN
+    ? `  ${definition.code.padEnd(CODE_COLUMN)}${definition.exitCode}`
+    : `  ${definition.code} ${definition.exitCode}`;
+  const lines = head.length < MEANING_COLUMN
+    ? [`${head.padEnd(MEANING_COLUMN)}${first}`, ...rest.map((line) => indent + line)]
+    : [head, ...[first, ...rest].map((line) => indent + line)];
+  return lines.join('\n') + '\n';
+}
+
+/** A code's row in the full skill's table of error recovery recipes: code, summary, recovery. */
+export function skillCodeRow(definition: CodeDefinition): string {
+  // A pipe splits a table cell, inside a code span too, unless escaped.
+  const cell = (text: string): string => text.replaceAll('|', '\\|');
+  return `| \`${definition.code}\` | ${cell(definition.summary)} | ${cell(definition.recovery ?? '')} |\n`;
+}
+
+/**
+ * A package's error-code rows, from its code definitions: each code's row in
+ * the manual's 'error-codes' section and in the full skill's 'error-recovery'
+ * table, placed by its `order`. Refuses a code with no order (its rows would
+ * have no place) or no recovery (its recipe would be empty).
+ */
+export function codeGuidancePieces(codes: readonly CodeDefinition[]): GuidancePiece[] {
+  return codes.flatMap((definition) => {
+    if (definition.order === undefined) throw new GuidanceError(`Error code "${definition.code}" has no order, so its rows have no place`);
+    if (definition.recovery === undefined) throw new GuidanceError(`Error code "${definition.code}" has no recovery for its recipe`);
+    return [
+      { text: 'agent-manual', section: 'error-codes', order: definition.order, body: manualCodeRow(definition) },
+      { text: 'skill-full', section: 'error-recovery', order: definition.order, body: skillCodeRow(definition) },
+    ] satisfies GuidancePiece[];
+  });
 }

@@ -143,29 +143,42 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 
 | Code | Meaning | Recovery |
 |---|---|---|
-| `INSUFFICIENT_BALANCE` | Wallet doesn't have enough NIGHT to cover the requested amount. | Show the user. On localnet: `midnight_airdrop({ amount: "..." })`. On hosted networks: tell user to fund the address. |
-| `DUST_REQUIRED` | Wallet has NIGHT but not enough DUST for the fee. | Not registered (`midnight_dust_status()` shows `registered: false`): run `midnight_dust_register()`. Registered: its NIGHT is still generating the fee, which happens with time. mn has already waited when the fee was a few minutes away; the message says how long the rest takes ("generates the rest in about 4 minutes"). Wait that long and retry, don't retry at once. |
-| `INVALID_DUST_PROOF` | Chain rejected the dust spend proof as malformed (substrate "Custom error 170"). Stale commitment tree. | `midnight_cache_clear({ wallet: "<name>" })` then retry. |
-| `STALE_CACHE` | Local wallet cache disagrees with chain (e.g. localnet reset, remote testnet re-indexed). | `midnight_cache_clear({ wallet: "<name>" })` then retry. |
-| `STALE_UTXO` | UTXO was already spent on-chain (substrate "error code 115"). | Re-sync (the next call will refresh state) and retry. |
-| `PROOF_FAILURE` | Proof server rejected or failed to generate the ZK proof. Often a stale commitment tree or unreachable proof server. | Check that the proof server is running (`midnight_localnet_status()`, or the endpoint the user configured); if it is, `midnight_cache_clear({ wallet: "<name>" })` then retry. |
-| `PROOF_TIMEOUT` | ZK proof generation didn't finish within the deadline. | Retry — proofs can be slow under load. |
-| `SYNC_TIMEOUT` | Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync. | Retry; the cache resumes from the last applied event so progress is preserved. |
+| `INVALID_ARGS` | Missing/invalid argument. | Show the message to the user verbatim — it names the missing field. |
+| `WALLET_NOT_FOUND` | Named wallet doesn't exist on disk. | `midnight_wallet_list()` — user may have removed it. |
 | `NETWORK_ERROR` | Indexer/node/proof-server connection refused or DNS failure. | Check `midnight_localnet_status()` or the endpoints the user configured; on this build `midnight_localnet_up()` is refused, so ask the user to start their ledger-9 stack. |
+| `SYNC_TIMEOUT` | Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync. | Retry; the cache resumes from the last applied event so progress is preserved. |
+| `INSUFFICIENT_BALANCE` | Wallet doesn't have enough NIGHT to cover the requested amount. | Show the user. On localnet: `midnight_airdrop({ amount: "..." })`. On hosted networks: tell user to fund the address. |
+| `TX_REJECTED` | Chain rejected the submitted transaction (catch-all when no more specific code applies). | Read the message; usually a state mismatch resolved by re-sync + retry. |
+| `STALE_UTXO` | UTXO was already spent on-chain (substrate "error code 115"). | Re-sync (the next call will refresh state) and retry. |
+| `STALE_CACHE` | Local wallet cache disagrees with chain (e.g. localnet reset, remote testnet re-indexed). | `midnight_cache_clear({ wallet: "<name>" })` then retry. |
+| `PROOF_TIMEOUT` | ZK proof generation didn't finish within the deadline. | Retry — proofs can be slow under load. |
+| `PROOF_FAILURE` | Proof server rejected or failed to generate the ZK proof. Often a stale commitment tree or unreachable proof server. | Check that the proof server is running (`midnight_localnet_status()`, or the endpoint the user configured); if it is, `midnight_cache_clear({ wallet: "<name>" })` then retry. |
+| `INVALID_DUST_PROOF` | Chain rejected the dust spend proof as malformed (substrate "Custom error 170"). Stale commitment tree. | `midnight_cache_clear({ wallet: "<name>" })` then retry. |
+| `DUST_REQUIRED` | Wallet has NIGHT but not enough DUST for the fee. | Not registered (`midnight_dust_status()` shows `registered: false`): run `midnight_dust_register()`. Registered: its NIGHT is still generating the fee, which happens with time. mn has already waited when the fee was a few minutes away; the message says how long the rest takes ("generates the rest in about 4 minutes"). Wait that long and retry, don't retry at once. |
+| `DUST_GENERATING` | A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust. | The message says when: run `midnight_dust_register()` again then, or add NIGHT. |
+| `CHAIN_CLOCK_BEHIND` | The chain's clock lags this computer's (a local chain after sleep), so Dust estimates don't hold. | Wait for it to catch up, or ask the user to restart the local chain. |
 | `UNSUPPORTED_LEDGER` | The network is on ledger 8; this build supports ledger 9 only. | Tell the user: this network needs midnight-wallet-cli 0.5.x. Don't retry. |
-| `LOCALNET_UNAVAILABLE` | `midnight_localnet_up()` can't start a ledger-9 stack on this build. | Ask the user to start their ledger-9 stack and point mn at it (endpoint config). |
+| `LOCALNET_UNAVAILABLE` | `mn localnet up` (`midnight_localnet_up()`) can't start a ledger-9 stack on this build. | Ask the user to start their ledger-9 stack and point mn at it (endpoint config). |
 | `LOCAL_STACK_UNREACHABLE` | No ledger-9 stack answers at the configured endpoints. | Ask the user to start their stack or fix the configured node / indexer-ws / proof-server endpoints. |
 | `AMBIGUOUS_LOCAL_STACKS` | Several local Midnight stacks are running and no endpoints are configured, so mn won't guess. | Ask the user which stack to use; they set its endpoints with `midnight config set`. Don't retry blindly. |
-| `NO_ACCOUNT` | A `midnight_grant_*` tool was called for a wallet that has no account on this network. | Offer `midnight_grant_deploy()`, after telling the user how its owner key is kept (see the allowance flow). |
-| `PASSPHRASE_REQUIRED` | A tool needed a secret (a wallet's seed, an account's owner key) and the MCP server has no passphrase. | Ask the user to set `MN_PASSPHRASE` in the MCP server's environment and restart it. Never ask them to type the passphrase into the chat. |
+| `UNSUPPORTED_NODE` | Node.js is older than 22 (22.18 for mn grant). | Ask the user to install a current Node.js. |
+| `NO_NODE_RUNTIME` | Contract scripts run under Node.js, and none was found on PATH. | Ask the user to install Node.js 22 or later, or to run mn under Node. |
+| `NO_ACCOUNT` | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. | Offer `midnight_grant_deploy()`, after telling the user how its owner key is kept (see the allowance flow). |
 | `WRONG_PASSPHRASE` | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. | Ask the user to correct `MN_PASSPHRASE` in the MCP server's environment. Nothing was changed. |
+| `PASSPHRASE_REQUIRED` | A tool needed a secret (a wallet's seed, an account's owner key) and no passphrase could be had: `MN_PASSPHRASE` is unset and there is no terminal to ask at (the MCP server has none). | Ask the user to set `MN_PASSPHRASE` in the MCP server's environment and restart it. Never ask them to type the passphrase into the chat. |
 | `BLOCKFROST_PROJECT_ID_REQUIRED` | The network (preprod) is served by Blockfrost and no project id is set. | Ask the user to create a Midnight preprod project at https://blockfrost.io and run `midnight config set blockfrost-project-id <project id>` themselves. Never ask them to paste the id into the chat. Don't retry until they have. |
 | `BLOCKFROST_PROJECT_ID_REJECTED` | Blockfrost refused the project id (HTTP 403): mistyped, revoked, or for another network. | Ask the user to check it at blockfrost.io and set it again. Don't retry blindly. |
 | `BLOCKFROST_LIMIT_REACHED` | Blockfrost's plan limit or rate limit. | Wait and retry once; if it persists, tell the user it is their Blockfrost plan. |
 | `ENDPOINT_SHUT_DOWN` | An endpoint set by flag or config was shut down by its operator (the old preprod indexer). | `midnight_config_unset({ key: "indexer-ws" })` (and `node` if set), then retry. |
-| `WALLET_NOT_FOUND` | Named wallet doesn't exist on disk. | `midnight_wallet_list()` — user may have removed it. |
-| `INVALID_ARGS` | Missing/invalid argument. | Show the message to the user verbatim — it names the missing field. |
-| `TX_REJECTED` | Chain rejected the submitted transaction (catch-all when no more specific code applies). | Read the message; usually a state mismatch resolved by re-sync + retry. |
+| `OTHER_SDK_SET` | The process runs one SDK set's engine and the network runs on the other (an MCP server that served rc asked for stagenet). | Make the call in a process of its own: ask the user to start an MCP server for that network. |
+| `MIXED_SDK_LAYOUT` | mn was installed without its shrinkwrap (bun's installer): an engine's SDK packages reach more than one copy of its ledger. | Ask the user to install mn with npm. |
+| `NO_STATE_ROOT` | The host gave mn no place to keep its state (a program's `createHost` without paths). | Give the host its paths (`createHost({ paths })`). |
+| `NO_PAYER` | A command that submits a transaction was called without a payer. | Give the call a payer. |
+| `COMMAND_FAILED` | A command ended with a non-zero exit code without throwing (an MCP test run whose tests failed); the message carries its result. | Read the command's result in the message. |
+| `NOT_AN_OFFER` | The bytes given as a swap offer are not one. | Ask the maker for the offer again. |
+| `TERMS_MISMATCH` | A swap offer's own terms differ from the agreed ones. | Don't take it; agree the terms again with the maker. |
+| `OFFER_EXPIRED` | A swap offer is past the expiry its maker set. | Ask the maker for a new one. |
+| `OFFER_COINS_IN_USE` | A spend would use coins an open swap offer of this wallet's holds, cancelling it. | Cancel the offer first (`mn swap cancel`), or wait until it is taken. |
 | `CANCELLED` | Operation was aborted (SIGINT, or the MCP call was cancelled). | A transaction already submitted may still have landed: read the state first (`midnight_grant_status`, `midnight_balance`). Don't retry without confirming with the user. |
 | `UNKNOWN` | Error didn't match any known classifier. | Surface the message to the user. If reproducible, a new code may be warranted. |
 

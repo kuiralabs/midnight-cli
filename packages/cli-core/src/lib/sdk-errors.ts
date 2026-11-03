@@ -1,5 +1,7 @@
 // The engine contract's reading of the SDK's and the node's errors: the one
-// place mn recognises their shapes and words. An engine reports each failure
+// place mn recognises their shapes and words (a connection that could not be
+// made it reads through transport-failure.ts, which a contract script's
+// process shares). An engine reports each failure
 // it can name as a typed error carrying its code (toEngineError), and its DApp
 // connector marks the errors it answers with by their code, keeping their
 // messages (withEngineCode). Only the engines, and in core the wallet session and the Dust wait, import
@@ -10,6 +12,7 @@ import {
   EngineError,
   InsufficientBalanceError,
   InvalidDustProofError,
+  NetworkError,
   ProofFailureError,
   ProofTimeoutError,
   StaleUtxoError,
@@ -18,6 +21,7 @@ import {
   TransactionRefusedError,
   type RefusalCode,
 } from './errors.ts';
+import { carriesOwnCode, isTransportFailure } from './transport-failure.ts';
 
 /**
  * The chain rejected the transaction outright. Most commonly: balance check
@@ -226,6 +230,8 @@ function engineCodeOf(err: unknown): string | undefined {
   if (isDustShortage(err) || said.includes('no dust') || (said.includes('dust') && (said.includes('required') || said.includes('available') || said.includes('insufficient')))) return 'DUST_REQUIRED';
   if (isSdkInsufficientFundsError(err) || said.includes('insufficient') || said.includes('not enough')) return 'INSUFFICIENT_BALANCE';
   if (said.includes('rejected') || said.includes('transaction failed')) return 'TX_REJECTED';
+  // The node, the indexer or the proof server out of reach: last, as a refusal's or a proof's words come first.
+  if (isTransportFailure(err)) return 'NETWORK_ERROR';
   return undefined;
 }
 
@@ -241,6 +247,7 @@ function typedEngineError(code: string, message: string, cause: unknown): Error 
     case 'SYNC_TIMEOUT': return new SyncTimeoutError(message, options);
     case 'DUST_REQUIRED': return new DustRequiredError(message, options);
     case 'INSUFFICIENT_BALANCE': return new InsufficientBalanceError(message, options);
+    case 'NETWORK_ERROR': return new NetworkError(message, options);
     default: return new EngineError(code, message, options);
   }
 }
@@ -257,9 +264,8 @@ export function mnCodeOf(err: unknown): string | undefined {
 const isConnectorApiError = (err: unknown): boolean =>
   err !== null && typeof err === 'object' && (err as { type?: unknown }).type === 'DAppConnectorAPIError';
 
-/** Whether the error already carries a code of its own (mn's typed errors do); a connector API error's code is the API's, not mn's. */
-const carriesCode = (err: unknown): boolean =>
-  !isConnectorApiError(err) && err !== null && typeof err === 'object' && typeof (err as { code?: unknown }).code === 'string';
+/** Whether the error already carries a code of its own (mn's typed errors do); a connector API error's code is the API's, and a socket's ECONNREFUSED the transport's, not mn's. */
+const carriesCode = (err: unknown): boolean => !isConnectorApiError(err) && carriesOwnCode(err);
 
 /**
  * The failure as an engine reports it to mn: a node's refusal as a

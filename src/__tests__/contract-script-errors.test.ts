@@ -8,12 +8,15 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { closedPort } from './helpers/closed-port.ts';
 import { Effect } from 'effect';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
-import { ContractScriptError, SCRIPT_PRELUDE, scriptFailureMessage, scriptFailureOf } from '../lib/contract/runner.ts';
+import { ContractScriptError, SCRIPT_PRELUDE, executeScript, rpcClientCode, scriptFailureMessage, scriptFailureOf } from '../lib/contract/runner.ts';
 import { createApiError } from '../lib/ws-rpc.ts';
 import { scriptFailureAtServe } from './helpers/serve-script-failure.ts';
-import { classifyByCode, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { withEngineCode } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { installedCommands } from '../lib/installed-commands.ts';
 
@@ -62,6 +65,33 @@ await Promise.reject(new TypeError('Expected an input string with byte length of
     expect(scriptFailureOf(runScript(`throw new Error('no code');`).stderr, 1)).toStrictEqual({ message: 'no code' });
   });
 
+  it('reports a connection it could not make as NETWORK_ERROR, and a code it carries before that', async () => {
+    const refused = runScript(`throw Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:6300'), { code: 'ECONNREFUSED' });`);
+    expect(scriptFailureOf(refused.stderr, refused.status)).toStrictEqual({ message: 'connect ECONNREFUSED 127.0.0.1:6300', code: 'NETWORK_ERROR' });
+    // fetch says only "fetch failed"; its cause is the socket's ECONNREFUSED.
+    const fetched = runScript(`await fetch('http://127.0.0.1:${await closedPort()}/');`);
+    expect(scriptFailureOf(fetched.stderr, fetched.status)).toStrictEqual({ message: 'fetch failed', code: 'NETWORK_ERROR' });
+    const served = runScript(`throw Object.assign(new Error('the WebSocket said a network error'), { code: 'DUST_REQUIRED' });`);
+    expect(scriptFailureOf(served.stderr, served.status)).toStrictEqual({ message: 'the WebSocket said a network error', code: 'DUST_REQUIRED' });
+  });
+
+  it("reports mn serve out of reach as NETWORK_ERROR, from the script's own RPC client", async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mn-script-unserved-'));
+    try {
+      const wsModule = pathToFileURL(createRequire(import.meta.url).resolve('ws')).href;
+      const script = SCRIPT_PRELUDE + rpcClientCode(await closedPort(), wsModule) + 'await rpcConnect();\n';
+      const err = await executeScript({ dir, script, overlaySdk: false, packages: { packages: [], packageFolder: () => null, set: 'rc' } }).then(
+        () => { throw new Error('expected the script to fail'); },
+        (e: Error) => e,
+      );
+      expect(err).toBeInstanceOf(ContractScriptError);
+      expect(err.message).toMatch(/^Cannot connect to mn serve at ws:\/\/127\.0\.0\.1:\d+: connect ECONNREFUSED/);
+      expect(classifyError(err, installedCommands)).toStrictEqual({ errorCode: 'NETWORK_ERROR', exitCode: 4 });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("reads an older mn's script, which reported its message alone", () => {
     expect(scriptFailureOf('__MN_ERROR__ "the message"\n', 1)).toStrictEqual({ message: 'the message' });
   });
@@ -76,7 +106,7 @@ describe("a failure at mn serve, across the wire and the script's process", () =
     const err = await failedRun(() => createApiError('InternalError', message, 'DUST_REQUIRED'));
     expect(err).toBeInstanceOf(ContractScriptError);
     expect(err.message).toBe(message);
-    expect(classifyByCode(err, installedCommands)).toStrictEqual({ errorCode: 'DUST_REQUIRED', exitCode: 5 });
+    expect(classifyError(err, installedCommands)).toStrictEqual({ errorCode: 'DUST_REQUIRED', exitCode: 5 });
   });
 
   it("carries a node's refusal by its reason (approved Y54: one with no rule's words was UNKNOWN)", async () => {
@@ -88,9 +118,8 @@ describe("a failure at mn serve, across the wire and the script's process", () =
     };
     const other = await refused('1010: Invalid Transaction: Custom error: 199');
     expect(other.message).toBe('Transaction submission failed: [SubmissionError] Transaction submission error → 1010: Invalid Transaction: Custom error: 199');
-    expect(classifyError(other)).toStrictEqual({ errorCode: 'UNKNOWN', exitCode: 1 });
-    expect(classifyByCode(other, installedCommands)).toStrictEqual({ errorCode: 'TX_REJECTED', exitCode: 6 });
-    expect(classifyByCode(await refused('1010: Invalid Transaction: Custom error: 115'), installedCommands)).toStrictEqual({ errorCode: 'STALE_UTXO', exitCode: 6 });
-    expect(classifyByCode(await refused('1010: Invalid Transaction: Custom error: 170'), installedCommands)).toStrictEqual({ errorCode: 'INVALID_DUST_PROOF', exitCode: 6 });
+    expect(classifyError(other, installedCommands)).toStrictEqual({ errorCode: 'TX_REJECTED', exitCode: 6 });
+    expect(classifyError(await refused('1010: Invalid Transaction: Custom error: 115'), installedCommands)).toStrictEqual({ errorCode: 'STALE_UTXO', exitCode: 6 });
+    expect(classifyError(await refused('1010: Invalid Transaction: Custom error: 170'), installedCommands)).toStrictEqual({ errorCode: 'INVALID_DUST_PROOF', exitCode: 6 });
   });
 });

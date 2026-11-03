@@ -23,6 +23,7 @@ import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
 import { header, keyValue, formatNight } from '@kuiralabs/midnight-cli-core/ui/format';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { withTransportCode } from '@kuiralabs/midnight-cli-core/lib/transport-failure';
 
 const SPINNER_LABEL: Record<GrantRequest['subcommand'], string> = {
   deploy: 'Deploying the account...',
@@ -299,6 +300,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
     if (request.subcommand === 'deploy' && funds !== undefined && err instanceof Error && isShortOfDust(err)) {
       throw new DustRequiredError(`${err.message}\n\n${deployShortOfDustNote(funds.dustBalance)}`, { cause: err });
     }
-    throw err;
+    // The account package reaches the indexer and the proof server itself, past the engine: a connection it couldn't make is a network error.
+    throw withTransportCode(err);
   }
 }

@@ -2,7 +2,8 @@
 // its pieces of `help --agent` and of the two skills, each naming its section
 // and its place there, and its tools' rows in the manual's tools table.
 
-import type { PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { codeGuidancePieces, type PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { grantCodes } from './grant.codes.ts';
 
 export const grantGuidance: PackageGuidance = {
   pieces: [
@@ -125,14 +126,6 @@ Amounts are whole numbers of the token's smallest unit, as text in JSON.
 `,
     },
     {
-      text: 'agent-manual',
-      section: 'error-codes',
-      order: 100,
-      body: `  NO_ACCOUNT              1     mn grant: the wallet has no account on this
-                                network; run grant deploy
-`,
-    },
-    {
       text: 'skill-core',
       section: 'intent-routing',
       order: 50,
@@ -168,13 +161,8 @@ Amounts are whole numbers of the token's smallest unit, as text.
 
 `,
     },
-    {
-      text: 'skill-full',
-      section: 'error-recovery',
-      order: 70,
-      body: `| \`NO_ACCOUNT\` | A \`midnight_grant_*\` tool was called for a wallet that has no account on this network. | Offer \`midnight_grant_deploy()\`, after telling the user how its owner key is kept (see the allowance flow). |
-`,
-    },
+    // Its error codes' rows in the manual and the full skill, from their definitions.
+    ...codeGuidancePieces(grantCodes),
   ],
   toolsTable: [
     { tool: 'midnight_grant_status', group: 'grants', order: 10, description: ["Show the wallet's account (holdings, grants)"] },

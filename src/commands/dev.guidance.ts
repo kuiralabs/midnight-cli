@@ -2,7 +2,8 @@
 // its pieces of `help --agent` and of the two skills, each naming its section
 // and its place there, and its tools' rows in the manual's tools table.
 
-import type { PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { codeGuidancePieces, type PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { devCodes } from './dev.codes.ts';
 
 export const devGuidance: PackageGuidance = {
   pieces: [
@@ -43,14 +44,6 @@ export const devGuidance: PackageGuidance = {
 Runs E2E tests for Midnight dApps defined in dapp.test.json. Includes
 contract deployment, circuit calls, and state verification.
 
-`,
-    },
-    {
-      text: 'agent-manual',
-      section: 'error-codes',
-      order: 60,
-      body: `  LOCALNET_UNAVAILABLE    4     localnet up can't start a ledger-9 stack; run
-                                one and set its endpoints (config set)
 `,
     },
     {
@@ -105,18 +98,13 @@ Running a suite is a CLI command, not an MCP tool: \`mn test run --suite <name>\
     },
     {
       text: 'skill-full',
-      section: 'error-recovery',
-      order: 40,
-      body: `| \`LOCALNET_UNAVAILABLE\` | \`midnight_localnet_up()\` can't start a ledger-9 stack on this build. | Ask the user to start their ledger-9 stack and point mn at it (endpoint config). |
-`,
-    },
-    {
-      text: 'skill-full',
       section: 'not-this-cli',
       order: 10,
       body: `- Not a contract compiler. The project's \`package.json\` should expose a \`compact\` script (Midnight convention, e.g. \`"compact": "compact compile src/foo.compact src/managed/foo"\`) or a \`compile\` script as a generic fallback. \`mn dev\` detects whichever is present; create-mn-app and midnight-starship templates ship with the \`compact\` script already wired.
 `,
     },
+    // Its error codes' rows in the manual and the full skill, from their definitions.
+    ...codeGuidancePieces(devCodes),
   ],
   toolsTable: [
     { tool: 'midnight_localnet_up', group: 'local-network', order: 10, description: ['Refused on this ledger-9 build (see OVERVIEW)'] },
