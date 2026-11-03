@@ -59,6 +59,7 @@
     "test:beta": "vitest run src/__tests__/engine-beta",
     "test:live": "vitest run --config vitest.live.config.ts",
     "test:watch": "vitest",
+    "api-report": "node scripts/api-report.mjs write",
     "typecheck": "tsc --noEmit",
     "skill-docs": "tsx --conditions=midnight-cli-source scripts/write-skill-docs.ts",
     "readme-commands": "tsx --conditions=midnight-cli-source scripts/write-readme-commands.ts"
