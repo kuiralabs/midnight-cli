@@ -8,6 +8,12 @@ import { sdkSetOf, type HostEngines } from '@kuiralabs/midnight-cli-core/lib/eng
 import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { ContractInfo } from './inspect.ts';
 
+/** A deploy's or call's contract runs on the network's runtime: paying for it starts next. */
+export interface ContractChecked {
+  readonly kind: 'contract-checked';
+  readonly network: NetworkName;
+}
+
 /**
  * Throws a UsageError unless the engine of `engines` for `network` (by the
  * config under the state root `root`) runs a contract

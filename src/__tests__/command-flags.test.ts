@@ -108,6 +108,9 @@ describe('the accepted flags match the code', () => {
     // The swap request's terms and expiry, and the network and endpoints.
     'prepareMake(': ['give', 'give-token', 'want', 'want-token', 'expires-in', 'out', 'network', 'node', 'indexer-ws', 'proof-server'],
     'prepareTake(': ['give', 'give-token', 'want', 'want-token', 'network', 'node', 'indexer-ws', 'proof-server'],
+    // The same, without the network: the handler gives it to the library function.
+    'makeTermsOf(': ['give', 'give-token', 'want', 'want-token', 'expires-in', 'out'],
+    'termsOf(': ['give', 'give-token', 'want', 'want-token'],
     'resolveSeedSource(': ['seed', 'wallet'],
     'resolveSeed(': ['seed', 'wallet'],
     'walletSourceOf(': ['seed', 'wallet'],
@@ -117,6 +120,7 @@ describe('the accepted flags match the code', () => {
     'rejectNoCacheForWrites(': ['no-cache'],
     'resolveTransferRequest(': ['shielded', 'force-shielded', 'wallet', 'network'],
     'resolveScanDir(': ['managed', 'path'],
+    'resolveDappDir(': ['path'],
     'resolveContractDeployRequest(': ['path', 'managed', 'name', 'args', 'secret-key'],
     'resolveContractCallRequest(': ['path', 'managed', 'name', 'address', 'circuit', 'args'],
   };

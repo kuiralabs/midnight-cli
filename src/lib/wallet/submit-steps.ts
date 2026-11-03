@@ -29,14 +29,14 @@ export function submitSteps(steps: ProgressSteps): { onProving(): void; onSubmit
 /**
  * The submitted transaction `txHash` once the indexer at `indexer` lists it,
  * or why it is missing; undefined, without asking, when `waitMs` is 0. Then
- * the step is done: "Transaction submitted".
+ * the step is done, saying `doneMessage`.
  */
-export async function receiptOfSubmitted(indexer: string, txHash: string, steps: ProgressSteps, signal: AbortSignal | undefined, waitMs: number): Promise<Receipt | undefined> {
+export async function receiptOfSubmitted(indexer: string, txHash: string, steps: ProgressSteps, signal: AbortSignal | undefined, waitMs: number, doneMessage = 'Transaction submitted'): Promise<Receipt | undefined> {
   let receipt: Receipt | undefined;
   if (waitMs > 0) {
     steps.update('Waiting for the indexer to list it...');
     receipt = await receiptOf(indexer, txHash, signal, waitMs);
   }
-  steps.done('Transaction submitted');
+  steps.done(doneMessage);
   return receipt;
 }

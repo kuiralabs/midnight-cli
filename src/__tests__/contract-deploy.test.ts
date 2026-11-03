@@ -6,21 +6,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { resolveContractDeployRequest } from '../lib/contract/request.ts';
+import { contractDeployRequest } from '../lib/contract/request.ts';
 import { deployContract } from '../lib/contract/deploy.ts';
-import { resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
 import { servePayerAt } from '../lib/serve-payer.ts';
-import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped.
-const host = createHost();
-
-const ENDPOINTS = ['--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
+const ENDPOINTS = { network: 'undeployed' as const, node: 'ws://localhost:29944', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws', proofServer: 'http://localhost:26300' };
+// The host the tests' calls run in: its state root under the test's home, the engines the CLI ships, nobody to ask, notices dropped.
+let host: Host;
 
 let home: string;
 let originalHome: string | undefined;
@@ -29,6 +26,7 @@ beforeEach(() => {
   originalHome = process.env.HOME;
   home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'mn-contract-deploy-')));
   process.env.HOME = home;
+  host = createHost({ paths: { stateRoot: stateRootIn(home), home }, engineLoader: loadInstalledEngine });
   const compiler = path.join(home, 'dapp', 'managed', 'counter', 'compiler');
   fs.mkdirSync(compiler, { recursive: true });
   fs.writeFileSync(path.join(compiler, 'contract-info.json'), JSON.stringify({
@@ -45,15 +43,14 @@ afterEach(() => {
 
 describe('deployContract', () => {
   it('stops at the funds check when the paying wallet is not there, before anything is served', async () => {
-    const args = parseArgs(['contract', 'deploy', '--path', path.join(home, 'dapp'), '--wallet', 'nobody', ...ENDPOINTS]);
     const said: string[] = [];
-    await expect(deployContract({
-      request: resolveContractDeployRequest(args),
-      target: resolvePayingTarget(args, 'contract', 'deploy', stateRootIn(home), host),
+    await expect(deployContract(host, {
+      ...ENDPOINTS,
+      request: contractDeployRequest({ dappDir: path.join(home, 'dapp') }),
       wallet: 'nobody',
       // Never reached: serving would be the step after the funds check.
       payer: servePayerAt(1),
-      progress: (message) => { said.push(message); return silentSpinner((later) => said.push(later)); },
+      onProgress: (event) => { if ('message' in event) said.push(event.message); },
       sdkWarnings: createSdkWarningRouter().openCall().warnings,
     })).rejects.toThrow(path.join(home, '.midnight', 'wallets', 'nobody.json'));
     expect(said).toEqual(['Checking wallet...']);
@@ -67,13 +64,11 @@ describe('deployContract', () => {
       serve: async () => { asked.push('serve'); throw new Error('served by the program'); },
       connect: async () => { throw new Error('not used'); },
     };
-    const args = parseArgs(['contract', 'deploy', '--path', path.join(home, 'dapp'), '--wallet', 'external', ...ENDPOINTS]);
-    await expect(deployContract({
-      request: resolveContractDeployRequest(args),
-      target: resolvePayingTarget(args, 'contract', 'deploy', stateRootIn(home), host),
+    await expect(deployContract(host, {
+      ...ENDPOINTS,
+      request: contractDeployRequest({ dappDir: path.join(home, 'dapp') }),
       wallet: 'external',
       payer: ownPayer,
-      progress: () => silentSpinner(),
       sdkWarnings: createSdkWarningRouter().openCall().warnings,
     })).rejects.toThrow('served by the program');
     expect(asked).toEqual(['assertCanPay external', 'serve']);
@@ -92,13 +87,11 @@ describe('deployContract', () => {
       serve: async () => { asked.push('serve'); throw new Error('must not be served'); },
       connect: async () => { throw new Error('not used'); },
     };
-    const args = parseArgs(['contract', 'deploy', '--path', path.join(home, 'dapp'), '--wallet', 'external', ...ENDPOINTS]);
-    await expect(deployContract({
-      request: resolveContractDeployRequest(args),
-      target: resolvePayingTarget(args, 'contract', 'deploy', stateRootIn(home), host),
+    await expect(deployContract(host, {
+      ...ENDPOINTS,
+      request: contractDeployRequest({ dappDir: path.join(home, 'dapp') }),
       wallet: 'external',
       payer: ownPayer,
-      progress: () => silentSpinner(),
       sdkWarnings: createSdkWarningRouter().openCall().warnings,
       signal: controller.signal,
     })).rejects.toBeInstanceOf(CancelledError);
