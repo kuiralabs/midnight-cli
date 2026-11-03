@@ -7,6 +7,14 @@ import type { PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-gui
 export const contractGuidance: PackageGuidance = {
   pieces: [
     {
+      text: 'agent-manual',
+      section: 'error-codes',
+      order: 95,
+      body: `  NO_NODE_RUNTIME         1     Contract scripts run under Node.js and none
+                                is on PATH: install Node.js 22 or later
+`,
+    },
+    {
       text: 'skill-full',
       section: 'what-you-can-do',
       order: 20,

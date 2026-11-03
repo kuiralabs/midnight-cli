@@ -1,9 +1,10 @@
-// The packages this mn has, with their commands and agent guidance, collected
+// The packages this mn has, with their commands, agent guidance and error codes, collected
 // into one registry. The shell assembles it: a definition and a package's
 // guidance sit beside its commands, and the base can't import a package's
 // commands. Reading it loads no handler, so no SDK. The shell's dispatch and
 // flag checks read it, and so do help, the manual and the intro, the MCP
-// server's tools, and the agent manual and skills.
+// server's tools, the agent manual and skills, and the shell's and the MCP
+// server's classification of an error by its code.
 
 import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
 import { createPackageRegistry, type FlagDefinition, type GlobalFlagHelp } from '@kuiralabs/midnight-cli-core/lib/command-definition';
@@ -38,6 +39,12 @@ import { connectGuidance } from '../commands/connect.guidance.ts';
 import { devGuidance } from '../commands/dev.guidance.ts';
 import { grantGuidance } from '../commands/grant.guidance.ts';
 import { swapGuidance } from '../commands/swap.guidance.ts';
+import { coreCodes } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { chainCodes } from '@kuiralabs/midnight-chain/commands/chain.codes';
+import { walletCodes } from '../commands/wallet.codes.ts';
+import { contractCodes } from '../commands/contract.codes.ts';
+import { devCodes } from '../commands/dev.codes.ts';
+import { grantCodes } from '../commands/grant.codes.ts';
 
 /** The shell answers these before any command runs: no tool passes them on. */
 const SHELL_ANSWERS = { notForAgents: 'the shell answers it before any command runs' };
@@ -65,17 +72,18 @@ const GLOBAL_FLAGS_HELP: readonly GlobalFlagHelp[] = [
 
 /** Every package, in the layering's order; the shell's own commands last, its guidance being the skeletons. */
 export const installedCommands = createPackageRegistry([
-  { name: 'core', commands: [configDefinition], guidance: coreGuidance },
-  { name: 'chain', commands: [statusDefinition, txDefinition], guidance: chainGuidance },
+  { name: 'core', commands: [configDefinition], guidance: coreGuidance, codes: coreCodes },
+  { name: 'chain', commands: [statusDefinition, txDefinition], guidance: chainGuidance, codes: chainCodes },
   {
     name: 'wallet',
     commands: [walletDefinition, generateDefinition, infoDefinition, balanceDefinition, addressDefinition, genesisAddressDefinition, airdropDefinition, transferDefinition, dustDefinition, cacheDefinition],
     guidance: walletGuidance,
+    codes: walletCodes,
   },
-  { name: 'contract', commands: [inspectCostDefinition, contractDefinition], guidance: contractGuidance },
+  { name: 'contract', commands: [inspectCostDefinition, contractDefinition], guidance: contractGuidance, codes: contractCodes },
   { name: 'connect', commands: [serveDefinition], guidance: connectGuidance },
   { name: 'swap', commands: [swapDefinition], guidance: swapGuidance },
-  { name: 'dev', commands: [testDefinition, devDefinition, localnetDefinition], guidance: devGuidance },
-  { name: 'grant', commands: [grantDefinition], guidance: grantGuidance },
+  { name: 'dev', commands: [testDefinition, devDefinition, localnetDefinition], guidance: devGuidance, codes: devCodes },
+  { name: 'grant', commands: [grantDefinition], guidance: grantGuidance, codes: grantCodes },
   { name: 'shell', commands: [helpDefinition, manualDefinition], guidance: { pieces: [] } },
 ], GLOBAL_FLAGS, GLOBAL_FLAGS_HELP);

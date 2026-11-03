@@ -34,15 +34,15 @@ const HOMES = [
   ['mcp', /^mcp-server\.ts$/],
   ['mcp', /^lib\/mcp\//],
 
-  // A package's agent guidance (<package>.guidance.ts) sits beside its commands.
-  ...PACKAGES.map((pkg) => [pkg, new RegExp(`^commands/${pkg}\\.guidance\\.ts$`)]),
+  // A package's agent guidance (<package>.guidance.ts) and its error codes (<package>.codes.ts) sit beside its commands.
+  ...PACKAGES.map((pkg) => [pkg, new RegExp(`^commands/${pkg}\\.(guidance|codes)\\.ts$`)]),
 
   // A command's definition (<name>.definition.ts) lives in its command's package.
   ['core', /^commands\/config(\.definition)?\.ts$/],
   // The SDK engines: each is the only code that imports its SDK set.
   ['engine', /^engine\//],
 
-  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|wallet-cache|cache-indexer|reader-cache-files|connector-api|dust-wait|fee-limits|tx-serde|sign-data|approval|dust-balancing-plan|dust-registration-plan|shielded-policy|wallet-session|sdk-layout|swap-offer|offer-envelope|open-offers|host)\.ts$/],
+  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|pkg|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|error-codes|wallet-cache|cache-indexer|reader-cache-files|connector-api|dust-wait|fee-limits|tx-serde|sign-data|approval|dust-balancing-plan|dust-registration-plan|shielded-policy|wallet-session|sdk-layout|swap-offer|offer-envelope|open-offers|host)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
   ['dev', /^ui\/(test-create-prompt|dev-keys)\.ts$/],
 

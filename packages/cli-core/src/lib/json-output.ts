@@ -10,8 +10,6 @@
 // benefit — stderr output doesn't pollute the stdout JSON that consumers
 // actually read. Simpler to not suppress stderr at all.
 
-import { type ErrorCode } from './exit-codes.ts';
-
 /**
  * Write a structured JSON result to stdout: the CLI's way to write a call's
  * result (its context's output). Always outputs a single line of JSON
@@ -26,7 +24,7 @@ export function writeJsonResult(data: Readonly<Record<string, unknown>>): void {
  * Write a structured JSON error to stdout.
  * Format: { "error": true, "code": "ERROR_CODE", "message": "..." }
  */
-export function writeJsonError(err: Error, errorCode: ErrorCode, exitCode: number): void {
+export function writeJsonError(err: Error, errorCode: string, exitCode: number): void {
   const json = JSON.stringify({
     error: true,
     code: errorCode,
