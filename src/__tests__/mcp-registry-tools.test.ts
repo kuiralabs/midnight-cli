@@ -1,9 +1,11 @@
 // The MCP server's tools from a registry (src/lib/mcp/registry-tools.ts),
 // with test commands whose handlers record the argv they get and write
-// their JSON result through their call's context, as a command does.
+// their JSON result through their call's context, as a command does; and the
+// installed tools' descriptions.
 
 import { describe, expect, it } from 'vitest';
 import { createCommandRegistry, type CommandDefinition, type ToolDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { installedCommands } from '../lib/installed-commands.ts';
 import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from '../lib/mcp/registry-tools.ts';
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { MINIMAL_FLAG, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
@@ -17,6 +19,7 @@ const command = (tools: ToolDefinition[]): CommandDefinition => ({
   flags: [{ name: 'size', takesValue: true, agent: { type: 'string', description: 'How big' } }, { name: 'go', takesValue: false, subcommands: ['make'], agent: { notForAgents: 'a person\'s' } }],
   needsWalletSdk: false,
   shell: {},
+  errors: { codes: [] },
   load: async () => ({
     default: async (args: ParsedArgs, ctx: CallContext) => {
       received.push(structuredClone(args));
@@ -75,5 +78,21 @@ describe('the MCP server\'s tools from a registry', () => {
 
   it('confirms the definition\'s text when there is no check', async () => {
     expect(await confirmationFor(findTool(registry, 'thing_plain')!, {}, ownCall())).toBe('Plain thing');
+  });
+});
+
+describe("the installed tools' descriptions", () => {
+  it("end with their command's own codes, then its sets of codes by name", () => {
+    const description = (name: string): string => listedTools(installedCommands).find((tool) => tool.name === name)!.description;
+    const own = (name: string): string => findTool(installedCommands, name)!.description;
+    expect(description('midnight_tx_status')).toBe(`${own('midnight_tx_status')} Errors: NETWORK_ERROR; and the network codes (see the skill).`);
+    expect(description('midnight_config_get')).toBe(`${own('midnight_config_get')} Errors: the network codes (see the skill).`);
+    expect(description('midnight_transfer')).toBe(`${own('midnight_transfer')} Errors: CHAIN_CLOCK_BEHIND; and the network, wallet, engine, sync, paying, offers and chain codes (see the skill).`);
+    // Every installed tool says what it can fail with in at most 20 words.
+    for (const tool of listedTools(installedCommands).slice(0, -1)) {
+      expect(tool.description.split(' Errors: ')[1]!.split(/\s+/).length + 1, tool.name).toBeLessThanOrEqual(20);
+    }
+    // The server's own confirm tool runs no command: its description stays as it is.
+    expect(listedTools(installedCommands).at(-1)).toStrictEqual(CONFIRM_TOOL);
   });
 });

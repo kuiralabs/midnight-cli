@@ -8,12 +8,16 @@
 // The shell's dispatch and flag checks, help, the manual, the intro and the
 // MCP server's tools all read the registry; each tool's schema is generated
 // from what it takes and its command's flags. A package is installed with its
-// commands and its agent guidance.
+// commands and its agent guidance. Each definition declares the error codes
+// its command can end with beyond those every command can, which help, the
+// manuals and the tools' descriptions show; scripts/code-reach.mjs holds the
+// declaration to what the command's modules can throw.
 
 import { getValidNetworkNames } from './network.ts';
 import { FULL_FLAG, type ParsedArgs } from './argv.ts';
 import { type PackageGuidance, type ToolsTableRow, assertDistinctPlaces } from './agent-guidance.ts';
-import type { CodeDefinition, CodeRegistry } from './error-codes.ts';
+import type { CodeDefinition, CodeRegistry, CodeSet } from './error-codes.ts';
+import { EVERY_COMMAND } from '../commands/core.codes.ts';
 import type { CallContext, CommandOutcome } from './call-context.ts';
 import type { Host } from './host.ts';
 
@@ -185,6 +189,20 @@ export interface ToolDefinition {
   readonly order: number;
 }
 
+/** An exit code a command's handler returns without throwing, and when. */
+export interface DeclaredOutcome {
+  readonly exitCode: number;
+  readonly when: string;
+}
+
+/** What a command can end with besides success and what every command can (EVERY_COMMAND). */
+export interface CommandErrors {
+  /** Its error codes: each a code of its own, or a named set of codes a package exports beside its codes (READS_CHAIN). */
+  readonly codes: readonly (string | CodeSet)[];
+  /** The exit codes its handler returns without throwing (a test run whose tests failed). */
+  readonly outcomes?: readonly DeclaredOutcome[];
+}
+
 export interface CommandDefinition {
   readonly name: string;
   /** Its place among the installed commands, which help lists in this order; a plugin takes one no other command has. */
@@ -200,6 +218,8 @@ export interface CommandDefinition {
   /** It starts the wallet SDK: the shell gives it more heap and exits when it ends. */
   readonly needsWalletSdk: boolean;
   readonly shell: ShellCall;
+  /** The error codes it can end with beyond EVERY_COMMAND's, and its exit codes without an error. */
+  readonly errors: CommandErrors;
   /** Loads the handler. A static `import()` specifier, so the MCP server's bundler finds it. */
   readonly load: () => Promise<CommandModule>;
   /** Present when the MCP server can load its handler; its tools, possibly none. */
@@ -409,6 +429,63 @@ export function toolArgv(tool: RegisteredTool, params: Readonly<Record<string, u
   return { command: tool.command.name, subcommand, positionals, flags };
 }
 
+/** The error codes a definition declares, its sets spread, in the order declared. */
+export function declaredCodes(command: CommandDefinition): string[] {
+  return command.errors.codes.flatMap((entry) => (typeof entry === 'string' ? [entry] : [...entry.codes]));
+}
+
+/** The named sets a definition declares, in the order declared. */
+export function declaredSets(command: CommandDefinition): CodeSet[] {
+  return command.errors.codes.flatMap((entry) => (typeof entry === 'string' ? [] : [entry]));
+}
+
+/** Every set the commands declare, each once, in the order first declared; refuses two sets of one name. */
+export function declaredCodeSets(registry: Pick<CommandRegistry, 'commands'>): CodeSet[] {
+  const byName = new Map<string, CodeSet>();
+  for (const set of registry.commands.flatMap(declaredSets)) {
+    const known = byName.get(set.name);
+    if (known !== undefined && known.codes.join() !== set.codes.join()) throw new CommandDefinitionError(`two code sets are named "${set.name}"`);
+    byName.set(set.name, known ?? set);
+  }
+  return [...byName.values()];
+}
+
+/** Refuses a declared code no installed package defines, one every command can end with, and one declared twice. */
+function checkDeclaredCodes(command: CommandDefinition, defined: ReadonlyMap<string, CodeDefinition>): void {
+  const every: readonly string[] = EVERY_COMMAND;
+  const declared = declaredCodes(command);
+  assertUnique(declared, `${command.name}: error code`);
+  for (const code of declared) {
+    if (every.includes(code)) throw new CommandDefinitionError(`${command.name} declares ${code}, which every command can end with`);
+    if (!defined.has(code)) throw new CommandDefinitionError(`${command.name} declares ${code}, which no installed package defines`);
+  }
+}
+
+/** The definitions of `codes`, in the code tables' order; a code no installed package defines is left out. */
+function inTableOrder(registry: Pick<CommandRegistry, 'code'>, codes: readonly string[]): CodeDefinition[] {
+  return codes
+    .flatMap((code) => registry.code(code) ?? [])
+    .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER) || a.code.localeCompare(b.code));
+}
+
+/** The definitions of every error code a command declares, its sets' included, in the code tables' order. */
+export function commandErrorCodes(registry: Pick<CommandRegistry, 'code'>, command: CommandDefinition): CodeDefinition[] {
+  return inTableOrder(registry, declaredCodes(command));
+}
+
+/** The definitions of a command's own codes, those it declares in no set, in the code tables' order. */
+export function commandOwnCodes(registry: Pick<CommandRegistry, 'code'>, command: CommandDefinition): CodeDefinition[] {
+  return inTableOrder(registry, command.errors.codes.filter((entry): entry is string => typeof entry === 'string'));
+}
+
+/** The exit codes a command can end with: success, its own codes' and every command's, and its outcomes', ascending. */
+export function commandExitCodes(registry: Pick<CommandRegistry, 'code'>, command: CommandDefinition): number[] {
+  const own = commandErrorCodes(registry, command).map((definition) => definition.exitCode);
+  const every = EVERY_COMMAND.flatMap((code) => registry.code(code)?.exitCode ?? []);
+  const outcomes = (command.errors.outcomes ?? []).map((outcome) => outcome.exitCode);
+  return [...new Set([0, ...own, ...every, ...outcomes])].sort((a, b) => a - b);
+}
+
 /** Collects definitions into a registry, refusing any that contradict each other. */
 export function createCommandRegistry(
   commands: readonly CommandDefinition[],
@@ -478,6 +555,8 @@ export function createPackageRegistry(
   const codes = packages.flatMap((pkg) => pkg.codes ?? []);
   assertUnique(codes.map((definition) => definition.code), 'error code');
   const byCode = new Map(codes.map((definition) => [definition.code, definition]));
+  for (const command of commands) checkDeclaredCodes(command, byCode);
+  declaredCodeSets({ commands });
   return { ...createCommandRegistry(commands, globalFlags, globalFlagsHelp), packages, code: (code) => byCode.get(code) };
 }
 
@@ -487,7 +566,7 @@ export function flagsSectionLines(command: CommandDefinition): string[] {
     typeof entry === 'string' ? [entry] : command.flags.find((flag) => flag.name === entry.flag)?.help ?? []);
 }
 
-/** One command as `help <command>`, `help --json` and `manual` show it: its help, the Flags section rendered. */
+/** One command as `help <command>`, `help --json` and `manual` show it: its help, the Flags section rendered, its codes. */
 export interface CommandHelpSpec {
   readonly name: string;
   readonly description: string;
@@ -495,10 +574,20 @@ export interface CommandHelpSpec {
   readonly flags?: readonly string[];
   readonly examples?: readonly string[];
   readonly jsonFields?: Readonly<Record<string, string>>;
+  /** Every error code it declares, its sets' included, in the code tables' order, each with its exit code and summary. */
+  readonly errorCodes: readonly CodeDefinition[];
+  /** Its own codes: those it declares in no set. */
+  readonly ownCodes: readonly CodeDefinition[];
+  /** The names of the sets of codes it declares, in the order declared. */
+  readonly errorSets: readonly string[];
+  /** The exit codes it can end with without an error besides success (a test run whose tests failed). */
+  readonly outcomes: readonly DeclaredOutcome[];
+  /** Every exit code it can end with, ascending. */
+  readonly exitCodes: readonly number[];
 }
 
 /** Every command help lists, in the registry's order; a command with no help is left out. */
-export function commandHelpSpecs(registry: Pick<CommandRegistry, 'commands'>): CommandHelpSpec[] {
+export function commandHelpSpecs(registry: Pick<CommandRegistry, 'commands' | 'code'>): CommandHelpSpec[] {
   return registry.commands.flatMap((command) => {
     const help = command.help;
     if (help === undefined) return [];
@@ -509,6 +598,11 @@ export function commandHelpSpecs(registry: Pick<CommandRegistry, 'commands'>): C
       ...(help.flags === undefined ? {} : { flags: flagsSectionLines(command) }),
       ...(help.examples === undefined ? {} : { examples: [...help.examples] }),
       ...(help.jsonFields === undefined ? {} : { jsonFields: { ...help.jsonFields } }),
+      errorCodes: commandErrorCodes(registry, command),
+      ownCodes: commandOwnCodes(registry, command),
+      errorSets: declaredSets(command).map((set) => set.name),
+      outcomes: [...(command.errors.outcomes ?? [])],
+      exitCodes: commandExitCodes(registry, command),
     }];
   });
 }

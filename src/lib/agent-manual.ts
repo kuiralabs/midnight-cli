@@ -5,6 +5,7 @@
 // registry's tools, each in the topic group its package's row names.
 
 import { PKG_VERSION } from './pkg.ts';
+import { codeSetLines } from './code-tables.ts';
 import { GuidanceError, assembleGuidance, sectionsWithAdded, type GuidancePiece, type ToolsTableRow } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
 import { commandHelpSpecs, type CommandRegistry, type RegisteredTool } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 
@@ -121,7 +122,7 @@ examples, and JSON field schemas.
   };
 }
 
-/** Each command's usage and the fields of its --json output, from the registry. */
+/** Each command's usage, its own error codes and the sets of codes it declares, and the fields of its --json output, from the registry. */
 function jsonSchemas(registry: CommandRegistry): GuidancePiece {
   const schemas = commandHelpSpecs(registry).filter((spec) => spec.jsonFields).map((spec) => {
     const fields = Object.entries(spec.jsonFields!)
@@ -130,6 +131,7 @@ function jsonSchemas(registry: CommandRegistry): GuidancePiece {
     return `
   ${spec.name}
   ${spec.usage}
+  Error codes: ${spec.ownCodes.map((definition) => definition.code).join(', ') || 'none'}; sets: ${spec.errorSets.join(', ') || 'none'}
   JSON fields:
 ${fields}`;
   }).join('\n');
@@ -320,6 +322,11 @@ resources/list. Ground responses in these instead of training-data guesses.
     },
 ];
 
+/** After the code table, each set of codes the commands declare, by the name the commands and the tools' descriptions give it. */
+function codeSets(registry: CommandRegistry): GuidancePiece {
+  return { text: 'agent-manual', section: 'error-codes', order: 999, body: `\n  Sets of codes (a command's "sets", a tool's "Errors" name them):\n${codeSetLines(registry, 4).map((line) => `${line}\n`).join('')}` };
+}
+
 /** The tools behind the two-step confirmation, one per line, from the registry. */
 function confirmedTools(registry: CommandRegistry): GuidancePiece {
   const names = registry.tools.filter((tool) => tool.confirmation !== undefined).map((tool) => `  ${tool.name}\n`);
@@ -328,7 +335,7 @@ function confirmedTools(registry: CommandRegistry): GuidancePiece {
 
 /** The `help --agent` manual for the installed packages. */
 export function agentManual(registry: CommandRegistry): string {
-  const pieces = [overview(), jsonSchemas(registry), mcpTools(registry), confirmedTools(registry), ...SHELL_PIECES, ...registry.packages.flatMap((pkg) => pkg.guidance.pieces)];
+  const pieces = [overview(), jsonSchemas(registry), mcpTools(registry), codeSets(registry), confirmedTools(registry), ...SHELL_PIECES, ...registry.packages.flatMap((pkg) => pkg.guidance.pieces)];
   const added = registry.packages.flatMap((pkg) => pkg.guidance.sections ?? []);
   return assembleGuidance('agent-manual', sectionsWithAdded('agent-manual', AGENT_MANUAL_SECTIONS, added), pieces);
 }

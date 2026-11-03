@@ -39,3 +39,15 @@ export function defineCodes<const T extends readonly CodeDefinition[]>(codes: T)
   }
   return codes;
 }
+
+/** A set of codes a package exports for command definitions to declare at once, with the plain name help and the tools' descriptions show it by. */
+export interface CodeSet {
+  /** One word: "the network codes". */
+  readonly name: string;
+  readonly codes: readonly string[];
+}
+
+/** A named set of codes, as a package exports it beside its codes. */
+export function defineCodeSet(name: string, codes: readonly string[]): CodeSet {
+  return { name, codes };
+}

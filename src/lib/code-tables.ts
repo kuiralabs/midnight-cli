@@ -1,11 +1,14 @@
 // The tables of error codes that are not agent guidance, from the installed
 // packages' code definitions: docs/JSON_CONTRACT.md's, which
 // scripts/write-readme-commands.ts writes between its markers (a test fails
-// when the file differs), and the lines of `mn manual`'s EXIT CODES block.
+// when the file differs), the lines of `mn manual`'s EXIT CODES block (its
+// codes and the sets of them commands declare), and a command's Errors
+// section in `mn help <command>` and the manual.
 // The manual's and the skills' rows come from each package's guidance
 // (codeGuidancePieces).
 
-import type { CommandRegistry } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { declaredCodeSets, type CommandHelpSpec, type CommandRegistry } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { EVERY_COMMAND } from '@kuiralabs/midnight-cli-core/commands/core.codes';
 import type { CodeDefinition } from '@kuiralabs/midnight-cli-core/lib/error-codes';
 import { wrapWords } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
 import { withGeneratedBlock } from './readme-commands.ts';
@@ -39,7 +42,7 @@ export function withJsonContractCodeTable(doc: string, table: string): string {
 // `mn manual`'s list: the code in a column of 31 (the longest code is 30), its
 // exit code, then the meaning from column 38 of an 80-column page.
 const MANUAL_CODE_INDENT = 4;
-const MANUAL_CODE_COLUMN = 31;
+const CODE_COLUMN = 31;
 const MANUAL_MEANING_COLUMN = 38;
 const MANUAL_WIDTH = 80;
 
@@ -47,7 +50,35 @@ const MANUAL_WIDTH = 80;
 export function manualCodeLines(registry: Pick<CommandRegistry, 'packages'>, styleCode: (code: string) => string = (code) => code): string[] {
   return installedCodes(registry).flatMap(({ code, exitCode, summary }) => {
     const [first = '', ...rest] = wrapWords(summary, MANUAL_WIDTH - MANUAL_MEANING_COLUMN);
-    const head = `${' '.repeat(MANUAL_CODE_INDENT)}${styleCode(code)}${' '.repeat(Math.max(1, MANUAL_CODE_COLUMN - code.length))}${exitCode}  `;
+    const head = `${' '.repeat(MANUAL_CODE_INDENT)}${styleCode(code)}${' '.repeat(Math.max(1, CODE_COLUMN - code.length))}${exitCode}  `;
     return [head + first, ...rest.map((line) => ' '.repeat(MANUAL_MEANING_COLUMN) + line)];
   });
+}
+
+/** Names in a sentence: "network", "network and wallet", "network, wallet and engine". */
+export function listedNames(names: readonly string[]): string {
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+/**
+ * A command's Errors section, each line from `indent`: one per code of its own
+ * (the code in the manual's column, its exit code, its meaning), one per exit
+ * code it ends with without an error, then the sets of codes it declares and
+ * the codes every command can end with; `styleCode` colours a code.
+ */
+export function commandCodeLines(spec: Pick<CommandHelpSpec, 'ownCodes' | 'errorSets' | 'outcomes'>, indent: number, styleCode: (code: string) => string = (code) => code): string[] {
+  const pad = ' '.repeat(indent);
+  const sets = spec.errorSets.length === 0 ? '' : `the ${listedNames(spec.errorSets)} codes, and `;
+  return [
+    ...spec.ownCodes.map(({ code, exitCode, summary }) => `${pad}${styleCode(code)}${' '.repeat(Math.max(1, CODE_COLUMN - code.length))}${exitCode}  ${summary}`),
+    ...spec.outcomes.map(({ exitCode, when }) => `${pad}${'(no error)'.padEnd(CODE_COLUMN)}${exitCode}  ${when}`),
+    `${pad}Also: ${sets}${EVERY_COMMAND.join(', ')} (mn manual lists them all).`,
+  ];
+}
+
+/** Each set of codes the commands declare, one line each from `indent`: its name, then its codes. */
+export function codeSetLines(registry: Pick<CommandRegistry, 'commands'>, indent: number): string[] {
+  const sets = declaredCodeSets(registry);
+  const width = Math.max(...sets.map((set) => set.name.length)) + 2;
+  return sets.map((set) => `${' '.repeat(indent)}${set.name.padEnd(width)}${set.codes.join(', ')}`);
 }

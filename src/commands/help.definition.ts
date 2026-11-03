@@ -1,6 +1,7 @@
 // The `help` command, described once.
 
 import type { CommandDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
 
 export const helpDefinition: CommandDefinition = {
   name: 'help',
@@ -23,5 +24,6 @@ export const helpDefinition: CommandDefinition = {
   intro: { brief: 'Show command usage', order: 18 },
   needsWalletSdk: false,
   shell: {},
+  errors: { codes: [RESOLVES_NETWORK] },
   load: () => import('./help.ts'),
 };

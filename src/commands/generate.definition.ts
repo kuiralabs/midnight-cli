@@ -2,6 +2,8 @@
 
 import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { CommandDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { LOADS_ENGINE, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { OPENS_WALLET } from './wallet.codes.ts';
 
 export const generateDefinition: CommandDefinition = {
   name: 'generate',
@@ -58,6 +60,7 @@ export const generateDefinition: CommandDefinition = {
   },
   needsWalletSdk: false,
   shell: { notice: '\n  Note: "midnight generate" is deprecated.\n  Use "midnight wallet generate <name>" instead.\n\n' },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, 'NETWORK_ERROR'] },
   load: () => import('./generate.ts'),
   // The MCP server can load generate's handler, but its tool was removed (agents use midnight_wallet_generate).
   mcp: { tools: [] },

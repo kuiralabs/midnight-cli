@@ -11,7 +11,7 @@ import { bold, dim, teal, yellow, white } from '@kuiralabs/midnight-cli-core/ui/
 import { helpSpecs, type CommandSpec } from './help.ts';
 import { PKG_NAME, PKG_VERSION, PKG_REPOSITORY_URL } from '../lib/pkg.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
-import { manualCodeLines } from '../lib/code-tables.ts';
+import { codeSetLines, commandCodeLines, manualCodeLines } from '../lib/code-tables.ts';
 
 const SECTION_BAR = '═'.repeat(63);
 const RULE = '─'.repeat(64);
@@ -56,6 +56,9 @@ function renderCommandSection(spec: CommandSpec): string {
       lines.push(`    ${dim('$')} ${dim(example)}`);
     }
   }
+  lines.push('');
+  lines.push(`  ${bold('ERRORS')}`);
+  lines.push(...commandCodeLines(spec, 4, yellow));
   return lines.join('\n');
 }
 
@@ -214,6 +217,9 @@ export function buildManual(): string {
   out.push(`  ${bold('Stable error code strings')} (in JSON ${yellow('--json')} error output), with the exit code of each:`);
   // Every installed package's codes, from their definitions.
   out.push(...manualCodeLines(installedCommands, yellow));
+  out.push('');
+  out.push(`  ${bold('Sets of codes')} (a command's ERRORS names those it can end with):`);
+  out.push(...codeSetLines(installedCommands, 4));
 
   // ── Troubleshooting ───────────────────────────────────────
   out.push(subhead('TROUBLESHOOTING'));

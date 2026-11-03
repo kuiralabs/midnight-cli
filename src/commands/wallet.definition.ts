@@ -2,6 +2,8 @@
 
 import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
 import { type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { LOADS_ENGINE, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { OPENS_WALLET } from './wallet.codes.ts';
 
 export const walletDefinition: CommandDefinition = {
   name: 'wallet',
@@ -113,6 +115,7 @@ export const walletDefinition: CommandDefinition = {
   intro: { brief: 'Manage named wallets', order: 1 },
   needsWalletSdk: false,
   shell: { protectors: true },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, 'NETWORK_ERROR'] },
   load: () => import('./wallet.ts'),
   mcp: {
     tools: [

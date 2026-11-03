@@ -9,3 +9,7 @@ export function findLayeringProblems(): { unhomed: string[]; violations: { home:
 export const WORKSPACE_PACKAGES: readonly { name: string; dir: string; prefix?: string }[];
 /** A file's path as the homes read it: under its package's source folder, or under src/. */
 export function relOf(file: string): string;
+/** A file's imports: each specifier, its line, whether it is an `import()`, and whether it brings in types alone. */
+export function importsOf(file: string): { specifier: string; line: number; dynamic: boolean; typeOnly: boolean }[];
+/** The source file an import of `file` names; undefined for an outside package. */
+export function importTarget(file: string, specifier: string): string | undefined;

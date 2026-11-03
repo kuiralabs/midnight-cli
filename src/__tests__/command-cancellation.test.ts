@@ -33,6 +33,7 @@ import cacheCommand from '../commands/cache.ts';
 import testCommand from '../commands/test.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
+import { declaredOutcome } from './helpers/expect-declared.ts';
 import { testHost } from './helpers/test-host.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
@@ -97,7 +98,7 @@ describe('quick commands: a cancelled call never starts', () => {
   it.each(quick)('%s: CANCELLED, with no result and nothing written', async (...argv) => {
     const definition = installedCommands.find(argv[0]!)!;
     const { default: handler } = await definition.load();
-    await expect(cliCall(handler as CommandHandler, parseArgs([...argv]), { signal: cancelled() })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(declaredOutcome(argv[0]!, cliCall(handler as CommandHandler, parseArgs([...argv]), { signal: cancelled() }))).rejects.toMatchObject({ code: 'CANCELLED' });
     expect(io.stdout()).toBe('');
     // Nothing under the state root: no config, no wallet, nothing cleared or created.
     expect(fs.existsSync(stateRootIn(home))).toBe(false);
@@ -126,7 +127,7 @@ describe('balance passes the signal into its reads', () => {
     const call = new AbortController();
     void indexer.sentAtLeast(1).then(() => call.abort());
 
-    await expect(cliCall(balanceCommand, parseArgs(['balance', address, '--json', ...endpoints()]), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(declaredOutcome('balance', cliCall(balanceCommand, parseArgs(['balance', address, '--json', ...endpoints()]), { signal: call.signal }))).rejects.toMatchObject({ code: 'CANCELLED' });
 
     expect(io.stdout()).toBe('');
     expect(indexer.subscriptions).toHaveLength(1);
@@ -138,7 +139,7 @@ describe('balance passes the signal into its reads', () => {
     const call = new AbortController();
     void indexer.sentAtLeast(1).then(() => call.abort());
 
-    await expect(cliCall(balanceCommand, parseArgs(['balance', '--seed', 'bb'.repeat(32), '--network', 'undeployed', '--json', ...endpoints()]), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(declaredOutcome('balance', cliCall(balanceCommand, parseArgs(['balance', '--seed', 'bb'.repeat(32), '--network', 'undeployed', '--json', ...endpoints()]), { signal: call.signal }))).rejects.toMatchObject({ code: 'CANCELLED' });
 
     expect(io.stdout()).toBe('');
     await expect.poll(() => indexer.subscriptions[0]?.closedEarly).toBe(true);
@@ -168,7 +169,7 @@ describe('inspect-cost passes the signal into its reads', () => {
     let cancelledAt = 0;
     server.once('request', () => { cancelledAt = Date.now(); call.abort(); });
 
-    await expect(cliCall(inspectCostCommand, parseArgs(['inspect-cost', '--network', 'undeployed', '--indexer-ws', `ws://127.0.0.1:${port}/api/v4/graphql/ws`, '--json']), { signal: call.signal }))
+    await expect(declaredOutcome('inspect-cost', cliCall(inspectCostCommand, parseArgs(['inspect-cost', '--network', 'undeployed', '--indexer-ws', `ws://127.0.0.1:${port}/api/v4/graphql/ws`, '--json']), { signal: call.signal })))
       .rejects.toMatchObject({ code: 'CANCELLED' });
 
     // Before the signal reached it, it waited out the probe's own 5s time limit, then went on to read the parameters.
@@ -202,7 +203,7 @@ describe('status passes the signal into its probes', () => {
     // Cancelled once all four requests are out.
     const fetches = hangingFetch((started) => { if (started === 4) call.abort(); });
 
-    await expect(cliCall(statusCommand, parseArgs(['status', '--network', 'preprod', '--json']), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(declaredOutcome('status', cliCall(statusCommand, parseArgs(['status', '--network', 'preprod', '--json']), { signal: call.signal }))).rejects.toMatchObject({ code: 'CANCELLED' });
 
     // The dashboard's two, and the network's faucet and explorer (its indexer and node need a Blockfrost project id, which the test gives none).
     expect(fetches.signals).toHaveLength(4);
@@ -222,7 +223,7 @@ describe('status passes the signal into its probes', () => {
     // Cancelled once the first view is drawn, its last line the dashboard's link: the watch has begun.
     const drawn = setInterval(() => { if (io.stderr().includes('Dashboard:')) { clearInterval(drawn); call.abort(); } }, 10);
 
-    await expect(cliCall(statusCommand, parseArgs(['status', '--network', 'preprod', '--watch']), { signal: call.signal })).resolves.toEqual({ exitCode: 0 });
+    await expect(declaredOutcome('status', cliCall(statusCommand, parseArgs(['status', '--network', 'preprod', '--watch']), { signal: call.signal }))).resolves.toEqual({ exitCode: 0 });
     clearInterval(drawn);
   });
 });
@@ -233,7 +234,7 @@ describe('commands that write check the call before each whole write', () => {
     const prompter = cancellingPrompter(call);
     const target = path.join(home, 'legacy-wallet.json');
 
-    await expect(cliCall(generateCommand, parseArgs(['generate', '--output', target, '--json']), { signal: call.signal, host: testHost({ prompter }) })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(declaredOutcome('generate', cliCall(generateCommand, parseArgs(['generate', '--output', target, '--json']), { signal: call.signal, host: testHost({ prompter }) }))).rejects.toMatchObject({ code: 'CANCELLED' });
 
     expect(prompter.asked).toBeGreaterThan(0);
     expect(fs.existsSync(target)).toBe(false);
@@ -245,7 +246,7 @@ describe('commands that write check the call before each whole write', () => {
     const call = new AbortController();
     const prompter = cancellingPrompter(call);
 
-    await expect(cliCall(walletCommand, parseArgs(['wallet', 'generate', 'alice', '--json']), { signal: call.signal, host: testHost({ prompter }) })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(declaredOutcome('wallet', cliCall(walletCommand, parseArgs(['wallet', 'generate', 'alice', '--json']), { signal: call.signal, host: testHost({ prompter }) }))).rejects.toMatchObject({ code: 'CANCELLED' });
 
     expect(prompter.asked).toBeGreaterThan(0);
     expect(fs.existsSync(path.join(stateRootIn(home), 'wallets', 'alice.json'))).toBe(false);
@@ -268,7 +269,7 @@ describe('commands that write check the call before each whole write', () => {
       const files = [plainWallet('alice', 'a1'), plainWallet('bob', 'b2')];
       const call = new AbortController();
 
-      await expect(cliCall(walletCommand, parseArgs(['wallet', 'protect', '--json']), { signal: call.signal, host: testHost({ prompter: cancellingPrompter(call) }) })).rejects.toMatchObject({ code: 'CANCELLED' });
+      await expect(declaredOutcome('wallet', cliCall(walletCommand, parseArgs(['wallet', 'protect', '--json']), { signal: call.signal, host: testHost({ prompter: cancellingPrompter(call) }) }))).rejects.toMatchObject({ code: 'CANCELLED' });
 
       expect(await Promise.all(files.map(isSealed))).toEqual([false, false]);
       expect(io.stdout()).toBe('');
@@ -301,10 +302,10 @@ describe('commands that write check the call before each whole write', () => {
         },
       });
 
-      await expect(cliCall(walletCommand, parseArgs(['wallet', 'protect', '--json']), {
+      await expect(declaredOutcome('wallet', cliCall(walletCommand, parseArgs(['wallet', 'protect', '--json']), {
         signal: call.signal,
         protectors: [protector('grant', () => call.abort()), protector('later')],
-      })).rejects.toMatchObject({ code: 'CANCELLED' });
+      }))).rejects.toMatchObject({ code: 'CANCELLED' });
 
       expect(ran).toEqual(['grant']);
       expect(io.stdout()).toBe('');
@@ -319,7 +320,7 @@ describe('commands that write check the call before each whole write', () => {
     fs.writeFileSync(cache, '{}');
     const call = new AbortController();
 
-    await expect(cliCall(cacheCommand, parseArgs(['cache', 'clear', '--wallet', 'alice', '--network', 'undeployed', '--json']), { signal: call.signal, host: testHost({ prompter: cancellingPrompter(call) }) })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(declaredOutcome('cache', cliCall(cacheCommand, parseArgs(['cache', 'clear', '--wallet', 'alice', '--network', 'undeployed', '--json']), { signal: call.signal, host: testHost({ prompter: cancellingPrompter(call) }) }))).rejects.toMatchObject({ code: 'CANCELLED' });
 
     expect(fs.existsSync(cache)).toBe(true);
     expect(io.stdout()).toBe('');
@@ -348,7 +349,7 @@ describe('test create, cancelled while Claude scaffolds', () => {
     process.env.PATH = `${bin}${path.delimiter}${originalPath}`;
 
     const call = new AbortController();
-    const run = cliCall(testCommand, parseArgs(['test', 'create', '--path', dapp, '--goal', 'count up', '--json']), { signal: call.signal });
+    const run = declaredOutcome('test', cliCall(testCommand, parseArgs(['test', 'create', '--path', dapp, '--goal', 'count up', '--json']), { signal: call.signal }));
     await expect.poll(() => fs.existsSync(started) && fs.readFileSync(started, 'utf8').trim() !== '', { timeout: 10_000 }).toBe(true);
     const pid = Number(fs.readFileSync(started, 'utf8').trim());
     call.abort();

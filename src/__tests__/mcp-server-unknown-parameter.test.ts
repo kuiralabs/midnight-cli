@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { expectDeclaredToolResult } from './helpers/expect-declared.ts';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const TSX = path.join(REPO, 'node_modules', '.bin', 'tsx');
@@ -33,7 +34,10 @@ afterAll(async () => {
 
 const call = async (name: string, args: Record<string, unknown>) => {
   const result = await client.callTool({ name, arguments: args });
-  return { isError: result.isError === true, body: JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as Record<string, unknown> };
+  const body = JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as Record<string, unknown>;
+  // The confirm tool is the server's own: called here with no token it issued, it runs no command.
+  if (name !== 'midnight_confirm_operation') expectDeclaredToolResult(name, body);
+  return { isError: result.isError === true, body };
 };
 
 // A port nothing listens on: an endpoint a call is given never reaches a chain.

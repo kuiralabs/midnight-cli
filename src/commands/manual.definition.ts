@@ -1,6 +1,7 @@
 // The `manual` command, described once.
 
 import type { CommandDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
 
 export const manualDefinition: CommandDefinition = {
   name: 'manual',
@@ -39,5 +40,6 @@ export const manualDefinition: CommandDefinition = {
   intro: { brief: 'Full reference manual', order: 19 },
   needsWalletSdk: false,
   shell: {},
+  errors: { codes: [RESOLVES_NETWORK] },
   load: () => import('./manual.ts'),
 };

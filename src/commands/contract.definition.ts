@@ -2,6 +2,9 @@
 
 import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 import type { HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands/chain.codes';
+import { OPENS_WALLET } from './wallet.codes.ts';
 
 /** The subcommands that reach a chain: inspect reads only the compiled contract (--path, --managed, --name). */
 const ON_CHAIN: readonly string[] = ['deploy', 'call', 'state'];
@@ -154,6 +157,7 @@ export const contractDefinition: CommandDefinition = {
   intro: { brief: 'Inspect, deploy, call contracts', order: 10 },
   needsWalletSdk: true,
   shell: { payer: true },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'NO_NODE_RUNTIME', 'NO_PAYER'] },
   load: () => import('./contract.ts'),
   mcp: {
     tools: [

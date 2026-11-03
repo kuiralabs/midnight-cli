@@ -1,6 +1,8 @@
 // The `inspect-cost` command, described once.
 
 import type { CommandDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { LOADS_ENGINE, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands/chain.codes';
 
 export const inspectCostDefinition: CommandDefinition = {
   name: 'inspect-cost',
@@ -38,6 +40,7 @@ export const inspectCostDefinition: CommandDefinition = {
   intro: { brief: 'Display block limits', order: 6 },
   needsWalletSdk: false,
   shell: {},
+  errors: { codes: [RESOLVES_NETWORK, LOADS_ENGINE, READS_CHAIN, READS_OFFERS, 'NETWORK_ERROR'] },
   load: () => import('./inspect-cost.ts'),
   mcp: {
     tools: [

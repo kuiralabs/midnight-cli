@@ -27,7 +27,7 @@
 // Usage: node scripts/check-process-safety.mjs
 // Exits 1 when a library does something the rules above forbid, or any code
 // breaks the module-state rules, and the allowlist doesn't name it. Imported, it exports
-// findViolations.
+// findViolations, and codeOnly, which blanks strings and comments.
 
 import { readFileSync } from 'node:fs';
 import { relative, resolve, dirname, join } from 'node:path';
@@ -112,7 +112,7 @@ const SETTER_NAME = /^(set\w*Source|set\w*Sink|setPrompter|setEngineLoader)$/;
  * with spaces, keeping line breaks. The code inside a template's `${…}` is
  * kept and scanned like any other code.
  */
-function codeOnly(source) {
+export function codeOnly(source) {
   let out = '';
   let i = 0;
   const blank = (s) => s.replace(/[^\n]/g, ' ');

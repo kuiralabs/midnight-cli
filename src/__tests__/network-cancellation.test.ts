@@ -19,6 +19,7 @@ import { servePayerAt } from '../lib/serve-payer.ts';
 import type { CommandHandler } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
+import { declaredOutcome } from './helpers/expect-declared.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 import { testHost } from './helpers/test-host.ts';
 
@@ -114,7 +115,7 @@ describe('cancelled while the network has not answered', () => {
     let cancelledAt = 0;
     onFirstRequest = () => { cancelledAt = Date.now(); call.abort(); };
 
-    const outcome = await cliCall(handler as CommandHandler, args, { signal: call.signal, payer: servePayerAt(0) }).then(() => 'finished', (err: unknown) => err);
+    const outcome = await declaredOutcome(args.command!, cliCall(handler as CommandHandler, args, { signal: call.signal, payer: servePayerAt(0) })).then(() => 'finished', (err: unknown) => err);
 
     expect(requests, `it reached the network: ${String(outcome instanceof Error ? outcome.message : outcome)}`).toBeGreaterThan(0);
     expect(outcome).toMatchObject({ code: 'CANCELLED' });

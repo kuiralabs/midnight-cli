@@ -3,11 +3,20 @@
 // is defined twice.
 
 import { describe, expect, it } from 'vitest';
-import { CodeDefinitionError, defineCodes } from '@kuiralabs/midnight-cli-core/lib/error-codes';
-import { CommandDefinitionError, createCommandRegistry, createPackageRegistry, type CommandPackage } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { CodeDefinitionError, defineCodeSet, defineCodes } from '@kuiralabs/midnight-cli-core/lib/error-codes';
+import {
+  CommandDefinitionError,
+  commandErrorCodes,
+  commandExitCodes,
+  createCommandRegistry,
+  createPackageRegistry,
+  declaredCodes,
+  type CommandDefinition,
+  type CommandPackage,
+} from '@kuiralabs/midnight-cli-core/lib/command-definition';
 import { classifyError, ERROR_CODES } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
-import { coreCodes } from '@kuiralabs/midnight-cli-core/commands/core.codes';
-import { chainCodes } from '@kuiralabs/midnight-chain/commands/chain.codes';
+import { coreCodes, ENGINE_SYNC, EVERY_COMMAND } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { chainCodes, READS_CHAIN } from '@kuiralabs/midnight-chain/commands/chain.codes';
 import { installedCommands } from '../lib/installed-commands.ts';
 
 /** A package with no commands and no guidance: only codes. */
@@ -70,5 +79,61 @@ describe('the package registry\'s codes', () => {
 
   it('knows no code in a registry made from bare commands', () => {
     expect(createCommandRegistry([], []).code('INVALID_ARGS')).toBeUndefined();
+  });
+});
+
+/** A command that declares `codes` (and `outcomes`), in a package of its own. */
+const declaring = (codes: CommandDefinition['errors']['codes'], outcomes?: CommandDefinition['errors']['outcomes']): CommandDefinition => ({
+  name: 'declaring',
+  order: 9_999,
+  flags: [],
+  needsWalletSdk: false,
+  shell: {},
+  errors: { codes, ...(outcomes === undefined ? {} : { outcomes }) },
+  load: async () => ({ default: async () => {} }),
+});
+const withCommand = (command: CommandDefinition, codes: CommandPackage['codes'] = []): CommandPackage => ({ name: 'declaring', commands: [command], guidance: { pieces: [] }, codes });
+
+describe('the codes a definition declares', () => {
+  it('spreads the sets it names, in the order declared', () => {
+    expect(declaredCodes(declaring([READS_CHAIN, 'CHAIN_CLOCK_BEHIND', ENGINE_SYNC]))).toStrictEqual([
+      'UNSUPPORTED_LEDGER', 'LOCAL_STACK_UNREACHABLE', 'CHAIN_CLOCK_BEHIND', 'NETWORK_ERROR', 'SYNC_TIMEOUT', 'STALE_CACHE',
+    ]);
+  });
+
+  it('refuses a code no installed package defines', () => {
+    expect(() => createPackageRegistry([codesOnly('core', coreCodes), withCommand(declaring(['PLUGIN_ORACLE_DOWN']))], []))
+      .toThrow(new CommandDefinitionError('declaring declares PLUGIN_ORACLE_DOWN, which no installed package defines'));
+    // Installed with the plugin that defines it, the same declaration holds.
+    expect(createPackageRegistry([codesOnly('core', coreCodes), withCommand(declaring(['PLUGIN_ORACLE_DOWN']), PLUGIN_CODES)], []).code('PLUGIN_ORACLE_DOWN')).toBe(PLUGIN_CODES[0]);
+  });
+
+  it('refuses a code every command can end with, and a code declared twice', () => {
+    expect(() => createPackageRegistry([codesOnly('core', coreCodes), withCommand(declaring(['CANCELLED']))], []))
+      .toThrow(new CommandDefinitionError('declaring declares CANCELLED, which every command can end with'));
+    expect(() => createPackageRegistry([codesOnly('core', coreCodes), withCommand(declaring([ENGINE_SYNC, 'NETWORK_ERROR']))], []))
+      .toThrow(new CommandDefinitionError('declaring: error code "NETWORK_ERROR" is defined twice'));
+  });
+
+  it("shows a command's codes in the code tables' order, and its exit codes from them, every command's and its outcomes", () => {
+    const registry = createPackageRegistry([codesOnly('core', coreCodes), codesOnly('chain', chainCodes), withCommand(declaring([READS_CHAIN, ENGINE_SYNC], [{ exitCode: 9, when: 'it says so' }]))], []);
+    const command = registry.find('declaring')!;
+    expect(commandErrorCodes(registry, command).map((definition) => [definition.code, definition.exitCode])).toStrictEqual([
+      ['NETWORK_ERROR', 4], ['SYNC_TIMEOUT', 4], ['STALE_CACHE', 6], ['UNSUPPORTED_LEDGER', 4], ['LOCAL_STACK_UNREACHABLE', 4],
+    ]);
+    // Success, its codes' (4, 6), every command's (INVALID_ARGS 2, CANCELLED 7, the rest 1), and its outcome's.
+    expect(commandExitCodes(registry, command)).toStrictEqual([0, 1, 2, 4, 6, 7, 9]);
+  });
+
+  it('refuses two sets of codes with one name', () => {
+    const other = defineCodeSet('chain', ['CHAIN_CLOCK_BEHIND']);
+    expect(() => createPackageRegistry([codesOnly('core', coreCodes), codesOnly('chain', chainCodes), withCommand(declaring([READS_CHAIN])), {
+      name: 'second', commands: [{ ...declaring([other]), name: 'second', order: 9_998 }], guidance: { pieces: [] },
+    }], [])).toThrow(new CommandDefinitionError('two code sets are named "chain"'));
+  });
+
+  it('names five codes every command can end with, all defined by core', () => {
+    expect([...EVERY_COMMAND]).toStrictEqual(['INVALID_ARGS', 'CANCELLED', 'UNKNOWN', 'UNSUPPORTED_NODE', 'NO_STATE_ROOT']);
+    for (const code of EVERY_COMMAND) expect(coreCodes.some((definition) => definition.code === code), code).toBe(true);
   });
 });

@@ -239,6 +239,18 @@ export declare const coreCodes: readonly [
         readonly recovery: "Cancel the offer first (`mn swap cancel`), or wait until it is taken.";
     }
 ];
+export declare const EVERY_COMMAND: readonly [
+    "INVALID_ARGS",
+    "CANCELLED",
+    "UNKNOWN",
+    "UNSUPPORTED_NODE",
+    "NO_STATE_ROOT"
+];
+export declare const RESOLVES_NETWORK: import("../lib/error-codes.ts").CodeSet;
+export declare const LOADS_ENGINE: import("../lib/error-codes.ts").CodeSet;
+export declare const ENGINE_SYNC: import("../lib/error-codes.ts").CodeSet;
+export declare const PAYS: import("../lib/error-codes.ts").CodeSet;
+export declare const READS_OFFERS: import("../lib/error-codes.ts").CodeSet;
 ```
 
 ## `@kuiralabs/midnight-cli-core/commands/core.guidance`
@@ -518,7 +530,7 @@ export declare function getValidConfigKeys(): readonly string[];
 ```ts
 import { type ParsedArgs } from "./argv.ts";
 import { type PackageGuidance } from "./agent-guidance.ts";
-import type { CodeDefinition, CodeRegistry } from "./error-codes.ts";
+import type { CodeDefinition, CodeRegistry, CodeSet } from "./error-codes.ts";
 import type { CallContext, CommandOutcome } from "./call-context.ts";
 import type { Host } from "./host.ts";
 export interface ParamSchema {
@@ -617,6 +629,14 @@ export interface ToolDefinition {
     readonly confirmation?: ToolConfirmation;
     readonly order: number;
 }
+export interface DeclaredOutcome {
+    readonly exitCode: number;
+    readonly when: string;
+}
+export interface CommandErrors {
+    readonly codes: readonly (string | CodeSet)[];
+    readonly outcomes?: readonly DeclaredOutcome[];
+}
 export interface CommandDefinition {
     readonly name: string;
     readonly order: number;
@@ -630,6 +650,7 @@ export interface CommandDefinition {
     };
     readonly needsWalletSdk: boolean;
     readonly shell: ShellCall;
+    readonly errors: CommandErrors;
     readonly load: () => Promise<CommandModule>;
     readonly mcp?: {
         readonly tools: readonly ToolDefinition[];
@@ -662,6 +683,12 @@ export declare class CommandDefinitionError extends Error {
 }
 export declare function toolInputSchema(command: CommandDefinition, tool: ToolDefinition, globalFlags: readonly FlagDefinition[]): ToolInputSchema;
 export declare function toolArgv(tool: RegisteredTool, params: Readonly<Record<string, unknown>>): ParsedArgs;
+export declare function declaredCodes(command: CommandDefinition): string[];
+export declare function declaredSets(command: CommandDefinition): CodeSet[];
+export declare function declaredCodeSets(registry: Pick<CommandRegistry, "commands">): CodeSet[];
+export declare function commandErrorCodes(registry: Pick<CommandRegistry, "code">, command: CommandDefinition): CodeDefinition[];
+export declare function commandOwnCodes(registry: Pick<CommandRegistry, "code">, command: CommandDefinition): CodeDefinition[];
+export declare function commandExitCodes(registry: Pick<CommandRegistry, "code">, command: CommandDefinition): number[];
 export declare function createCommandRegistry(commands: readonly CommandDefinition[], globalFlags: readonly FlagDefinition[], globalFlagsHelp?: readonly GlobalFlagHelp[]): CommandRegistry;
 export declare function createPackageRegistry(packages: readonly CommandPackage[], globalFlags: readonly FlagDefinition[], globalFlagsHelp?: readonly GlobalFlagHelp[]): CommandRegistry;
 export declare function flagsSectionLines(command: CommandDefinition): string[];
@@ -672,8 +699,13 @@ export interface CommandHelpSpec {
     readonly flags?: readonly string[];
     readonly examples?: readonly string[];
     readonly jsonFields?: Readonly<Record<string, string>>;
+    readonly errorCodes: readonly CodeDefinition[];
+    readonly ownCodes: readonly CodeDefinition[];
+    readonly errorSets: readonly string[];
+    readonly outcomes: readonly DeclaredOutcome[];
+    readonly exitCodes: readonly number[];
 }
-export declare function commandHelpSpecs(registry: Pick<CommandRegistry, "commands">): CommandHelpSpec[];
+export declare function commandHelpSpecs(registry: Pick<CommandRegistry, "commands" | "code">): CommandHelpSpec[];
 export declare function introBriefs(registry: Pick<CommandRegistry, "commands">): [
     name: string,
     brief: string
@@ -1216,6 +1248,11 @@ export declare class CodeDefinitionError extends Error {
     constructor(message: string);
 }
 export declare function defineCodes<const T extends readonly CodeDefinition[]>(codes: T): T;
+export interface CodeSet {
+    readonly name: string;
+    readonly codes: readonly string[];
+}
+export declare function defineCodeSet(name: string, codes: readonly string[]): CodeSet;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/error-trim`

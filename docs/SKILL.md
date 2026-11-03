@@ -182,6 +182,18 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 | `CANCELLED` | Operation was aborted (SIGINT, or the MCP call was cancelled). | A transaction already submitted may still have landed: read the state first (`midnight_grant_status`, `midnight_balance`). Don't retry without confirming with the user. |
 | `UNKNOWN` | Error didn't match any known classifier. | Surface the message to the user. If reproducible, a new code may be warranted. |
 
+A tool's description ends with the codes it can fail with: its own, and sets of them by name. The sets:
+
+| Set | Codes |
+|---|---|
+| network | `AMBIGUOUS_LOCAL_STACKS`, `BLOCKFROST_PROJECT_ID_REQUIRED`, `BLOCKFROST_PROJECT_ID_REJECTED`, `BLOCKFROST_LIMIT_REACHED`, `ENDPOINT_SHUT_DOWN` |
+| wallet | `WALLET_NOT_FOUND`, `WRONG_PASSPHRASE`, `PASSPHRASE_REQUIRED` |
+| engine | `OTHER_SDK_SET`, `MIXED_SDK_LAYOUT` |
+| sync | `NETWORK_ERROR`, `SYNC_TIMEOUT`, `STALE_CACHE` |
+| paying | `TX_REJECTED`, `STALE_UTXO`, `INVALID_DUST_PROOF`, `PROOF_TIMEOUT`, `PROOF_FAILURE`, `DUST_REQUIRED`, `DUST_GENERATING`, `INSUFFICIENT_BALANCE`, `OFFER_COINS_IN_USE` |
+| offers | `NOT_AN_OFFER`, `TERMS_MISMATCH` |
+| chain | `UNSUPPORTED_LEDGER`, `LOCAL_STACK_UNREACHABLE` |
+
 ## When to use which network
 
 - **Developing a contract?** → `undeployed` (a ledger-9 stack the user runs locally). No first-sync cost; everything is local.

@@ -38,6 +38,13 @@ describe('the layering', () => {
     expect(importRule('commands/dev.ts', 'commands/contract.ts')).toBe('command → contract command');
   });
 
+  it("lets a definition name the code sets of a package below it, and no package above's", () => {
+    expect(importRule('commands/balance.definition.ts', 'commands/core.codes.ts')).toBeUndefined();
+    expect(importRule('commands/balance.definition.ts', 'commands/chain.codes.ts')).toBeUndefined();
+    expect(importRule('lib/command-definition.ts', 'commands/core.codes.ts')).toBeUndefined();
+    expect(importRule('commands/balance.definition.ts', 'commands/grant.codes.ts')).toBe('wallet → grant');
+  });
+
   it('lets only the shell\'s list of engines reach an engine, and an engine reach only core and chain', () => {
     expect(importRule('lib/installed-engines.ts', 'engine/rc/index.ts')).toBeUndefined();
     expect(importRule('lib/engine.ts', 'engine/rc/index.ts')).toBe('core → engine (reach it through lib/installed-engines.ts)');

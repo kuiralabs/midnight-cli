@@ -11,3 +11,5 @@ export function findViolations(
   src?: string,
   allowedSetters?: Record<string, Record<string, string>>,
 ): { file: string; line: number; rule: string; name?: string }[];
+/** The source with string, template-text, regex and comment contents blanked, every offset and line kept. */
+export function codeOnly(source: string): string;

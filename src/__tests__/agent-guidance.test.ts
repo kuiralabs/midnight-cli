@@ -133,6 +133,7 @@ describe('createPackageRegistry', () => {
     flags: [],
     needsWalletSdk: false,
     shell: {},
+    errors: { codes: [] },
     load: async () => ({ default: async () => {} }),
     mcp: { tools: tools.map((tool, i) => ({ name: tool, description: tool, params: [], argv: { flags: [] }, order: name.length * 100 + i })) },
   });

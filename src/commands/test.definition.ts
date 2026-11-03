@@ -1,6 +1,10 @@
 // The `test` command, described once.
 
 import { type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands/chain.codes';
+import { EXIT_GENERAL_ERROR } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { OPENS_WALLET } from './wallet.codes.ts';
 
 export const testDefinition: CommandDefinition = {
   name: 'test',
@@ -171,6 +175,11 @@ export const testDefinition: CommandDefinition = {
   intro: { brief: 'Run dApp E2E tests', order: 17 },
   needsWalletSdk: true,
   shell: {},
+  errors: {
+    codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'NO_NODE_RUNTIME'],
+    // `test run` returns it when a test fails, with the results as its JSON (COMMAND_FAILED under MCP).
+    outcomes: [{ exitCode: EXIT_GENERAL_ERROR, when: 'A test failed' }],
+  },
   load: () => import('./test.ts'),
   mcp: {
     tools: [

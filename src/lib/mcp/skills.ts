@@ -7,7 +7,7 @@
 // docs/SKILL-CORE.md and docs/SKILL.md, the copies the README links to.
 
 import { assembleGuidance, sectionsWithAdded, type GuidancePiece } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
-import type { CommandRegistry } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { declaredCodeSets, type CommandRegistry } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 
 /** skill/core's sections, in order. */
 export const SKILL_CORE_SECTIONS = ['title', 'intent-routing', 'safety-rules', 'when-to-fetch'] as const;
@@ -267,8 +267,8 @@ const confirmedTools = (registry: CommandRegistry): string =>
 
 /**
  * What the skills say from the registry: the safety rule on the confirmed
- * tools, in both, and in skill/full the commands no tool runs, which the user
- * runs in a terminal.
+ * tools, in both, and in skill/full the sets of codes the tools' descriptions
+ * name and the commands no tool runs, which the user runs in a terminal.
  */
 function registryPieces(registry: CommandRegistry): GuidancePiece[] {
   const confirmation = `- **Some tools use a two-step confirmation token**: ${confirmedTools(registry)}. The first call returns a pending token + description and does nothing else; show the description verbatim, and call \`midnight_confirm_operation({ token })\` only after the user explicitly says yes. (\`midnight_wallet_generate\` asks only with \`force: true\`, which replaces a wallet.)`;
@@ -276,6 +276,12 @@ function registryPieces(registry: CommandRegistry): GuidancePiece[] {
   return [
     { text: 'skill-core', section: 'safety-rules', order: 500, body: `${confirmation} Full flow in \`midnight-wallet://skill/full\`.\n\n` },
     { text: 'skill-full', section: 'safety-rules', order: 500, body: `${confirmation}\n\n` },
+    {
+      text: 'skill-full',
+      section: 'error-recovery',
+      order: 999,
+      body: `\nA tool's description ends with the codes it can fail with: its own, and sets of them by name. The sets:\n\n| Set | Codes |\n|---|---|\n${declaredCodeSets(registry).map((set) => `| ${set.name} | ${set.codes.map((code) => `\`${code}\``).join(', ')} |\n`).join('')}`,
+    },
     {
       text: 'skill-full',
       section: 'what-you-can-do',
