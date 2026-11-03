@@ -1,6 +1,6 @@
 {
   "name": "@kuiralabs/midnight-engine-beta",
-  "version": "0.1.0-rc.0",
+  "version": "0.1.0-rc.1",
   "type": "module",
   "description": "The Midnight CLI's engine for the SDK's beta set that stagenet runs (wallet SDK 5.0 beta split packages, ledger 9 rc.3, midnight-js 5 beta): everything the CLI does with that SDK set, behind the engine interface",
   "license": "Apache-2.0",
@@ -36,7 +36,7 @@
     "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@kuiralabs/midnight-chain": "0.1.0-rc.0",
+    "@kuiralabs/midnight-chain": "0.1.0-rc.1",
     "@kuiralabs/midnight-cli-core": "0.1.0-rc.0",
     "@midnight-ntwrk/compact-js": "2.5.5-rc.7",
     "@midnight-ntwrk/compact-runtime": "0.18.0-rc.1",

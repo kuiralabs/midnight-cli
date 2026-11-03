@@ -1,6 +1,6 @@
 {
   "name": "midnight-wallet-cli",
-  "version": "0.6.0-rc.11",
+  "version": "0.6.0-rc.12",
   "type": "module",
   "description": "Git-style CLI wallet for the Midnight blockchain",
   "license": "Apache-2.0",
@@ -67,10 +67,10 @@
   "dependencies": {
     "@kuiralabs/midnight-account": "0.2.0-rc.0",
     "@kuiralabs/midnight-account-chain": "0.3.0-rc.0",
-    "@kuiralabs/midnight-chain": "0.1.0-rc.0",
+    "@kuiralabs/midnight-chain": "0.1.0-rc.1",
     "@kuiralabs/midnight-cli-core": "0.1.0-rc.0",
-    "@kuiralabs/midnight-engine-beta": "0.1.0-rc.0",
-    "@kuiralabs/midnight-engine-rc": "0.1.0-rc.0",
+    "@kuiralabs/midnight-engine-beta": "0.1.0-rc.1",
+    "@kuiralabs/midnight-engine-rc": "0.1.0-rc.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@scure/bip39": "^2.0.1",
     "ws": "^8.19.0"

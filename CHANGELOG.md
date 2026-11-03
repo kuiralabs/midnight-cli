@@ -4,10 +4,16 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0-rc.12] - 2026-11-03
+
 ### Added
 
 - **`midnight tx status <hash or identifier>`: what became of a transaction**, from the indexer: its block (height, hash, time), the fee it paid in DUST (exact, and in specks), and its result (`SUCCESS`, `PARTIAL_SUCCESS` with each segment, or `FAILURE`). It takes the transaction's hash or any of its identifiers, which is what mn prints as `txHash` after a submit. The indexer lists only finalized transactions, so one it has is final; one it doesn't have is reported as `notFound` (not on chain yet, dropped, or never sent). `--wait` asks until it is listed, up to `--timeout` seconds (120 by default). MCP tool `midnight_tx_status`, read-only.
 - **Receipts in the results of the commands that submit.** `transfer`, `airdrop`, `dust register`, `swap take` and `swap cancel` wait up to 60 s for the indexer to list their transaction and add a `receipt` to their `--json` output (block, fee and result, as `tx status` gives them) and its block and fee to their text. If the indexer has not listed it by then, `receipt` is null and `receiptMissing` says why; the transaction is submitted either way.
+
+### Packages
+
+- `@kuiralabs/midnight-chain` 0.1.0-rc.1 (adds the transaction status and receipts), and `@kuiralabs/midnight-engine-rc` and `-beta` 0.1.0-rc.1 (no change but their chain dependency). `@kuiralabs/midnight-cli-core` stays 0.1.0-rc.0.
 
 ## [0.6.0-rc.11] - 2026-11-02
 
