@@ -86,7 +86,6 @@ export const ALLOWED_STATE = {
   'lib/chain-id.ts': { CHAIN_ID_MEMO: 'shared on purpose: the chain-id memo, by endpoint' },
   'lib/engine.ts': {
     loadedSet: 'shared on purpose: the SDK set this process loads, whichever host loads it (two WASM ledgers cannot share a process)',
-    bridged: "temporary until slice 6: the shell's host's engines, for the libraries that don't take their host's engines yet",
   },
   // The host source, set once by the host at start (handlers see it through the context).
   'lib/settings.ts': { source: 'shared on purpose: the host sets the settings source once' },

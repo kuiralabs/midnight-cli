@@ -3,7 +3,6 @@
 
 import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { resolveSeed } from '../lib/seed-resolver.ts';
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { keyValue, divider, formatAddress } from '@kuiralabs/midnight-cli-core/ui/format';
 import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
@@ -21,7 +20,7 @@ export default async function addressCommand(args: ParsedArgs, ctx: CallContext)
   }
 
   const networkName = resolveNetworkName({ args, configDir: root });
-  const address = (await engineFor(networkName, root)).keys.unshieldedAddress(seedBuffer, networkName, keyIndex);
+  const address = (await ctx.host.engines.for(networkName)).keys.unshieldedAddress(seedBuffer, networkName, keyIndex);
   const derivationPath = `m/44'/2400'/0'/NightExternal/${keyIndex}`;
 
   // JSON mode

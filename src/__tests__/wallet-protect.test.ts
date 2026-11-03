@@ -20,6 +20,7 @@ import { accountProtector } from '../lib/grant/account-protector.ts';
 import type { WalletProtector } from '../lib/wallet-protector.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 import { cliCall } from './helpers/cli-call.ts';
+import { testHost } from './helpers/test-host.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
@@ -58,7 +59,7 @@ describe('wallet protect', () => {
     const result = await protect();
     expect(isPassphraseSet(stateRootIn(home))).toBe(true);
     expect(result).toMatchObject({ sealed: ['alice', 'bob'], alreadySealed: [] });
-    expect((await loadWalletConfig(alice)).isSealed).toBe(true);
+    expect((await loadWalletConfig(alice, testHost().engines)).isSealed).toBe(true);
     expect(fs.readFileSync(alice, 'utf8')).not.toContain(SEED);
   });
 
@@ -74,7 +75,7 @@ describe('wallet protect', () => {
     const bob = plainWallet('bob');
     process.env[PASSPHRASE_ENV] = 'another passphrase entirely';
     await expect(protect()).rejects.toThrow(/Wrong passphrase/);
-    expect((await loadWalletConfig(bob)).isSealed).toBe(false);
+    expect((await loadWalletConfig(bob, testHost().engines)).isSealed).toBe(false);
   });
 
   it("seals each wallet's plain-text account too, and names one whose wallet is gone", async () => {

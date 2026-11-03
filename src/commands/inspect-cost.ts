@@ -8,7 +8,6 @@ import { bold, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { fetchLedgerParameters } from '../lib/chain-params.ts';
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { assertLedgerSupported, fetchProtocolVersion } from '@kuiralabs/midnight-chain/lib/ledger-guard';
 
 const UNITS: Record<string, string> = {
@@ -25,7 +24,7 @@ export default async function inspectCostCommand(args: ParsedArgs, ctx: CallCont
   // A ledger-8 chain's parameters aren't ledger-9 ones: refuse it like every other chain read.
   await assertLedgerSupported(networkName, config, fetchProtocolVersion, ctx.signal);
   const { height, parametersHex } = await fetchLedgerParameters(config.indexer, ctx.signal);
-  const limits = (await engineFor(networkName, root)).ledger.blockLimits(parametersHex);
+  const limits = (await ctx.host.engines.for(networkName)).ledger.blockLimits(parametersHex);
 
   // JSON mode
   if (hasFlag(args, 'json')) {

@@ -14,9 +14,10 @@ import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address
 import { PASSPHRASE_ENV, passphraseForNewSecret } from '../lib/passphrase.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped.
-const host = createHost();
+// The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
+const host = createHost({ engineLoader: loadInstalledEngine });
 
 const CHOSEN = 'correct horse battery staple';
 // The passphrase as a caller gets it: the first secret in a new home sets it.
@@ -42,7 +43,7 @@ afterEach(() => {
 
 describe('createWallet', () => {
   it('writes a sealed wallet that unlocks to its new mnemonic, and makes it active', async () => {
-    const created = await createWallet(stateRootIn(home), 'alice', walletSecretFrom(), PASSPHRASE);
+    const created = await createWallet(stateRootIn(home), 'alice', walletSecretFrom(), PASSPHRASE, await host.engines.any());
 
     expect(created.file).toBe(walletFilePath(stateRootIn(home), 'alice'));
     expect(created.mnemonic!.split(' ')).toHaveLength(24);
@@ -54,24 +55,24 @@ describe('createWallet', () => {
   });
 
   it('derives its addresses from a given mnemonic', async () => {
-    const created = await createWallet(stateRootIn(home), 'bob', walletSecretFrom({ mnemonic: MNEMONIC }), PASSPHRASE);
+    const created = await createWallet(stateRootIn(home), 'bob', walletSecretFrom({ mnemonic: MNEMONIC }), PASSPHRASE, await host.engines.any());
     expect(created.addresses).toEqual(deriveAllAddresses(Buffer.from(mnemonicToSeedSync(MNEMONIC))));
   });
 
   it('keeps a given seed and no mnemonic', async () => {
     const seed = Buffer.alloc(32, 2);
-    const created = await createWallet(stateRootIn(home), 'carol', walletSecretFrom({ seed }), PASSPHRASE);
+    const created = await createWallet(stateRootIn(home), 'carol', walletSecretFrom({ seed }), PASSPHRASE, await host.engines.any());
     const unlocked = await unlockWallet(created.file, { root: stateRootIn(home) , host});
     expect(unlocked.seed).toBe(seed.toString('hex'));
     expect(unlocked.mnemonic).toBeUndefined();
   });
 
   it('replaces an existing wallet only when asked', async () => {
-    const first = await createWallet(stateRootIn(home), 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 1) }), PASSPHRASE);
-    await expect(createWallet(stateRootIn(home), 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE)).rejects.toThrow(`Wallet file already exists: ${first.file}`);
+    const first = await createWallet(stateRootIn(home), 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 1) }), PASSPHRASE, await host.engines.any());
+    await expect(createWallet(stateRootIn(home), 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE, await host.engines.any())).rejects.toThrow(`Wallet file already exists: ${first.file}`);
     expect((await unlockWallet(first.file, { root: stateRootIn(home) , host})).seed).toBe(Buffer.alloc(32, 1).toString('hex'));
 
-    await createWallet(stateRootIn(home), 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE, { overwrite: true });
+    await createWallet(stateRootIn(home), 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE, await host.engines.any(), { overwrite: true });
     expect((await unlockWallet(first.file, { root: stateRootIn(home) , host})).seed).toBe(Buffer.alloc(32, 2).toString('hex'));
   });
 

@@ -5,7 +5,7 @@
 // what the file says, that the terms are the agreed ones, that the maker's
 // expiry hasn't passed, and that none of its coins is spent.
 
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { sdkSetOf, type Engine, type HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
 import type { NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { WalletSession } from '@kuiralabs/midnight-cli-core/lib/wallet-session';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
@@ -23,11 +23,11 @@ export interface MadeOffer {
 
 /**
  * Makes an offer with the session's wallet: its half of the swap, proved and
- * signed, recorded among the wallet's open offers (under the state root
- * `root`) so its later spends don't cancel it unawares.
+ * signed, read back by `engine` (the session network's), and recorded among
+ * the wallet's open offers (under the state root `root`) so its later spends
+ * don't cancel it unawares.
  */
-export async function makeOffer(session: WalletSession, root: string, walletAddress: string, terms: SwapTerms, expiresAt: Date, now: Date = new Date()): Promise<MadeOffer> {
-  const engine = await engineFor(session.network, root);
+export async function makeOffer(session: WalletSession, engine: Engine, root: string, walletAddress: string, terms: SwapTerms, expiresAt: Date, now: Date = new Date()): Promise<MadeOffer> {
   const tx = await session.makeOffer(terms.give, terms.want);
   const read = engine.ledger.readOffer(tx);
   const envelope: OfferEnvelope = { network: session.network, id: read.id, terms: read.terms, expiresAt, tx };
@@ -41,13 +41,13 @@ export interface ReadOffer {
   contents: OfferContents;
 }
 
-/** Reads an offer file's text for `network`, with the engine the config under the state root `root` gives it. Throws NotAnOfferError for anything that isn't one, or says other than its bytes. */
-export async function readOfferFile(root: string, text: string, network: NetworkName): Promise<ReadOffer> {
+/** Reads an offer file's text for `network`, with the engine of `engines` the config under the state root `root` gives it. Throws NotAnOfferError for anything that isn't one, or says other than its bytes. */
+export async function readOfferFile(root: string, text: string, network: NetworkName, engines: HostEngines): Promise<ReadOffer> {
   const envelope = decodeOfferEnvelope(text);
   if (envelope.network !== network) {
     throw new UsageError(`The offer is for ${envelope.network}, not ${network}: take it on ${envelope.network} (--network ${envelope.network}).`);
   }
-  const contents = (await engineFor(network, root)).ledger.readOffer(envelope.tx);
+  const contents = (await engines.load(sdkSetOf(network, root))).ledger.readOffer(envelope.tx);
   assertEnvelopeMatches(envelope, contents);
   return { envelope, contents };
 }

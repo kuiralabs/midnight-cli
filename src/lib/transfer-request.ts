@@ -6,7 +6,7 @@ import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { loadWalletConfig, resolveWalletPath, walletAddress, walletShieldedAddress, type UnlockHost, type WalletConfig } from './wallet-config.ts';
 import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import { engineFor, type EngineKeys } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { sdkSetOf, type EngineKeys } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { shieldedSyncEnabled, shieldedDisabledReason } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
 import { parseAmount } from '@kuiralabs/midnight-cli-core/lib/amount';
 import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
@@ -21,7 +21,7 @@ export interface TransferRequest {
   shielded: boolean;
 }
 
-/** `transfer <to> <amount> [--shielded] [--wallet] [--network]`, checked without touching the chain, against the wallets and config under the state root `root`; a sealed recipient wallet is unlocked through `host`. */
+/** `transfer <to> <amount> [--shielded] [--wallet] [--network]`, checked without touching the chain, against the wallets and config under the state root `root`; a sealed recipient wallet is unlocked through `host`, and the recipient checked by its engine for the network. */
 export async function resolveTransferRequest(args: ParsedArgs, root: string, host: UnlockHost): Promise<TransferRequest> {
   const recipientInput = args.subcommand;
   const amountStr = args.positionals[0];
@@ -47,7 +47,7 @@ export async function resolveTransferRequest(args: ParsedArgs, root: string, hos
   const recipientAddress = await resolveRecipient(recipientInput, args, shielded, root, host);
   const amountNight = parseAmount(amountStr);
   const walletPath = resolveWalletPath(root, getFlag(args, 'wallet'));
-  const walletConfig = await loadWalletConfig(walletPath);
+  const walletConfig = await loadWalletConfig(walletPath, host.engines);
   const networkName = resolveNetworkName({ args, configDir: root });
 
   if (shielded) {
@@ -55,7 +55,7 @@ export async function resolveTransferRequest(args: ParsedArgs, root: string, hos
       throw new Error(shieldedDisabledReason(networkName));
     }
   }
-  assertRecipient((await engineFor(networkName, root)).keys, recipientAddress, shielded, networkName);
+  assertRecipient((await host.engines.load(sdkSetOf(networkName, root))).keys, recipientAddress, shielded, networkName);
 
   return { walletPath, walletConfig, networkName, recipientAddress, amountNight, shielded };
 }

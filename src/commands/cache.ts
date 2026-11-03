@@ -5,7 +5,6 @@ import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/
 import { UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { clearWalletCache } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
 import { clearDustDirectCache, clearNativeDustCheckpoint, clearShieldedDirectCache } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { green } from '@kuiralabs/midnight-cli-core/ui/colors';
@@ -36,7 +35,7 @@ export default async function cacheCommand(args: ParsedArgs, ctx: CallContext): 
     const address = config.addresses[networkName];
     clearWalletCache(address, networkName, root);
     // Also clear the dust-direct cache for this wallet on this network.
-    const { keys } = await engineFor(networkName, root);
+    const { keys } = await ctx.host.engines.for(networkName);
     const dustPubkey = keys.dustPublicKeyHex(Buffer.from(config.seed, 'hex'));
     clearDustDirectCache(networkName, dustPubkey, root);
     clearNativeDustCheckpoint(networkName, dustPubkey, root);

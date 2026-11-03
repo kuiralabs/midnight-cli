@@ -13,7 +13,7 @@ import { startServeOrReuse } from '../serve-manager.ts';
 import { OWN_COMMAND_DUST_WAIT_MS } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
 import { startBuild } from './build-manager.ts';
 import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { sdkSetOf } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 /**
  * Run all prep steps defined in the config, in order.
@@ -117,7 +117,7 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
 
   // Check current balance — use fresh cache since localnet may have restarted
   callbacks.onMessage('Checking balance...');
-  const engine = await engineFor(network, ctx.root);
+  const engine = await ctx.host.engines.load(sdkSetOf(network, ctx.root));
   const stopListening = ctx.sdkWarnings.listen((_tag, msg) => {
     callbacks.onMessage(`SDK: ${msg}`);
   });
@@ -177,7 +177,7 @@ async function stepDust(config: DappTestConfig, ctx: PrepContext, callbacks: Pre
   // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
   const stopListening = ctx.sdkWarnings.listen(undefined);
   try {
-    const { dustAvailable } = await (await engineFor(network, ctx.root)).wallet.prepDust(
+    const { dustAvailable } = await (await ctx.host.engines.load(sdkSetOf(network, ctx.root))).wallet.prepDust(
       { seed: seedBuffer, root: ctx.root, notice: ctx.host.notice, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage },
       DUST_WAIT_TIMEOUT_MS,
     );

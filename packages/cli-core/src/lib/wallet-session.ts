@@ -11,7 +11,7 @@
 // writes retry). Until the session has built its first transaction, it meets
 // that by reopening the wallet and asking again, a few times.
 
-import { engineFor, type DAppConnector, type OpenedConnector, type TransactionDetail } from './engine.ts';
+import { sdkSetOf, type DAppConnector, type HostEngines, type OpenedConnector, type TransactionDetail } from './engine.ts';
 import type { NetworkConfig, NetworkName } from './network.ts';
 import type { NoticeSink } from './notices.ts';
 import { resolveNetwork } from './resolve-network.ts';
@@ -226,6 +226,8 @@ export interface OpenWalletSessionOptions {
   root: string;
   /** Where the wallet's lines for the person go (a cache it can't restore from, the connector's waits for Dust). */
   notice: NoticeSink;
+  /** The engines of the host the session opens in: the network's SDK set is loaded from them. */
+  engines: HostEngines;
   /** The network's endpoints; when absent, as a command without endpoint flags resolves them (the saved config, then the defaults). */
   networkConfig?: NetworkConfig;
   /** Whether to sync the shielded wallet; off where the network has no shielded faucet, unless forced. */
@@ -239,16 +241,16 @@ export interface OpenWalletSessionOptions {
 }
 
 /**
- * Opens a seed's wallet on a network: synced, its Dust ready. The host must
- * have installed its engine loader and settings first, as the CLI does at
- * start.
+ * Opens a seed's wallet on a network: synced, its Dust ready, with the
+ * network's engine from `options.engines`. The host must have installed its
+ * settings first, as the CLI does at start.
  */
 export async function openWalletSession(options: OpenWalletSessionOptions): Promise<WalletSession> {
   const { seed, network, root, signal } = options;
   throwIfCancelled(signal);
   const networkConfig = options.networkConfig
     ?? resolveNetwork({ args: { command: 'wallet-session', subcommand: '', positionals: [], flags: { network } }, configDir: root }).config;
-  const engine = await engineFor(network, root);
+  const engine = await options.engines.load(sdkSetOf(network, root));
   const open = () => engine.wallet.openConnector({
     seed,
     root,

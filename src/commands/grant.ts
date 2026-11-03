@@ -256,7 +256,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
           await addOwnerDevice(await ownerSession(), named.attestation);
           const added = identityCodeOf(request.code);
           devices.write([...known.filter((code) => identityCodeOf(code) !== added), added]);
-          const written = request.backup === undefined ? undefined : await exportAccount(recordsDir, target.network, passphrase, request.backup, { forDevice: named });
+          const written = request.backup === undefined ? undefined : await exportAccount(recordsDir, target.network, passphrase, request.backup, ctx.host.engines, { forDevice: named });
           spinner.stop('Device added');
           if (jsonMode) {
             ctx.output.result({ ...common, action: 'add', code: added, ...(written === undefined ? {} : { backup: written.file }) });
@@ -281,7 +281,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
       case 'export': {
         const { exportAccount } = await import('../lib/grant/account-backup.ts');
         const { unlockPassphrase } = await import('../lib/passphrase.ts');
-        const outcome = await exportAccount(recordsDir, target.network, await unlockPassphrase(ctx.host, target.root), request.file);
+        const outcome = await exportAccount(recordsDir, target.network, await unlockPassphrase(ctx.host, target.root), request.file, ctx.host.engines);
         spinner.stop('Written');
         if (jsonMode) {
           ctx.output.result({ ...common, address: outcome.contractAddress, file: outcome.file });

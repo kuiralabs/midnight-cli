@@ -72,14 +72,13 @@ async function handleUp(jsonMode: boolean, ctx: CallContext, docker: DockerCall)
         const { waitForAddressFunded } = await import('@kuiralabs/midnight-chain/lib/indexer-ready');
         const { waitForProofServerReady } = await import('@kuiralabs/midnight-chain/lib/proof-server-ready');
         const { getNetworkConfig } = await import('@kuiralabs/midnight-cli-core/lib/network');
-        const { engineFor } = await import('@kuiralabs/midnight-cli-core/lib/engine');
         const { GENESIS_SEED } = await import('@kuiralabs/midnight-cli-core/lib/constants');
 
         const netCfg = getNetworkConfig('undeployed');
         await waitForFirstBlock(netCfg.node, { timeoutMs: 30_000, signal: ctx.signal });
 
         spinner.update('Waiting for indexer to ingest genesis state...');
-        const genesisAddress = (await engineFor('undeployed', docker.root)).keys.unshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
+        const genesisAddress = (await ctx.host.engines.for('undeployed')).keys.unshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
         await waitForAddressFunded(netCfg.indexerWS, genesisAddress, { timeoutMs: 30_000, signal: ctx.signal });
 
         spinner.update('Waiting for proof server...');

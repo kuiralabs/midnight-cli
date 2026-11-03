@@ -7,7 +7,6 @@ import { saveShieldedAddress, unlockWallet } from '../lib/wallet-config.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { applyEndpointOverrides } from '@kuiralabs/midnight-cli-core/lib/network';
 import { resolveTransferRequest, type TransferRequest } from '../lib/transfer-request.ts';
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { nightToMicro } from '@kuiralabs/midnight-cli-core/lib/amount';
 import { header, keyValue, divider, formatAddress, successMessage } from '@kuiralabs/midnight-cli-core/ui/format';
 import { bold, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
@@ -50,7 +49,7 @@ async function unshieldedTransfer(
   const spinner = ctx.progress.start('Starting wallet...');
 
   try {
-    const result = await (await engineFor(networkName, root)).wallet.transfer({
+    const result = await (await ctx.host.engines.for(networkName)).wallet.transfer({
       root,
       notice: ctx.host.notice,
       seedBuffer,
@@ -150,7 +149,7 @@ async function shieldedTransfer(
   const spinner = ctx.progress.start('Syncing wallet...');
 
   try {
-    const txHash = await (await engineFor(networkName, root)).wallet.shieldedTransfer({
+    const txHash = await (await ctx.host.engines.for(networkName)).wallet.shieldedTransfer({
       seed: seedBuffer,
       root,
       notice: ctx.host.notice,

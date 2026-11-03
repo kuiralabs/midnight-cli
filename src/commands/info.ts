@@ -12,7 +12,7 @@ import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context'
 export default async function infoCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const root = ctx.config.paths.stateRoot;
   const resolvedPath = resolveWalletPath(root, getFlag(args, 'wallet'));
-  const config = await loadWalletConfig(resolvedPath);
+  const config = await loadWalletConfig(resolvedPath, ctx.host.engines);
   const activeNetwork = resolveNetworkName({ args, configDir: root });
   const activeAddress = await walletAddress(resolvedPath, activeNetwork, root, ctx.host);
 

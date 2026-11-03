@@ -21,8 +21,8 @@ export async function assertWalletCanPay({ network, root, host, networkConfig }:
   const walletConfig = await unlockWallet(resolveWalletPath(root, wallet), { root, host });
   const seedBuffer = Buffer.from(walletConfig.seed, 'hex');
   const address = walletConfig.addresses[network as NetworkName];
-  const { engineFor } = await import('@kuiralabs/midnight-cli-core/lib/engine');
-  const { wallet: repo } = await engineFor(network, root);
+  const { sdkSetOf } = await import('@kuiralabs/midnight-cli-core/lib/engine');
+  const { wallet: repo } = await host.engines.load(sdkSetOf(network, root));
 
   try {
     // Two cheap reads through the repo: no facade, no proof server, no strict

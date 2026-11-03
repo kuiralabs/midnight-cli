@@ -3,6 +3,7 @@
 // caller passes it in the call context: wallet never imports that domain.
 
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import type { HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { resolveWalletPath, unlockWallet, type UnlockHost } from './wallet-config.ts';
 
 /** What protecting one item did: sealed now, already sealed, or why it could not be. */
@@ -22,17 +23,16 @@ export interface WalletProtector {
   name: string;
   /**
    * Seals what it keeps under the state root `root` with `passphrase`. `coinKeyOf` gives the
-   * shielded coin public key of a wallet, by name.
+   * shielded coin public key of a wallet, by name; `engines` are the host's, for what the SDK decides.
    */
-  protect(root: string, passphrase: string, coinKeyOf: (wallet: string) => Promise<string>): Promise<ProtectorResult>;
+  protect(root: string, passphrase: string, coinKeyOf: (wallet: string) => Promise<string>, engines: HostEngines): Promise<ProtectorResult>;
 }
 
 /** The wallet command's call context: a command's, with the protectors `wallet protect` runs. */
 export type WalletCommandContext = CallContext<WalletProtector>;
 
-/** The shielded coin public key of the wallet `name` under the state root `root`, unlocked with mn's passphrase through `host`. */
+/** The shielded coin public key of the wallet `name` under the state root `root`, unlocked with mn's passphrase through `host` and derived by an engine of its. */
 export async function coinKeyOfWallet(root: string, host: UnlockHost, name: string): Promise<string> {
   // The engine loads the SDK, which the other wallet subcommands don't need: loaded here, not up front.
-  const { anyEngine } = await import('@kuiralabs/midnight-cli-core/lib/engine');
-  return (await anyEngine()).keys.shieldedCoinPublicKeyHex(Buffer.from((await unlockWallet(resolveWalletPath(root, name), { root, host })).seed, 'hex'));
+  return (await host.engines.any()).keys.shieldedCoinPublicKeyHex(Buffer.from((await unlockWallet(resolveWalletPath(root, name), { root, host })).seed, 'hex'));
 }

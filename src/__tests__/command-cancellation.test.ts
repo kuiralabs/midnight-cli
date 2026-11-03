@@ -262,7 +262,7 @@ describe('commands that write check the call before each whole write', () => {
         createdAt: '2026-10-31T00:00:00.000Z',
       }, path.join(stateRootIn(home), 'wallets', `${name}.json`));
     };
-    const isSealed = async (file: string): Promise<boolean> => (await loadWalletConfig(file)).isSealed === true;
+    const isSealed = async (file: string): Promise<boolean> => (await loadWalletConfig(file, testHost().engines)).isSealed === true;
 
     it('cancelled while the passphrase is asked for: no wallet is sealed', async () => {
       const files = [plainWallet('alice', 'a1'), plainWallet('bob', 'b2')];
@@ -279,7 +279,7 @@ describe('commands that write check the call before each whole write', () => {
       const files = [plainWallet('alice', 'a1'), plainWallet('bob', 'b2'), plainWallet('carol', 'c3')];
       const call = new AbortController();
 
-      const protecting = protectAllWallets(stateRootIn(home), PASSPHRASE, call.signal);
+      const protecting = protectAllWallets(stateRootIn(home), PASSPHRASE, testHost().engines, call.signal);
       // Lands while the first wallet is being sealed: after the first turn of the event loop, before the second.
       setImmediate(() => call.abort());
 
@@ -313,7 +313,7 @@ describe('commands that write check the call before each whole write', () => {
 
   it('cache clear --wallet: cancelled while the wallet is unlocked, it clears no cache', async () => {
     establishPassphrase(stateRootIn(home), PASSPHRASE);
-    const created = await createWallet(stateRootIn(home), 'alice', walletSecretFrom(), PASSPHRASE);
+    const created = await createWallet(stateRootIn(home), 'alice', walletSecretFrom(), PASSPHRASE, await testHost().engines.any());
     const cache = getCachePath(created.addresses.undeployed, 'undeployed', stateRootIn(home));
     fs.mkdirSync(path.dirname(cache), { recursive: true });
     fs.writeFileSync(cache, '{}');

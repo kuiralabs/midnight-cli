@@ -12,9 +12,10 @@ import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-war
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped.
-const host = createHost();
+// The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
+const host = createHost({ engineLoader: loadInstalledEngine });
 
 const scratch = { node: 'ws://localhost:29944', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws' };
 

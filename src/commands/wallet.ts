@@ -87,7 +87,7 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
   // Cancelled while the passphrase was asked for: no wallet is written, and no new passphrase saved.
   throwIfCancelled(ctx.signal);
   // Checked above: an existing wallet is replaced only with --force.
-  const created = await createWallet(root, name, secret, passphrase, { overwrite: hasFlag(args, 'force') });
+  const created = await createWallet(root, name, secret, passphrase, await ctx.host.engines.any(), { overwrite: hasFlag(args, 'force') });
   const { addresses, shieldedAddresses, mnemonic, file: savedPath } = created;
   const seedBuffer = created.seed;
   const activeAddress = addresses[networkName];
@@ -141,7 +141,7 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
 
 async function walletList(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const root = ctx.config.paths.stateRoot;
-  const wallets = await listWallets(root);
+  const wallets = await listWallets(root, ctx.host.engines);
   const networkName = resolveNetworkName({ args, configDir: root });
 
   if (hasFlag(args, 'json')) {
@@ -237,7 +237,7 @@ async function walletInfo(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const root = ctx.config.paths.stateRoot;
   const name = getFlag(args, 'wallet') ?? args.positionals[0] ?? getActiveWalletName(root);
   const walletPath = resolveWalletPath(root, name);
-  const config = await loadWalletConfig(walletPath);
+  const config = await loadWalletConfig(walletPath, ctx.host.engines);
   const isActive = name === getActiveWalletName(root);
   const networkName = resolveNetworkName({ args, configDir: root });
   const activeAddress = await walletAddress(walletPath, networkName, root, ctx.host);
@@ -393,14 +393,14 @@ async function walletProtect(args: ParsedArgs, ctx: WalletCommandContext): Promi
   const root = ctx.config.paths.stateRoot;
   const passphrase = await passphraseForNewSecret(ctx.host, root, { signal: ctx.signal });
   // Cancelled, it stops between wallets and before a protector, never in the middle of a file.
-  const report = await protectAllWallets(root, passphrase, ctx.signal);
+  const report = await protectAllWallets(root, passphrase, ctx.host.engines, ctx.signal);
   const sealed = report.filter((w) => w.sealedNow).map((w) => w.name);
   const alreadySealed = report.filter((w) => !w.sealedNow).map((w) => w.name);
   // What other domains keep for a wallet, sealed by the protectors the caller gave; each is told how to get a wallet's coin key.
   const results: Array<{ name: string; result: ProtectorResult }> = [];
   for (const protector of ctx.protectors ?? []) {
     throwIfCancelled(ctx.signal);
-    results.push({ name: protector.name, result: await protector.protect(root, passphrase, (wallet) => coinKeyOfWallet(root, ctx.host, wallet)) });
+    results.push({ name: protector.name, result: await protector.protect(root, passphrase, (wallet) => coinKeyOfWallet(root, ctx.host, wallet), ctx.host.engines) });
   }
   if (hasFlag(args, 'json')) {
     ctx.output.result({ sealed, alreadySealed, ...Object.fromEntries(results.map(({ name, result }) => [name, result.report])) });

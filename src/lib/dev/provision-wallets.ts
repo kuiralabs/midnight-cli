@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet, type UnlockHost } from '../wallet-config.ts';
 import { createWallet, walletFilePath, walletSecretFrom } from '../wallet-create.ts';
 import { passphraseForNewSecret } from '../passphrase.ts';
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { sdkSetOf } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { checkBalance } from '@kuiralabs/midnight-chain/lib/balance-subscription';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
@@ -54,7 +54,7 @@ function walletSteps(root: string, host: UnlockHost, network: NetworkConfig, sdk
     generate: (name, signal) => generateWallet(root, host, name, signal),
     airdrop: (name, amountNight, signal) => airdropToWallet(root, host, network, name, amountNight, signal, sdkWarnings),
     registerDust: (name, signal) => registerWalletDust(root, host, network, name, signal, sdkWarnings),
-    needsDust: (name, signal) => walletNeedsDust(root, network, name, signal),
+    needsDust: (name, signal) => walletNeedsDust(root, host, network, name, signal),
   };
 }
 
@@ -151,22 +151,22 @@ async function generateWallet(root: string, host: UnlockHost, name: string, sign
   const passphrase = await passphraseForNewSecret(host, root);
   // Cancelled while the passphrase was asked for: no wallet is written.
   throwIfCancelled(signal);
-  await createWallet(root, name, walletSecretFrom(), passphrase);
+  await createWallet(root, name, walletSecretFrom(), passphrase, await host.engines.any());
 }
 
 async function airdropToWallet(root: string, host: UnlockHost, network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
-  const recipientAddress = (await loadWalletConfig(resolveWalletPath(root, name))).addresses.undeployed;
+  const recipientAddress = (await loadWalletConfig(resolveWalletPath(root, name), host.engines)).addresses.undeployed;
   // dev's wallets live on the local chain.
-  await (await engineFor('undeployed', root)).wallet.airdrop({ networkConfig: network, recipientAddress, amountNight, signal, sdkWarnings, root, notice: host.notice });
+  await (await host.engines.load(sdkSetOf('undeployed', root))).wallet.airdrop({ networkConfig: network, recipientAddress, amountNight, signal, sdkWarnings, root, notice: host.notice });
 }
 
-async function walletNeedsDust(root: string, network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<boolean> {
-  const address = (await loadWalletConfig(resolveWalletPath(root, name))).addresses.undeployed;
+async function walletNeedsDust(root: string, host: UnlockHost, network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<boolean> {
+  const address = (await loadWalletConfig(resolveWalletPath(root, name), host.engines)).addresses.undeployed;
   const { registeredUtxos, unregisteredUtxos } = await checkBalance(address, network.indexerWS, undefined, signal);
   return registeredUtxos === 0 && unregisteredUtxos > 0;
 }
 
 async function registerWalletDust(root: string, host: UnlockHost, network: NetworkConfig, name: string, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
   const { seed } = await unlockWallet(resolveWalletPath(root, name), { root, host });
-  await (await engineFor('undeployed', root)).wallet.registerDust(Buffer.from(seed, 'hex'), network, { signal, sdkWarnings, root, notice: host.notice });
+  await (await host.engines.load(sdkSetOf('undeployed', root))).wallet.registerDust(Buffer.from(seed, 'hex'), network, { signal, sdkWarnings, root, notice: host.notice });
 }

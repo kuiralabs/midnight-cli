@@ -46,7 +46,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
       const session = await payerFor('swap make', ctx).connect(target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal, SHIELDED);
       try {
         const spinner = spinnerFor('Making the offer (proving its half)...');
-        const made = await makeOffer(session, root, address, terms, expiresAt, now);
+        const made = await makeOffer(session, await ctx.host.engines.for(session.network), root, address, terms, expiresAt, now);
         const file = out ?? `offer-${made.envelope.id.slice(0, 16)}.json`;
         writeFileSync(file, made.file, { flag: 'wx' });
         spinner.stop('Offer made');

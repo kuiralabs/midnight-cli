@@ -10,6 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { WebSocket } from 'ws';
 import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { promptApproval } from '@kuiralabs/midnight-cli-core/lib/approval';
 import { NoPassphraseError, PASSPHRASE_ENV, establishPassphrase, unlockPassphrase } from '../lib/passphrase.ts';
@@ -33,9 +34,9 @@ function answering(answer: string): Prompter & { questions: string[] } {
   };
 }
 
-/** A host whose notices land in `lines`, asking through `prompter`. */
+/** A host whose notices land in `lines`, asking through `prompter`, with an engine of its own from the engines the CLI ships. */
 const hostSaying = (lines: string[], prompter: Prompter | null = null): Host =>
-  createHost({ notice: (line) => lines.push(line), prompter });
+  createHost({ notice: (line) => lines.push(line), prompter, engineLoader: loadInstalledEngine });
 
 let home: string;
 

@@ -7,7 +7,7 @@ import { Socket } from 'node:net';
 import { resolveWalletPath, unlockWallet, walletAddress, type UnlockHost } from './wallet-config.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { engineFor, type DAppConnectorCallbacks, type OpenedConnector } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { sdkSetOf, type DAppConnectorCallbacks, type OpenedConnector } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { createRpcServer, type RpcServer } from './ws-rpc.ts';
 import { DEFAULT_SERVE_PORT } from '@kuiralabs/midnight-cli-core/lib/constants';
 import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
@@ -248,7 +248,7 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
   // the listener doesn't outlive this call and the wallet doesn't keep syncing.
   let opened: OpenedConnector;
   try {
-    opened = await (await engineFor(networkName, options.root)).wallet.openConnector({
+    opened = await (await options.host.engines.load(sdkSetOf(networkName, options.root))).wallet.openConnector({
       seed: seedBuffer,
       root: options.root,
       notice: options.host.notice,

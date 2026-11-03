@@ -562,6 +562,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
         let currentAction: import('../lib/test/types.ts').TestAction | undefined;
         const actionResults = await runActions({
           root: ctx.config.paths.stateRoot,
+          engines: ctx.host.engines,
           actions: actionsConfig.actions,
           config,
           dappDir,

@@ -8,7 +8,7 @@
 import { DEFAULT_SERVE_PORT } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { OWN_COMMAND_DUST_WAIT_MS } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
 import type { ConnectOptions, Payer, PayingTarget, ServedWallet } from '@kuiralabs/midnight-cli-core/lib/payer';
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { sdkSetOf } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { sessionOver, type WalletSession } from '@kuiralabs/midnight-cli-core/lib/wallet-session';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
@@ -45,7 +45,7 @@ async function serveWallet(port: number, { network, root, host, endpoints }: Pay
  */
 async function connectWallet({ network, root, host, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined, options: ConnectOptions = {}): Promise<WalletSession> {
   const { openConnector } = await import('./serve-manager.ts');
-  const engine = await engineFor(network, root);
+  const engine = await host.engines.load(sdkSetOf(network, root));
   const open = () => openConnector({ root, host, network, endpoints, wallet, onMessage: (msg) => progress.update(msg), dustWaitMs: OWN_COMMAND_DUST_WAIT_MS, sdkWarnings, forceShielded: options.shielded, signal });
   return sessionOver(network, await open(), (tx, stage) => engine.ledger.readTransaction(tx, stage), { reopen: open, onMessage: (msg) => progress.update(msg) });
 }

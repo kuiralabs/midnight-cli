@@ -15,9 +15,10 @@ import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midni
 import { FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { stateRootIn } from './helpers/state-root-in.ts';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped.
-const host = createHost();
+// The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
+const host = createHost({ engineLoader: loadInstalledEngine });
 
 const SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
 const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -52,7 +53,7 @@ describe('a sealed wallet', () => {
 
   it('shows its addresses without the passphrase', async () => {
     writeSealedWallet(file, PUBLIC, { seed: SEED }, PASSPHRASE);
-    const config = await loadWalletConfig(file);
+    const config = await loadWalletConfig(file, host.engines);
     expect(config.addresses).toEqual(PUBLIC.addresses);
     expect(config.shieldedAddresses).toEqual(PUBLIC.shieldedAddresses);
     expect(config.isSealed).toBe(true);
@@ -88,17 +89,17 @@ describe('a wallet an earlier mn wrote in plain text', () => {
     const warnings: string[] = [];
     const wallet = await unlockWallet(file, { root: stateRootIn(home), host, warn: (line) => warnings.push(line) });
     expect(wallet.seed).toBe(SEED);
-    expect((await loadWalletConfig(file)).isSealed).toBe(false);
+    expect((await loadWalletConfig(file, host.engines)).isSealed).toBe(false);
     expect(warnings.join('\n')).toMatch(/not protected[\s\S]*midnight wallet protect/);
   });
 
   it('is sealed in place, keeping its seed, mnemonic and addresses, with nothing left in the clear', async () => {
     writePlain();
-    await sealWalletInPlace(file, PASSPHRASE);
+    await sealWalletInPlace(file, PASSPHRASE, host.engines);
     const text = fs.readFileSync(file, 'utf8');
     expect(text).not.toContain(SEED);
     expect(text).not.toContain('abandon');
-    expect(await loadWalletConfig(file)).toMatchObject({ ...PUBLIC, isSealed: true });
+    expect(await loadWalletConfig(file, host.engines)).toMatchObject({ ...PUBLIC, isSealed: true });
     const wallet = await unlockWallet(file, withPassphrase(PASSPHRASE));
     expect(wallet.seed).toBe(SEED);
     expect(wallet.mnemonic).toBe(MNEMONIC);
@@ -107,7 +108,7 @@ describe('a wallet an earlier mn wrote in plain text', () => {
   it('is left as it was when it is already sealed', async () => {
     writeSealedWallet(file, PUBLIC, { seed: SEED }, PASSPHRASE);
     const before = fs.readFileSync(file, 'utf8');
-    await sealWalletInPlace(file, PASSPHRASE);
+    await sealWalletInPlace(file, PASSPHRASE, host.engines);
     expect(fs.readFileSync(file, 'utf8')).toBe(before);
   });
 });
@@ -125,7 +126,7 @@ describe('protecting every wallet', () => {
     const bob = writePlainAt('bob', OTHER_SEED);
     const carol = writePlainAt('carol', SEED);
     writeSealedWallet(file, PUBLIC, { seed: SEED }, PASSPHRASE);
-    const report = await protectAllWallets(stateRootIn(home), PASSPHRASE);
+    const report = await protectAllWallets(stateRootIn(home), PASSPHRASE, host.engines);
     expect(report).toEqual([
       { name: 'alice', file, sealedNow: false },
       { name: 'bob', file: bob, sealedNow: true },
@@ -136,7 +137,7 @@ describe('protecting every wallet', () => {
   });
 
   it('protects nothing, and says so, where there is no wallet', async () => {
-    expect(await protectAllWallets(stateRootIn(home), PASSPHRASE)).toEqual([]);
+    expect(await protectAllWallets(stateRootIn(home), PASSPHRASE, host.engines)).toEqual([]);
   });
 });
 

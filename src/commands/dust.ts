@@ -9,7 +9,6 @@ import { resolveSeed } from '../lib/seed-resolver.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { applyEndpointOverrides, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { checkBalance } from '@kuiralabs/midnight-chain/lib/balance-subscription';
-import { engineFor } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { header, keyValue, divider, formatDust, successMessage, toDust } from '@kuiralabs/midnight-cli-core/ui/format';
 import { bold, dim, yellow } from '@kuiralabs/midnight-cli-core/ui/colors';
 
@@ -101,7 +100,7 @@ async function dustExport(
 ): Promise<void> {
   const spinner = ctx.progress.start(`Reading dust events from ${networkName}...`);
   try {
-    const result = await (await engineFor(networkName, ctx.config.paths.stateRoot)).wallet.exportDust(seedBuffer, networkName, networkConfig, {
+    const result = await (await ctx.host.engines.for(networkName)).wallet.exportDust(seedBuffer, networkName, networkConfig, {
       root: ctx.config.paths.stateRoot,
       notice: ctx.host.notice,
       signal: ctx.signal,
@@ -261,7 +260,7 @@ async function dustRegister(
   const spinner = ctx.progress.start('Syncing wallet...');
 
   try {
-    const result = await (await engineFor(network, ctx.config.paths.stateRoot)).wallet.registerDust(seedBuffer, networkConfig, {
+    const result = await (await ctx.host.engines.for(network)).wallet.registerDust(seedBuffer, networkConfig, {
       root: ctx.config.paths.stateRoot,
       notice: ctx.host.notice,
       signal: ctx.signal,
@@ -324,7 +323,7 @@ async function dustStatusDirect(
   const spinner = ctx.progress.start(`Reading dust events from ${networkName}...`);
 
   try {
-    const view = await (await engineFor(network, ctx.config.paths.stateRoot)).wallet.dustBalance(seedBuffer, networkConfig, {
+    const view = await (await ctx.host.engines.for(network)).wallet.dustBalance(seedBuffer, networkConfig, {
       root: ctx.config.paths.stateRoot,
       notice: ctx.host.notice,
       forceFresh: !useCache,

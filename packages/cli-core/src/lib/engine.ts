@@ -521,28 +521,3 @@ export function claimSdkSet(set: SdkSet): void {
   if (loadedSet !== undefined && loadedSet !== set) throw new OtherSdkSetError(loadedSet, set);
   loadedSet = set;
 }
-
-// A temporary bridge, gone once every library takes its host's engines: the
-// engines of the host the shell bridges to, for the libraries that don't yet.
-// The shell sets it once at start, so the CLI process has one engine.
-let bridged: HostEngines | undefined;
-
-/** Gives engineFor and anyEngine the engines of the host they serve: the shell's, set once at start. */
-export function bridgeEngines(engines: HostEngines): void {
-  bridged = engines;
-}
-
-function bridgedEngines(): HostEngines {
-  if (bridged === undefined) throw new Error('No SDK engine is installed: the shell bridges its host\'s engines at start (bridgeEngines)');
-  return bridged;
-}
-
-/** The bridged host's engine for a network's SDK set (by the config under the state root `root`), loaded on first use. */
-export function engineFor(network: NetworkName, root: string): Promise<Engine> {
-  return bridgedEngines().load(sdkSetOf(network, root));
-}
-
-/** The bridged host's engine for work every set does alike (see HostEngines.any). */
-export function anyEngine(): Promise<Engine> {
-  return bridgedEngines().any();
-}
