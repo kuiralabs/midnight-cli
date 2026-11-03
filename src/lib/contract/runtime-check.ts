@@ -9,14 +9,15 @@ import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { ContractInfo } from './inspect.ts';
 
 /**
- * Throws a UsageError unless the engine for `network` runs a contract
+ * Throws a UsageError unless the engine for `network` (by the config under
+ * the state root `root`) runs a contract
  * compiled for `info.runtimeVersion`. A contract from a compiler that records
  * no runtime version is let through: its own code checks the runtime when it
  * loads.
  */
-export async function assertContractRunsOn(info: Pick<ContractInfo, 'name' | 'compilerVersion' | 'runtimeVersion'>, network: NetworkName): Promise<void> {
+export async function assertContractRunsOn(info: Pick<ContractInfo, 'name' | 'compilerVersion' | 'runtimeVersion'>, network: NetworkName, root: string): Promise<void> {
   if (info.runtimeVersion === 'unknown') return;
-  const { scripts } = (await engineFor(network)).contracts;
+  const { scripts } = (await engineFor(network, root)).contracts;
   if (scripts.acceptsRuntime(info.runtimeVersion)) return;
   throw new UsageError(
     `${info.name} was compiled by compactc ${info.compilerVersion} for compact-runtime ${info.runtimeVersion}, ` +

@@ -5,10 +5,10 @@ import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTar
 /** The subcommands that reach a chain: inspect reads only the compiled contract (--path, --managed, --name). */
 const ON_CHAIN: readonly string[] = ['deploy', 'call', 'state'];
 
-/** The wallet a deploy or call pays from exists and can be read. */
-async function checkSendingWallet(params: Readonly<Record<string, unknown>>): Promise<void> {
+/** The wallet a deploy or call pays from, under the state root `root`, exists and can be read. */
+async function checkSendingWallet(params: Readonly<Record<string, unknown>>, root: string): Promise<void> {
   const { loadWalletConfig, resolveWalletPath } = await import('../lib/wallet-config.ts');
-  await loadWalletConfig(resolveWalletPath(params.wallet as string | undefined));
+  await loadWalletConfig(resolveWalletPath(root, params.wallet as string | undefined));
 }
 
 export const contractDefinition: CommandDefinition = {
@@ -218,8 +218,9 @@ export const contractDefinition: CommandDefinition = {
             const { info } = resolveContractDeployRequest(args);
             const { resolvePayingTarget } = await import('@kuiralabs/midnight-cli-core/lib/payer');
             const { assertContractRunsOn } = await import('../lib/contract/runtime-check.ts');
-            await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'deploy').network);
-            await checkSendingWallet(params);
+            const root = call.host.paths().stateRoot;
+            await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'deploy', root).network, root);
+            await checkSendingWallet(params, root);
           },
         },
         order: 26,
@@ -252,8 +253,9 @@ export const contractDefinition: CommandDefinition = {
             const { info } = resolveContractCallRequest(args);
             const { resolvePayingTarget } = await import('@kuiralabs/midnight-cli-core/lib/payer');
             const { assertContractRunsOn } = await import('../lib/contract/runtime-check.ts');
-            await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'call').network);
-            await checkSendingWallet(params);
+            const root = call.host.paths().stateRoot;
+            await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'call', root).network, root);
+            await checkSendingWallet(params, root);
           },
         },
         order: 27,

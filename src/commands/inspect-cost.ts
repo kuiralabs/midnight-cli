@@ -20,11 +20,12 @@ const UNITS: Record<string, string> = {
 };
 
 export default async function inspectCostCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
-  const { name: networkName, config } = resolveNetwork({ args });
+  const root = ctx.config.paths.stateRoot;
+  const { name: networkName, config } = resolveNetwork({ args, configDir: root });
   // A ledger-8 chain's parameters aren't ledger-9 ones: refuse it like every other chain read.
   await assertLedgerSupported(networkName, config, fetchProtocolVersion, ctx.signal);
   const { height, parametersHex } = await fetchLedgerParameters(config.indexer, ctx.signal);
-  const limits = (await engineFor(networkName)).ledger.blockLimits(parametersHex);
+  const limits = (await engineFor(networkName, root)).ledger.blockLimits(parametersHex);
 
   // JSON mode
   if (hasFlag(args, 'json')) {

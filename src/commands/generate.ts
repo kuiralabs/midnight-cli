@@ -20,7 +20,8 @@ import { getDefaultWalletPath } from '../lib/wallet-paths.ts';
 import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export default async function generateCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
-  const networkName = resolveNetworkName({ args });
+  const root = ctx.config.paths.stateRoot;
+  const networkName = resolveNetworkName({ args, configDir: root });
   const outputPath = getFlag(args, 'output');
 
   // Mutual exclusion: --seed and --mnemonic cannot both be specified.
@@ -38,7 +39,7 @@ export default async function generateCommand(args: ParsedArgs, ctx: CallContext
   // Overwrite protection: check if target file already exists
   const targetPath = outputPath
     ? path.resolve(outputPath)
-    : getDefaultWalletPath();
+    : getDefaultWalletPath(root);
 
   if (fs.existsSync(targetPath) && !hasFlag(args, 'force')) {
     throw new Error(
@@ -66,7 +67,7 @@ export default async function generateCommand(args: ParsedArgs, ctx: CallContext
     seedBuffer = Buffer.from(mnemonicToSeedSync(mnemonic));
   }
 
-  const addresses = (await engineFor(networkName)).keys.unshieldedAddresses(seedBuffer);
+  const addresses = (await engineFor(networkName, root)).keys.unshieldedAddresses(seedBuffer);
   const activeAddress = addresses[networkName];
 
   const config: WalletPublic = {
@@ -75,7 +76,7 @@ export default async function generateCommand(args: ParsedArgs, ctx: CallContext
   };
   const secrets = mnemonic ? { seed: seedBuffer.toString('hex'), mnemonic } : { seed: seedBuffer.toString('hex') };
 
-  const passphrase = await passphraseForNewSecret(undefined, { signal: ctx.signal });
+  const passphrase = await passphraseForNewSecret(root, { signal: ctx.signal });
   // Cancelled while the passphrase was asked for: no wallet is written, and no new passphrase saved.
   throwIfCancelled(ctx.signal);
   const savedPath = writeSealedWallet(targetPath, config, secrets, passphrase, { overwrite: hasFlag(args, 'force') });

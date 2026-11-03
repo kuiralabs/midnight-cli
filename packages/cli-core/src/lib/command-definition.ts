@@ -14,6 +14,7 @@ import { getValidNetworkNames } from './network.ts';
 import { FULL_FLAG, type ParsedArgs } from './argv.ts';
 import { type PackageGuidance, type ToolsTableRow, assertDistinctPlaces } from './agent-guidance.ts';
 import type { CallContext, CommandOutcome } from './call-context.ts';
+import type { Host } from './host.ts';
 
 /** A parameter as an MCP tool's schema shows it to an agent. */
 export interface ParamSchema {
@@ -141,6 +142,8 @@ export interface ToolArgv {
 
 /** What a tool's check gets besides the call's parameters. */
 export interface ToolCheckCall {
+  /** The host the tool runs in: its paths are where the check reads the wallets and config. */
+  readonly host: Host;
   /** The command's argv for the call, as the tool would run it; a fresh copy each time. */
   argv(): ParsedArgs;
   /** Runs the tool's command with `args`, as the tool runs it (same cancellation), and returns its JSON result. */

@@ -4,12 +4,11 @@ import * as path from 'path';
 import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, isValidWalletName } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { getValidNetworkNames, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { loadCliConfig, saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import { getDefaultWalletPath, getWalletsDir } from './wallet-paths.ts';
+import { getWalletsDir } from './wallet-paths.ts';
 import { anyEngine, type EngineKeys } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { isSealedSecret, openSecret, sealSecret } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import { FileExistsError, writeJsonDurably } from '@kuiralabs/midnight-cli-core/lib/durable-file';
 import { type PassphraseSource, unlockPassphrase } from './passphrase.ts';
-import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
 import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 /** What anyone may read of a wallet: its addresses, and whether its secrets are sealed. No secret. */
@@ -81,16 +80,16 @@ export function getAddress(config: WalletConfig, network: NetworkName): string {
  * that network existed has none saved yet: it is unlocked, which derives and
  * saves it.
  */
-export async function walletAddress(walletPath: string, network: NetworkName): Promise<string> {
+export async function walletAddress(walletPath: string, network: NetworkName, root: string): Promise<string> {
   const config = await loadWalletConfig(walletPath);
-  return config.addresses[network] ?? (await unlockWallet(walletPath)).addresses[network];
+  return config.addresses[network] ?? (await unlockWallet(walletPath, { root })).addresses[network];
 }
 
 /** A wallet's shielded address on `network`, unlocking a sealed wallet that has none saved yet (see walletAddress); undefined when the wallet keeps no shielded addresses. */
-export async function walletShieldedAddress(walletPath: string, network: NetworkName): Promise<string | undefined> {
+export async function walletShieldedAddress(walletPath: string, network: NetworkName, root: string): Promise<string | undefined> {
   const config = await loadWalletConfig(walletPath);
   if (config.shieldedAddresses === undefined || config.shieldedAddresses[network] !== undefined) return config.shieldedAddresses?.[network];
-  return (await unlockWallet(walletPath)).shieldedAddresses?.[network];
+  return (await unlockWallet(walletPath, { root })).shieldedAddresses?.[network];
 }
 
 /** The networks an address map has no address for: a wallet written before they existed. */
@@ -122,59 +121,59 @@ function looksLikePath(value: string): boolean {
 /**
  * Resolve a wallet name or path to an absolute file path.
  *
- * Resolution order:
+ * Resolution order, under the state root `root`:
  * 1. If nameOrPath contains '/' or ends with '.json' → treat as path (backward compat)
  * 2. If nameOrPath is a simple name → resolve to ~/.midnight/wallets/<name>.json
  * 3. If no argument: read active wallet from config → resolve by name
  * 4. If no config: use DEFAULT_WALLET_NAME → ~/.midnight/wallets/default.json
  */
-export function resolveWalletPath(nameOrPath?: string): string {
+export function resolveWalletPath(root: string, nameOrPath?: string): string {
   if (nameOrPath !== undefined) {
     if (looksLikePath(nameOrPath)) {
       return path.resolve(nameOrPath);
     }
-    return path.join(getWalletsDir(), `${nameOrPath}.json`);
+    return path.join(getWalletsDir(root), `${nameOrPath}.json`);
   }
 
   // No flag provided — check config for active wallet
-  const config = loadCliConfig();
+  const config = loadCliConfig(root);
   const activeWallet = config.wallet ?? DEFAULT_WALLET_NAME;
-  return path.join(getWalletsDir(), `${activeWallet}.json`);
+  return path.join(getWalletsDir(root), `${activeWallet}.json`);
 }
 
 /**
- * Get the active wallet name from config (or default).
+ * Get the active wallet name from the config under the state root `root` (or default).
  */
-export function getActiveWalletName(): string {
-  const config = loadCliConfig();
+export function getActiveWalletName(root: string): string {
+  const config = loadCliConfig(root);
   return config.wallet ?? DEFAULT_WALLET_NAME;
 }
 
 /**
- * Set the active wallet in config.
+ * Set the active wallet in the config under the state root `root`.
  */
-export function setActiveWallet(name: string): void {
+export function setActiveWallet(root: string, name: string): void {
   if (!isValidWalletName(name)) {
     throw new Error(
       `Invalid wallet name: "${name}"\nWallet name must be a simple name (no path separators, .json suffix, or special characters).`
     );
   }
-  const walletPath = path.join(getWalletsDir(), `${name}.json`);
+  const walletPath = path.join(getWalletsDir(root), `${name}.json`);
   if (!fs.existsSync(walletPath)) {
     throw new Error(
       `Wallet "${name}" not found.\nRun "midnight wallet list" to see available wallets.`
     );
   }
-  const config = loadCliConfig();
+  const config = loadCliConfig(root);
   config.wallet = name;
-  saveCliConfig(config);
+  saveCliConfig(config, root);
 }
 
 /**
- * List all wallets in ~/.midnight/wallets/.
+ * List all wallets in the wallets folder under the state root `root`.
  */
-export async function listWallets(): Promise<WalletInfo[]> {
-  const walletsDir = getWalletsDir();
+export async function listWallets(root: string): Promise<WalletInfo[]> {
+  const walletsDir = getWalletsDir(root);
   if (!fs.existsSync(walletsDir)) {
     return [];
   }
@@ -182,7 +181,7 @@ export async function listWallets(): Promise<WalletInfo[]> {
   let keys: EngineKeys | undefined;
   const engineKeys = async (): Promise<EngineKeys> => (keys ??= (await anyEngine()).keys);
 
-  const activeName = getActiveWalletName();
+  const activeName = getActiveWalletName(root);
   const files = fs.readdirSync(walletsDir).filter(f => f.endsWith('.json')).sort();
 
   return Promise.all(files.map(async (file) => {
@@ -260,9 +259,10 @@ export function matchWalletAddress(
  * Convenience wrapper over matchWalletAddress + listWallets.
  */
 export async function findWalletByAddress(
+  root: string,
   address: string,
 ): Promise<{ wallet: WalletInfo; network: NetworkName } | undefined> {
-  return matchWalletAddress(await listWallets(), address);
+  return matchWalletAddress(await listWallets(root), address);
 }
 
 /**
@@ -273,13 +273,13 @@ export async function findWalletByAddress(
  * Throws, saying why, unless the named wallet can be removed: it exists, and
  * it is neither the active wallet nor the only one. Returns its file.
  */
-export function assertWalletRemovable(name: string): string {
+export function assertWalletRemovable(root: string, name: string): string {
   if (!isValidWalletName(name)) {
     throw new Error(
       `Invalid wallet name: "${name}"\nWallet name must be a simple name (no path separators, .json suffix, or special characters).`
     );
   }
-  const walletsDir = getWalletsDir();
+  const walletsDir = getWalletsDir(root);
   const walletPath = path.join(walletsDir, `${name}.json`);
 
   if (!fs.existsSync(walletPath)) {
@@ -288,7 +288,7 @@ export function assertWalletRemovable(name: string): string {
     );
   }
 
-  const activeName = getActiveWalletName();
+  const activeName = getActiveWalletName(root);
   if (name === activeName) {
     throw new Error(
       `Cannot remove the active wallet "${name}".\n` +
@@ -307,8 +307,8 @@ export function assertWalletRemovable(name: string): string {
   return walletPath;
 }
 
-export function removeWallet(name: string): void {
-  fs.unlinkSync(assertWalletRemovable(name));
+export function removeWallet(root: string, name: string): void {
+  fs.unlinkSync(assertWalletRemovable(root, name));
 }
 
 /** Throws, with how to make one, when there is no wallet file at `resolvedPath`. */
@@ -326,10 +326,8 @@ export function assertWalletFileExists(resolvedPath: string): void {
  * Throws with an actionable message if file is missing or invalid.
  * Callers should use resolveWalletPath() to get the path first.
  */
-export async function loadWalletConfig(walletPath?: string): Promise<WalletConfig> {
-  const resolvedPath = walletPath
-    ? path.resolve(walletPath)
-    : getDefaultWalletPath();
+export async function loadWalletConfig(walletPath: string): Promise<WalletConfig> {
+  const resolvedPath = path.resolve(walletPath);
 
   assertWalletFileExists(resolvedPath);
 
@@ -555,9 +553,9 @@ export async function protectAllWallets(root: string, passphrase: string, signal
   return report;
 }
 
-/** How a wallet is unlocked: the state root holding mn's passphrase check (the host's, unless given), where the passphrase comes from, and where a warning goes. */
+/** How a wallet is unlocked: the state root holding mn's passphrase check, where the passphrase comes from, and where a warning goes. */
 export interface UnlockOptions {
-  root?: string;
+  root: string;
   source?: PassphraseSource;
   warn?: (line: string) => void;
 }
@@ -566,7 +564,7 @@ export interface UnlockOptions {
 const warnedPlain = new Set<string>();
 
 /** A wallet with its secrets: opened with mn's passphrase, or read as it is from a plain-text file an earlier mn wrote. */
-export async function unlockWallet(walletPath: string, options: UnlockOptions = {}): Promise<UnlockedWallet> {
+export async function unlockWallet(walletPath: string, options: UnlockOptions): Promise<UnlockedWallet> {
   const resolvedPath = path.resolve(walletPath);
   const config = await loadWalletConfig(resolvedPath);
   const raw = JSON.parse(fs.readFileSync(resolvedPath, 'utf-8'));
@@ -579,7 +577,7 @@ export async function unlockWallet(walletPath: string, options: UnlockOptions = 
     }
     return typeof raw.mnemonic === 'string' ? { ...config, seed: raw.seed, mnemonic: raw.mnemonic } : { ...config, seed: raw.seed };
   }
-  const passphrase = await unlockPassphrase(options.root ?? stateRoot(), options.source);
+  const passphrase = await unlockPassphrase(options.root, options.source);
   const secrets = JSON.parse(openSecret(raw.sealed, passphrase, 'wallet').toString('utf8')) as WalletSecrets;
   // A network added since the wallet was written: now that its seed is open,
   // derive that network's addresses and save them beside the sealed secrets.

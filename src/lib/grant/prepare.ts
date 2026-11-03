@@ -6,7 +6,7 @@
 import { type ParsedArgs, getFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { type PayingTarget, resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
-import { assertWalletFileExists, resolveWalletPath } from '../wallet-config.ts';
+import { assertWalletFileExists, getActiveWalletName, resolveWalletPath } from '../wallet-config.ts';
 import { assertAccountNetwork, assertNodeRunsAccount } from './account.ts';
 import { accountRecordsDir, accountWalletName, ensureAccountRecordsDir } from './account-records.ts';
 import { type GrantRequest, resolveGrantRequest } from './request.ts';
@@ -49,14 +49,14 @@ export async function accountOnRecord(recordsDir: string): Promise<AccountOnReco
   return record === undefined ? null : { address: record.contractAddress };
 }
 
-export async function prepareGrant(args: ParsedArgs): Promise<PreparedGrant> {
+export async function prepareGrant(args: ParsedArgs, root: string): Promise<PreparedGrant> {
   const request = resolveGrantRequest(args);
   assertNodeRunsAccount();
-  const target = resolvePayingTarget(args, 'grant', request.subcommand);
+  const target = resolvePayingTarget(args, 'grant', request.subcommand, root);
   // Refuses a network the account can't reach before anything is created.
-  assertAccountNetwork(target.networkConfig);
-  const walletName = accountWalletName(getFlag(args, 'wallet'));
-  const recordsDir = accountRecordsDir(target.network, walletName);
+  assertAccountNetwork(target.networkConfig, root);
+  const walletName = accountWalletName(getFlag(args, 'wallet'), () => getActiveWalletName(root));
+  const recordsDir = accountRecordsDir(target.network, walletName, root);
   const account = await accountOnRecord(recordsDir);
   if (request.subcommand === 'import' && account !== null) {
     throw new UsageError(`Wallet "${walletName}" already has an account on ${target.network} (${account.address}); a backup is never imported over one.`);
@@ -71,7 +71,7 @@ export async function prepareGrant(args: ParsedArgs): Promise<PreparedGrant> {
   // Only a command that writes an account's first records makes their folder,
   // and only for a wallet there is: a command refused leaves nothing behind.
   if (account === null) {
-    assertWalletFileExists(resolveWalletPath(getFlag(args, 'wallet')));
+    assertWalletFileExists(resolveWalletPath(root, getFlag(args, 'wallet')));
     ensureAccountRecordsDir(recordsDir);
   }
   return { request, target, walletName, recordsDir, account };

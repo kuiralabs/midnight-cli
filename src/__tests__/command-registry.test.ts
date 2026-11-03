@@ -31,7 +31,6 @@ import { FULL_FLAG, parseArgs, type ParsedArgs } from '@kuiralabs/midnight-cli-c
 import { CancelledError, isUsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { classifyError, EXIT_CANCELLED } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import type { CallContext, CommandOutcome } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { hostPaths } from '@kuiralabs/midnight-cli-core/lib/state-root';
 import { settings } from '@kuiralabs/midnight-cli-core/lib/settings';
 import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
 import { createSdkWarningRouter, sdkWarningCallsOn } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
@@ -141,7 +140,7 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => 
 
   it('gives the handler the configuration the host gives when the call starts, and --verbose', async () => {
     const { ctx } = (await run('plain')).call;
-    expect(ctx.config.paths).toStrictEqual(hostPaths());
+    expect(ctx.config.paths).toStrictEqual(provisions.host.paths());
     expect(ctx.config.settings).toStrictEqual(settings());
     expect(ctx.diagnostics.isVerbose).toBe(false);
     received.length = 0;

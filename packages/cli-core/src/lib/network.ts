@@ -71,14 +71,14 @@ export function defaultSdkSetOf(name: NetworkName): SdkSet {
   return NETWORK_SDK_SETS[name];
 }
 
-/** The networks that run on `set` now. */
-export function networksOnSdkSet(set: SdkSet): NetworkName[] {
-  return VALID_NETWORK_NAMES.filter((name) => sdkSetOfNetwork(name) === set);
+/** The networks that run on `set` now, by the config under the state root `root`. */
+export function networksOnSdkSet(set: SdkSet, root: string): NetworkName[] {
+  return VALID_NETWORK_NAMES.filter((name) => sdkSetOfNetwork(name, root) === set);
 }
 
-/** The SDK set a network runs on: the one `midnight config set sdk-set` gave it, else the table's. */
-export function sdkSetOfNetwork(name: NetworkName): SdkSet {
-  return getSdkSetOverride(loadCliConfig(), name) ?? NETWORK_SDK_SETS[name];
+/** The SDK set a network runs on: the one `midnight config set sdk-set` gave it under the state root `root`, else the table's. */
+export function sdkSetOfNetwork(name: NetworkName, root: string): SdkSet {
+  return getSdkSetOverride(loadCliConfig(root), name) ?? NETWORK_SDK_SETS[name];
 }
 
 const VALID_NETWORK_NAMES: readonly NetworkName[] = ['preprod', 'preview', 'stagenet', 'undeployed'] as const;
@@ -283,7 +283,7 @@ export function applyEndpointOverrides(
   config: NetworkConfig,
   flagOverrides: EndpointOverrides,
   networkName: NetworkName,
-  configDir?: string,
+  configDir: string,
 ): NetworkConfig {
   const cliConfig = loadCliConfig(configDir);
   const scoped = getEndpointOverridesForNetwork(cliConfig, networkName);

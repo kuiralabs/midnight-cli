@@ -52,7 +52,7 @@ function shortOfShieldedNight(held: bigint, value: bigint): UsageError {
 }
 
 export default async function grantCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
-  const { request, target, walletName, recordsDir, account } = await prepareGrant(args);
+  const { request, target, walletName, recordsDir, account } = await prepareGrant(args, ctx.config.paths.stateRoot);
   const jsonMode = hasFlag(args, 'json');
   const walletFlag = getFlag(args, 'wallet');
   const spinnerFor = (label: string): Spinner => (jsonMode ? ctx.progress.silent() : ctx.progress.start(label));
@@ -94,7 +94,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   if (request.subcommand === 'device' && request.action === 'new') {
     const { createPendingDevice, openAccountKey, ownJoinCode } = await import('../lib/grant/sealed-account.ts');
     const { unlockPassphrase, passphraseForNewSecret, isPassphraseSet } = await import('../lib/passphrase.ts');
-    const passphrase = isPassphraseSet() ? await unlockPassphrase() : await passphraseForNewSecret();
+    const passphrase = isPassphraseSet(target.root) ? await unlockPassphrase(target.root) : await passphraseForNewSecret(target.root);
     const device = createPendingDevice(recordsDir, passphrase);
     const code = ownJoinCode(recordsDir, openAccountKey(recordsDir, passphrase), device);
     spinner.stop('Device ready');
@@ -114,7 +114,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
     const { importAccount } = await import('../lib/grant/account-backup.ts');
     const { unlockPassphrase, passphraseForNewSecret, isPassphraseSet } = await import('../lib/passphrase.ts');
     try {
-      const passphrase = isPassphraseSet() ? await unlockPassphrase() : await passphraseForNewSecret();
+      const passphrase = isPassphraseSet(target.root) ? await unlockPassphrase(target.root) : await passphraseForNewSecret(target.root);
       const { contractAddress } = await importAccount(recordsDir, target.network, passphrase, request.file);
       spinner.stop('Imported');
       if (jsonMode) ctx.output.result({ subcommand: request.subcommand, network: target.network, wallet: walletName, ownerKey: 'sealed', address: contractAddress });
@@ -131,7 +131,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   const owned: GrantAccount = await openGrantAccount(target.networkConfig, recordsDir, (line) => {
     spinner.update(line);
     throwIfCancelled(ctx.signal);
-  });
+  }, { root: target.root });
   // How the account's owner key and records are kept: sealed, or in plain text until `wallet protect`.
   const common = { subcommand: request.subcommand, network: target.network, wallet: walletName, ownerKey: owned.protection };
 
@@ -232,7 +232,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         if (owned.protection !== 'sealed') throw new UsageError('The account is not protected: its devices are managed once it is. Encrypt it first: midnight wallet protect');
         const { openAccountKey, sealedDeviceList } = await import('../lib/grant/sealed-account.ts');
         const { unlockPassphrase } = await import('../lib/passphrase.ts');
-        const passphrase = await unlockPassphrase();
+        const passphrase = await unlockPassphrase(target.root);
         const devices = sealedDeviceList(recordsDir, openAccountKey(recordsDir, passphrase));
         if (owned.ownCode === undefined) throw new Error('A sealed account names its own device code');
         const own = owned.ownCode();
@@ -281,7 +281,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
       case 'export': {
         const { exportAccount } = await import('../lib/grant/account-backup.ts');
         const { unlockPassphrase } = await import('../lib/passphrase.ts');
-        const outcome = await exportAccount(recordsDir, target.network, await unlockPassphrase(), request.file);
+        const outcome = await exportAccount(recordsDir, target.network, await unlockPassphrase(target.root), request.file);
         spinner.stop('Written');
         if (jsonMode) {
           ctx.output.result({ ...common, address: outcome.contractAddress, file: outcome.file });

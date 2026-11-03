@@ -7,7 +7,6 @@
 
 import { join } from 'node:path';
 import { readJsonIfPresent, writeJsonDurably } from './durable-file.ts';
-import { stateRoot } from './state-root.ts';
 import type { NetworkName } from './network.ts';
 import type { SwapLeg, SwapTerms } from './swap-offer.ts';
 
@@ -34,17 +33,17 @@ export class OfferCoinsInUseError extends Error {
 interface StoredLeg { token: string; amount: string }
 interface StoredOffer { id: string; terms: { give: StoredLeg; want: StoredLeg }; nullifiers: string[]; madeAt: string; expiresAt: string }
 
-/** The file holding a wallet's open offers on a network; the wallet by its unshielded address there. */
-export function openOffersFile(network: NetworkName, walletAddress: string): string {
-  return join(stateRoot(), 'swap-offers', network, `${walletAddress}.json`);
+/** The file under the state root `root` holding a wallet's open offers on a network; the wallet by its unshielded address there. */
+export function openOffersFile(root: string, network: NetworkName, walletAddress: string): string {
+  return join(root, 'swap-offers', network, `${walletAddress}.json`);
 }
 
 const leg = (stored: StoredLeg): SwapLeg => ({ token: stored.token, amount: BigInt(stored.amount) });
 const stored = (l: SwapLeg): StoredLeg => ({ token: l.token, amount: l.amount.toString() });
 
 /** The wallet's open offers on the network. */
-export function readOpenOffers(network: NetworkName, walletAddress: string): OpenOffer[] {
-  const file = readJsonIfPresent<{ offers: StoredOffer[] }>(openOffersFile(network, walletAddress));
+export function readOpenOffers(root: string, network: NetworkName, walletAddress: string): OpenOffer[] {
+  const file = readJsonIfPresent<{ offers: StoredOffer[] }>(openOffersFile(root, network, walletAddress));
   return (file?.offers ?? []).map((o) => ({
     id: o.id,
     terms: { give: leg(o.terms.give), want: leg(o.terms.want) },
@@ -54,8 +53,8 @@ export function readOpenOffers(network: NetworkName, walletAddress: string): Ope
   }));
 }
 
-function writeOpenOffers(network: NetworkName, walletAddress: string, offers: OpenOffer[]): void {
-  writeJsonDurably(openOffersFile(network, walletAddress), {
+function writeOpenOffers(root: string, network: NetworkName, walletAddress: string, offers: OpenOffer[]): void {
+  writeJsonDurably(openOffersFile(root, network, walletAddress), {
     offers: offers.map((o) => ({
       id: o.id,
       terms: { give: stored(o.terms.give), want: stored(o.terms.want) },
@@ -67,16 +66,16 @@ function writeOpenOffers(network: NetworkName, walletAddress: string, offers: Op
 }
 
 /** Records an offer the wallet made. */
-export function recordOpenOffer(network: NetworkName, walletAddress: string, offer: OpenOffer): void {
-  const offers = readOpenOffers(network, walletAddress).filter((o) => o.id !== offer.id);
-  writeOpenOffers(network, walletAddress, [...offers, offer]);
+export function recordOpenOffer(root: string, network: NetworkName, walletAddress: string, offer: OpenOffer): void {
+  const offers = readOpenOffers(root, network, walletAddress).filter((o) => o.id !== offer.id);
+  writeOpenOffers(root, network, walletAddress, [...offers, offer]);
 }
 
 /** Closes the wallet's offers with these ids (taken or cancelled); the ones it had. */
-export function closeOpenOffers(network: NetworkName, walletAddress: string, ids: readonly string[]): OpenOffer[] {
-  const offers = readOpenOffers(network, walletAddress);
+export function closeOpenOffers(root: string, network: NetworkName, walletAddress: string, ids: readonly string[]): OpenOffer[] {
+  const offers = readOpenOffers(root, network, walletAddress);
   const closing = offers.filter((o) => ids.includes(o.id));
-  if (closing.length > 0) writeOpenOffers(network, walletAddress, offers.filter((o) => !ids.includes(o.id)));
+  if (closing.length > 0) writeOpenOffers(root, network, walletAddress, offers.filter((o) => !ids.includes(o.id)));
   return closing;
 }
 

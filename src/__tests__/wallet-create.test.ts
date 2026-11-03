@@ -38,41 +38,41 @@ afterEach(() => {
 
 describe('createWallet', () => {
   it('writes a sealed wallet that unlocks to its new mnemonic, and makes it active', async () => {
-    const created = await createWallet('alice', walletSecretFrom(), PASSPHRASE);
+    const created = await createWallet(stateRootIn(home), 'alice', walletSecretFrom(), PASSPHRASE);
 
-    expect(created.file).toBe(walletFilePath('alice'));
+    expect(created.file).toBe(walletFilePath(stateRootIn(home), 'alice'));
     expect(created.mnemonic!.split(' ')).toHaveLength(24);
     expect(fs.readFileSync(created.file, 'utf8')).not.toContain(created.seed.toString('hex'));
-    const unlocked = await unlockWallet(created.file);
+    const unlocked = await unlockWallet(created.file, { root: stateRootIn(home) });
     expect(unlocked.seed).toBe(created.seed.toString('hex'));
     expect(unlocked.mnemonic).toBe(created.mnemonic);
-    expect(getActiveWalletName()).toBe('alice');
+    expect(getActiveWalletName(stateRootIn(home))).toBe('alice');
   });
 
   it('derives its addresses from a given mnemonic', async () => {
-    const created = await createWallet('bob', walletSecretFrom({ mnemonic: MNEMONIC }), PASSPHRASE);
+    const created = await createWallet(stateRootIn(home), 'bob', walletSecretFrom({ mnemonic: MNEMONIC }), PASSPHRASE);
     expect(created.addresses).toEqual(deriveAllAddresses(Buffer.from(mnemonicToSeedSync(MNEMONIC))));
   });
 
   it('keeps a given seed and no mnemonic', async () => {
     const seed = Buffer.alloc(32, 2);
-    const created = await createWallet('carol', walletSecretFrom({ seed }), PASSPHRASE);
-    const unlocked = await unlockWallet(created.file);
+    const created = await createWallet(stateRootIn(home), 'carol', walletSecretFrom({ seed }), PASSPHRASE);
+    const unlocked = await unlockWallet(created.file, { root: stateRootIn(home) });
     expect(unlocked.seed).toBe(seed.toString('hex'));
     expect(unlocked.mnemonic).toBeUndefined();
   });
 
   it('replaces an existing wallet only when asked', async () => {
-    const first = await createWallet('alice', walletSecretFrom({ seed: Buffer.alloc(32, 1) }), PASSPHRASE);
-    await expect(createWallet('alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE)).rejects.toThrow(`Wallet file already exists: ${first.file}`);
-    expect((await unlockWallet(first.file)).seed).toBe(Buffer.alloc(32, 1).toString('hex'));
+    const first = await createWallet(stateRootIn(home), 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 1) }), PASSPHRASE);
+    await expect(createWallet(stateRootIn(home), 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE)).rejects.toThrow(`Wallet file already exists: ${first.file}`);
+    expect((await unlockWallet(first.file, { root: stateRootIn(home) })).seed).toBe(Buffer.alloc(32, 1).toString('hex'));
 
-    await createWallet('alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE, { overwrite: true });
-    expect((await unlockWallet(first.file)).seed).toBe(Buffer.alloc(32, 2).toString('hex'));
+    await createWallet(stateRootIn(home), 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE, { overwrite: true });
+    expect((await unlockWallet(first.file, { root: stateRootIn(home) })).seed).toBe(Buffer.alloc(32, 2).toString('hex'));
   });
 
   it('refuses a name that is not a simple name, and an invalid mnemonic', () => {
-    expect(() => walletFilePath('../alice')).toThrow('Invalid wallet name: "../alice"');
+    expect(() => walletFilePath(stateRootIn(home), '../alice')).toThrow('Invalid wallet name: "../alice"');
     expect(() => walletSecretFrom({ mnemonic: 'not a real mnemonic' })).toThrow('Invalid BIP-39 mnemonic');
   });
 });

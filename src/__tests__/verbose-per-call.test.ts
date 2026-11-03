@@ -80,7 +80,6 @@ describe('verbose, per call', () => {
       fetchProtocolVersion: async () => 2001000n,
       fetchTip: async () => { throw new Error('node unreachable'); },
       fetchUnshielded: async () => ({ balances: new Map(), utxoCount: 0, txCount: 0, highestTxId: 0, registeredUtxos: 0, unregisteredUtxos: 0 }),
-      cacheDir: home,
     });
     const verboseLines: string[] = [];
     const quietLines: string[] = [];

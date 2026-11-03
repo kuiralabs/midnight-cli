@@ -31,14 +31,15 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
   }
 
   // Resolve network first — independent of the wallet (--network flag / config / fallback).
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args });
+  const root = ctx.config.paths.stateRoot;
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
 
   // Apply endpoint overrides: --flag > config > network default
   applyEndpointOverrides(networkConfig, {
     proofServer: getFlag(args, 'proof-server'),
     node: getFlag(args, 'node'),
     indexerWS: getFlag(args, 'indexer-ws'),
-  }, networkName);
+  }, networkName, root);
 
   const isJson = hasFlag(args, 'json');
   const minimal = isMinimalMode(args);
@@ -49,7 +50,7 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
     // The chain-id check connects to the node; keep polkadot-js's RPC-CORE noise off stderr.
     const stopListening = ctx.sdkWarnings.listen(undefined);
     try {
-      await dustExport(await resolveSeed(args), networkName, networkConfig, isJson, minimal, ctx);
+      await dustExport(await resolveSeed(args, root), networkName, networkConfig, isJson, minimal, ctx);
     } finally {
       stopListening();
     }
@@ -57,7 +58,7 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
   }
 
   // status / register: named wallet + its stored address (used by the registration pre-check).
-  const config = await unlockWallet(resolveWalletPath(getFlag(args, 'wallet')));
+  const config = await unlockWallet(resolveWalletPath(root, getFlag(args, 'wallet')), { root });
   const seedBuffer = Buffer.from(config.seed, 'hex');
   const address = config.addresses[networkName];
 
@@ -100,7 +101,8 @@ async function dustExport(
 ): Promise<void> {
   const spinner = ctx.progress.start(`Reading dust events from ${networkName}...`);
   try {
-    const result = await (await engineFor(networkName)).wallet.exportDust(seedBuffer, networkName, networkConfig, {
+    const result = await (await engineFor(networkName, ctx.config.paths.stateRoot)).wallet.exportDust(seedBuffer, networkName, networkConfig, {
+      root: ctx.config.paths.stateRoot,
       signal: ctx.signal,
       log: ctx.diagnostics.line,
       onProgress: (applied, maxIdSeen) => spinner.update(
@@ -258,7 +260,8 @@ async function dustRegister(
   const spinner = ctx.progress.start('Syncing wallet...');
 
   try {
-    const result = await (await engineFor(network)).wallet.registerDust(seedBuffer, networkConfig, {
+    const result = await (await engineFor(network, ctx.config.paths.stateRoot)).wallet.registerDust(seedBuffer, networkConfig, {
+      root: ctx.config.paths.stateRoot,
       signal: ctx.signal,
       sdkWarnings: ctx.sdkWarnings,
       log: ctx.diagnostics.line,
@@ -319,7 +322,8 @@ async function dustStatusDirect(
   const spinner = ctx.progress.start(`Reading dust events from ${networkName}...`);
 
   try {
-    const view = await (await engineFor(network)).wallet.dustBalance(seedBuffer, networkConfig, {
+    const view = await (await engineFor(network, ctx.config.paths.stateRoot)).wallet.dustBalance(seedBuffer, networkConfig, {
+      root: ctx.config.paths.stateRoot,
       forceFresh: !useCache,
       signal: ctx.signal,
       log: ctx.diagnostics.line,

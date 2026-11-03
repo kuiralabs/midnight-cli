@@ -60,12 +60,13 @@ const ENDPOINTS = [['node', 'node'], ['indexer-ws', 'indexer'], ['proof-server',
  * text the user confirms: each given as a parameter, or else set for the
  * network with `config set`. Empty when the tool takes no endpoints or none
  * is overridden. Without it, a transaction's proof could go to a host the
- * user never saw.
+ * user never saw. The saved endpoints are the config's under the state root
+ * `root`.
  */
-export function endpointOverridesNote(tool: RegisteredTool, params: Readonly<Record<string, unknown>>): string {
+export function endpointOverridesNote(tool: RegisteredTool, params: Readonly<Record<string, unknown>>, root: string): string {
   const properties = tool.inputSchema.properties;
   if (!ENDPOINTS.some(([param]) => Object.hasOwn(properties, param))) return '';
-  const configured = getEndpointOverridesForNetwork(loadCliConfig(), resolveNetworkName({ args: toolArgv(tool, params) }));
+  const configured = getEndpointOverridesForNetwork(loadCliConfig(root), resolveNetworkName({ args: toolArgv(tool, params), configDir: root }));
   const named = ENDPOINTS.flatMap(([param, label]) => {
     const given = params[param];
     if (typeof given === 'string' && given !== '') return [`${label} ${given}`];
@@ -83,8 +84,9 @@ export function endpointOverridesNote(tool: RegisteredTool, params: Readonly<Rec
  */
 export async function confirmationFor(tool: RegisteredTool, params: Readonly<Record<string, unknown>>, call: CommandRun): Promise<string> {
   const found = await tool.confirmation?.check?.(params, {
+    host: call.host,
     argv: () => toolArgv(tool, params),
     run: async (args) => captureCommand((await tool.command.load()).default, args, call),
   });
-  return (found ?? confirmationText(tool, params)) + endpointOverridesNote(tool, params);
+  return (found ?? confirmationText(tool, params)) + endpointOverridesNote(tool, params, call.host.paths().stateRoot);
 }

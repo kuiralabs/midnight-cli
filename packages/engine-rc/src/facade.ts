@@ -71,13 +71,15 @@ export interface FacadeBundle {
  *
  * When `cache` is provided, wallets are restored from serialized state
  * instead of starting fresh — the SDK then only syncs new transactions
- * since the last checkpoint.
+ * since the last checkpoint, with the Dust checkpoint kept under the state
+ * root `root` bridged in when it is ahead.
  *
  * Its diagnostics go to `log`, the call's verbose lines.
  */
 export async function buildFacade(
   seedBuffer: Buffer,
   networkConfig: NetworkConfig,
+  root: string,
   cache?: WalletCacheData | null,
   log?: VerboseLog,
 ): Promise<FacadeBundle> {
@@ -136,7 +138,7 @@ export async function buildFacade(
   // register) benefit from the indexer-direct reader's checkpoint without
   // re-implementing the whole transaction flow.
   const dustPublicKey = ledger.DustSecretKey.fromSeed(seeds.dust).publicKey;
-  const effectiveCache = cache ? maybeBridgeDustCache(cache, networkConfig, dustPublicKey, log) : null;
+  const effectiveCache = cache ? maybeBridgeDustCache(cache, networkConfig, dustPublicKey, root, log) : null;
 
   // Attempt cache restore — fall back to fresh build on any deserialization error.
   let restoredFromCache = false;
@@ -257,12 +259,13 @@ function maybeBridgeDustCache(
   cache: WalletCacheData,
   networkConfig: NetworkConfig,
   dustPublicKey: ledger.DustPublicKey,
+  root: string,
   log?: VerboseLog,
 ): WalletCacheData {
   try {
     const networkName = networkConfig.networkId.toLowerCase();
     const pubkeyHex = dustPublicKeyHex(dustPublicKey);
-    const direct = loadDustCache(networkName, pubkeyHex);
+    const direct = loadDustCache(networkName, pubkeyHex, root);
     if (!direct) return cache;
 
     // Only overlay when dust-direct is AHEAD of the facade cache's own offset — a prior

@@ -10,10 +10,11 @@ import { bold, dim, teal } from '@kuiralabs/midnight-cli-core/ui/colors';
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 
 export default async function infoCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
-  const resolvedPath = resolveWalletPath(getFlag(args, 'wallet'));
+  const root = ctx.config.paths.stateRoot;
+  const resolvedPath = resolveWalletPath(root, getFlag(args, 'wallet'));
   const config = await loadWalletConfig(resolvedPath);
-  const activeNetwork = resolveNetworkName({ args });
-  const activeAddress = await walletAddress(resolvedPath, activeNetwork);
+  const activeNetwork = resolveNetworkName({ args, configDir: root });
+  const activeAddress = await walletAddress(resolvedPath, activeNetwork, root);
 
   // JSON mode
   if (hasFlag(args, 'json')) {

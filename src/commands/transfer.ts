@@ -17,7 +17,7 @@ import { receiptText } from '../ui/receipt.ts';
 
 export default async function transferCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
-  const request = await resolveTransferRequest(args);
+  const request = await resolveTransferRequest(args, ctx.config.paths.stateRoot);
   return request.shielded ? shieldedTransfer(args, request, ctx) : unshieldedTransfer(args, request, ctx);
 }
 
@@ -28,16 +28,17 @@ async function unshieldedTransfer(
   { walletPath, walletConfig: config, recipientAddress, amountNight }: TransferRequest,
   ctx: CallContext,
 ): Promise<void> {
-  const seedBuffer = Buffer.from((await unlockWallet(walletPath)).seed, 'hex');
+  const root = ctx.config.paths.stateRoot;
+  const seedBuffer = Buffer.from((await unlockWallet(walletPath, { root })).seed, 'hex');
 
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args });
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
   const address = config.addresses[networkName];
 
   applyEndpointOverrides(networkConfig, {
     proofServer: getFlag(args, 'proof-server'),
     node: getFlag(args, 'node'),
     indexerWS: getFlag(args, 'indexer-ws'),
-  }, networkName);
+  }, networkName, root);
 
   ctx.output.stderr('\n' + header('Transfer') + '\n\n');
   ctx.output.stderr(keyValue('Network', networkName) + '\n');
@@ -49,7 +50,8 @@ async function unshieldedTransfer(
   const spinner = ctx.progress.start('Starting wallet...');
 
   try {
-    const result = await (await engineFor(networkName)).wallet.transfer({
+    const result = await (await engineFor(networkName, root)).wallet.transfer({
+      root,
       seedBuffer,
       networkConfig,
       recipientAddress,
@@ -124,15 +126,16 @@ async function shieldedTransfer(
   ctx: CallContext,
 ): Promise<void> {
   const amount = nightToMicro(amountNight);
-  const seedBuffer = Buffer.from((await unlockWallet(walletPath)).seed, 'hex');
+  const root = ctx.config.paths.stateRoot;
+  const seedBuffer = Buffer.from((await unlockWallet(walletPath, { root })).seed, 'hex');
 
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args });
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
 
   applyEndpointOverrides(networkConfig, {
     proofServer: getFlag(args, 'proof-server'),
     node: getFlag(args, 'node'),
     indexerWS: getFlag(args, 'indexer-ws'),
-  }, networkName);
+  }, networkName, root);
 
   ctx.output.stderr('\n' + header('Shielded Transfer') + '\n\n');
   ctx.output.stderr(keyValue('Network', networkName) + '\n');
@@ -146,8 +149,9 @@ async function shieldedTransfer(
   const spinner = ctx.progress.start('Syncing wallet...');
 
   try {
-    const txHash = await (await engineFor(networkName)).wallet.shieldedTransfer({
+    const txHash = await (await engineFor(networkName, root)).wallet.shieldedTransfer({
       seed: seedBuffer,
+      root,
       network: networkName,
       networkConfig,
       recipient: recipientAddress,

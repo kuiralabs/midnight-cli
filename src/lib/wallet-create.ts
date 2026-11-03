@@ -27,14 +27,14 @@ export interface CreatedWallet {
   createdAt: string;
 }
 
-/** Where the wallet called `name` is kept. */
-export function walletFilePath(name: string): string {
+/** Where the wallet called `name` is kept under the state root `root`. */
+export function walletFilePath(root: string, name: string): string {
   if (!isValidWalletName(name)) {
     throw new Error(
       `Invalid wallet name: "${name}"\nWallet name must be a simple name (no path separators, .json suffix, or special characters).`
     );
   }
-  return path.join(getWalletsDir(), `${name}.json`);
+  return path.join(getWalletsDir(root), `${name}.json`);
 }
 
 /** The secret from a given seed, a given mnemonic (checked against the English wordlist), or else a new 24-word mnemonic. */
@@ -51,11 +51,12 @@ export function walletSecretFrom(given: { seed?: Buffer; mnemonic?: string } = {
 }
 
 /**
- * Writes the wallet `name` sealed under `passphrase` and makes it the active
- * wallet. An existing wallet of that name is replaced only with `overwrite`.
+ * Writes the wallet `name` sealed under `passphrase` under the state root
+ * `root` and makes it the active wallet. An existing wallet of that name is
+ * replaced only with `overwrite`.
  */
-export async function createWallet(name: string, secret: WalletSecret, passphrase: string, { overwrite = false }: { overwrite?: boolean } = {}): Promise<CreatedWallet> {
-  const targetPath = walletFilePath(name);
+export async function createWallet(root: string, name: string, secret: WalletSecret, passphrase: string, { overwrite = false }: { overwrite?: boolean } = {}): Promise<CreatedWallet> {
+  const targetPath = walletFilePath(root, name);
   const { keys } = await anyEngine();
   const addresses = keys.unshieldedAddresses(secret.seed);
   const shieldedAddresses = keys.shieldedAddresses(secret.seed);
@@ -64,7 +65,7 @@ export async function createWallet(name: string, secret: WalletSecret, passphras
   const secrets = secret.mnemonic ? { seed: seedHex, mnemonic: secret.mnemonic } : { seed: seedHex };
 
   const file = writeSealedWallet(targetPath, config, secrets, passphrase, { overwrite });
-  setActiveWallet(name);
+  setActiveWallet(root, name);
 
   const created: CreatedWallet = { name, addresses, shieldedAddresses, seed: secret.seed, file, createdAt: config.createdAt };
   if (secret.mnemonic) created.mnemonic = secret.mnemonic;

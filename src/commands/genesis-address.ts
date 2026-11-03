@@ -9,9 +9,10 @@ import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 
 export default async function genesisAddressCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
-  const networkName = resolveNetworkName({ args });
+  const root = ctx.config.paths.stateRoot;
+  const networkName = resolveNetworkName({ args, configDir: root });
   const seedBuffer = Buffer.from(GENESIS_SEED, 'hex');
-  const address = (await engineFor(networkName)).keys.unshieldedAddress(seedBuffer, networkName);
+  const address = (await engineFor(networkName, root)).keys.unshieldedAddress(seedBuffer, networkName);
 
   // JSON mode
   if (hasFlag(args, 'json')) {

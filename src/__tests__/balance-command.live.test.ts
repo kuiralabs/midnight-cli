@@ -5,6 +5,7 @@ import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './help
 import { deriveUnshieldedAddress, deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { testHost } from './helpers/test-host.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -56,7 +57,7 @@ afterEach(() => {
 
 beforeAll(async () => {
   const { resolveNetwork } = await import('@kuiralabs/midnight-cli-core/lib/resolve-network');
-  const { indexer } = resolveNetwork({ args: parseArgs(['balance', '--network', 'undeployed']) }).config;
+  const { indexer } = resolveNetwork({ args: parseArgs(['balance', '--network', 'undeployed']), configDir: testHost().paths().stateRoot }).config;
   const answered = await fetch(indexer, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: '{ block { height } }' }), signal: AbortSignal.timeout(5_000) })
     .then((r) => r.ok, () => false);
   if (!answered) throw new Error(`No ledger-9 indexer answers at ${indexer}: start the local chain (or point undeployed at one with midnight config set) before npm run test:live.`);

@@ -62,10 +62,10 @@ export function shieldedCoinPublicKeyHexFromSeed(seedBuffer: Buffer): string {
 export function loadShieldedCache(
   network: string,
   pubkeyHex: string,
-  cacheDir?: string,
+  root: string,
   expectedChainId?: string,
 ): ShieldedCacheEntry | null {
-  const path = getShieldedCachePath(network, pubkeyHex, cacheDir);
+  const path = getShieldedCachePath(network, pubkeyHex, root);
   if (!existsSync(path)) return null;
 
   try {
@@ -92,7 +92,7 @@ export function saveShieldedCache(
   pubkeyHex: string,
   state: ledger.ZswapLocalState,
   lastAppliedEventId: number,
-  cacheDir?: string,
+  root: string,
   chainId?: string,
 ): void {
   const data: ShieldedCacheFile = {
@@ -105,7 +105,7 @@ export function saveShieldedCache(
     ...(chainId ? { chainId } : {}),
   };
 
-  const path = getShieldedCachePath(network, pubkeyHex, cacheDir);
+  const path = getShieldedCachePath(network, pubkeyHex, root);
   const dir = dirname(path);
 
   if (!existsSync(dir)) {
@@ -137,17 +137,17 @@ export async function readShieldedBalanceCached(
   seedBuffer: Buffer,
   network: string,
   indexerWS: string,
-  options: ShieldedCachedOptions = {},
+  options: ShieldedCachedOptions,
 ): Promise<ShieldedBalanceResult> {
   const secretKeys = ledger.ZswapSecretKeys.fromSeed(deriveShieldedSeed(seedBuffer));
   const pubkeyHex = secretKeys.coinPublicKey;
 
   // State resumed from another indexer's event ids would replay the wrong events.
-  bindCachesToIndexer(network, indexerWS);
-  let cached = options.forceFresh ? null : loadShieldedCache(network, pubkeyHex, undefined, options.chainId);
+  bindCachesToIndexer(network, indexerWS, options.root);
+  let cached = options.forceFresh ? null : loadShieldedCache(network, pubkeyHex, options.root, options.chainId);
   // A cursor past the chain's latest event: the chain was reset under the cache.
   if (cached && isCursorBeyondTip(cached.lastAppliedEventId, await fetchEventTip(indexerWS, 'zswap'))) {
-    clearShieldedDirectCache(network, pubkeyHex);
+    clearShieldedDirectCache(network, pubkeyHex, options.root);
     cached = null;
   }
   const startFromId = cached ? cached.lastAppliedEventId + 1 : 0;
@@ -161,16 +161,16 @@ export async function readShieldedBalanceCached(
     // Persist after each chunk so a Ctrl+C / kill during a cold ~70s sync
     // doesn't lose progress — the next call resumes from the last checkpoint.
     onCheckpoint: (state, lastAppliedEventId) => {
-      try { saveShieldedCache(network, pubkeyHex, state, lastAppliedEventId, undefined, options.chainId); } catch { /* best-effort */ }
+      try { saveShieldedCache(network, pubkeyHex, state, lastAppliedEventId, options.root, options.chainId); } catch { /* best-effort */ }
     },
   });
 
   // Only write if we advanced or this is a first sync. If we had a cache and zero
   // new events arrived, leave the on-disk file untouched.
   if (result.lastAppliedEventId >= 0) {
-    saveShieldedCache(network, pubkeyHex, result.state, result.lastAppliedEventId, undefined, options.chainId);
+    saveShieldedCache(network, pubkeyHex, result.state, result.lastAppliedEventId, options.root, options.chainId);
   } else if (!cached) {
-    saveShieldedCache(network, pubkeyHex, result.state, -1, undefined, options.chainId);
+    saveShieldedCache(network, pubkeyHex, result.state, -1, options.root, options.chainId);
   }
 
   return {

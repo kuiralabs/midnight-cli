@@ -37,13 +37,14 @@ export default async function airdropCommand(args: ParsedArgs, ctx: CallContext)
   }
 
   const amountNight = parseAmount(amountStr);
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args });
+  const root = ctx.config.paths.stateRoot;
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
 
   applyEndpointOverrides(networkConfig, {
     proofServer: getFlag(args, 'proof-server'),
     node: getFlag(args, 'node'),
     indexerWS: getFlag(args, 'indexer-ws'),
-  }, networkName);
+  }, networkName, root);
 
   if (networkName !== 'undeployed') {
     throw new Error(
@@ -60,7 +61,7 @@ export default async function airdropCommand(args: ParsedArgs, ctx: CallContext)
   const walletFlag = getFlag(args, 'wallet');
   const isShielded = hasFlag(args, 'shielded') ||
     (walletFlag !== undefined && walletFlag.startsWith('mn_shield-addr_'));
-  const destination = await resolveDestination(args, networkName, networkConfig, isShielded);
+  const destination = await resolveDestination(args, root, networkName, networkConfig, isShielded);
 
   if (isShielded) {
     return shieldedAirdrop(args, destination as ShieldedDestination, amountNight, networkName, networkConfig, ctx);
@@ -88,6 +89,7 @@ function looksLikeBech32mAddress(value: string): boolean {
 
 async function resolveDestination(
   args: ParsedArgs,
+  root: string,
   networkName: NetworkName,
   networkConfig: NetworkConfig,
   isShielded: boolean,
@@ -95,26 +97,27 @@ async function resolveDestination(
   const walletFlag = getFlag(args, 'wallet');
 
   if (walletFlag !== undefined && looksLikeBech32mAddress(walletFlag)) {
-    return resolveAddressDestination(walletFlag, networkName, isShielded);
+    return resolveAddressDestination(walletFlag, root, networkName, isShielded);
   }
 
   // Fall back to wallet file (name, path, or active wallet)
-  const walletPath = resolveWalletPath(walletFlag);
+  const walletPath = resolveWalletPath(root, walletFlag);
 
   if (isShielded) {
     // The wallet's own shielded address, as its file keeps it: receiving needs no passphrase
     // (unless the network was added after the wallet was written).
-    const stored = await walletShieldedAddress(walletPath, networkName);
+    const stored = await walletShieldedAddress(walletPath, networkName, root);
     if (stored === undefined) throw new Error(`Wallet ${walletPath} keeps no shielded address for ${networkName}.`);
-    const decoded = await resolveAddressDestination(stored, networkName, true) as ShieldedDestination;
+    const decoded = await resolveAddressDestination(stored, root, networkName, true) as ShieldedDestination;
     return { kind: 'wallet', bech32m: decoded.bech32m, walletPath };
   }
 
-  return { kind: 'address', address: await walletAddress(walletPath, networkName) };
+  return { kind: 'address', address: await walletAddress(walletPath, networkName, root) };
 }
 
 async function resolveAddressDestination(
   address: string,
+  root: string,
   networkName: NetworkName,
   isShielded: boolean,
 ): Promise<UnshieldedDestination | ShieldedDestination> {
@@ -144,7 +147,7 @@ async function resolveAddressDestination(
 
   if (isShielded) {
     try {
-      (await engineFor(networkName)).keys.assertAddress(address, 'shielded', networkName);
+      (await engineFor(networkName, root)).keys.assertAddress(address, 'shielded', networkName);
     } catch (err: any) {
       throw new Error(`Invalid shielded address: ${err.message}`);
     }
@@ -176,7 +179,8 @@ async function unshieldedAirdrop(
   const spinner = ctx.progress.start('Starting genesis wallet...');
 
   try {
-    const result = await (await engineFor(networkName)).wallet.airdrop({
+    const result = await (await engineFor(networkName, ctx.config.paths.stateRoot)).wallet.airdrop({
+      root: ctx.config.paths.stateRoot,
       networkConfig,
       recipientAddress,
       amountNight,
@@ -276,8 +280,9 @@ async function shieldedAirdrop(
   const spinner = ctx.progress.start('Syncing genesis wallet...');
 
   try {
-    const txHash = await (await engineFor(networkName)).wallet.shieldedTransfer({
+    const txHash = await (await engineFor(networkName, ctx.config.paths.stateRoot)).wallet.shieldedTransfer({
       seed: genesisSeedBuffer,
+      root: ctx.config.paths.stateRoot,
       network: networkName,
       networkConfig,
       recipient: userShieldedAddrStr,

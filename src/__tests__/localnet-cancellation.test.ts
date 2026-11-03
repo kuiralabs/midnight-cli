@@ -137,7 +137,7 @@ describe('localnet commands, cancelled while Docker runs', () => {
 });
 
 describe('localnet up, cancelled (started containers stay, and it says which)', () => {
-  const dockerCall = (exec: ExecRunner, signal: AbortSignal): DockerCall => ({ signal, exec, onStderr: () => {} });
+  const dockerCall = (exec: ExecRunner, signal: AbortSignal): DockerCall => ({ signal, exec, onStderr: () => {}, root: join(home, '.midnight') });
 
   it('during docker compose up: the client is killed, and the error names the containers left in place', async () => {
     const call = new AbortController();

@@ -44,9 +44,9 @@ function formatServiceTable(services: readonly ServiceStatus[]): string {
 }
 
 async function handleUp(jsonMode: boolean, ctx: CallContext, docker: DockerCall): Promise<void> {
-  const wrote = ensureComposeFile();
+  const wrote = ensureComposeFile(docker.root);
   if (wrote) {
-    ctx.output.stderr(dim(`  Wrote compose.yml to ${getComposePath()}`) + '\n');
+    ctx.output.stderr(dim(`  Wrote compose.yml to ${getComposePath(docker.root)}`) + '\n');
   }
 
   const spinner = ctx.progress.start('Starting local network...');
@@ -79,7 +79,7 @@ async function handleUp(jsonMode: boolean, ctx: CallContext, docker: DockerCall)
         await waitForFirstBlock(netCfg.node, { timeoutMs: 30_000, signal: ctx.signal });
 
         spinner.update('Waiting for indexer to ingest genesis state...');
-        const genesisAddress = (await engineFor('undeployed')).keys.unshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
+        const genesisAddress = (await engineFor('undeployed', docker.root)).keys.unshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
         await waitForAddressFunded(netCfg.indexerWS, genesisAddress, { timeoutMs: 30_000, signal: ctx.signal });
 
         spinner.update('Waiting for proof server...');
@@ -166,7 +166,7 @@ async function handleDown(jsonMode: boolean, ctx: CallContext, docker: DockerCal
     // and would trigger "applied > highest" on the next command. Clearing
     // here means the next `mn <anything>` starts with a truthful cache.
     const { clearChainCaches } = await import('../lib/chain-caches.ts');
-    clearChainCaches('undeployed');
+    clearChainCaches('undeployed', docker.root);
 
     // Also wipe the dapp-local LevelDB private-state store if the user is
     // running this from a dapp directory. The store survives `docker compose
@@ -248,7 +248,7 @@ async function handleClean(jsonMode: boolean, ctx: CallContext, docker: DockerCa
 }
 
 async function handleLogs(args: ParsedArgs, ctx: CallContext, docker: DockerCall): Promise<void> {
-  const composePath = getComposePath();
+  const composePath = getComposePath(docker.root);
   const tail = getFlag(args, 'tail');
   const jsonMode = hasFlag(args, 'json');
 
@@ -322,7 +322,7 @@ export async function runLocalnet(args: ParsedArgs, ctx: CallContext, exec: Exec
   if (subcommand === 'up') assertLocalnetCanStart();
 
   // Docker runs as a step of this call: its stderr goes where the call's text goes, and the call's cancellation kills it.
-  const docker: DockerCall = { signal: ctx.signal, exec, onStderr: (text) => ctx.output.stderr(text) };
+  const docker: DockerCall = { signal: ctx.signal, exec, onStderr: (text) => ctx.output.stderr(text), root: ctx.config.paths.stateRoot };
 
   // Check Docker is available before any operation
   await checkDockerAvailable(docker);

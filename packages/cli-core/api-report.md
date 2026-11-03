@@ -184,7 +184,7 @@ export interface IndexerChange {
     current: string;
     removed: number;
 }
-export declare function bindCachesToIndexer(network: string, indexerUrl: string, cacheDir?: string): IndexerChange | undefined;
+export declare function bindCachesToIndexer(network: string, indexerUrl: string, root: string): IndexerChange | undefined;
 export declare function describeIndexerChange(network: string, change: IndexerChange): string;
 ```
 
@@ -269,14 +269,14 @@ export interface CliConfig {
     "indexer-ws"?: string;
     wallet?: string;
 }
-export declare function loadCliConfig(configDir?: string): CliConfig;
+export declare function loadCliConfig(configDir: string): CliConfig;
 export declare function getEndpointOverridesForNetwork(config: CliConfig, networkName: NetworkName): NetworkEndpointOverrides;
 export declare function getSdkSetOverride(config: CliConfig, networkName: NetworkName): SdkSet | undefined;
 export declare function getBlockfrostProjectId(config: CliConfig, networkName: NetworkName): string | undefined;
-export declare function saveCliConfig(config: CliConfig, configDir?: string): void;
-export declare function getConfigValue(key: string, configDir?: string, scope?: NetworkName): string;
-export declare function setConfigValue(key: string, value: string, configDir?: string, scope?: NetworkName): void;
-export declare function unsetConfigValue(key: string, configDir?: string, scope?: NetworkName): void;
+export declare function saveCliConfig(config: CliConfig, configDir: string): void;
+export declare function getConfigValue(key: string, configDir: string, scope?: NetworkName): string;
+export declare function setConfigValue(key: string, value: string, configDir: string, scope?: NetworkName): void;
+export declare function unsetConfigValue(key: string, configDir: string, scope?: NetworkName): void;
 export declare function getValidConfigKeys(): readonly string[];
 ```
 
@@ -286,6 +286,7 @@ export declare function getValidConfigKeys(): readonly string[];
 import { type ParsedArgs } from "./argv.ts";
 import { type PackageGuidance } from "./agent-guidance.ts";
 import type { CallContext, CommandOutcome } from "./call-context.ts";
+import type { Host } from "./host.ts";
 export interface ParamSchema {
     readonly type: "string" | "boolean";
     readonly enum?: readonly string[];
@@ -363,6 +364,7 @@ export interface ToolArgv {
     readonly defaultFlags?: Readonly<Record<string, string>>;
 }
 export interface ToolCheckCall {
+    readonly host: Host;
     argv(): ParsedArgs;
     run(args: ParsedArgs): Promise<Record<string, unknown>>;
 }
@@ -744,9 +746,10 @@ export interface ShieldedCachedOptions {
     timeoutMs?: number;
     forceFresh?: boolean;
     chainId?: string;
+    root: string;
 }
 export interface EngineReaders {
-    shieldedBalance(seed: Buffer, network: NetworkName, indexerWS: string, options?: ShieldedCachedOptions): Promise<ShieldedBalanceResult>;
+    shieldedBalance(seed: Buffer, network: NetworkName, indexerWS: string, options: ShieldedCachedOptions): Promise<ShieldedBalanceResult>;
 }
 export interface BalanceSummary {
     balances: Map<string, bigint>;
@@ -771,6 +774,7 @@ export interface TransferParams {
     onSyncWarning?: (tag: string, message: string) => void;
     sdkWarnings: CallSdkWarnings;
     log?: VerboseLog;
+    root: string;
 }
 export interface TransferResult {
     txHash: string;
@@ -789,6 +793,7 @@ export interface DustRegisterOptions {
     onSyncWarning?: (tag: string, message: string) => void;
     sdkWarnings: CallSdkWarnings;
     log?: VerboseLog;
+    root: string;
 }
 export interface DustRegistration {
     alreadyAvailable: boolean;
@@ -816,6 +821,9 @@ export interface ReadOptions {
     onProgress?: (current: number, highest: number) => void;
     log?: VerboseLog;
 }
+export interface CachedReadOptions extends ReadOptions {
+    root: string;
+}
 export interface DustBalance {
     balance: bigint;
     availableCoins: number;
@@ -836,6 +844,7 @@ export interface WalletSyncHooks {
 }
 export interface ShieldedTransferParams extends WalletSyncHooks {
     seed: Buffer;
+    root: string;
     network: NetworkName;
     networkConfig: NetworkConfig;
     recipient: string;
@@ -847,6 +856,7 @@ export interface ShieldedTransferParams extends WalletSyncHooks {
 }
 export interface PrepWallet {
     seed: Buffer;
+    root: string;
     network: NetworkName;
     networkConfig: NetworkConfig;
     address: string;
@@ -881,12 +891,13 @@ export interface ServedWalletSession {
 }
 export interface EngineWallet {
     unshieldedBalance(address: string, networkConfig: NetworkConfig, options?: ReadOptions): Promise<UnshieldedView>;
-    dustBalance(seed: Buffer, networkConfig: NetworkConfig, options?: ReadOptions): Promise<DustBalance>;
+    dustBalance(seed: Buffer, networkConfig: NetworkConfig, options: CachedReadOptions): Promise<DustBalance>;
     transfer(params: TransferParams): Promise<TransferResult>;
     airdrop(params: AirdropParams): Promise<TransferResult>;
     shieldedTransfer(params: ShieldedTransferParams): Promise<string>;
     registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions): Promise<DustRegistration>;
-    exportDust(seed: Buffer, network: string, networkConfig: NetworkConfig, options?: {
+    exportDust(seed: Buffer, network: string, networkConfig: NetworkConfig, options: {
+        root: string;
         signal?: AbortSignal;
         log?: VerboseLog;
         onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
@@ -898,6 +909,7 @@ export interface EngineWallet {
     }>;
     openConnector(options: {
         seed: Buffer;
+        root: string;
         network: NetworkName;
         networkConfig: NetworkConfig;
         address: string;
@@ -908,6 +920,7 @@ export interface EngineWallet {
     }): Promise<OpenedConnector>;
     serveWallet<T>(options: {
         seed: Buffer;
+        root: string;
         networkConfig: NetworkConfig;
         network: NetworkName;
         address: string;
@@ -922,7 +935,7 @@ export interface Engine {
     readonly readers: EngineReaders;
     readonly wallet: EngineWallet;
 }
-export declare function sdkSetOf(network: NetworkName): SdkSet;
+export declare function sdkSetOf(network: NetworkName, root: string): SdkSet;
 export type EngineLoader = (set: SdkSet) => Promise<Engine>;
 export declare class OtherSdkSetError extends Error {
     readonly code = "OTHER_SDK_SET";
@@ -931,8 +944,8 @@ export declare class OtherSdkSetError extends Error {
     constructor(loadedSet: SdkSet, wantedSet: SdkSet, message?: string);
 }
 export declare function setEngineLoader(next: EngineLoader): void;
-export declare function engineFor(network: NetworkName): Promise<Engine>;
-export declare function preferEngineOf(network: NetworkName): void;
+export declare function engineFor(network: NetworkName, root: string): Promise<Engine>;
+export declare function preferEngineOf(network: NetworkName, root: string): void;
 export declare function anyEngine(): Promise<Engine>;
 ```
 
@@ -1152,8 +1165,8 @@ export interface NetworkConfig {
 }
 export declare const SDK_SETS: readonly SdkSet[];
 export declare function defaultSdkSetOf(name: NetworkName): SdkSet;
-export declare function networksOnSdkSet(set: SdkSet): NetworkName[];
-export declare function sdkSetOfNetwork(name: NetworkName): SdkSet;
+export declare function networksOnSdkSet(set: SdkSet, root: string): NetworkName[];
+export declare function sdkSetOfNetwork(name: NetworkName, root: string): SdkSet;
 export declare function isValidNetworkName(name: string): name is NetworkName;
 export declare function getNetworkConfig(name: NetworkName): NetworkConfig;
 export declare function getValidNetworkNames(): readonly string[];
@@ -1193,7 +1206,7 @@ export interface EndpointOverrides {
     indexerWS?: string;
 }
 export declare function endpointFlags(e: EndpointOverrides): Record<string, string>;
-export declare function applyEndpointOverrides(config: NetworkConfig, flagOverrides: EndpointOverrides, networkName: NetworkName, configDir?: string): NetworkConfig;
+export declare function applyEndpointOverrides(config: NetworkConfig, flagOverrides: EndpointOverrides, networkName: NetworkName, configDir: string): NetworkConfig;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/network-id`
@@ -1254,10 +1267,10 @@ export declare class OfferCoinsInUseError extends Error {
     readonly offerIds: string[];
     constructor(offerIds: string[]);
 }
-export declare function openOffersFile(network: NetworkName, walletAddress: string): string;
-export declare function readOpenOffers(network: NetworkName, walletAddress: string): OpenOffer[];
-export declare function recordOpenOffer(network: NetworkName, walletAddress: string, offer: OpenOffer): void;
-export declare function closeOpenOffers(network: NetworkName, walletAddress: string, ids: readonly string[]): OpenOffer[];
+export declare function openOffersFile(root: string, network: NetworkName, walletAddress: string): string;
+export declare function readOpenOffers(root: string, network: NetworkName, walletAddress: string): OpenOffer[];
+export declare function recordOpenOffer(root: string, network: NetworkName, walletAddress: string, offer: OpenOffer): void;
+export declare function closeOpenOffers(root: string, network: NetworkName, walletAddress: string, ids: readonly string[]): OpenOffer[];
 export declare function assertSpendsNoOfferCoin(open: readonly OpenOffer[], spent: readonly string[], cancelling?: readonly string[]): void;
 ```
 
@@ -1271,10 +1284,11 @@ import type { CallSdkWarnings } from "./sdk-warnings.ts";
 import type { WalletSession } from "./wallet-session.ts";
 export interface PayingTarget {
     network: NetworkName;
+    root: string;
     networkConfig: NetworkConfig;
     endpoints: EndpointOverrides;
 }
-export declare function resolvePayingTarget(args: ParsedArgs, command: string, subcommand: string): PayingTarget;
+export declare function resolvePayingTarget(args: ParsedArgs, command: string, subcommand: string, root: string): PayingTarget;
 export interface ServedWallet {
     port: number;
     stop: () => Promise<void>;
@@ -1338,13 +1352,13 @@ export declare function currentPrompter(): Prompter | null;
 ## `@kuiralabs/midnight-cli-core/lib/reader-cache-files`
 
 ```ts
-export declare function dustCacheDir(network: string, cacheDir?: string): string;
-export declare function getDustCachePath(network: string, pubkeyHex: string, cacheDir?: string): string;
-export declare function clearDustDirectCache(network?: string, pubkeyHex?: string, cacheDir?: string): void;
-export declare function getShieldedCachePath(network: string, pubkeyHex: string, cacheDir?: string): string;
-export declare function clearShieldedDirectCache(network?: string, pubkeyHex?: string, cacheDir?: string): void;
+export declare function dustCacheDir(network: string, root: string): string;
+export declare function getDustCachePath(network: string, pubkeyHex: string, root: string): string;
+export declare function clearDustDirectCache(network: string | undefined, pubkeyHex: string | undefined, root: string): void;
+export declare function getShieldedCachePath(network: string, pubkeyHex: string, root: string): string;
+export declare function clearShieldedDirectCache(network: string | undefined, pubkeyHex: string | undefined, root: string): void;
 export declare const nativeCheckpointName: (pubkeyHex: string) => string;
-export declare function clearNativeDustCheckpoint(network?: string, pubkeyHex?: string, cacheDir?: string): void;
+export declare function clearNativeDustCheckpoint(network: string | undefined, pubkeyHex: string | undefined, root: string): void;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/resolve-network`
@@ -1355,11 +1369,11 @@ import { type NetworkName, type NetworkConfig } from "./network.ts";
 import { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV } from "./settings.ts";
 export interface NetworkResolutionContext {
     args: ParsedArgs;
-    configDir?: string;
+    configDir: string;
 }
 export declare function resolveNetworkName(ctx: NetworkResolutionContext): NetworkName;
 export { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV };
-export declare function resolveBlockfrostProjectId(name: NetworkName, configDir?: string, env?: Record<string, string | undefined>): string | undefined;
+export declare function resolveBlockfrostProjectId(name: NetworkName, configDir: string, env?: Record<string, string | undefined>): string | undefined;
 export declare function resolveNetwork(ctx: NetworkResolutionContext): {
     name: NetworkName;
     config: NetworkConfig;
@@ -1483,10 +1497,6 @@ export declare class NoStateRootError extends Error {
     readonly code = "NO_STATE_ROOT";
     constructor();
 }
-export declare function setHostPathsSource(next: (() => HostPaths) | null): void;
-export declare function hostPaths(): HostPaths;
-export declare function stateRoot(): string;
-export declare function userHome(): string;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/swap-offer`
@@ -1543,12 +1553,12 @@ export interface WalletCacheData {
     unshielded: string;
     dust: string;
 }
-export declare function cacheRootDir(cacheDir?: string): string;
-export declare function networkCacheFolder(network: string): string;
+export declare function cacheRootDir(root: string): string;
+export declare function networkCacheFolder(network: string, root: string): string;
 export declare const CACHE_KEY_PREFIX_LENGTH = 20;
 export declare function cacheKeyOf(addressOrKey: string): string;
-export declare function getCachePath(address: string, network: string, cacheDir?: string): string;
-export declare function loadWalletCache(address: string, network: string, cacheDir?: string): WalletCacheData | null;
+export declare function getCachePath(address: string, network: string, root: string): string;
+export declare function loadWalletCache(address: string, network: string, root: string): WalletCacheData | null;
 export declare function saveWalletCache(address: string, network: string, facade: {
     shielded: {
         serializeState(): Promise<string>;
@@ -1559,9 +1569,9 @@ export declare function saveWalletCache(address: string, network: string, facade
     dust: {
         serializeState(): Promise<string>;
     };
-}, cacheDir?: string, chainId?: string): Promise<void>;
-export declare function validateWalletCacheChainId(network: string, currentChainId: string | null, cacheDir?: string): string[];
-export declare function clearWalletCache(address?: string, network?: string, cacheDir?: string): void;
+}, root: string, chainId?: string): Promise<void>;
+export declare function validateWalletCacheChainId(network: string, currentChainId: string | null, root: string): string[];
+export declare function clearWalletCache(address: string | undefined, network: string | undefined, root: string): void;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/wallet-session`
@@ -1620,6 +1630,7 @@ export declare function sessionOver(network: NetworkName, opened: OpenedConnecto
 export interface OpenWalletSessionOptions {
     seed: Buffer;
     network: NetworkName;
+    root: string;
     networkConfig?: NetworkConfig;
     forceShielded?: boolean;
     dustWaitMs?: number;

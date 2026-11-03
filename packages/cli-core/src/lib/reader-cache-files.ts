@@ -6,20 +6,20 @@ import { existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { cacheKeyOf, cacheRootDir, networkCacheFolder } from './wallet-cache.ts';
 
-/** The folder of a network's reader caches. */
-export function dustCacheDir(network: string, cacheDir?: string): string {
-  const base = cacheRootDir(cacheDir);
-  return join(base, networkCacheFolder(network));
+/** The folder of a network's reader caches under the state root `root`. */
+export function dustCacheDir(network: string, root: string): string {
+  const base = cacheRootDir(root);
+  return join(base, networkCacheFolder(network, root));
 }
 
 /** The Dust reader's cache file for a network and Dust public key. */
 export function getDustCachePath(
   network: string,
   pubkeyHex: string,
-  cacheDir?: string,
+  root: string,
 ): string {
   const prefix = cacheKeyOf(pubkeyHex);
-  return join(dustCacheDir(network, cacheDir), `dust-${prefix}.json`);
+  return join(dustCacheDir(network, root), `dust-${prefix}.json`);
 }
 
 /**
@@ -29,14 +29,14 @@ export function getDustCachePath(
  *  - (neither)            → all dust-* files across all networks
  */
 export function clearDustDirectCache(
-  network?: string,
-  pubkeyHex?: string,
-  cacheDir?: string,
+  network: string | undefined,
+  pubkeyHex: string | undefined,
+  root: string,
 ): void {
-  const base = cacheRootDir(cacheDir);
+  const base = cacheRootDir(root);
 
   if (network && pubkeyHex) {
-    const path = getDustCachePath(network, pubkeyHex, cacheDir);
+    const path = getDustCachePath(network, pubkeyHex, root);
     try { unlinkSync(path); } catch { /* not found is ok */ }
     return;
   }
@@ -53,7 +53,7 @@ export function clearDustDirectCache(
   };
 
   if (network) {
-    wipeNetworkDir(dustCacheDir(network, cacheDir));
+    wipeNetworkDir(dustCacheDir(network, root));
     return;
   }
 
@@ -65,19 +65,19 @@ export function clearDustDirectCache(
   } catch { /* best-effort */ }
 }
 
-function shieldedCacheDir(network: string, cacheDir?: string): string {
-  const base = cacheRootDir(cacheDir);
-  return join(base, networkCacheFolder(network));
+function shieldedCacheDir(network: string, root: string): string {
+  const base = cacheRootDir(root);
+  return join(base, networkCacheFolder(network, root));
 }
 
 /** The shielded reader's cache file for a network and coin public key. */
 export function getShieldedCachePath(
   network: string,
   pubkeyHex: string,
-  cacheDir?: string,
+  root: string,
 ): string {
   const prefix = cacheKeyOf(pubkeyHex);
-  return join(shieldedCacheDir(network, cacheDir), `shielded-${prefix}.json`);
+  return join(shieldedCacheDir(network, root), `shielded-${prefix}.json`);
 }
 
 /**
@@ -87,14 +87,14 @@ export function getShieldedCachePath(
  *  - (neither)            → all shielded-* files across all networks
  */
 export function clearShieldedDirectCache(
-  network?: string,
-  pubkeyHex?: string,
-  cacheDir?: string,
+  network: string | undefined,
+  pubkeyHex: string | undefined,
+  root: string,
 ): void {
-  const base = cacheRootDir(cacheDir);
+  const base = cacheRootDir(root);
 
   if (network && pubkeyHex) {
-    const path = getShieldedCachePath(network, pubkeyHex, cacheDir);
+    const path = getShieldedCachePath(network, pubkeyHex, root);
     try { unlinkSync(path); } catch { /* not found is ok */ }
     return;
   }
@@ -111,7 +111,7 @@ export function clearShieldedDirectCache(
   };
 
   if (network) {
-    wipeNetworkDir(shieldedCacheDir(network, cacheDir));
+    wipeNetworkDir(shieldedCacheDir(network, root));
     return;
   }
 
@@ -132,10 +132,10 @@ export const nativeCheckpointName = (pubkeyHex: string): string => `dust-native-
  * (neither) → all. Called from `mn cache clear` so clearing the cache also forces
  * a fresh native sync (and drops a stale checkpoint after a chain reset).
  */
-export function clearNativeDustCheckpoint(network?: string, pubkeyHex?: string, cacheDir?: string): void {
-  const base = cacheRootDir(cacheDir);
+export function clearNativeDustCheckpoint(network: string | undefined, pubkeyHex: string | undefined, root: string): void {
+  const base = cacheRootDir(root);
   if (network && pubkeyHex) {
-    try { unlinkSync(join(base, networkCacheFolder(network), nativeCheckpointName(pubkeyHex))); } catch { /* not found is ok */ }
+    try { unlinkSync(join(base, networkCacheFolder(network, root), nativeCheckpointName(pubkeyHex))); } catch { /* not found is ok */ }
     return;
   }
   const wipeDir = (dir: string) => {
@@ -148,7 +148,7 @@ export function clearNativeDustCheckpoint(network?: string, pubkeyHex?: string, 
       }
     } catch { /* best-effort */ }
   };
-  if (network) { wipeDir(join(base, networkCacheFolder(network))); return; }
+  if (network) { wipeDir(join(base, networkCacheFolder(network, root))); return; }
   if (!existsSync(base)) return;
   try { for (const net of readdirSync(base)) wipeDir(join(base, net)); } catch { /* best-effort */ }
 }

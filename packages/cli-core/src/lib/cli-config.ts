@@ -5,7 +5,6 @@ import { blockfrostNetworks, checkProjectId, maskProjectId, networkOfProjectId }
 import { type NetworkName, SDK_SETS, getValidNetworkNames, isValidNetworkName } from './network.ts';
 import type { SdkSet } from './engine.ts';
 import { UsageError } from './errors.ts';
-import { stateRoot } from './state-root.ts';
 
 /** Endpoint overrides for one network. Keys mirror the flag/config names. */
 export interface NetworkEndpointOverrides {
@@ -73,18 +72,13 @@ function isValidUrl(value: string): boolean {
   return /^(https?|wss?):\/\/\S+/.test(value);
 }
 
-function getConfigDir(configDir?: string): string {
-  return configDir ?? stateRoot();
+function getConfigPath(configDir: string): string {
+  return path.join(configDir, DEFAULT_CONFIG_FILENAME);
 }
 
-function getConfigPath(configDir?: string): string {
-  return path.join(getConfigDir(configDir), DEFAULT_CONFIG_FILENAME);
-}
-
-function ensureConfigDir(configDir?: string): void {
-  const dir = getConfigDir(configDir);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
+function ensureConfigDir(configDir: string): void {
+  if (!fs.existsSync(configDir)) {
+    fs.mkdirSync(configDir, { recursive: true, mode: DIR_MODE });
   }
 }
 
@@ -92,7 +86,7 @@ function ensureConfigDir(configDir?: string): void {
  * Load CLI config from ~/.midnight/config.json.
  * Returns defaults if the file doesn't exist.
  */
-export function loadCliConfig(configDir?: string): CliConfig {
+export function loadCliConfig(configDir: string): CliConfig {
   const configPath = getConfigPath(configDir);
 
   if (!fs.existsSync(configPath)) {
@@ -193,7 +187,7 @@ export function getBlockfrostProjectId(config: CliConfig, networkName: NetworkNa
  * Save CLI config to ~/.midnight/config.json.
  * Creates the directory if it doesn't exist.
  */
-export function saveCliConfig(config: CliConfig, configDir?: string): void {
+export function saveCliConfig(config: CliConfig, configDir: string): void {
   ensureConfigDir(configDir);
   const configPath = getConfigPath(configDir);
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', { mode: FILE_MODE });
@@ -204,7 +198,7 @@ export function saveCliConfig(config: CliConfig, configDir?: string): void {
  * Endpoint keys are network-scoped: returns the value that applies to the
  * currently configured network (scoped entry first, then the legacy flat key).
  */
-export function getConfigValue(key: string, configDir?: string, scope?: NetworkName): string {
+export function getConfigValue(key: string, configDir: string, scope?: NetworkName): string {
   const canonical = resolveConfigKey(key);
   const config = loadCliConfig(configDir);
   assertScopeApplies(canonical, scope);
@@ -261,7 +255,7 @@ function migrateFlatEndpointsToScope(config: CliConfig, networkName: NetworkName
  * two can't diverge. Switching `network` first migrates legacy flat endpoint
  * keys into the old network's scope — they were set while using it.
  */
-export function setConfigValue(key: string, value: string, configDir?: string, scope?: NetworkName): void {
+export function setConfigValue(key: string, value: string, configDir: string, scope?: NetworkName): void {
   const canonical = resolveConfigKey(key);
   const config = loadCliConfig(configDir);
   assertScopeApplies(canonical, scope);
@@ -319,7 +313,7 @@ export function setConfigValue(key: string, value: string, configDir?: string, s
  * legacy flat key (so one unset reliably clears whatever was applying).
  * For other optional keys: removes the key entirely.
  */
-export function unsetConfigValue(key: string, configDir?: string, scope?: NetworkName): void {
+export function unsetConfigValue(key: string, configDir: string, scope?: NetworkName): void {
   const canonical = resolveConfigKey(key);
   const config = loadCliConfig(configDir);
   assertScopeApplies(canonical, scope);

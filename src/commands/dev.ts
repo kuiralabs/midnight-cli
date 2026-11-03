@@ -54,7 +54,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
   // ── Phase 2: ensure localnet running ──────────────────────
   const localnetSpinner = ctx.progress.start('Checking localnet...');
   try {
-    const result = await ensureLocalnetRunning((msg) => localnetSpinner.update(msg));
+    const result = await ensureLocalnetRunning(ctx.config.paths.stateRoot, (msg) => localnetSpinner.update(msg));
     const stateLabel = {
       'already-running': 'Ledger-9 stack reachable',
     }[result.state];
@@ -68,6 +68,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
   const walletSpinner = ctx.progress.start('Provisioning dev wallets...');
   try {
     const provisioned = await provisionDevWallets({
+      root: ctx.config.paths.stateRoot,
       names: DEFAULT_DEV_WALLET_NAMES,
       amountNight: DEFAULT_DEV_AIRDROP_AMOUNT,
       signal,
@@ -154,7 +155,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
   // Unlock mn's passphrase now, while stdin is still a plain terminal: once the
   // dispatcher reads keys in raw mode, a passphrase typed for [d]'s deploy would
   // be read as dev keystrokes too. Asked once per run; MN_PASSPHRASE asks nothing.
-  if (isPassphraseSet()) await unlockPassphrase();
+  if (isPassphraseSet(ctx.config.paths.stateRoot)) await unlockPassphrase(ctx.config.paths.stateRoot);
 
   const abortController = new AbortController();
   const stopRequest = () => {
@@ -244,7 +245,7 @@ async function deployContract(project: ProjectInfo, ctx: CallContext): Promise<v
   try {
     const { deployDevContract } = await import('../lib/dev/deploy.ts');
     // The payer is the caller's (the CLI passes the serve payer), as for contract and grant.
-    const deployed = await deployDevContract(project.projectRoot, DEPLOY_WALLET, DEPLOY_NETWORK, payerFor('dev deploy', ctx), ctx.progress.silent(), ctx.sdkWarnings, ctx.signal);
+    const deployed = await deployDevContract(ctx.config.paths.stateRoot, project.projectRoot, DEPLOY_WALLET, DEPLOY_NETWORK, payerFor('dev deploy', ctx), ctx.progress.silent(), ctx.sdkWarnings, ctx.signal);
     spinner.stop(`Deployed`);
     ctx.output.stderr(`  ${dim('address')}  ${teal(deployed.address)}\n`);
   } catch (err) {

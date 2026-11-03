@@ -54,8 +54,8 @@ import { callNodeRpc } from '@kuiralabs/midnight-chain/lib/node-rpc';
 import { deriveDustSeed } from './derivation.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
 import { fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain/lib/event-tip';
-import type { DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/lib/engine';
-export type { DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/lib/engine';
+export type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 // ── Public types ──────────────────────────────────────────
 
@@ -72,6 +72,8 @@ export interface FacadeLease {
 
 export interface InvalidationScope {
   network: NetworkConfig;
+  /** The state root whose saved wallet state the facade kind clears. */
+  root: string;
   /** If set, scope invalidations to this seed's derived caches. */
   seed?: Buffer;
   /** If set, scope unshielded invalidation to this address. */
@@ -81,7 +83,7 @@ export interface InvalidationScope {
 }
 
 
-export interface FacadeOptions extends ReadOptions {
+export interface FacadeOptions extends CachedReadOptions {
   syncMode?: SyncMode;
   requireStrictSync?: boolean;
   /** If true, skip the post-resolve invalidation (read-only borrowers). */
@@ -131,8 +133,8 @@ export interface RepoDeps {
       onProgress?: (applied: number, max: number) => void;
       /** Repo passes a callback to persist incremental progress during long syncs. */
       onCheckpoint?: (state: ledger.DustLocalState, lastAppliedEventId: number, retention: DustRetention) => void;
-      /** The cache folder the repository keeps; the native sidecar keeps its checkpoint there. */
-      cacheDir?: string;
+      /** The state root of the caches; the native sidecar keeps its checkpoint beside them. */
+      root: string;
       /** The call's verbose lines. */
       log?: VerboseLog;
     },
@@ -143,8 +145,6 @@ export interface RepoDeps {
   fetchEventTip?: (indexerWS: string, stream: LedgerEventStream) => Promise<number | null>;
   /** Chain protocol-version fetcher (ledger-9-only guard). Default: indexer `block { protocolVersion }`. */
   fetchProtocolVersion?: (indexerHttpUrl: string, signal?: AbortSignal) => Promise<bigint | null>;
-  /** Override cache directory (tests use a tmp dir). */
-  cacheDir?: string;
 }
 
 // ── Implementation ────────────────────────────────────────
@@ -190,7 +190,6 @@ export class WalletDataRepository {
   private readonly fetchChainId: NonNullable<RepoDeps['fetchChainId']>;
   private readonly fetchEventTip: NonNullable<RepoDeps['fetchEventTip']>;
   private readonly fetchProtocolVersion: NonNullable<RepoDeps['fetchProtocolVersion']>;
-  private readonly cacheDir: string | undefined;
 
   private readonly dustMemo = new Map<string, MemoEntry<DustView>>();
   private readonly unshieldedMemo = new Map<string, MemoEntry<UnshieldedView>>();
@@ -204,7 +203,6 @@ export class WalletDataRepository {
     this.fetchChainId = deps.fetchChainId ?? getChainGenesisHash;
     this.fetchEventTip = deps.fetchEventTip ?? fetchEventTip;
     this.fetchProtocolVersion = deps.fetchProtocolVersion ?? fetchProtocolVersion;
-    this.cacheDir = deps.cacheDir;
   }
 
   /**
@@ -212,8 +210,8 @@ export class WalletDataRepository {
    * state read from another indexer is dropped before it is loaded, and the
    * caller is told why this sync is a full one.
    */
-  private keepCachesOfThisIndexer(networkName: string, network: NetworkConfig, onStatus?: (s: string) => void): void {
-    const change = bindCachesToIndexer(networkName, network.indexerWS, this.cacheDir);
+  private keepCachesOfThisIndexer(networkName: string, network: NetworkConfig, root: string, onStatus?: (s: string) => void): void {
+    const change = bindCachesToIndexer(networkName, network.indexerWS, root);
     if (change) onStatus?.(describeIndexerChange(networkName, change));
   }
 
@@ -228,18 +226,19 @@ export class WalletDataRepository {
   /**
    * The saved state a wallet restores from: its own, else a new wallet's on
    * the Dust checkpoint (see freshWalletOnDustCheckpoint). Null builds it from
-   * its keys. Every facade mn starts for writing starts from this. Building
-   * that new wallet's diagnostics go to `log`.
+   * its keys. Every facade mn starts for writing starts from this; both are
+   * read under the state root `root`. Building that new wallet's diagnostics
+   * go to `log`.
    */
-  async walletStateToRestore(seed: Buffer, network: NetworkConfig, networkName: NetworkName, log?: VerboseLog): Promise<WalletCacheData | null> {
-    return loadWalletCache(deriveUnshieldedAddress(seed, networkName), networkName, this.cacheDir)
-      ?? await this.freshWalletOnDustCheckpoint(seed, network, networkName, log);
+  async walletStateToRestore(seed: Buffer, network: NetworkConfig, networkName: NetworkName, root: string, log?: VerboseLog): Promise<WalletCacheData | null> {
+    return loadWalletCache(deriveUnshieldedAddress(seed, networkName), networkName, root)
+      ?? await this.freshWalletOnDustCheckpoint(seed, network, networkName, root, log);
   }
 
-  private async freshWalletOnDustCheckpoint(seed: Buffer, network: NetworkConfig, networkName: NetworkName, log?: VerboseLog): Promise<WalletCacheData | null> {
-    const checkpoint = loadDustCache(networkName, dustPublicKeyHexFromSeed(seed), this.cacheDir);
+  private async freshWalletOnDustCheckpoint(seed: Buffer, network: NetworkConfig, networkName: NetworkName, root: string, log?: VerboseLog): Promise<WalletCacheData | null> {
+    const checkpoint = loadDustCache(networkName, dustPublicKeyHexFromSeed(seed), root);
     if (!checkpoint || checkpoint.lastAppliedEventId < 0) return null;
-    const fresh = await buildFacade(seed, network, null, log);
+    const fresh = await buildFacade(seed, network, root, null, log);
     try {
       const { shielded, unshielded, dust } = fresh.facade as unknown as Record<'shielded' | 'unshielded' | 'dust', { serializeState(): Promise<string> }>;
       const [shieldedState, unshieldedState, dustState] = await Promise.all([shielded.serializeState(), unshielded.serializeState(), dust.serializeState()]);
@@ -251,7 +250,7 @@ export class WalletDataRepository {
 
   // ── Reads ─────────────────────────────────────────
 
-  async dust(seed: Buffer, network: NetworkConfig, opts: ReadOptions = {}): Promise<DustView> {
+  async dust(seed: Buffer, network: NetworkConfig, opts: CachedReadOptions): Promise<DustView> {
     const networkName = networkNameOf(network);
     await assertLedgerSupported(networkName, network, this.fetchProtocolVersion, opts.signal);
     const pubkeyHex = dustPublicKeyHexFromSeed(seed);
@@ -267,15 +266,15 @@ export class WalletDataRepository {
     // stale-chain dust files, and persist the same hash on every save so the
     // guard has something to compare on the next run.
     const currentChainId = await this.fetchChainId(network.node).catch(() => null);
-    validateDustCacheChainId(networkName, currentChainId, this.cacheDir);
-    this.keepCachesOfThisIndexer(networkName, network, opts.onStatus);
+    validateDustCacheChainId(networkName, currentChainId, opts.root);
+    this.keepCachesOfThisIndexer(networkName, network, opts.root, opts.onStatus);
     const chainId = currentChainId ?? undefined;
 
-    let cached = opts.forceFresh ? null : loadDustCache(networkName, pubkeyHex, this.cacheDir);
+    let cached = opts.forceFresh ? null : loadDustCache(networkName, pubkeyHex, opts.root);
     // A cursor past the chain's latest event: the chain was reset under the
     // cache (the genesis check above can't tell when the hash is reused).
     if (cached && isCursorBeyondTip(cached.lastAppliedEventId, await this.fetchEventTip(network.indexerWS, 'dust'))) {
-      clearDustDirectCache(networkName, pubkeyHex, this.cacheDir);
+      clearDustDirectCache(networkName, pubkeyHex, opts.root);
       cached = null;
     }
     const startedFromCache = cached !== null;
@@ -301,7 +300,7 @@ export class WalletDataRepository {
       );
 
       result = await this.fetchDust(seed, network, {
-        cacheDir: this.cacheDir,
+        root: opts.root,
         startFromId,
         initialState: cached?.state,
         initialRetention: cached?.retention,
@@ -319,7 +318,7 @@ export class WalletDataRepository {
         // Persist after each chunk so a Ctrl+C / process kill / SIGTERM
         // doesn't lose 100k events of work.
         onCheckpoint: (state, lastAppliedEventId, retention) => {
-          try { saveDustCache(networkName, pubkeyHex, state, lastAppliedEventId, this.cacheDir, chainId, retention); } catch { /* best-effort */ }
+          try { saveDustCache(networkName, pubkeyHex, state, lastAppliedEventId, opts.root, chainId, retention); } catch { /* best-effort */ }
         },
       });
 
@@ -330,7 +329,7 @@ export class WalletDataRepository {
         ? result.lastAppliedEventId
         : (cached?.lastAppliedEventId ?? -1);
       if (result.lastAppliedEventId >= 0 || !cached) {
-        try { saveDustCache(networkName, pubkeyHex, result.state, lastAppliedEventId, this.cacheDir, chainId, result.retention); } catch { /* best-effort */ }
+        try { saveDustCache(networkName, pubkeyHex, result.state, lastAppliedEventId, opts.root, chainId, result.retention); } catch { /* best-effort */ }
       }
 
       totalEventsApplied += result.eventCount;
@@ -339,7 +338,7 @@ export class WalletDataRepository {
       if (stalledWindows >= DUST_STALLED_WINDOWS || this.now() - startedAt >= DUST_SYNC_BUDGET_MS) break;
 
       // Reload for the next iteration so cached.state is the latest checkpoint.
-      cached = loadDustCache(networkName, pubkeyHex, this.cacheDir);
+      cached = loadDustCache(networkName, pubkeyHex, opts.root);
     }
 
     if (!result) throw new Error('Dust sync exhausted retries without producing a result');
@@ -413,7 +412,7 @@ export class WalletDataRepository {
     seed: Buffer,
     network: NetworkConfig,
     fn: (lease: FacadeLease) => Promise<T>,
-    opts: FacadeOptions = {},
+    opts: FacadeOptions,
   ): Promise<T> {
     const syncMode = opts.syncMode ?? 'full';
     const requireStrictSync = opts.requireStrictSync ?? true;
@@ -428,8 +427,8 @@ export class WalletDataRepository {
     await assertLedgerSupported(networkName, network, this.fetchProtocolVersion, opts.signal);
 
     const currentChainId = await this.fetchChainId(network.node).catch(() => null);
-    validateWalletCacheChainId(networkName, currentChainId, this.cacheDir);
-    this.keepCachesOfThisIndexer(networkName, network, opts.onStatus);
+    validateWalletCacheChainId(networkName, currentChainId, opts.root);
+    this.keepCachesOfThisIndexer(networkName, network, opts.root, opts.onStatus);
     const chainId = currentChainId ?? undefined;
 
     // ── Pre-prime the dust-direct cache for write-mode borrowers ──
@@ -438,7 +437,7 @@ export class WalletDataRepository {
     // near-tip. Read-only borrowers skip it.
     if (writeMode && !opts.noPrime && !opts.forceFresh) {
       try {
-        await this.dust(seed, network, { signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
+        await this.dust(seed, network, { root: opts.root, signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
       } catch (err) {
         // Pre-prime is best-effort — the actual sync below will re-attempt
         // anyway. Surface the error only via onSyncWarning if anyone cares.
@@ -461,8 +460,8 @@ export class WalletDataRepository {
         throwIfCancelled(opts.signal);
         const cacheBeforeBuild = opts.forceFresh
           ? null
-          : await this.walletStateToRestore(seed, network, networkName, opts.log);
-        bundle = await buildFacade(seed, network, cacheBeforeBuild, opts.log);
+          : await this.walletStateToRestore(seed, network, networkName, opts.root, opts.log);
+        bundle = await buildFacade(seed, network, opts.root, cacheBeforeBuild, opts.log);
         try {
           syncedState = await startAndSyncFacade(bundle, {
             onProgress: opts.onSyncProgress,
@@ -480,12 +479,12 @@ export class WalletDataRepository {
             opts.onStatus?.(`Cache is stale, clearing and rebuilding (attempt ${attempt + 1}/${SYNC_MAX_ATTEMPTS})...`);
             await stopFacade(bundle).catch(() => {});
             bundle = undefined;
-            clearWalletCache(address, networkName, this.cacheDir);
-            clearDustDirectCache(networkName, dustPublicKeyHexFromSeed(seed), this.cacheDir);
+            clearWalletCache(address, networkName, opts.root);
+            clearDustDirectCache(networkName, dustPublicKeyHexFromSeed(seed), opts.root);
             // Re-prime the dust cache so the next attempt restores from a
             // current checkpoint instead of a full SDK resync.
             try {
-              await this.dust(seed, network, { signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
+              await this.dust(seed, network, { root: opts.root, signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
             } catch { /* best-effort */ }
             continue;
           }
@@ -493,7 +492,7 @@ export class WalletDataRepository {
           if (attempt < SYNC_MAX_ATTEMPTS && String(err?.message ?? '').includes('timed out')) {
             // Save partial sync progress to cache before retrying so the next
             // attempt resumes from the latest event id.
-            try { await saveWalletCache(address, networkName, bundle.facade, this.cacheDir, chainId); } catch { /* best-effort */ }
+            try { await saveWalletCache(address, networkName, bundle.facade, opts.root, chainId); } catch { /* best-effort */ }
             opts.onStatus?.(`Sync timed out, retrying (attempt ${attempt + 1}/${SYNC_MAX_ATTEMPTS})...`);
             await stopFacade(bundle).catch(() => {});
             bundle = undefined;
@@ -529,8 +528,8 @@ export class WalletDataRepository {
           bundle = undefined;
           await new Promise((r) => setTimeout(r, COLD_START_DELAY_MS));
           throwIfCancelled(opts.signal);
-          const retryCache = loadWalletCache(address, networkName, this.cacheDir);
-          bundle = await buildFacade(seed, network, retryCache, opts.log);
+          const retryCache = loadWalletCache(address, networkName, opts.root);
+          bundle = await buildFacade(seed, network, opts.root, retryCache, opts.log);
           syncedState = await startAndSyncFacade(bundle, {
             onProgress: opts.onSyncProgress,
             onSyncDetail: opts.onSyncDetail,
@@ -543,9 +542,9 @@ export class WalletDataRepository {
       }
 
       if (!opts.skipAutoSave) {
-        try { await saveWalletCache(address, networkName, bundle.facade, this.cacheDir, chainId); } catch { /* best-effort */ }
+        try { await saveWalletCache(address, networkName, bundle.facade, opts.root, chainId); } catch { /* best-effort */ }
       }
-      if (!opts.readOnly) this.invalidate({ network, seed });
+      if (!opts.readOnly) this.invalidate({ network, root: opts.root, seed });
       return result;
     } finally {
       await cleanup();
@@ -576,7 +575,7 @@ export class WalletDataRepository {
 
     if (kinds.includes('facade') && scope.seed) {
       const address = deriveUnshieldedAddress(scope.seed, networkName);
-      try { clearWalletCache(address, networkName, this.cacheDir); } catch { /* best-effort */ }
+      try { clearWalletCache(address, networkName, scope.root); } catch { /* best-effort */ }
     }
   }
 
@@ -677,7 +676,7 @@ function defaultDustFetcher(
     signal?: AbortSignal;
     onProgress?: (applied: number, max: number) => void;
     onCheckpoint?: (state: ledger.DustLocalState, lastAppliedEventId: number, retention: DustRetention) => void;
-    cacheDir?: string;
+    root: string;
     log?: VerboseLog;
   },
 ): Promise<DustDirectResult> {
@@ -727,7 +726,7 @@ export function defaultRepository(): WalletDataRepository {
   return defaultRepo;
 }
 
-/** Test/diagnostic: replace the process singleton (e.g. with a different `cacheDir`). */
+/** Test/diagnostic: replace the process singleton (e.g. with different fetchers). */
 export function setDefaultRepository(repo: WalletDataRepository | null): void {
   defaultRepo = repo;
 }

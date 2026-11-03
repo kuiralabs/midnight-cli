@@ -6,7 +6,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { LOCALNET_DIR_NAME, DIR_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
 import { CancelledError, CANCELLED_MESSAGE, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import type { ExecRunner } from '@kuiralabs/midnight-cli-core/lib/exec-program';
 import { sleep } from '@kuiralabs/midnight-cli-core/lib/sleep';
@@ -23,10 +22,10 @@ const NODE_IMAGE = 'midnightntwrk/midnight-node:1.0.0';
 const INDEXER_IMAGE = 'midnightntwrk/indexer-standalone:4.3.3';
 const PROOF_SERVER_IMAGE = 'midnightntwrk/proof-server:8.1.0';
 
-// Built when used, under the state root the host gives; never when this module loads.
-const localnetDir = (): string => join(stateRoot(), LOCALNET_DIR_NAME);
-const composePath = (): string => join(localnetDir(), 'compose.yml');
-const versionPath = (): string => join(localnetDir(), '.version');
+// Built when used, under the state root the call gives; never when this module loads.
+const localnetDir = (root: string): string => join(root, LOCALNET_DIR_NAME);
+const composePath = (root: string): string => join(localnetDir(root), 'compose.yml');
+const versionPath = (root: string): string => join(localnetDir(root), '.version');
 
 // Full compose.yml for midnight-local-network: the ledger-8 stack above, which
 // this ledger-9 build does not start.
@@ -106,6 +105,8 @@ export interface DockerCall {
   readonly exec: ExecRunner;
   /** Docker's own stderr as it comes, where the call's text goes (the CLI shows it on the terminal). */
   readonly onStderr: (text: string) => void;
+  /** The state root the localnet's compose file lives under. */
+  readonly root: string;
 }
 
 /**
@@ -167,20 +168,21 @@ export function assertLocalnetCanStart(): void {
  * Returns true if the file was written, false if it was already up to date.
  *
  * Every path that starts the localnet calls this first, so it is where a
- * ledger-9 build refuses, before anything is written or started.
+ * ledger-9 build refuses, before anything is written or started. The folder
+ * is the one under the state root `root`.
  */
-export function ensureComposeFile(): boolean {
+export function ensureComposeFile(root: string): boolean {
   assertLocalnetCanStart();
   const versionMatches =
-    existsSync(versionPath()) &&
-    existsSync(composePath()) &&
-    readFileSync(versionPath(), 'utf-8').trim() === COMPOSE_VERSION;
+    existsSync(versionPath(root)) &&
+    existsSync(composePath(root)) &&
+    readFileSync(versionPath(root), 'utf-8').trim() === COMPOSE_VERSION;
 
   if (versionMatches) return false;
 
-  mkdirSync(localnetDir(), { recursive: true, mode: DIR_MODE });
-  writeFileSync(composePath(), COMPOSE_YAML, 'utf-8');
-  writeFileSync(versionPath(), COMPOSE_VERSION, 'utf-8');
+  mkdirSync(localnetDir(root), { recursive: true, mode: DIR_MODE });
+  writeFileSync(composePath(root), COMPOSE_YAML, 'utf-8');
+  writeFileSync(versionPath(root), COMPOSE_VERSION, 'utf-8');
   return true;
 }
 
@@ -189,8 +191,8 @@ export function ensureComposeFile(): boolean {
  * goes to the call as it comes. Throws on non-zero exit with stderr in the
  * error message, and CancelledError when the call is cancelled.
  */
-export function dockerCompose({ signal, exec, onStderr }: DockerCall, args: readonly string[]): Promise<string> {
-  return exec('docker', ['compose', '-f', composePath(), ...args], { signal, timeoutMs: DOCKER_TIMEOUT_MS, onStderr });
+export function dockerCompose({ signal, exec, onStderr, root }: DockerCall, args: readonly string[]): Promise<string> {
+  return exec('docker', ['compose', '-f', composePath(root), ...args], { signal, timeoutMs: DOCKER_TIMEOUT_MS, onStderr });
 }
 
 export interface ServiceStatus {
@@ -298,10 +300,10 @@ const CANCELLED_LISTING_TIMEOUT_MS = 10_000;
  * bounded by its own time limit. When Docker can't list them, the error says
  * so rather than claim none were started.
  */
-export async function localnetUpCancelled({ exec }: Omit<DockerCall, 'signal'>): Promise<CancelledError> {
+export async function localnetUpCancelled({ exec, root }: Omit<DockerCall, 'signal'>): Promise<CancelledError> {
   let left: ServiceStatus[];
   try {
-    left = parseServiceStatus(await exec('docker', ['compose', '-f', composePath(), 'ps', '-a', '--format', 'json'], {
+    left = parseServiceStatus(await exec('docker', ['compose', '-f', composePath(root), 'ps', '-a', '--format', 'json'], {
       signal: new AbortController().signal,
       timeoutMs: CANCELLED_LISTING_TIMEOUT_MS,
     }));
@@ -319,9 +321,9 @@ export async function localnetUpCancelled({ exec }: Omit<DockerCall, 'signal'>):
   );
 }
 
-/** Return the compose file path (for display purposes). */
-export function getComposePath(): string {
-  return composePath();
+/** Return the compose file path under the state root `root` (for display purposes). */
+export function getComposePath(root: string): string {
+  return composePath(root);
 }
 
 // Container names used in compose.yml — these are the hardcoded container_name values

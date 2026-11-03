@@ -3,10 +3,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync, statSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setHostPathsSource } from '@kuiralabs/midnight-cli-core/lib/state-root';
-import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { assertSpendsNoOfferCoin, closeOpenOffers, OfferCoinsInUseError, openOffersFile, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core/lib/open-offers';
 import { classifyError, ERROR_CODES, EXIT_INVALID_ARGS } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 
@@ -19,31 +17,31 @@ const offer = (id: string, nullifiers: string[]): OpenOffer => ({
   expiresAt: new Date('2026-11-03T10:00:00.000Z'),
 });
 
+let home: string;
 let root: string;
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'mn-open-offers-'));
-  setHostPathsSource(() => ({ stateRoot: join(root, '.midnight'), home: root }));
+  home = mkdtempSync(join(tmpdir(), 'mn-open-offers-'));
+  root = join(home, '.midnight');
 });
 afterEach(() => {
-  setHostPathsSource(() => ({ stateRoot: join(homedir(), MIDNIGHT_DIR), home: homedir() }));
-  rmSync(root, { recursive: true, force: true });
+  rmSync(home, { recursive: true, force: true });
 });
 
 describe('open offers', () => {
   it('records an offer per wallet and network, in mn\'s state, readable only by its owner', () => {
-    recordOpenOffer('undeployed', WALLET, offer('a1', ['n1']));
-    expect(readOpenOffers('undeployed', WALLET)).toEqual([offer('a1', ['n1'])]);
-    expect(readOpenOffers('stagenet', WALLET)).toEqual([]);
-    expect(openOffersFile('undeployed', WALLET)).toBe(join(root, '.midnight', 'swap-offers', 'undeployed', `${WALLET}.json`));
-    expect(statSync(openOffersFile('undeployed', WALLET)).mode & 0o077).toBe(0);
+    recordOpenOffer(root, 'undeployed', WALLET, offer('a1', ['n1']));
+    expect(readOpenOffers(root, 'undeployed', WALLET)).toEqual([offer('a1', ['n1'])]);
+    expect(readOpenOffers(root, 'stagenet', WALLET)).toEqual([]);
+    expect(openOffersFile(root, 'undeployed', WALLET)).toBe(join(root, 'swap-offers', 'undeployed', `${WALLET}.json`));
+    expect(statSync(openOffersFile(root, 'undeployed', WALLET)).mode & 0o077).toBe(0);
   });
 
   it('closes offers by id, keeping the rest', () => {
-    recordOpenOffer('undeployed', WALLET, offer('a1', ['n1']));
-    recordOpenOffer('undeployed', WALLET, offer('a2', ['n2']));
-    expect(closeOpenOffers('undeployed', WALLET, ['a1']).map((o) => o.id)).toEqual(['a1']);
-    expect(readOpenOffers('undeployed', WALLET).map((o) => o.id)).toEqual(['a2']);
-    expect(closeOpenOffers('undeployed', WALLET, ['gone'])).toEqual([]);
+    recordOpenOffer(root, 'undeployed', WALLET, offer('a1', ['n1']));
+    recordOpenOffer(root, 'undeployed', WALLET, offer('a2', ['n2']));
+    expect(closeOpenOffers(root, 'undeployed', WALLET, ['a1']).map((o) => o.id)).toEqual(['a1']);
+    expect(readOpenOffers(root, 'undeployed', WALLET).map((o) => o.id)).toEqual(['a2']);
+    expect(closeOpenOffers(root, 'undeployed', WALLET, ['gone'])).toEqual([]);
   });
 
   it('refuses a spend of an open offer\'s coin, naming the offer, unless the spend cancels it', () => {

@@ -129,7 +129,6 @@ function fakeRepo(result: DustDirectResult): WalletDataRepository {
     fetchChainId: async () => null,           // skip the node RPC (offline)
     fetchUnshielded: async () => ({ balances: new Map(), utxoCount: 0, txCount: 0, highestTxId: 0, registeredUtxos: 0, unregisteredUtxos: 0 }),
     fetchDust: async () => result,
-    cacheDir: EXPORT_TMP,
   });
 }
 
@@ -141,6 +140,7 @@ describe('exportDustSnapshot', () => {
     // the incomplete result rather than a false "warm" snapshot.
     const repo = fakeRepo(fakeDust(ownedState, { lastAppliedEventId: 42, balance: 500n, partial: true }));
     const res = await exportDustSnapshot(EXPORT_SEED, 'undeployed', EXPORT_NETWORK, {
+      root: EXPORT_TMP,
       repository: repo,
       buildBaseDust: async () => baseSnapshot('0'),
     });
@@ -158,6 +158,7 @@ describe('exportDustSnapshot', () => {
   it('reports partial: false for a completed sync', async () => {
     const repo = fakeRepo(fakeDust(ownedState, { lastAppliedEventId: 100, eventCount: 100, partial: false }));
     const res = await exportDustSnapshot(EXPORT_SEED, 'undeployed', EXPORT_NETWORK, {
+      root: EXPORT_TMP,
       repository: repo,
       buildBaseDust: async () => baseSnapshot('0'),
     });
@@ -171,6 +172,7 @@ describe('exportDustSnapshot', () => {
     const repo = fakeRepo(fakeDust(fresh, { lastAppliedEventId: -1, eventCount: 0, partial: false }));
     const base = baseSnapshot('0');
     const res = await exportDustSnapshot(EXPORT_SEED, 'undeployed', EXPORT_NETWORK, {
+      root: EXPORT_TMP,
       repository: repo,
       buildBaseDust: async () => base,
     });

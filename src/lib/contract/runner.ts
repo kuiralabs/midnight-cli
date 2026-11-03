@@ -33,6 +33,8 @@ export interface RunnerOptions {
   dappDir: string;
   /** The network: its engine writes the script. */
   network: NetworkName;
+  /** The state root whose config names the network's SDK set. */
+  root: string;
   networkConfig: NetworkConfig;
   managedDir: string;
   contractName: string;
@@ -71,6 +73,8 @@ export interface StateOptions {
   dappDir: string;
   /** The network: its engine writes the script. */
   network: NetworkName;
+  /** The state root whose config names the network's SDK set. */
+  root: string;
   networkConfig: NetworkConfig;
   managedDir: string;
   contractName: string;
@@ -111,8 +115,8 @@ export function indexerEnvironment(networkConfig: NetworkConfig): Record<string,
 export async function runState(options: StateOptions): Promise<StateResult> {
   // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
   throwIfCancelled(options.signal);
-  await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network);
-  const engine = await engineFor(options.network);
+  await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network, options.root);
+  const engine = await engineFor(options.network, options.root);
   const scripts = { ...engine.contracts.scripts, set: engine.set };
   const script = scripts.state(options, SCRIPT_PARTS);
   const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal });
@@ -126,8 +130,8 @@ export async function runState(options: StateOptions): Promise<StateResult> {
 export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
   // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
   throwIfCancelled(options.signal);
-  await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network);
-  const engine = await engineFor(options.network);
+  await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network, options.root);
+  const engine = await engineFor(options.network, options.root);
   const scripts = { ...engine.contracts.scripts, set: engine.set };
   const script = scripts.deploy(options, SCRIPT_PARTS);
   // The private-state secret goes to the subprocess via env (never the on-disk
@@ -147,8 +151,8 @@ export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
 export async function runCall(options: CallOptions): Promise<CallResult> {
   // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
   throwIfCancelled(options.signal);
-  await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network);
-  const engine = await engineFor(options.network);
+  await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network, options.root);
+  const engine = await engineFor(options.network, options.root);
   const scripts = { ...engine.contracts.scripts, set: engine.set };
   const script = scripts.call(options, SCRIPT_PARTS);
   const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal });

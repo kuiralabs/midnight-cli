@@ -27,6 +27,8 @@ export type { DustExportResult } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 
 export interface DustExportOptions {
+  /** The state root the Dust cache lives under. */
+  root: string;
   onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
   signal?: AbortSignal;
   /** Injectable for tests; defaults to the process-wide repository. */
@@ -37,14 +39,14 @@ export interface DustExportOptions {
    * The default touches the node relay (building a facade opens its API-WS), so
    * tests stub this to stay offline.
    */
-  buildBaseDust?: (seed: Buffer, networkConfig: NetworkConfig, log?: VerboseLog) => Promise<string>;
+  buildBaseDust?: (seed: Buffer, networkConfig: NetworkConfig, root: string, log?: VerboseLog) => Promise<string>;
   /** The call's verbose lines. */
   log?: VerboseLog;
 }
 
 /** Build a fresh facade from keys and read its base (empty) dust snapshot. */
-async function defaultBuildBaseDust(seedBuffer: Buffer, networkConfig: NetworkConfig, log?: VerboseLog): Promise<string> {
-  const bundle = await buildFacade(seedBuffer, networkConfig, null, log);
+async function defaultBuildBaseDust(seedBuffer: Buffer, networkConfig: NetworkConfig, root: string, log?: VerboseLog): Promise<string> {
+  const bundle = await buildFacade(seedBuffer, networkConfig, root, null, log);
   try {
     return await (bundle.facade as unknown as {
       dust: { serializeState(): Promise<string> };
@@ -69,18 +71,19 @@ export async function exportDustSnapshot(
   seedBuffer: Buffer,
   network: string,
   networkConfig: NetworkConfig,
-  options: DustExportOptions = {},
+  options: DustExportOptions,
 ): Promise<DustExportResult> {
   const pubkeyHex = dustPublicKeyHexFromSeed(seedBuffer);
   const repo = options.repository ?? defaultRepository();
 
   const view = await repo.dust(seedBuffer, networkConfig, {
+    root: options.root,
     signal: options.signal,
     onProgress: options.onProgress,
     log: options.log,
   });
 
-  const baseDust = await (options.buildBaseDust ?? defaultBuildBaseDust)(seedBuffer, networkConfig, options.log);
+  const baseDust = await (options.buildBaseDust ?? defaultBuildBaseDust)(seedBuffer, networkConfig, options.root, options.log);
 
   // Overlay whenever at least one event has been folded in. For a wallet with no
   // dust events yet (lastAppliedEventId -1) the fresh base snapshot is already the

@@ -21,8 +21,8 @@ export interface TransferRequest {
   shielded: boolean;
 }
 
-/** `transfer <to> <amount> [--shielded] [--wallet] [--network]`, checked without touching the chain. */
-export async function resolveTransferRequest(args: ParsedArgs): Promise<TransferRequest> {
+/** `transfer <to> <amount> [--shielded] [--wallet] [--network]`, checked without touching the chain, against the wallets and config under the state root `root`. */
+export async function resolveTransferRequest(args: ParsedArgs, root: string): Promise<TransferRequest> {
   const recipientInput = args.subcommand;
   const amountStr = args.positionals[0];
 
@@ -44,18 +44,18 @@ export async function resolveTransferRequest(args: ParsedArgs): Promise<Transfer
   }
 
   const shielded = hasFlag(args, 'shielded');
-  const recipientAddress = await resolveRecipient(recipientInput, args, shielded);
+  const recipientAddress = await resolveRecipient(recipientInput, args, shielded, root);
   const amountNight = parseAmount(amountStr);
-  const walletPath = resolveWalletPath(getFlag(args, 'wallet'));
+  const walletPath = resolveWalletPath(root, getFlag(args, 'wallet'));
   const walletConfig = await loadWalletConfig(walletPath);
-  const networkName = resolveNetworkName({ args });
+  const networkName = resolveNetworkName({ args, configDir: root });
 
   if (shielded) {
     if (!shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded'))) {
       throw new Error(shieldedDisabledReason(networkName));
     }
   }
-  assertRecipient((await engineFor(networkName)).keys, recipientAddress, shielded, networkName);
+  assertRecipient((await engineFor(networkName, root)).keys, recipientAddress, shielded, networkName);
 
   return { walletPath, walletConfig, networkName, recipientAddress, amountNight, shielded };
 }
@@ -75,16 +75,16 @@ function assertRecipient(keys: EngineKeys, address: string, shielded: boolean, n
  * An address (mn_addr_ or mn_shield-addr_ prefix) is used as given. Anything
  * else is a wallet name, and the address comes from that wallet's file.
  */
-async function resolveRecipient(input: string, args: ParsedArgs, shielded: boolean): Promise<string> {
+async function resolveRecipient(input: string, args: ParsedArgs, shielded: boolean, root: string): Promise<string> {
   if (input.startsWith('mn_addr_') || input.startsWith('mn_shield-addr_')) {
     return input;
   }
 
-  const recipientPath = resolveWalletPath(input);
-  const networkName = resolveNetworkName({ args });
+  const recipientPath = resolveWalletPath(root, input);
+  const networkName = resolveNetworkName({ args, configDir: root });
 
   if (shielded) {
-    const shieldedAddr = await walletShieldedAddress(recipientPath, networkName);
+    const shieldedAddr = await walletShieldedAddress(recipientPath, networkName, root);
     if (!shieldedAddr) {
       throw new Error(
         `Wallet "${input}" has no shielded address for network "${networkName}".\n` +
@@ -94,7 +94,7 @@ async function resolveRecipient(input: string, args: ParsedArgs, shielded: boole
     return shieldedAddr;
   }
 
-  const address = await walletAddress(recipientPath, networkName);
+  const address = await walletAddress(recipientPath, networkName, root);
   if (!address) {
     throw new Error(`Wallet "${input}" has no address for network "${networkName}". Regenerate the wallet to derive one.`);
   }

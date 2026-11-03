@@ -37,6 +37,8 @@ export interface ProvisionSteps {
 }
 
 interface ProvisionRun {
+  /** The state root the wallets and config live under. */
+  root: string;
   names: readonly string[];
   amountNight: number;
   onProgress?: (wallet: string, phase: 'creating' | 'funding' | 'dust' | 'done', state: WalletProvisionState) => void;
@@ -47,12 +49,12 @@ interface ProvisionRun {
 export type ProvisionOptions = ProvisionRun & ({ steps: ProvisionSteps } | { sdkWarnings: CallSdkWarnings });
 
 /** The steps through the wallet functions, on `network` (resolved once, for every wallet). */
-function walletSteps(network: NetworkConfig, sdkWarnings: CallSdkWarnings): ProvisionSteps {
+function walletSteps(root: string, network: NetworkConfig, sdkWarnings: CallSdkWarnings): ProvisionSteps {
   return {
-    generate: generateWallet,
-    airdrop: (name, amountNight, signal) => airdropToWallet(network, name, amountNight, signal, sdkWarnings),
-    registerDust: (name, signal) => registerWalletDust(network, name, signal, sdkWarnings),
-    needsDust: (name, signal) => walletNeedsDust(network, name, signal),
+    generate: (name, signal) => generateWallet(root, name, signal),
+    airdrop: (name, amountNight, signal) => airdropToWallet(root, network, name, amountNight, signal, sdkWarnings),
+    registerDust: (name, signal) => registerWalletDust(root, network, name, signal, sdkWarnings),
+    needsDust: (name, signal) => walletNeedsDust(root, network, name, signal),
   };
 }
 
@@ -67,19 +69,20 @@ function walletSteps(network: NetworkConfig, sdkWarnings: CallSdkWarnings): Prov
  * while the earlier ones register instead of one after another.
  */
 export async function provisionDevWallets(opts: ProvisionOptions): Promise<ProvisionedWallet[]> {
-  const steps = 'steps' in opts ? opts.steps : walletSteps(undeployedNetwork(), opts.sdkWarnings);
+  const { root } = opts;
+  const steps = 'steps' in opts ? opts.steps : walletSteps(root, undeployedNetwork(root), opts.sdkWarnings);
   const results: ProvisionedWallet[] = [];
   const created: string[] = [];
 
   // `wallet generate` sets the new wallet as active — remember the user's
   // current active wallet so we can restore it after provisioning.
-  const previousActive = safeGetActiveWallet();
+  const previousActive = safeGetActiveWallet(root);
 
   try {
     for (const name of opts.names) {
       throwIfCancelled(opts.signal);
 
-      if (walletExists(name)) {
+      if (walletExists(root, name)) {
         // Funded but never registered (setup stopped between funding and
         // registering): finish it below rather than reuse it as is.
         if (await steps.needsDust(name, opts.signal)) {
@@ -108,61 +111,62 @@ export async function provisionDevWallets(opts: ProvisionOptions): Promise<Provi
       results.push({ name, state: 'created' });
     }
   } finally {
-    restoreActiveWallet(previousActive);
+    restoreActiveWallet(root, previousActive);
   }
 
   return opts.names.flatMap((name) => results.filter((r) => r.name === name));
 }
 
-function safeGetActiveWallet(): string | null {
+function safeGetActiveWallet(root: string): string | null {
   try {
-    return getActiveWalletName();
+    return getActiveWalletName(root);
   } catch {
     return null;
   }
 }
 
-function restoreActiveWallet(name: string | null): void {
+function restoreActiveWallet(root: string, name: string | null): void {
   if (!name) return;
-  if (!walletExists(name)) return;
+  if (!walletExists(root, name)) return;
   try {
-    setActiveWallet(name);
+    setActiveWallet(root, name);
   } catch { /* best-effort */ }
 }
 
 // ── Internals ────────────────────────────────────────────────
 
-function walletExists(name: string): boolean {
-  return existsSync(walletFilePath(name));
+function walletExists(root: string, name: string): boolean {
+  return existsSync(walletFilePath(root, name));
 }
 
 /** The local network, with any endpoints saved for it, as the wallet commands resolve it. */
-function undeployedNetwork(): NetworkConfig {
+function undeployedNetwork(root: string): NetworkConfig {
   return resolveNetwork({
     args: { command: 'dev', subcommand: undefined, positionals: [], flags: { network: 'undeployed' } },
+    configDir: root,
   }).config;
 }
 
-async function generateWallet(name: string, signal?: AbortSignal): Promise<void> {
-  const passphrase = await passphraseForNewSecret();
+async function generateWallet(root: string, name: string, signal?: AbortSignal): Promise<void> {
+  const passphrase = await passphraseForNewSecret(root);
   // Cancelled while the passphrase was asked for: no wallet is written.
   throwIfCancelled(signal);
-  await createWallet(name, walletSecretFrom(), passphrase);
+  await createWallet(root, name, walletSecretFrom(), passphrase);
 }
 
-async function airdropToWallet(network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
-  const recipientAddress = (await loadWalletConfig(resolveWalletPath(name))).addresses.undeployed;
+async function airdropToWallet(root: string, network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
+  const recipientAddress = (await loadWalletConfig(resolveWalletPath(root, name))).addresses.undeployed;
   // dev's wallets live on the local chain.
-  await (await engineFor('undeployed')).wallet.airdrop({ networkConfig: network, recipientAddress, amountNight, signal, sdkWarnings });
+  await (await engineFor('undeployed', root)).wallet.airdrop({ networkConfig: network, recipientAddress, amountNight, signal, sdkWarnings, root });
 }
 
-async function walletNeedsDust(network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<boolean> {
-  const address = (await loadWalletConfig(resolveWalletPath(name))).addresses.undeployed;
+async function walletNeedsDust(root: string, network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<boolean> {
+  const address = (await loadWalletConfig(resolveWalletPath(root, name))).addresses.undeployed;
   const { registeredUtxos, unregisteredUtxos } = await checkBalance(address, network.indexerWS, undefined, signal);
   return registeredUtxos === 0 && unregisteredUtxos > 0;
 }
 
-async function registerWalletDust(network: NetworkConfig, name: string, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
-  const { seed } = await unlockWallet(resolveWalletPath(name));
-  await (await engineFor('undeployed')).wallet.registerDust(Buffer.from(seed, 'hex'), network, { signal, sdkWarnings });
+async function registerWalletDust(root: string, network: NetworkConfig, name: string, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
+  const { seed } = await unlockWallet(resolveWalletPath(root, name), { root });
+  await (await engineFor('undeployed', root)).wallet.registerDust(Buffer.from(seed, 'hex'), network, { signal, sdkWarnings, root });
 }

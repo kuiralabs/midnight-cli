@@ -10,7 +10,7 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { loadDustCache, saveDustCache, dustPublicKeyHex } from '@kuiralabs/midnight-engine-rc/dust-direct-cache';
 import { clearDustDirectCache, getDustCachePath } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
 
-const CACHE_DIR = path.join(os.tmpdir(), `midnight-dust-cache-test-${process.pid}-${Date.now()}`);
+const STATE_ROOT = path.join(os.tmpdir(), `midnight-dust-cache-test-${process.pid}-${Date.now()}`);
 const NETWORK = 'undeployed';
 const SEED_HEX = '0000000000000000000000000000000000000000000000000000000000000042';
 
@@ -30,11 +30,11 @@ function testDustPubkeyHex(): string {
 }
 
 beforeEach(() => {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  fs.mkdirSync(STATE_ROOT, { recursive: true });
 });
 
 afterEach(() => {
-  fs.rmSync(CACHE_DIR, { recursive: true, force: true });
+  fs.rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
 describe('dustPublicKeyHex', () => {
@@ -56,8 +56,8 @@ describe('dust-direct cache: round-trip', () => {
     const pubkey = testDustPubkeyHex();
     const state = freshDustState();
 
-    saveDustCache(NETWORK, pubkey, state, 42, CACHE_DIR);
-    const loaded = loadDustCache(NETWORK, pubkey, CACHE_DIR);
+    saveDustCache(NETWORK, pubkey, state, 42, STATE_ROOT);
+    const loaded = loadDustCache(NETWORK, pubkey, STATE_ROOT);
 
     expect(loaded).not.toBeNull();
     expect(loaded!.lastAppliedEventId).toBe(42);
@@ -71,25 +71,25 @@ describe('dust-direct cache: round-trip', () => {
     const state = freshDustState();
     const retention = { ownedGenerationIndices: [0, 3, 99], generationFrontier: 120 };
 
-    saveDustCache(NETWORK, pubkey, state, 42, CACHE_DIR, undefined, retention);
-    const loaded = loadDustCache(NETWORK, pubkey, CACHE_DIR);
+    saveDustCache(NETWORK, pubkey, state, 42, STATE_ROOT, undefined, retention);
+    const loaded = loadDustCache(NETWORK, pubkey, STATE_ROOT);
 
     expect(loaded!.retention).toEqual(retention);
   });
 
   it('defaults to empty retention when none is provided', () => {
     const pubkey = testDustPubkeyHex();
-    saveDustCache(NETWORK, pubkey, freshDustState(), 1, CACHE_DIR);
-    const loaded = loadDustCache(NETWORK, pubkey, CACHE_DIR);
+    saveDustCache(NETWORK, pubkey, freshDustState(), 1, STATE_ROOT);
+    const loaded = loadDustCache(NETWORK, pubkey, STATE_ROOT);
     expect(loaded!.retention).toEqual({ ownedGenerationIndices: [], generationFrontier: 0 });
   });
 
   it('writes file with 0o600 permissions', () => {
     const pubkey = testDustPubkeyHex();
     const state = freshDustState();
-    saveDustCache(NETWORK, pubkey, state, 0, CACHE_DIR);
+    saveDustCache(NETWORK, pubkey, state, 0, STATE_ROOT);
 
-    const filePath = getDustCachePath(NETWORK, pubkey, CACHE_DIR);
+    const filePath = getDustCachePath(NETWORK, pubkey, STATE_ROOT);
     const stat = fs.statSync(filePath);
     // On macOS/Linux the mode low 9 bits reflect user/group/other rwx.
     expect(stat.mode & 0o777).toBe(0o600);
@@ -98,113 +98,113 @@ describe('dust-direct cache: round-trip', () => {
 
 describe('dust-direct cache: invalidation', () => {
   it('returns null when the file is missing', () => {
-    expect(loadDustCache(NETWORK, testDustPubkeyHex(), CACHE_DIR)).toBeNull();
+    expect(loadDustCache(NETWORK, testDustPubkeyHex(), STATE_ROOT)).toBeNull();
   });
 
   it('returns null on version mismatch', () => {
     const pubkey = testDustPubkeyHex();
     const state = freshDustState();
-    saveDustCache(NETWORK, pubkey, state, 1, CACHE_DIR);
+    saveDustCache(NETWORK, pubkey, state, 1, STATE_ROOT);
 
     // Corrupt: bump version on disk
-    const filePath = getDustCachePath(NETWORK, pubkey, CACHE_DIR);
+    const filePath = getDustCachePath(NETWORK, pubkey, STATE_ROOT);
     const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     data.version = 999;
     fs.writeFileSync(filePath, JSON.stringify(data));
 
-    expect(loadDustCache(NETWORK, pubkey, CACHE_DIR)).toBeNull();
+    expect(loadDustCache(NETWORK, pubkey, STATE_ROOT)).toBeNull();
   });
 
   it('invalidates a legacy v1 cache (no retention fields) so it re-syncs', () => {
     const pubkey = testDustPubkeyHex();
-    saveDustCache(NETWORK, pubkey, freshDustState(), 5, CACHE_DIR);
+    saveDustCache(NETWORK, pubkey, freshDustState(), 5, STATE_ROOT);
 
     // Rewrite as a pre-collapse v1 file: version 1, retention fields absent.
-    const filePath = getDustCachePath(NETWORK, pubkey, CACHE_DIR);
+    const filePath = getDustCachePath(NETWORK, pubkey, STATE_ROOT);
     const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     data.version = 1;
     delete data.ownedGenerationIndices;
     delete data.generationFrontier;
     fs.writeFileSync(filePath, JSON.stringify(data));
 
-    expect(loadDustCache(NETWORK, pubkey, CACHE_DIR)).toBeNull();
+    expect(loadDustCache(NETWORK, pubkey, STATE_ROOT)).toBeNull();
   });
 
   it('invalidates a cache written by ledger-8 mn (v2) so a ledger-9 chain re-syncs', () => {
     // Dev-preset localnets share a genesis hash, so only the version keeps a
     // ledger-8 cache from being replayed onto a ledger-9 chain.
     const pubkey = testDustPubkeyHex();
-    saveDustCache(NETWORK, pubkey, freshDustState(), 5, CACHE_DIR);
-    const filePath = getDustCachePath(NETWORK, pubkey, CACHE_DIR);
+    saveDustCache(NETWORK, pubkey, freshDustState(), 5, STATE_ROOT);
+    const filePath = getDustCachePath(NETWORK, pubkey, STATE_ROOT);
     const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     data.version = 2;
     fs.writeFileSync(filePath, JSON.stringify(data));
 
-    expect(loadDustCache(NETWORK, pubkey, CACHE_DIR)).toBeNull();
+    expect(loadDustCache(NETWORK, pubkey, STATE_ROOT)).toBeNull();
   });
 
   it('returns null on network mismatch', () => {
     const pubkey = testDustPubkeyHex();
-    saveDustCache(NETWORK, pubkey, freshDustState(), 1, CACHE_DIR);
-    expect(loadDustCache('preprod', pubkey, CACHE_DIR)).toBeNull();
+    saveDustCache(NETWORK, pubkey, freshDustState(), 1, STATE_ROOT);
+    expect(loadDustCache('preprod', pubkey, STATE_ROOT)).toBeNull();
   });
 
   it('returns null on pubkey mismatch', () => {
     const pubkey = testDustPubkeyHex();
-    saveDustCache(NETWORK, pubkey, freshDustState(), 1, CACHE_DIR);
-    expect(loadDustCache(NETWORK, 'f'.repeat(64), CACHE_DIR)).toBeNull();
+    saveDustCache(NETWORK, pubkey, freshDustState(), 1, STATE_ROOT);
+    expect(loadDustCache(NETWORK, 'f'.repeat(64), STATE_ROOT)).toBeNull();
   });
 
   it('returns null on corrupted JSON', () => {
     const pubkey = testDustPubkeyHex();
-    saveDustCache(NETWORK, pubkey, freshDustState(), 1, CACHE_DIR);
-    fs.writeFileSync(getDustCachePath(NETWORK, pubkey, CACHE_DIR), '{not-json');
-    expect(loadDustCache(NETWORK, pubkey, CACHE_DIR)).toBeNull();
+    saveDustCache(NETWORK, pubkey, freshDustState(), 1, STATE_ROOT);
+    fs.writeFileSync(getDustCachePath(NETWORK, pubkey, STATE_ROOT), '{not-json');
+    expect(loadDustCache(NETWORK, pubkey, STATE_ROOT)).toBeNull();
   });
 
   it('returns null when dustState is not a hex string', () => {
     const pubkey = testDustPubkeyHex();
-    saveDustCache(NETWORK, pubkey, freshDustState(), 1, CACHE_DIR);
-    const filePath = getDustCachePath(NETWORK, pubkey, CACHE_DIR);
+    saveDustCache(NETWORK, pubkey, freshDustState(), 1, STATE_ROOT);
+    const filePath = getDustCachePath(NETWORK, pubkey, STATE_ROOT);
     const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     data.dustState = 'not-hex-zzz';
     fs.writeFileSync(filePath, JSON.stringify(data));
-    expect(loadDustCache(NETWORK, pubkey, CACHE_DIR)).toBeNull();
+    expect(loadDustCache(NETWORK, pubkey, STATE_ROOT)).toBeNull();
   });
 });
 
 describe('dust-direct cache: clearDustDirectCache', () => {
   it('removes a single (network, pubkey) file', () => {
     const pubkey = testDustPubkeyHex();
-    saveDustCache(NETWORK, pubkey, freshDustState(), 1, CACHE_DIR);
-    expect(fs.existsSync(getDustCachePath(NETWORK, pubkey, CACHE_DIR))).toBe(true);
+    saveDustCache(NETWORK, pubkey, freshDustState(), 1, STATE_ROOT);
+    expect(fs.existsSync(getDustCachePath(NETWORK, pubkey, STATE_ROOT))).toBe(true);
 
-    clearDustDirectCache(NETWORK, pubkey, CACHE_DIR);
-    expect(fs.existsSync(getDustCachePath(NETWORK, pubkey, CACHE_DIR))).toBe(false);
+    clearDustDirectCache(NETWORK, pubkey, STATE_ROOT);
+    expect(fs.existsSync(getDustCachePath(NETWORK, pubkey, STATE_ROOT))).toBe(false);
   });
 
   it('removes all dust-* files in a network dir, preserving non-dust files', () => {
     const pubkey = testDustPubkeyHex();
-    saveDustCache(NETWORK, pubkey, freshDustState(), 1, CACHE_DIR);
+    saveDustCache(NETWORK, pubkey, freshDustState(), 1, STATE_ROOT);
     // Simulate an existing facade cache file that should NOT be touched.
-    const networkDir = path.join(CACHE_DIR, NETWORK);
+    const networkDir = path.join(STATE_ROOT, 'cache', NETWORK);
     const walletCachePath = path.join(networkDir, 'some-wallet-cache.json');
     fs.writeFileSync(walletCachePath, '{}');
 
-    clearDustDirectCache(NETWORK, undefined, CACHE_DIR);
+    clearDustDirectCache(NETWORK, undefined, STATE_ROOT);
 
-    expect(fs.existsSync(getDustCachePath(NETWORK, pubkey, CACHE_DIR))).toBe(false);
+    expect(fs.existsSync(getDustCachePath(NETWORK, pubkey, STATE_ROOT))).toBe(false);
     expect(fs.existsSync(walletCachePath)).toBe(true);
   });
 
   it('removes all dust-* files across all networks when called with no args', () => {
     const pubkey = testDustPubkeyHex();
-    saveDustCache('undeployed', pubkey, freshDustState(), 1, CACHE_DIR);
-    saveDustCache('preprod', pubkey, freshDustState(), 2, CACHE_DIR);
+    saveDustCache('undeployed', pubkey, freshDustState(), 1, STATE_ROOT);
+    saveDustCache('preprod', pubkey, freshDustState(), 2, STATE_ROOT);
 
-    clearDustDirectCache(undefined, undefined, CACHE_DIR);
+    clearDustDirectCache(undefined, undefined, STATE_ROOT);
 
-    expect(fs.existsSync(getDustCachePath('undeployed', pubkey, CACHE_DIR))).toBe(false);
-    expect(fs.existsSync(getDustCachePath('preprod', pubkey, CACHE_DIR))).toBe(false);
+    expect(fs.existsSync(getDustCachePath('undeployed', pubkey, STATE_ROOT))).toBe(false);
+    expect(fs.existsSync(getDustCachePath('preprod', pubkey, STATE_ROOT))).toBe(false);
   });
 });

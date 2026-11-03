@@ -150,7 +150,8 @@ export function createCallContext<Protector = unknown>(parts: CallParts<Protecto
 export async function runHandler<Protector>(handler: CommandHandler<Protector>, args: ParsedArgs, ctx: CallContext<Protector>): Promise<CommandOutcome | void> {
   if (ctx.signal.aborted) throw new CancelledError();
   try {
-    preferEngineOf(resolveNetworkName({ args }));
+    const root = ctx.config.paths.stateRoot;
+    preferEngineOf(resolveNetworkName({ args, configDir: root }), root);
   } catch { /* an invalid --network: the command says so */ }
   return handler(args, ctx);
 }

@@ -9,13 +9,13 @@ import { clearShieldedDirectCache } from '@kuiralabs/midnight-cli-core/lib/reade
 import { clearNativeDustCheckpoint } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
 
 /**
- * Clears every wallet cache kept for `network` (all networks when undefined):
- * the wallet sync caches, the direct Dust and shielded caches, and the native
- * sidecar's Dust checkpoints.
+ * Clears every wallet cache kept for `network` (all networks when undefined)
+ * under the state root `root`: the wallet sync caches, the direct Dust and
+ * shielded caches, and the native sidecar's Dust checkpoints.
  */
-export function clearChainCaches(network: string | undefined, cacheDir?: string): void {
-  clearWalletCache(undefined, network, cacheDir);
-  clearDustDirectCache(network, undefined, cacheDir);
-  clearShieldedDirectCache(network, undefined, cacheDir);
-  clearNativeDustCheckpoint(network, undefined, cacheDir);
+export function clearChainCaches(network: string | undefined, root: string): void {
+  clearWalletCache(undefined, network, root);
+  clearDustDirectCache(network, undefined, root);
+  clearShieldedDirectCache(network, undefined, root);
+  clearNativeDustCheckpoint(network, undefined, root);
 }

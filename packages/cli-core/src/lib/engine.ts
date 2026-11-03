@@ -171,12 +171,14 @@ export interface ShieldedCachedOptions {
   forceFresh?: boolean;
   /** Current chain genesis hash — stored on save and checked on load (chain-reset guard). */
   chainId?: string;
+  /** The state root the cache lives under. */
+  root: string;
 }
 
 /** mn's own readers of a wallet's chain state, beside the SDK's wallet. */
 export interface EngineReaders {
   /** The shielded NIGHT balance of a seed on a network, reading (and extending) its cache. */
-  shieldedBalance(seed: Buffer, network: NetworkName, indexerWS: string, options?: ShieldedCachedOptions): Promise<ShieldedBalanceResult>;
+  shieldedBalance(seed: Buffer, network: NetworkName, indexerWS: string, options: ShieldedCachedOptions): Promise<ShieldedBalanceResult>;
 }
 
 // ── The wallet ──
@@ -214,6 +216,8 @@ export interface TransferParams {
   sdkWarnings: CallSdkWarnings;
   /** The call's verbose lines. */
   log?: VerboseLog;
+  /** The state root the wallet's caches live under. */
+  root: string;
 }
 
 export interface TransferResult {
@@ -242,6 +246,8 @@ export interface DustRegisterOptions {
   sdkWarnings: CallSdkWarnings;
   /** The call's verbose lines. */
   log?: VerboseLog;
+  /** The state root the wallet's caches live under. */
+  root: string;
 }
 
 export interface DustRegistration {
@@ -297,6 +303,12 @@ export interface ReadOptions {
   log?: VerboseLog;
 }
 
+/** A read that keeps its cache under a state root. */
+export interface CachedReadOptions extends ReadOptions {
+  /** The state root the cache lives under. */
+  root: string;
+}
+
 /** A wallet's Dust, as mn's reader found it. */
 export interface DustBalance {
   balance: bigint;
@@ -341,6 +353,8 @@ export interface WalletSyncHooks {
 /** A shielded payment of NIGHT from a seed's wallet. */
 export interface ShieldedTransferParams extends WalletSyncHooks {
   seed: Buffer;
+  /** The state root the wallet's caches and open offers live under. */
+  root: string;
   network: NetworkName;
   networkConfig: NetworkConfig;
   /** The recipient's shielded address on `network`. */
@@ -360,6 +374,8 @@ export interface ShieldedTransferParams extends WalletSyncHooks {
 /** A wallet a test's preparation checks, by its seed and its saved address. */
 export interface PrepWallet {
   seed: Buffer;
+  /** The state root the wallet's caches live under. */
+  root: string;
   network: NetworkName;
   networkConfig: NetworkConfig;
   address: string;
@@ -409,7 +425,7 @@ export interface EngineWallet {
   /** The unshielded balance of an address, through mn's cache. */
   unshieldedBalance(address: string, networkConfig: NetworkConfig, options?: ReadOptions): Promise<UnshieldedView>;
   /** A seed's Dust, through mn's reader and its cache. */
-  dustBalance(seed: Buffer, networkConfig: NetworkConfig, options?: ReadOptions): Promise<DustBalance>;
+  dustBalance(seed: Buffer, networkConfig: NetworkConfig, options: CachedReadOptions): Promise<DustBalance>;
   /** An unshielded payment of NIGHT. */
   transfer(params: TransferParams): Promise<TransferResult>;
   /** NIGHT from the genesis wallet (a local chain only). */
@@ -419,15 +435,15 @@ export interface EngineWallet {
   /** Registers a seed's NIGHT for Dust, unless it has Dust already. */
   registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions): Promise<DustRegistration>;
   /** A seed's Dust as a snapshot another wallet restores from. */
-  exportDust(seed: Buffer, network: string, networkConfig: NetworkConfig, options?: { signal?: AbortSignal; log?: VerboseLog; onProgress?: (eventsApplied: number, maxIdSeen: number) => void }): Promise<DustExportResult>;
+  exportDust(seed: Buffer, network: string, networkConfig: NetworkConfig, options: { root: string; signal?: AbortSignal; log?: VerboseLog; onProgress?: (eventsApplied: number, maxIdSeen: number) => void }): Promise<DustExportResult>;
   /** A test wallet's unshielded NIGHT after a quick sync; its state is saved when it holds some. */
   prepNightBalance(wallet: PrepWallet): Promise<bigint>;
   /** Makes sure a test wallet has Dust, registering and then waiting up to `waitMs` for it. */
   prepDust(wallet: PrepWallet, waitMs: number): Promise<{ alreadyAvailable: boolean; dustAvailable: boolean }>;
   /** The connector over a seed's wallet, synced and its Dust ready, for a command of mn's own. */
-  openConnector(options: { seed: Buffer; network: NetworkName; networkConfig: NetworkConfig; address: string; syncMode: 'full' | 'lite'; dustWaitMs?: number; signal?: AbortSignal; onMessage: (message: string) => void }): Promise<OpenedConnector>;
+  openConnector(options: { seed: Buffer; root: string; network: NetworkName; networkConfig: NetworkConfig; address: string; syncMode: 'full' | 'lite'; dustWaitMs?: number; signal?: AbortSignal; onMessage: (message: string) => void }): Promise<OpenedConnector>;
   /** Syncs a seed's wallet strictly for mn serve and runs `serve` with it; the wallet stops when `serve` ends. */
-  serveWallet<T>(options: { seed: Buffer; networkConfig: NetworkConfig; network: NetworkName; address: string; syncMode: 'full' | 'lite' } & WalletSyncHooks, serve: (session: ServedWalletSession) => Promise<T>): Promise<T>;
+  serveWallet<T>(options: { seed: Buffer; root: string; networkConfig: NetworkConfig; network: NetworkName; address: string; syncMode: 'full' | 'lite' } & WalletSyncHooks, serve: (session: ServedWalletSession) => Promise<T>): Promise<T>;
 }
 
 /** One SDK set, as mn uses it. */
@@ -440,9 +456,9 @@ export interface Engine {
   readonly wallet: EngineWallet;
 }
 
-/** The SDK set a network runs on, as the network table names it. */
-export function sdkSetOf(network: NetworkName): SdkSet {
-  return sdkSetOfNetwork(network);
+/** The SDK set a network runs on, as the network table and the config under the state root `root` name it. */
+export function sdkSetOf(network: NetworkName, root: string): SdkSet {
+  return sdkSetOfNetwork(network, root);
 }
 
 /** Loads the engine for an SDK set: the host's, which knows the engines it ships. */
@@ -490,14 +506,14 @@ function loadEngine(set: SdkSet): Promise<Engine> {
   });
 }
 
-/** The engine for a network's SDK set, loaded on first use. */
-export function engineFor(network: NetworkName): Promise<Engine> {
-  return loadEngine(sdkSetOf(network));
+/** The engine for a network's SDK set (by the config under the state root `root`), loaded on first use. */
+export function engineFor(network: NetworkName, root: string): Promise<Engine> {
+  return loadEngine(sdkSetOf(network, root));
 }
 
 /** The network a call is for, whose set work every set does alike loads while no engine is loaded. */
-export function preferEngineOf(network: NetworkName): void {
-  preferred = sdkSetOf(network);
+export function preferEngineOf(network: NetworkName, root: string): void {
+  preferred = sdkSetOf(network, root);
 }
 
 /**

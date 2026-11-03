@@ -52,8 +52,9 @@ export function parseSeedHex(input: string, label: string): Buffer {
  *   `--seed <hex>` → `MN_SEED` (env, kept off the process list) → `--wallet <name>` → active wallet.
  * Returns the seed plus the backing wallet file/config (both null for a `--seed` / `MN_SEED`
  * source), so a caller that caches to the wallet file can skip that when there is none.
+ * Wallets are the ones under the state root `root`.
  */
-export async function resolveSeedSource(args: ParsedArgs, opts: ResolveSeedOptions = {}): Promise<ResolvedSeed> {
+export async function resolveSeedSource(args: ParsedArgs, root: string, opts: ResolveSeedOptions = {}): Promise<ResolvedSeed> {
   const seedFlag = getFlag(args, 'seed');
   const seedSource = seedFlag ?? settings().seed;
   if (seedSource) {
@@ -74,12 +75,12 @@ export async function resolveSeedSource(args: ParsedArgs, opts: ResolveSeedOptio
     );
   }
 
-  const walletPath = resolveWalletPath(walletName);
-  const { seed, mnemonic: _mnemonic, ...config } = await unlockWallet(walletPath);
+  const walletPath = resolveWalletPath(root, walletName);
+  const { seed, mnemonic: _mnemonic, ...config } = await unlockWallet(walletPath, { root });
   return { seed: Buffer.from(seed, 'hex'), walletPath, config };
 }
 
 /** Just the seed — for commands that don't touch the wallet file. */
-export async function resolveSeed(args: ParsedArgs, opts?: ResolveSeedOptions): Promise<Buffer> {
-  return (await resolveSeedSource(args, opts)).seed;
+export async function resolveSeed(args: ParsedArgs, root: string, opts?: ResolveSeedOptions): Promise<Buffer> {
+  return (await resolveSeedSource(args, root, opts)).seed;
 }

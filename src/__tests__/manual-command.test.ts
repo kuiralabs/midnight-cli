@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { buildManual } from '../commands/manual.ts';
 import { getConfigValue } from '@kuiralabs/midnight-cli-core/lib/cli-config';
 import { installedCommands } from '../lib/installed-commands.ts';
@@ -80,7 +83,8 @@ describe('mn manual', () => {
   it('describes every key `config` accepts', () => {
     // The keys config accepts, as its refusal of an unknown key lists them.
     let refusal = '';
-    try { getConfigValue('no-such-key'); } catch (err) { refusal = (err as Error).message; }
+    const root = mkdtempSync(join(tmpdir(), 'mn-manual-'));
+    try { getConfigValue('no-such-key', root); } catch (err) { refusal = (err as Error).message; } finally { rmSync(root, { recursive: true, force: true }); }
     const keys = refusal.split('Valid keys: ')[1]!.split(', ');
     expect(keys.length).toBeGreaterThan(0);
     const section = stripAnsi(buildManual()).split('Config keys')[1]!.split('Compatibility alias')[0]!;

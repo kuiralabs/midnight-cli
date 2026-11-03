@@ -99,7 +99,6 @@ export const ALLOWED_STATE = {
   'lib/wallet-config.ts': { warnedPlain: 'shared on purpose: each plain-text wallet is warned about once per run' },
   // The host sources, set once by the host at start (handlers see them through the context).
   'lib/settings.ts': { source: 'shared on purpose: the host sets the settings source once' },
-  'lib/state-root.ts': { source: 'shared on purpose: the host sets the paths source once' },
   'lib/notices.ts': { sink: 'shared on purpose: the host sets the notice sink once' },
   'lib/prompter.ts': { current: 'shared on purpose: the host sets the prompter once' },
 };

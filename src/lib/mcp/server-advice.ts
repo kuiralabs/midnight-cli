@@ -5,10 +5,10 @@
 import { OtherSdkSetError } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { networksOnSdkSet } from '@kuiralabs/midnight-cli-core/lib/network';
 
-/** The server runs one SDK set: a call on the other set's network is told to use a server of its own. */
-export function withServerAdvice(error: Error): Error {
+/** The server runs one SDK set: a call on the other set's network (by the config under the state root `root`) is told to use a server of its own. */
+export function withServerAdvice(error: Error, root: string): Error {
   if (!(error instanceof OtherSdkSetError)) return error;
-  const networks = networksOnSdkSet(error.wantedSet).join(', ');
+  const networks = networksOnSdkSet(error.wantedSet, root).join(', ');
   return new OtherSdkSetError(error.loadedSet, error.wantedSet,
     `This MCP server runs the ${error.loadedSet} SDK set, and ${networks} run${networks.includes(',') ? '' : 's'} on the ${error.wantedSet} set: two sets' ledgers can't share a process. Start another MCP server for ${networks} and make the call there.`);
 }

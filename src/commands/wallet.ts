@@ -25,7 +25,6 @@ import { coinKeyOfWallet, type ProtectorResult, type WalletCommandContext } from
 import { header, keyValue, divider, formatAddress } from '@kuiralabs/midnight-cli-core/ui/format';
 import { bold, yellow, dim, green, teal } from '@kuiralabs/midnight-cli-core/ui/colors';
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
 
 export default async function walletCommand(args: ParsedArgs, ctx: WalletCommandContext): Promise<void> {
   const subcommand = args.subcommand;
@@ -64,9 +63,10 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
     );
   }
 
-  const targetPath = walletFilePath(name);
+  const root = ctx.config.paths.stateRoot;
+  const targetPath = walletFilePath(root, name);
 
-  const networkName = resolveNetworkName({ args });
+  const networkName = resolveNetworkName({ args, configDir: root });
   const seedHex = getFlag(args, 'seed');
   const mnemonicStr = getFlag(args, 'mnemonic');
 
@@ -83,11 +83,11 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
 
   const secret = walletSecretFrom(seedHex !== undefined ? { seed: parseSeedHex(seedHex, '--seed') } : { mnemonic: mnemonicStr });
 
-  const passphrase = await passphraseForNewSecret(undefined, { signal: ctx.signal });
+  const passphrase = await passphraseForNewSecret(root, { signal: ctx.signal });
   // Cancelled while the passphrase was asked for: no wallet is written, and no new passphrase saved.
   throwIfCancelled(ctx.signal);
   // Checked above: an existing wallet is replaced only with --force.
-  const created = await createWallet(name, secret, passphrase, { overwrite: hasFlag(args, 'force') });
+  const created = await createWallet(root, name, secret, passphrase, { overwrite: hasFlag(args, 'force') });
   const { addresses, shieldedAddresses, mnemonic, file: savedPath } = created;
   const seedBuffer = created.seed;
   const activeAddress = addresses[networkName];
@@ -140,8 +140,9 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
 }
 
 async function walletList(args: ParsedArgs, ctx: CallContext): Promise<void> {
-  const wallets = await listWallets();
-  const networkName = resolveNetworkName({ args });
+  const root = ctx.config.paths.stateRoot;
+  const wallets = await listWallets(root);
+  const networkName = resolveNetworkName({ args, configDir: root });
 
   if (hasFlag(args, 'json')) {
     // Agent-slim shape: per-wallet { name, active, network, address,
@@ -220,7 +221,7 @@ async function walletUse(args: ParsedArgs, ctx: CallContext): Promise<void> {
     );
   }
 
-  setActiveWallet(name);
+  setActiveWallet(ctx.config.paths.stateRoot, name);
 
   if (hasFlag(args, 'json')) {
     ctx.output.result({ wallet: name, active: true });
@@ -233,12 +234,13 @@ async function walletUse(args: ParsedArgs, ctx: CallContext): Promise<void> {
 async function walletInfo(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // Accept both `wallet info <name>` (positional) and `wallet info --wallet <name>`
   // (flag, consistent with balance/dust/transfer); fall back to the active wallet.
-  const name = getFlag(args, 'wallet') ?? args.positionals[0] ?? getActiveWalletName();
-  const walletPath = resolveWalletPath(name);
+  const root = ctx.config.paths.stateRoot;
+  const name = getFlag(args, 'wallet') ?? args.positionals[0] ?? getActiveWalletName(root);
+  const walletPath = resolveWalletPath(root, name);
   const config = await loadWalletConfig(walletPath);
-  const isActive = name === getActiveWalletName();
-  const networkName = resolveNetworkName({ args });
-  const activeAddress = await walletAddress(walletPath, networkName);
+  const isActive = name === getActiveWalletName(root);
+  const networkName = resolveNetworkName({ args, configDir: root });
+  const activeAddress = await walletAddress(walletPath, networkName, root);
 
   if (hasFlag(args, 'json')) {
     // Agent-slim shape: drops the per-network addresses map (3× repetition
@@ -308,7 +310,7 @@ async function walletRemove(args: ParsedArgs, ctx: CallContext): Promise<void> {
     );
   }
 
-  removeWallet(name);
+  removeWallet(ctx.config.paths.stateRoot, name);
 
   if (hasFlag(args, 'json')) {
     ctx.output.result({ wallet: name, removed: true });
@@ -320,11 +322,12 @@ async function walletRemove(args: ParsedArgs, ctx: CallContext): Promise<void> {
 
 async function walletSeed(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // Accept both `wallet seed <name>` and `wallet seed --wallet <name>`.
-  const name = getFlag(args, 'wallet') ?? args.positionals[0] ?? getActiveWalletName();
-  const walletPath = resolveWalletPath(name);
+  const root = ctx.config.paths.stateRoot;
+  const name = getFlag(args, 'wallet') ?? args.positionals[0] ?? getActiveWalletName(root);
+  const walletPath = resolveWalletPath(root, name);
 
   // The seed and mnemonic, opened with mn's passphrase.
-  const raw = await unlockWallet(walletPath);
+  const raw = await unlockWallet(walletPath, { root });
 
   // `--entropy` adds the 32-byte BIP-39 entropy (derived from the mnemonic)
   // alongside the 64-byte PBKDF2 seed. They're DIFFERENT values that produce
@@ -387,7 +390,7 @@ async function walletSeed(args: ParsedArgs, ctx: CallContext): Promise<void> {
 
 /** Sets mn's passphrase where none is set, and seals every plain-text wallet under it. */
 async function walletProtect(args: ParsedArgs, ctx: WalletCommandContext): Promise<void> {
-  const root = stateRoot();
+  const root = ctx.config.paths.stateRoot;
   const passphrase = await passphraseForNewSecret(root, { signal: ctx.signal });
   // Cancelled, it stops between wallets and before a protector, never in the middle of a file.
   const report = await protectAllWallets(root, passphrase, ctx.signal);
@@ -397,7 +400,7 @@ async function walletProtect(args: ParsedArgs, ctx: WalletCommandContext): Promi
   const results: Array<{ name: string; result: ProtectorResult }> = [];
   for (const protector of ctx.protectors ?? []) {
     throwIfCancelled(ctx.signal);
-    results.push({ name: protector.name, result: await protector.protect(root, passphrase, coinKeyOfWallet) });
+    results.push({ name: protector.name, result: await protector.protect(root, passphrase, (wallet) => coinKeyOfWallet(root, wallet)) });
   }
   if (hasFlag(args, 'json')) {
     ctx.output.result({ sealed, alreadySealed, ...Object.fromEntries(results.map(({ name, result }) => [name, result.report])) });

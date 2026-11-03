@@ -110,7 +110,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       assertKnownParams(schema, params);
       assertParamTypes(schema, params);
     } catch (err) {
-      return errorResponse(err instanceof Error ? err : new Error(String(err)));
+      return errorResponse(err instanceof Error ? err : new Error(String(err)), call);
     }
   }
 
@@ -119,7 +119,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const token = typeof params.token === 'string' ? params.token : '';
     const pending = confirmationStore.redeem(token);
     if (!pending) {
-      return errorResponse(new Error('Unknown or expired confirmation token. The first-step tool call may need to be re-issued.'));
+      return errorResponse(new Error('Unknown or expired confirmation token. The first-step tool call may need to be re-issued.'), call);
     }
     return executeTool(pending.tool, pending.args, call);
   }
@@ -130,7 +130,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     try {
       description = await confirmationFor(tool, params, call);
     } catch (err) {
-      return errorResponse(err instanceof Error ? err : new Error(String(err)));
+      return errorResponse(err instanceof Error ? err : new Error(String(err)), call);
     }
     const pending = confirmationStore.create({ tool: name, args: params, description });
     return {
@@ -188,7 +188,7 @@ function stamp<T extends Record<string, unknown>>(payload: T): T & { _serverVers
 
 async function executeTool(name: string, params: Record<string, unknown>, call: CommandRun) {
   const tool = findTool(installedCommands, name);
-  if (!tool) return errorResponse(new Error(`Unknown tool: ${name}`));
+  if (!tool) return errorResponse(new Error(`Unknown tool: ${name}`), call);
 
   try {
     const result = await runTool(tool, params, call);
@@ -196,13 +196,13 @@ async function executeTool(name: string, params: Record<string, unknown>, call: 
       content: [{ type: 'text' as const, text: JSON.stringify(stamp(result), null, 2) }],
     };
   } catch (err) {
-    return errorResponse(err instanceof Error ? err : new Error(String(err)));
+    return errorResponse(err instanceof Error ? err : new Error(String(err)), call);
   }
 }
 
-function errorResponse(thrown: Error) {
+function errorResponse(thrown: Error, call: CommandRun) {
   // A node's refusal is reported with the node's words, which the wallet SDK keeps only among its causes.
-  const error = withServerAdvice(withNodeReason(thrown));
+  const error = withServerAdvice(withNodeReason(thrown), call.host.paths().stateRoot);
   const { errorCode } = classifyError(error);
   return {
     content: [{

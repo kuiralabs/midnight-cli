@@ -13,7 +13,6 @@ import { throwIfCancelled, UsageError } from '@kuiralabs/midnight-cli-core/lib/e
 import { openSecret, sealSecret } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import { currentPrompter, type Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { PASSPHRASE_ENV, settings } from '@kuiralabs/midnight-cli-core/lib/settings';
-import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
 
 /** The variable a non-interactive run sets the passphrase in (named in settings.ts). */
 export { PASSPHRASE_ENV };
@@ -67,7 +66,7 @@ export async function readPassphrase(source: PassphraseSource = {}): Promise<str
 }
 
 /** True once mn's passphrase is set on this machine. */
-export function isPassphraseSet(root: string = stateRoot()): boolean {
+export function isPassphraseSet(root: string): boolean {
   return fs.existsSync(keystorePath(root));
 }
 
@@ -97,7 +96,7 @@ const unlocked = new Map<string, string>();
  * run. One already checked is taken again only when the environment names no
  * other: a changed MN_PASSPHRASE is checked afresh.
  */
-export async function unlockPassphrase(root: string = stateRoot(), source: PassphraseSource = {}): Promise<string> {
+export async function unlockPassphrase(root: string, source: PassphraseSource = {}): Promise<string> {
   const known = unlocked.get(root);
   const fromEnv = source.env !== undefined ? source.env[PASSPHRASE_ENV] : settings().passphrase;
   if (known !== undefined && (fromEnv === undefined || fromEnv === '' || fromEnv === known)) return known;
@@ -112,7 +111,7 @@ export async function unlockPassphrase(root: string = stateRoot(), source: Passp
  * The passphrase to seal a new secret under: the one set, or, on a machine
  * with none yet, a new one (asked twice at a terminal), which is then set.
  */
-export async function passphraseForNewSecret(root: string = stateRoot(), source: PassphraseSource = {}): Promise<string> {
+export async function passphraseForNewSecret(root: string, source: PassphraseSource = {}): Promise<string> {
   if (isPassphraseSet(root)) return unlockPassphrase(root, source);
   const passphrase = await readPassphrase({ ...source, confirm: true });
   if ([...passphrase].length < MIN_PASSPHRASE_LENGTH) {

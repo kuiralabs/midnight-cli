@@ -51,10 +51,11 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
 
   // ── Load wallet ──
 
-  const config = await unlockWallet(resolveWalletPath(getFlag(args, 'wallet')));
+  const root = ctx.config.paths.stateRoot;
+  const config = await unlockWallet(resolveWalletPath(root, getFlag(args, 'wallet')), { root });
   const seedBuffer = Buffer.from(config.seed, 'hex');
 
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args });
+  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
   const address = config.addresses[networkName];
 
   // Apply endpoint overrides: --flag > config > network default
@@ -62,7 +63,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
     proofServer: getFlag(args, 'proof-server'),
     node: getFlag(args, 'node'),
     indexerWS: getFlag(args, 'indexer-ws'),
-  }, networkName);
+  }, networkName, root);
 
   // ── Header ──
 
@@ -100,7 +101,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
   // preview/preprod). dApps there can only do unshielded + dust anyway.
   const syncMode = shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded')) ? 'full' : 'lite';
 
-  await (await engineFor(networkName)).wallet.serveWallet({ seed: seedBuffer, networkConfig, network: networkName, address, syncMode, signal: ctx.signal, log: ctx.diagnostics.line,
+  await (await engineFor(networkName, root)).wallet.serveWallet({ seed: seedBuffer, root, networkConfig, network: networkName, address, syncMode, signal: ctx.signal, log: ctx.diagnostics.line,
     onStatus: (s) => spinner.update(s),
     onSyncProgress: (applied, highest) => {
       if (highest > 0) {

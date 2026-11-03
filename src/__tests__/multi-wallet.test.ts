@@ -74,37 +74,32 @@ afterEach(() => {
 
 describe('resolveWalletPath', () => {
   it('treats value with / as a file path', () => {
-    const result = resolveWalletPath('/tmp/my-wallet.json');
+    const result = resolveWalletPath(TEST_MIDNIGHT_DIR, '/tmp/my-wallet.json');
     expect(result).toBe('/tmp/my-wallet.json');
   });
 
   it('treats value ending in .json as a file path', () => {
-    const result = resolveWalletPath('wallet.json');
+    const result = resolveWalletPath(TEST_MIDNIGHT_DIR, 'wallet.json');
     expect(path.isAbsolute(result)).toBe(true);
     expect(result).toContain('wallet.json');
   });
 
   it('treats simple name as wallet name and resolves to wallets dir', () => {
-    const result = resolveWalletPath('alice');
+    const result = resolveWalletPath(TEST_MIDNIGHT_DIR, 'alice');
     expect(result).toContain(WALLETS_DIR_NAME);
     expect(result).toContain('alice.json');
   });
 
   it('resolves to wallets directory when no argument given', () => {
-    // resolveWalletPath reads the real ~/.midnight/config.json for the active wallet name,
-    // falling back to DEFAULT_WALLET_NAME if no config exists.
-    const result = resolveWalletPath();
+    // No config under the state root: the default wallet.
+    const result = resolveWalletPath(TEST_MIDNIGHT_DIR);
     expect(result).toContain(WALLETS_DIR_NAME);
     expect(result).toMatch(/\.json$/);
   });
 
   it('uses active wallet from config when no argument given', () => {
-    // resolveWalletPath reads from real ~/.midnight/config.json
-    // We can't inject a test config dir, so we verify the behavior
-    // by checking that the result uses the wallets directory pattern
-    const result = resolveWalletPath();
-    expect(result).toContain(WALLETS_DIR_NAME);
-    expect(result).toMatch(/\.json$/);
+    createConfig({ wallet: 'alice' });
+    expect(resolveWalletPath(TEST_MIDNIGHT_DIR)).toBe(path.join(TEST_WALLETS_DIR, 'alice.json'));
   });
 });
 
@@ -112,10 +107,8 @@ describe('resolveWalletPath', () => {
 
 describe('listWallets', () => {
   it('returns empty array when wallets dir does not exist', async () => {
-    const wallets = await listWallets();
-    // There might be a real ~/.midnight/wallets dir, but in test context
-    // we check the structure is correct
-    expect(Array.isArray(wallets)).toBe(true);
+    const wallets = await listWallets(TEST_MIDNIGHT_DIR);
+    expect(wallets).toEqual([]);
   });
 
   it('lists wallets from wallets directory', () => {
@@ -144,20 +137,20 @@ describe('listWallets', () => {
 
 describe('removeWallet', () => {
   it('throws when wallet does not exist', () => {
-    expect(() => removeWallet('nonexistent')).toThrow('not found');
+    expect(() => removeWallet(TEST_MIDNIGHT_DIR, 'nonexistent')).toThrow('not found');
   });
 
   it('rejects invalid wallet names with path traversal', () => {
-    expect(() => removeWallet('../evil')).toThrow('Invalid wallet name');
-    expect(() => removeWallet('path/to/wallet')).toThrow('Invalid wallet name');
+    expect(() => removeWallet(TEST_MIDNIGHT_DIR, '../evil')).toThrow('Invalid wallet name');
+    expect(() => removeWallet(TEST_MIDNIGHT_DIR, 'path/to/wallet')).toThrow('Invalid wallet name');
   });
 
   it('rejects empty wallet name', () => {
-    expect(() => removeWallet('')).toThrow('Invalid wallet name');
+    expect(() => removeWallet(TEST_MIDNIGHT_DIR, '')).toThrow('Invalid wallet name');
   });
 
   it('rejects wallet name ending in .json', () => {
-    expect(() => removeWallet('test.json')).toThrow('Invalid wallet name');
+    expect(() => removeWallet(TEST_MIDNIGHT_DIR, 'test.json')).toThrow('Invalid wallet name');
   });
 });
 
@@ -166,12 +159,12 @@ describe('removeWallet', () => {
 describe('migrateOldWallet', () => {
   it('is a no-op when old wallet does not exist', () => {
     // Should not throw
-    migrateOldWallet();
+    migrateOldWallet(TEST_MIDNIGHT_DIR);
   });
 
   it('is idempotent — does nothing on second call', () => {
-    migrateOldWallet();
-    migrateOldWallet();
+    migrateOldWallet(TEST_MIDNIGHT_DIR);
+    migrateOldWallet(TEST_MIDNIGHT_DIR);
     // No error
   });
 });
@@ -189,20 +182,20 @@ describe('loadWalletConfig error messages', () => {
 
 describe('setActiveWallet validation', () => {
   it('rejects path traversal names', () => {
-    expect(() => setActiveWallet('../evil')).toThrow('Invalid wallet name');
-    expect(() => setActiveWallet('a/b')).toThrow('Invalid wallet name');
+    expect(() => setActiveWallet(TEST_MIDNIGHT_DIR, '../evil')).toThrow('Invalid wallet name');
+    expect(() => setActiveWallet(TEST_MIDNIGHT_DIR, 'a/b')).toThrow('Invalid wallet name');
   });
 
   it('rejects empty name', () => {
-    expect(() => setActiveWallet('')).toThrow('Invalid wallet name');
+    expect(() => setActiveWallet(TEST_MIDNIGHT_DIR, '')).toThrow('Invalid wallet name');
   });
 
   it('rejects .json suffix', () => {
-    expect(() => setActiveWallet('test.json')).toThrow('Invalid wallet name');
+    expect(() => setActiveWallet(TEST_MIDNIGHT_DIR, 'test.json')).toThrow('Invalid wallet name');
   });
 
   it('rejects control characters', () => {
-    expect(() => setActiveWallet('test\x00name')).toThrow('Invalid wallet name');
+    expect(() => setActiveWallet(TEST_MIDNIGHT_DIR, 'test\x00name')).toThrow('Invalid wallet name');
   });
 });
 

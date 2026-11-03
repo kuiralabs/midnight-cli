@@ -1,31 +1,38 @@
 // The engine for a network: one per process, loaded on first use, and the
 // same for work every set does alike.
 
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { OtherSdkSetError, anyEngine, engineFor, preferEngineOf, sdkSetOf, setEngineLoader } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { getValidNetworkNames, sdkSetOfNetwork, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { rcEngine } from '@kuiralabs/midnight-engine-rc';
 
+// A state root with no config: every network on the set the table names.
+const ROOT = mkdtempSync(join(tmpdir(), 'mn-engine-test-'));
+afterAll(() => rmSync(ROOT, { recursive: true, force: true }));
+
 describe('the engine for a network', () => {
   it('is the rc engine for every network but stagenet, which runs the beta set', async () => {
     for (const network of getValidNetworkNames() as NetworkName[]) {
       if (network === 'stagenet') continue;
-      expect(sdkSetOf(network)).toBe('rc');
-      expect(await engineFor(network)).toBe(rcEngine);
+      expect(sdkSetOf(network, ROOT)).toBe('rc');
+      expect(await engineFor(network, ROOT)).toBe(rcEngine);
     }
-    expect(sdkSetOf('stagenet')).toBe('beta');
+    expect(sdkSetOf('stagenet', ROOT)).toBe('beta');
   });
 
   it('refuses stagenet in a process that has loaded the rc engine, naming both sets', async () => {
-    await engineFor('undeployed');
-    const refusal = await engineFor('stagenet').catch((err: unknown) => err);
+    await engineFor('undeployed', ROOT);
+    const refusal = await engineFor('stagenet', ROOT).catch((err: unknown) => err);
     expect(refusal).toBeInstanceOf(OtherSdkSetError);
     expect(refusal).toMatchObject({ code: 'OTHER_SDK_SET', loadedSet: 'rc', wantedSet: 'beta' });
   });
 
   it('is the one loaded in this process for work every set does alike', async () => {
-    expect(await anyEngine()).toBe(await engineFor('undeployed'));
+    expect(await anyEngine()).toBe(await engineFor('undeployed', ROOT));
   });
 
   it('derives a wallet\'s addresses on every network, matching one network at a time', async () => {
@@ -47,10 +54,10 @@ describe('the network picks the engine', () => {
     const asked: string[] = [];
     setEngineLoader(async (set) => { asked.push(set); return rcEngine; });
     try {
-      expect(await engineFor('preview')).toBe(rcEngine);
-      expect(await engineFor('undeployed')).toBe(rcEngine);
+      expect(await engineFor('preview', ROOT)).toBe(rcEngine);
+      expect(await engineFor('undeployed', ROOT)).toBe(rcEngine);
       expect(asked).toStrictEqual(['rc']);
-      for (const network of getValidNetworkNames() as NetworkName[]) expect(sdkSetOf(network)).toBe(sdkSetOfNetwork(network));
+      for (const network of getValidNetworkNames() as NetworkName[]) expect(sdkSetOf(network, ROOT)).toBe(sdkSetOfNetwork(network, ROOT));
     } finally {
       setEngineLoader(loadInstalledEngine);
     }
@@ -61,11 +68,11 @@ describe('the network picks the engine', () => {
     const beta = { ...rcEngine, set: 'beta' } as unknown as typeof rcEngine;
     setEngineLoader(async (set) => { asked.push(set); return set === 'beta' ? beta : rcEngine; });
     try {
-      preferEngineOf('stagenet');
+      preferEngineOf('stagenet', ROOT);
       expect(await anyEngine()).toBe(beta);
       expect(asked).toStrictEqual(['beta']);
     } finally {
-      preferEngineOf('undeployed');
+      preferEngineOf('undeployed', ROOT);
       setEngineLoader(loadInstalledEngine);
     }
   });
@@ -74,7 +81,7 @@ describe('the network picks the engine', () => {
     const other = { ...rcEngine, set: 'beta' } as unknown as typeof rcEngine;
     setEngineLoader(async () => other);
     try {
-      await expect(engineFor('undeployed')).rejects.toThrow("This process runs the beta SDK set and can't load the rc one");
+      await expect(engineFor('undeployed', ROOT)).rejects.toThrow("This process runs the beta SDK set and can't load the rc one");
     } finally {
       setEngineLoader(loadInstalledEngine);
     }

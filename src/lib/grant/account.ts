@@ -39,12 +39,11 @@ import {
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { isValidNetworkName, sdkSetOfNetwork, type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { SdkSet } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { stateRoot } from '@kuiralabs/midnight-cli-core/lib/state-root';
 
 /** Where the account package caches its proving artefacts, under ~/.midnight: each file is fetched the first time a command proves with it. */
 const ACCOUNT_ARTIFACTS_DIR_NAME = 'account-artifacts';
 
-export function accountArtifactsDir(root: string = stateRoot()): string {
+export function accountArtifactsDir(root: string): string {
   return join(root, ACCOUNT_ARTIFACTS_DIR_NAME);
 }
 
@@ -78,10 +77,10 @@ export class UnreachableByAccountError extends UsageError {
   }
 }
 
-/** Throws when the account package can't act on `networkConfig`'s network. */
-export function assertAccountNetwork(networkConfig: NetworkConfig): void {
+/** Throws when the account package can't act on `networkConfig`'s network, by the SDK set the config under the state root `root` gives it. */
+export function assertAccountNetwork(networkConfig: NetworkConfig, root: string): void {
   const id = networkConfig.networkId.toLowerCase();
-  const sdkSet = isValidNetworkName(id) ? sdkSetOfNetwork(id) : 'rc';
+  const sdkSet = isValidNetworkName(id) ? sdkSetOfNetwork(id, root) : 'rc';
   if (sdkSet !== 'rc') throw new UnreachableByAccountError(networkConfig.networkId, sdkSet);
   if (networkConfig.networkId.toLowerCase() !== ACCOUNT_NETWORK_ID) throw new UnreachableByAccountError(networkConfig.networkId);
 }
@@ -129,7 +128,8 @@ export interface GrantAccount {
 
 /** Where an account's passphrase comes from, and where a warning about a plain-text account goes. */
 export interface OpenAccountOptions {
-  root?: string;
+  /** The state root holding mn's passphrase check and the proving artefacts. */
+  root: string;
   source?: PassphraseSource;
   warn?: (line: string) => void;
 }
@@ -140,9 +140,9 @@ export interface OpenAccountOptions {
  * earlier mn wrote in plain text, as it was, with a warning; or, with nothing
  * on record (a first deploy), a new account sealed from the start.
  */
-export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir: string, say: (line: string) => void, options: OpenAccountOptions = {}): Promise<GrantAccount> {
-  assertAccountNetwork(networkConfig);
-  const root = options.root ?? stateRoot();
+export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir: string, say: (line: string) => void, options: OpenAccountOptions): Promise<GrantAccount> {
+  const { root } = options;
+  assertAccountNetwork(networkConfig, root);
   const progress = (event: ProgressEvent): void => say(describeProgress(event).trim());
   const network = networkOf({ networkId: ACCOUNT_NETWORK_ID, node: httpOf(networkConfig.node), indexer: networkConfig.indexer, proofServer: networkConfig.proofServer });
   const context = accountContext({ network, artefacts: artefactCache(accountArtifactsDir(root), { progress }), progress });

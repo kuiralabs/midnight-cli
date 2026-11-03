@@ -316,8 +316,8 @@ describe('commands that write check the call before each whole write', () => {
 
   it('cache clear --wallet: cancelled while the wallet is unlocked, it clears no cache', async () => {
     establishPassphrase(stateRootIn(home), PASSPHRASE);
-    const created = await createWallet('alice', walletSecretFrom(), PASSPHRASE);
-    const cache = getCachePath(created.addresses.undeployed, 'undeployed');
+    const created = await createWallet(stateRootIn(home), 'alice', walletSecretFrom(), PASSPHRASE);
+    const cache = getCachePath(created.addresses.undeployed, 'undeployed', stateRootIn(home));
     fs.mkdirSync(path.dirname(cache), { recursive: true });
     fs.writeFileSync(cache, '{}');
     const call = new AbortController();

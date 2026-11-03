@@ -45,7 +45,7 @@ describe('notices', () => {
   it("carry a library's warning when its caller gives no warn of its own", async () => {
     const lines: string[] = [];
     setNoticeSink((line) => lines.push(line));
-    await unlockWallet(plainWallet('notice-alice'));
+    await unlockWallet(plainWallet('notice-alice'), { root: path.join(home, '.midnight') });
     expect(lines.join('\n')).toMatch(/not protected: its seed is in plain text/);
   });
 

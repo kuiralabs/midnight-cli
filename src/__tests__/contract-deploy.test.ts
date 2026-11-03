@@ -14,6 +14,7 @@ import { servePayerAt } from '../lib/serve-payer.ts';
 import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { stateRootIn } from './helpers/state-root-in.ts';
 
 const ENDPOINTS = ['--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
 
@@ -44,7 +45,7 @@ describe('deployContract', () => {
     const said: string[] = [];
     await expect(deployContract({
       request: resolveContractDeployRequest(args),
-      target: resolvePayingTarget(args, 'contract', 'deploy'),
+      target: resolvePayingTarget(args, 'contract', 'deploy', stateRootIn(home)),
       wallet: 'nobody',
       // Never reached: serving would be the step after the funds check.
       payer: servePayerAt(1),
@@ -65,7 +66,7 @@ describe('deployContract', () => {
     const args = parseArgs(['contract', 'deploy', '--path', path.join(home, 'dapp'), '--wallet', 'external', ...ENDPOINTS]);
     await expect(deployContract({
       request: resolveContractDeployRequest(args),
-      target: resolvePayingTarget(args, 'contract', 'deploy'),
+      target: resolvePayingTarget(args, 'contract', 'deploy', stateRootIn(home)),
       wallet: 'external',
       payer: ownPayer,
       progress: () => silentSpinner(),
@@ -90,7 +91,7 @@ describe('deployContract', () => {
     const args = parseArgs(['contract', 'deploy', '--path', path.join(home, 'dapp'), '--wallet', 'external', ...ENDPOINTS]);
     await expect(deployContract({
       request: resolveContractDeployRequest(args),
-      target: resolvePayingTarget(args, 'contract', 'deploy'),
+      target: resolvePayingTarget(args, 'contract', 'deploy', stateRootIn(home)),
       wallet: 'external',
       payer: ownPayer,
       progress: () => silentSpinner(),

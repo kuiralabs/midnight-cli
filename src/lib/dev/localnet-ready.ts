@@ -12,10 +12,11 @@ export interface EnsureLocalnetResult {
   state: LocalnetState;
 }
 
-/** Require a running ledger-9 stack; throws with setup instructions if none answers. */
-export async function ensureLocalnetRunning(onProgress?: (msg: string) => void): Promise<EnsureLocalnetResult> {
+/** Require a running ledger-9 stack, at the endpoints saved under the state root `root`; throws with setup instructions if none answers. */
+export async function ensureLocalnetRunning(root: string, onProgress?: (msg: string) => void): Promise<EnsureLocalnetResult> {
   const { name, config } = resolveNetwork({
     args: { command: 'dev', subcommand: undefined, positionals: [], flags: { network: 'undeployed' } },
+    configDir: root,
   });
   onProgress?.(`Checking the ledger-9 stack at ${config.node}`);
   await assertLedger9StackReachable(name, config);

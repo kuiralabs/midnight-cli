@@ -34,6 +34,7 @@ export async function deployContract({ request, target, wallet, payer, progress,
     const result = await runDeploy({
       dappDir,
       network: target.network,
+      root: target.root,
       networkConfig: target.networkConfig,
       managedDir: info.managedDir,
       contractName: info.name,
