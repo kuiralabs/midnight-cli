@@ -1,4 +1,5 @@
 import { CANCELLED_MESSAGE, isUsageError } from './errors.ts';
+import type { CodeRegistry } from './error-codes.ts';
 // Structured exit codes and error classification for CLI
 // Used by both JSON mode and non-JSON error reporting
 
@@ -13,6 +14,11 @@ export const EXIT_TX_REJECTED = 6;
 export const EXIT_CANCELLED = 7;
 
 // ── Machine-readable error code strings ─────────────────
+/**
+ * @deprecated Each package defines its own codes (`<package>.codes.ts`, made
+ * with defineCodes), and classifyError reads them from the installed
+ * packages' registry. Kept, with every code those define, until callers move.
+ */
 export const ERROR_CODES = {
   INVALID_ARGS: 'INVALID_ARGS',
   WALLET_NOT_FOUND: 'WALLET_NOT_FOUND',
@@ -71,6 +77,14 @@ export const ERROR_CODES = {
   WRONG_PASSPHRASE: 'WRONG_PASSPHRASE',
   /** A secret was needed and no passphrase could be had. Recovery: set MN_PASSPHRASE, or run at a terminal. */
   PASSPHRASE_REQUIRED: 'PASSPHRASE_REQUIRED',
+  /** The host gave mn no place to keep its state. Recovery: give the host its paths. */
+  NO_STATE_ROOT: 'NO_STATE_ROOT',
+  /** A command that submits a transaction was called without a payer. Recovery: give the call a payer. */
+  NO_PAYER: 'NO_PAYER',
+  /** Contract scripts run under Node.js, and none was found on PATH. Recovery: install Node.js 22 or later, or run mn under Node. */
+  NO_NODE_RUNTIME: 'NO_NODE_RUNTIME',
+  /** A command ended with a non-zero exit code without throwing (a test run whose tests failed), run where no process exit code can be set (MCP). */
+  COMMAND_FAILED: 'COMMAND_FAILED',
   UNKNOWN: 'UNKNOWN',
 } as const;
 
@@ -89,19 +103,34 @@ const SETUP_ERROR_CODES: ReadonlySet<string> = new Set([
   ERROR_CODES.ENDPOINT_SHUT_DOWN,
 ]);
 
+/** @deprecated A code is a string a package defines; see ERROR_CODES. */
 export type ErrorCode = typeof ERROR_CODES[keyof typeof ERROR_CODES];
 
 interface ClassifiedError {
   exitCode: number;
-  errorCode: ErrorCode;
+  /** A code one of the installed packages defines (a plugin's included), or one of ERROR_CODES. */
+  errorCode: string;
 }
 
 /**
- * Inspect an error message to determine the appropriate exit code and error code.
- * Pattern-matches against known error messages from the CLI and Midnight SDK.
- * Order matters: more specific patterns are checked before broader ones.
+ * The error's code and the exit code it ends the CLI with. An error that
+ * carries a code `codes` defines is classified by it; any other falls back to
+ * the rules below, which read its message.
  */
-export function classifyError(err: Error): ClassifiedError {
+export function classifyError(err: Error, codes?: CodeRegistry): ClassifiedError {
+  const code = (err as { code?: unknown }).code;
+  const defined = typeof code === 'string' ? codes?.code(code) : undefined;
+  if (defined !== undefined) return { exitCode: defined.exitCode, errorCode: defined.code };
+  return legacyByMessage(err);
+}
+
+/**
+ * The classification before codes were owned per package, unchanged: the
+ * typed codes it knew, then patterns over the message from the CLI and the
+ * Midnight SDK. Order matters: more specific patterns are checked before
+ * broader ones.
+ */
+function legacyByMessage(err: Error): ClassifiedError {
   // A usage error is the caller's to fix, whatever its text (the CLI and MCP agree on this).
   // (Tested through `unknown`: UsageError has Error's shape, so narrowing `err` itself would leave `never`.)
   const code = (err as { code?: unknown }).code;

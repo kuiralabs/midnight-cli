@@ -36,12 +36,15 @@ const NOT_A_FLAG = 'zz-not-a-flag';
 
 // ---------- running the CLI ----------
 
-function cleanEnv(home) {
+// `unset` names variables of the fixed environment a case runs without.
+function cleanEnv(home, unset = []) {
   const env = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (!key.startsWith('MN_') && key !== 'NODE_OPTIONS' && key !== 'FORCE_COLOR') env[key] = value;
   }
-  return { ...env, HOME: home, MN_NO_LOCAL_DETECT: '1', MN_PASSPHRASE: 'behaviour-snapshot', NO_COLOR: '1', TERM: 'dumb' };
+  const fixed = { ...env, HOME: home, MN_NO_LOCAL_DETECT: '1', MN_PASSPHRASE: 'behaviour-snapshot', NO_COLOR: '1', TERM: 'dumb' };
+  for (const key of unset) delete fixed[key];
+  return fixed;
 }
 
 function normalise(text, home) {
@@ -52,9 +55,9 @@ function normalise(text, home) {
     .replace(/\b\d{13}\b/g, '<EPOCH_MS>');
 }
 
-function runCli(home, args, nodeArgs = []) {
+function runCli(home, args, nodeArgs = [], unset = []) {
   const result = spawnSync(process.execPath, [...nodeArgs, BIN, ...args], {
-    cwd: home, env: cleanEnv(home), encoding: 'utf8', timeout: TIMEOUT_MS, input: '',
+    cwd: home, env: cleanEnv(home, unset), encoding: 'utf8', timeout: TIMEOUT_MS, input: '',
   });
   return {
     args,
@@ -107,7 +110,7 @@ function acceptedFlags(home, helpCasesRecorded) {
 }
 
 // Commands that need no network, run in order in one HOME, so later ones see
-// what earlier ones wrote.
+// what earlier ones wrote. A third element names variables the case runs without.
 const OFFLINE = [
   ['config-get-network', ['config', 'get', 'network', '--json']],
   ['config-set-network', ['config', 'set', 'network', 'undeployed']],
@@ -117,6 +120,8 @@ const OFFLINE = [
   ['wallet-list-empty', ['wallet', 'list', '--json']],
   ['wallet-generate', ['wallet', 'generate', 'snap', '--seed', SEED, '--network', 'undeployed', '--json']],
   ['wallet-generate-again', ['wallet', 'generate', 'snap', '--seed', SEED, '--network', 'undeployed', '--json']],
+  // No passphrase and no terminal to ask at: refused before it writes anything.
+  ['wallet-generate-no-passphrase', ['wallet', 'generate', 'nopass', '--seed', SEED, '--network', 'undeployed', '--json'], ['MN_PASSPHRASE']],
   ['wallet-list', ['wallet', 'list', '--json']],
   ['wallet-info', ['wallet', 'info', '--json']],
   ['wallet-use', ['wallet', 'use', 'snap', '--json']],
@@ -141,7 +146,7 @@ const OFFLINE = [
 
 function offlineCases(home) {
   const cases = {};
-  for (const [name, args] of OFFLINE) cases[name] = runCli(home, args);
+  for (const [name, args, unset = []] of OFFLINE) cases[name] = runCli(home, args, [], unset);
   cases['home-files'] = listFiles(join(home, '.midnight'), home);
   return cases;
 }

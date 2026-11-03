@@ -203,7 +203,7 @@ async function executeTool(name: string, params: Record<string, unknown>, call: 
 function errorResponse(thrown: Error, call: CommandRun) {
   // A node's refusal is reported with the node's words, which the wallet SDK keeps only among its causes.
   const error = withServerAdvice(withNodeReason(thrown), call.host.paths().stateRoot);
-  const { errorCode } = classifyError(error);
+  const { errorCode } = classifyError(error, installedCommands);
   return {
     content: [{
       type: 'text' as const,

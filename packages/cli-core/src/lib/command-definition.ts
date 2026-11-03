@@ -13,6 +13,7 @@
 import { getValidNetworkNames } from './network.ts';
 import { FULL_FLAG, type ParsedArgs } from './argv.ts';
 import { type PackageGuidance, type ToolsTableRow, assertDistinctPlaces } from './agent-guidance.ts';
+import type { CodeDefinition, CodeRegistry } from './error-codes.ts';
 import type { CallContext, CommandOutcome } from './call-context.ts';
 import type { Host } from './host.ts';
 
@@ -205,11 +206,13 @@ export interface CommandDefinition {
   readonly mcp?: { readonly tools: readonly ToolDefinition[] };
 }
 
-/** A package as the shell installs it: its commands and what it tells agents. */
+/** A package as the shell installs it: its commands, what it tells agents, and the error codes it owns. */
 export interface CommandPackage {
   readonly name: string;
   readonly commands: readonly CommandDefinition[];
   readonly guidance: PackageGuidance;
+  /** The error codes its errors carry; none: it owns no code. */
+  readonly codes?: readonly CodeDefinition[];
 }
 
 /** A tool as the registry holds it: its definition, its generated schema, and the command it runs. */
@@ -225,7 +228,8 @@ export interface GlobalFlagHelp {
   readonly description: string;
 }
 
-export interface CommandRegistry {
+/** The installed commands, and (through `code`) the error codes of the installed packages. */
+export interface CommandRegistry extends CodeRegistry {
   /** The definitions, in help's order. */
   readonly commands: readonly CommandDefinition[];
   /** Flags every command accepts. */
@@ -433,6 +437,7 @@ export function createCommandRegistry(
     find: (name) => commands.find((command) => command.name === name),
     tools: tools.sort((a, b) => a.order - b.order),
     packages: [],
+    code: () => undefined,
   };
 }
 
@@ -457,7 +462,7 @@ function checkGuidance(packages: readonly CommandPackage[]): void {
 
 /**
  * Collects packages into a registry, its commands in their definitions'
- * order. Every command is in one package.
+ * order. Every command is in one package, and every error code in one package.
  */
 export function createPackageRegistry(
   packages: readonly CommandPackage[],
@@ -470,7 +475,10 @@ export function createPackageRegistry(
   assertUnique(all.map((command) => String(command.order)), 'command place');
   const commands = [...all].sort((a, b) => a.order - b.order);
   checkGuidance(packages);
-  return { ...createCommandRegistry(commands, globalFlags, globalFlagsHelp), packages };
+  const codes = packages.flatMap((pkg) => pkg.codes ?? []);
+  assertUnique(codes.map((definition) => definition.code), 'error code');
+  const byCode = new Map(codes.map((definition) => [definition.code, definition]));
+  return { ...createCommandRegistry(commands, globalFlags, globalFlagsHelp), packages, code: (code) => byCode.get(code) };
 }
 
 /** The Flags section of `help <command>`, line by line, as shown. */

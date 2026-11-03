@@ -17,6 +17,195 @@ import type { CommandDefinition } from "../lib/command-definition.ts";
 export declare const configDefinition: CommandDefinition;
 ```
 
+## `@kuiralabs/midnight-cli-core/commands/core.codes`
+
+```ts
+export declare const coreCodes: readonly [
+    {
+        readonly code: "INVALID_ARGS";
+        readonly exitCode: 2;
+        readonly summary: "Missing or invalid arguments.";
+        readonly recovery: "Fix the arguments and run it again; `midnight help <command>` shows them.";
+    },
+    {
+        readonly code: "WRONG_PASSPHRASE";
+        readonly exitCode: 2;
+        readonly summary: "mn's passphrase was wrong, or a sealed secret was changed.";
+        readonly recovery: "Run it again with the passphrase mn was protected with.";
+    },
+    {
+        readonly code: "PASSPHRASE_REQUIRED";
+        readonly exitCode: 2;
+        readonly summary: "A secret was needed and no passphrase could be had.";
+        readonly recovery: "Set MN_PASSPHRASE, or run at a terminal.";
+    },
+    {
+        readonly code: "NETWORK_ERROR";
+        readonly exitCode: 4;
+        readonly summary: "Connection refused, timeout, DNS failure.";
+        readonly recovery: "Check that the node, indexer and proof server at the configured endpoints are running.";
+    },
+    {
+        readonly code: "AMBIGUOUS_LOCAL_STACKS";
+        readonly exitCode: 4;
+        readonly summary: "Several local Midnight stacks run and no endpoints were given.";
+        readonly recovery: "Pass endpoint flags or `midnight config set` them.";
+    },
+    {
+        readonly code: "BLOCKFROST_PROJECT_ID_REQUIRED";
+        readonly exitCode: 4;
+        readonly summary: "The network is served by Blockfrost and no project id is set.";
+        readonly recovery: "`mn config set blockfrost-project-id <project id>`.";
+    },
+    {
+        readonly code: "BLOCKFROST_PROJECT_ID_REJECTED";
+        readonly exitCode: 4;
+        readonly summary: "Blockfrost refused the project id.";
+        readonly recovery: "Check it at blockfrost.io and set it again.";
+    },
+    {
+        readonly code: "BLOCKFROST_LIMIT_REACHED";
+        readonly exitCode: 4;
+        readonly summary: "Blockfrost is holding the project back (its plan's daily limit, or too many requests at once).";
+        readonly recovery: "Wait, or see the project's plan.";
+    },
+    {
+        readonly code: "ENDPOINT_SHUT_DOWN";
+        readonly exitCode: 4;
+        readonly summary: "An endpoint set by flag or config was shut down by its operator.";
+        readonly recovery: "Unset it (`mn config unset indexer-ws`).";
+    },
+    {
+        readonly code: "CANCELLED";
+        readonly exitCode: 7;
+        readonly summary: "Operation cancelled (SIGINT).";
+    },
+    {
+        readonly code: "OTHER_SDK_SET";
+        readonly exitCode: 1;
+        readonly summary: "The process has loaded one SDK set's engine and the call's network runs on the other.";
+        readonly recovery: "Run the call in a process of its own (for MCP, a server for that network).";
+    },
+    {
+        readonly code: "MIXED_SDK_LAYOUT";
+        readonly exitCode: 1;
+        readonly summary: "An engine's SDK packages reach more than one copy of its ledger: mn was installed without its shrinkwrap (bun's installer).";
+        readonly recovery: "Install mn with npm.";
+    },
+    {
+        readonly code: "UNSUPPORTED_NODE";
+        readonly exitCode: 1;
+        readonly summary: "This Node.js is older than mn supports (22).";
+        readonly recovery: "Install a current Node.js.";
+    },
+    {
+        readonly code: "NO_STATE_ROOT";
+        readonly exitCode: 1;
+        readonly summary: "The host gave mn no place to keep its state.";
+        readonly recovery: "Give the host its paths (createHost paths).";
+    },
+    {
+        readonly code: "NO_PAYER";
+        readonly exitCode: 1;
+        readonly summary: "A command that submits a transaction was called without a payer.";
+        readonly recovery: "Give the call a payer.";
+    },
+    {
+        readonly code: "COMMAND_FAILED";
+        readonly exitCode: 1;
+        readonly summary: "A command ended with a non-zero exit code without throwing (a test run whose tests failed); the message carries its result.";
+        readonly recovery: "Read the command's result in the message.";
+    },
+    {
+        readonly code: "UNKNOWN";
+        readonly exitCode: 1;
+        readonly summary: "Unclassified error.";
+    },
+    {
+        readonly code: "PROOF_TIMEOUT";
+        readonly exitCode: 6;
+        readonly summary: "ZK proof generation timed out.";
+        readonly recovery: "Retry: proofs can be slow under load.";
+    },
+    {
+        readonly code: "PROOF_FAILURE";
+        readonly exitCode: 6;
+        readonly summary: "Proof server rejected or failed to generate the ZK proof.";
+        readonly recovery: "Ensure the proof server is running, then retry; if persistent, `mn cache clear` to force a fresh sync.";
+    },
+    {
+        readonly code: "INVALID_DUST_PROOF";
+        readonly exitCode: 6;
+        readonly summary: "Chain rejected the dust spend proof as malformed (substrate \"Custom error 170\").";
+        readonly recovery: "`mn cache clear --wallet <name>` then retry.";
+    },
+    {
+        readonly code: "TX_REJECTED";
+        readonly exitCode: 6;
+        readonly summary: "Transaction rejected by the node.";
+    },
+    {
+        readonly code: "STALE_UTXO";
+        readonly exitCode: 6;
+        readonly summary: "UTXOs consumed by another transaction (substrate \"error code 115\").";
+        readonly recovery: "Re-sync (the next call refreshes the state) and retry.";
+    },
+    {
+        readonly code: "STALE_CACHE";
+        readonly exitCode: 6;
+        readonly summary: "Local wallet cache disagrees with chain state (a localnet reset, a remote testnet re-index).";
+        readonly recovery: "`mn cache clear --wallet <name>` then retry.";
+    },
+    {
+        readonly code: "SYNC_TIMEOUT";
+        readonly exitCode: 4;
+        readonly summary: "Wallet sync exceeded its deadline.";
+        readonly recovery: "Retry: the cache resumes from the last applied event.";
+    },
+    {
+        readonly code: "DUST_REQUIRED";
+        readonly exitCode: 5;
+        readonly summary: "Not enough Dust for the fee.";
+        readonly recovery: "Not registered: `mn dust register`. Generating: retry when the message says, or register more NIGHT.";
+    },
+    {
+        readonly code: "DUST_GENERATING";
+        readonly exitCode: 5;
+        readonly summary: "A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust.";
+        readonly recovery: "Run `mn dust register` again at the time the message gives, or add NIGHT.";
+    },
+    {
+        readonly code: "INSUFFICIENT_BALANCE";
+        readonly exitCode: 5;
+        readonly summary: "Not enough NIGHT for the operation.";
+    },
+    {
+        readonly code: "NOT_AN_OFFER";
+        readonly exitCode: 2;
+        readonly summary: "Bytes given as a swap offer are not one.";
+        readonly recovery: "Ask the maker for the offer again.";
+    },
+    {
+        readonly code: "TERMS_MISMATCH";
+        readonly exitCode: 2;
+        readonly summary: "A swap offer's own terms differ from the agreed ones.";
+        readonly recovery: "Don't take it; agree the terms again with the maker.";
+    },
+    {
+        readonly code: "OFFER_EXPIRED";
+        readonly exitCode: 2;
+        readonly summary: "A swap offer is past the expiry its maker set.";
+        readonly recovery: "Ask the maker for a new one.";
+    },
+    {
+        readonly code: "OFFER_COINS_IN_USE";
+        readonly exitCode: 2;
+        readonly summary: "A spend would use coins an open swap offer of this wallet's holds, cancelling it.";
+        readonly recovery: "Cancel the offer first (mn swap cancel), or wait until it is taken.";
+    }
+];
+```
+
 ## `@kuiralabs/midnight-cli-core/commands/core.guidance`
 
 ```ts
@@ -289,6 +478,7 @@ export declare function getValidConfigKeys(): readonly string[];
 ```ts
 import { type ParsedArgs } from "./argv.ts";
 import { type PackageGuidance } from "./agent-guidance.ts";
+import type { CodeDefinition, CodeRegistry } from "./error-codes.ts";
 import type { CallContext, CommandOutcome } from "./call-context.ts";
 import type { Host } from "./host.ts";
 export interface ParamSchema {
@@ -409,6 +599,7 @@ export interface CommandPackage {
     readonly name: string;
     readonly commands: readonly CommandDefinition[];
     readonly guidance: PackageGuidance;
+    readonly codes?: readonly CodeDefinition[];
 }
 export interface RegisteredTool extends ToolDefinition {
     readonly inputSchema: ToolInputSchema;
@@ -418,7 +609,7 @@ export interface GlobalFlagHelp {
     readonly name: string;
     readonly description: string;
 }
-export interface CommandRegistry {
+export interface CommandRegistry extends CodeRegistry {
     readonly commands: readonly CommandDefinition[];
     readonly globalFlags: readonly FlagDefinition[];
     readonly globalFlagsHelp: readonly GlobalFlagHelp[];
@@ -967,6 +1158,25 @@ export declare class OtherSdkSetError extends Error {
 export declare function claimSdkSet(set: SdkSet): void;
 ```
 
+## `@kuiralabs/midnight-cli-core/lib/error-codes`
+
+```ts
+export interface CodeDefinition {
+    readonly code: string;
+    readonly exitCode: number;
+    readonly summary: string;
+    readonly recovery?: string;
+    readonly order?: number;
+}
+export interface CodeRegistry {
+    code(code: string): CodeDefinition | undefined;
+}
+export declare class CodeDefinitionError extends Error {
+    constructor(message: string);
+}
+export declare function defineCodes<const T extends readonly CodeDefinition[]>(codes: T): T;
+```
+
 ## `@kuiralabs/midnight-cli-core/lib/error-trim`
 
 ```ts
@@ -977,6 +1187,7 @@ export declare function trimAgentMessage(raw: string): string;
 
 ```ts
 export declare class UsageError extends Error {
+    readonly code: string;
     constructor(message: string);
 }
 export declare function isUsageError(err: unknown): err is UsageError;
@@ -992,6 +1203,7 @@ export declare class TransactionRefusedError extends Error {
     });
 }
 export declare class CommandFailedError extends Error {
+    readonly code = "COMMAND_FAILED";
     readonly exitCode: number;
     readonly result: Readonly<Record<string, unknown>>;
     constructor(command: string, exitCode: number, result: Readonly<Record<string, unknown>>);
@@ -1025,6 +1237,7 @@ export declare const execProgram: ExecRunner;
 ## `@kuiralabs/midnight-cli-core/lib/exit-codes`
 
 ```ts
+import type { CodeRegistry } from "./error-codes.ts";
 export declare const EXIT_SUCCESS = 0;
 export declare const EXIT_GENERAL_ERROR = 1;
 export declare const EXIT_INVALID_ARGS = 2;
@@ -1067,14 +1280,18 @@ export declare const ERROR_CODES: {
     readonly OFFER_COINS_IN_USE: "OFFER_COINS_IN_USE";
     readonly WRONG_PASSPHRASE: "WRONG_PASSPHRASE";
     readonly PASSPHRASE_REQUIRED: "PASSPHRASE_REQUIRED";
+    readonly NO_STATE_ROOT: "NO_STATE_ROOT";
+    readonly NO_PAYER: "NO_PAYER";
+    readonly NO_NODE_RUNTIME: "NO_NODE_RUNTIME";
+    readonly COMMAND_FAILED: "COMMAND_FAILED";
     readonly UNKNOWN: "UNKNOWN";
 };
 export type ErrorCode = typeof ERROR_CODES[keyof typeof ERROR_CODES];
 interface ClassifiedError {
     exitCode: number;
-    errorCode: ErrorCode;
+    errorCode: string;
 }
-export declare function classifyError(err: Error): ClassifiedError;
+export declare function classifyError(err: Error, codes?: CodeRegistry): ClassifiedError;
 export declare function humanizeNetworkError(message: string): string;
 ```
 
@@ -1130,9 +1347,8 @@ export declare function createHost(options?: HostOptions): Host;
 ## `@kuiralabs/midnight-cli-core/lib/json-output`
 
 ```ts
-import { type ErrorCode } from "./exit-codes.ts";
 export declare function writeJsonResult(data: Readonly<Record<string, unknown>>): void;
-export declare function writeJsonError(err: Error, errorCode: ErrorCode, exitCode: number): void;
+export declare function writeJsonError(err: Error, errorCode: string, exitCode: number): void;
 ```
 
 ## `@kuiralabs/midnight-cli-core/lib/keystore`

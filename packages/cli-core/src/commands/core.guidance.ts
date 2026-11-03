@@ -54,6 +54,13 @@ export const coreGuidance: PackageGuidance = {
                                 server for that network
   MIXED_SDK_LAYOUT        1     mn was installed without its shrinkwrap (bun's
                                 installer): install it with npm
+  NO_STATE_ROOT           1     The host gave mn no place to keep its state
+                                (a program's createHost without paths)
+  NO_PAYER                1     A command that submits a transaction was
+                                called without a payer
+  COMMAND_FAILED          1     A command ended with a non-zero exit code
+                                (an MCP test run whose tests failed); the
+                                message carries its result
   NOT_AN_OFFER            2     The bytes given as a swap offer are not one;
                                 ask the maker for it again
   TERMS_MISMATCH          2     A swap offer's own terms differ from the agreed

@@ -12,9 +12,12 @@
 /**
  * Thrown when the user invoked the CLI with missing or invalid arguments
  * that they should fix and retry. Renders in yellow with a "Usage" header
- * instead of red "Error".
+ * instead of red "Error". Its code is INVALID_ARGS; a subclass names its own
+ * (NoPassphraseError: PASSPHRASE_REQUIRED).
  */
 export class UsageError extends Error {
+  readonly code: string = 'INVALID_ARGS';
+
   constructor(message: string) {
     super(message);
     this.name = 'UsageError';
@@ -61,9 +64,11 @@ export class TransactionRefusedError extends Error {
 /**
  * A command that ended with a non-zero exit code without throwing (a test run
  * whose tests failed): the code, and the JSON result it wrote. A runner with no
- * process exit code to set, such as the MCP server, reports it as a failure.
+ * process exit code to set, such as the MCP server, reports it as a failure,
+ * with the code COMMAND_FAILED.
  */
 export class CommandFailedError extends Error {
+  readonly code = 'COMMAND_FAILED';
   readonly exitCode: number;
   readonly result: Readonly<Record<string, unknown>>;
 

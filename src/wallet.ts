@@ -10,7 +10,7 @@ import { withNodeReason } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { installedCommands } from './lib/installed-commands.ts';
 import { commandNeedsWalletSdk, dispatchCommand, processOutput } from './lib/command-dispatch.ts';
 import type { CommandOutcome } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { classifyError, humanizeNetworkError, EXIT_INVALID_ARGS } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { classifyError, humanizeNetworkError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
 import { isUsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { writeJsonError } from '@kuiralabs/midnight-cli-core/lib/json-output';
 import { PKG_VERSION } from './lib/pkg.ts';
@@ -117,26 +117,21 @@ run().then((outcome) => {
 }).catch((thrown: Error) => {
   // A node's refusal is reported with the node's words, which the wallet SDK keeps only among its causes.
   const err = withNodeReason(thrown);
-  // Usage errors (missing/unknown subcommand, bad args) render in yellow
-  // with a softer "Usage" framing. They are the user's prompt to fix and
-  // retry, not a system failure. Exit code 2 (INVALID_ARGS).
+  // The code and exit code come from the error's code, as the MCP server's do:
+  // a usage error carries INVALID_ARGS unless its class names another
+  // (PASSPHRASE_REQUIRED). Usage errors (missing/unknown subcommand, bad args)
+  // render in yellow with a softer "Usage" framing: the user's prompt to fix
+  // and retry, not a system failure.
+  const { exitCode, errorCode } = classifyError(err, installedCommands);
   const message = humanizeNetworkError(err.message);
-  if (isUsageError(err)) {
-    if (jsonMode) {
-      writeJsonError(err, 'INVALID_ARGS', EXIT_INVALID_ARGS);
-    } else {
-      process.stderr.write('\n' + usageMessage(message, 'Run "midnight manual" for the full reference, or "midnight help <command>" for one command.') + '\n\n');
-    }
-    process.exit(EXIT_INVALID_ARGS);
-  } else if (jsonMode) {
-    const { exitCode, errorCode } = classifyError(err);
+  if (jsonMode) {
     writeJsonError(err, errorCode, exitCode);
-    process.exit(exitCode);
+  } else if (isUsageError(err)) {
+    process.stderr.write('\n' + usageMessage(message, 'Run "midnight manual" for the full reference, or "midnight help <command>" for one command.') + '\n\n');
   } else {
     process.stderr.write('\n' + errorMessage(message, 'Run "midnight help" for usage information.') + '\n\n');
-    const { exitCode } = classifyError(err);
-    process.exit(exitCode);
   }
+  process.exit(exitCode);
 });
 
 }
