@@ -34,11 +34,18 @@ export type RpcHandler = (params: Record<string, unknown>, context: RpcHandlerCo
 
 // ── APIError factory ──
 
-export function createApiError(code: ErrorCode, reason: string): APIError {
+/**
+ * An APIError with the API's code. `mnCode`, when given, is mn's own code for
+ * the failure (DUST_REQUIRED for a fee the wallet's Dust can't pay), kept
+ * beside the API's as `mnCode`, outside the specification's type; the wire
+ * carries it as `data.mnCode`.
+ */
+export function createApiError(code: ErrorCode, reason: string, mnCode?: string): APIError {
   const error = new Error(reason) as APIError;
   error.type = 'DAppConnectorAPIError';
   error.code = code;
   error.reason = reason;
+  if (mnCode !== undefined) Object.assign(error, { mnCode });
   return error;
 }
 

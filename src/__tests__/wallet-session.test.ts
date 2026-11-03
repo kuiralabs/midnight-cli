@@ -12,6 +12,11 @@ import { NO_TERMINAL, TEST_NETWORK_CONFIG, connectorStub } from './helpers/conne
 import { createDAppConnector } from '@kuiralabs/midnight-engine-rc/dapp-connector';
 import { FORK_SCHEDULE } from '@kuiralabs/midnight-engine-rc/fork-schedule';
 import { agentPaysMerchant, unsealedBytes } from './helpers/ledger-tx.ts';
+import { Effect } from 'effect';
+import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
+import { DustRequiredError, TransactionRefusedError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { classifyByCode } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 const { WALLET_SHIELDED, WALLET_UNSHIELDED, createBundleStub, mockState } = connectorStub({
   createDAppConnector, deriveShieldedAddress, DustAddress, UnshieldedAddress, ledger9ProtocolVersion: FORK_SCHEDULE.v9,
@@ -167,11 +172,11 @@ describe('wallet session', () => {
       expect(third.stop).toHaveBeenCalledOnce();
     });
 
-    it('gives up after five attempts with the SDK\'s refusal', async () => {
+    it('gives up after five attempts with the SDK\'s refusal, reported as the engine reports it', async () => {
       const reopen = vi.fn(async () => openedWith(() => Promise.reject(coldStart())));
       const session = sessionOver('undeployed', openedWith(() => Promise.reject(coldStart())), () => [], { reopen, delayMs: 0 });
 
-      await expect(session.swap(give, take)).rejects.toMatchObject({ _tag: 'Wallet.InsufficientFunds' });
+      await expect(session.swap(give, take)).rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE', message: 'Insufficient funds', cause: { _tag: 'Wallet.InsufficientFunds' } });
       expect(reopen).toHaveBeenCalledTimes(4);
       await session.close();
     });
@@ -182,7 +187,7 @@ describe('wallet session', () => {
       const session = sessionOver('undeployed', openedWith(initSwap), () => [], { reopen, delayMs: 0 });
 
       await session.swap(give, take);
-      await expect(session.swap(give, take)).rejects.toMatchObject({ _tag: 'Wallet.InsufficientFunds' });
+      await expect(session.swap(give, take)).rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE', message: 'Insufficient funds', cause: { _tag: 'Wallet.InsufficientFunds' } });
       expect(reopen).not.toHaveBeenCalled();
       await session.close();
     });
@@ -198,6 +203,41 @@ describe('wallet session', () => {
         await vi.advanceTimersByTimeAsync(60_000);
         expect(await failure).toBeInstanceOf(Error);
         expect(reopen).not.toHaveBeenCalled();
+        await session.close();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  // The connector answers as it answers a dApp; the session, a program's
+  // wallet in this process, reports as the engine does.
+  describe('its failures, as the engine reports them', () => {
+    it("reports the node's refusal in the node's words, coded by its reason", async () => {
+      const sdkFailure = Effect.runPromise(Effect.fail(new SubmissionError({ message: 'Transaction submission error', cause: new Error('1010: Invalid Transaction: Custom error: 115') })));
+      sdkFailure.catch(() => {});
+      const { session } = openSession({ bundleOverrides: { submitTransaction: () => sdkFailure } });
+      const balanced = await session.balanceTransaction(AGENT_TX);
+
+      const err = await session.submit(balanced).catch((e: Error) => e);
+
+      expect(err).toBeInstanceOf(TransactionRefusedError);
+      expect((err as Error).message).toBe('The node refused the transaction: 1010: Invalid Transaction: Custom error: 115');
+      expect(classifyByCode(err as Error, installedCommands)).toStrictEqual({ errorCode: 'STALE_UTXO', exitCode: 6 });
+      await session.close();
+    });
+
+    it("reports the connector's Dust refusal as DUST_REQUIRED, in the connector's words", async () => {
+      vi.useFakeTimers();
+      try {
+        const { session } = openSession({ bundleOverrides: { balanceUnboundTransaction: () => Promise.reject(new Error('No dust tokens found in the wallet state')) } });
+        const failure = session.balanceTransaction(AGENT_TX).catch((e: Error) => e);
+        await vi.advanceTimersByTimeAsync(10 * 3_000);
+        const err = await failure;
+
+        expect(err).toBeInstanceOf(DustRequiredError);
+        expect((err as Error).message).toContain("The wallet has no Dust available that covers this transaction's fee (No dust tokens found in the wallet state)");
+        expect(classifyByCode(err as Error, installedCommands)).toStrictEqual({ errorCode: 'DUST_REQUIRED', exitCode: 5 });
         await session.close();
       } finally {
         vi.useRealTimers();

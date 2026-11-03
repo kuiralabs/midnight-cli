@@ -17,6 +17,7 @@ import type {
   ShieldedTransferParams,
 } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { InsufficientBalanceError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { reportingEngineErrors } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
 import { bindCachesToIndexer, describeIndexerChange } from '@kuiralabs/midnight-cli-core/lib/cache-indexer';
 import { loadWalletCache, saveWalletCache } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
@@ -307,9 +308,13 @@ function serveWallet<T>(repo: WalletDataRepository, options: Parameters<EngineWa
   });
 }
 
-/** The wallet of an engine whose repository (its caches) is `repo`. */
+/**
+ * The wallet of an engine whose repository (its caches) is `repo`. Its
+ * operations report the SDK's and the node's failures as the engine
+ * contract's typed errors, each carrying its code.
+ */
 export function createBetaWallet(repo: WalletDataRepository): EngineWallet {
-  return {
+  return reportingEngineErrors<EngineWallet>({
     unshieldedBalance: (address, networkConfig, options) => repo.unshielded(address, networkConfig, options),
     async dustBalance(seed, networkConfig, options) {
       const { state: _state, ...balance } = await repo.dust(seed, networkConfig, options);
@@ -324,5 +329,5 @@ export function createBetaWallet(repo: WalletDataRepository): EngineWallet {
     prepDust,
     openConnector: (options) => openConnector(repo, options),
     serveWallet: (options, serve) => serveWallet(repo, options, serve),
-  };
+  });
 }

@@ -6,9 +6,11 @@ import { describe, it, expect } from 'vitest';
 import { Brand, Effect } from 'effect';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import { NodeClientError } from '@midnightntwrk/wallet-sdk/node-client/effect';
-import { dustShortfallOf, isColdStartRace, isDustShortage, nodeRefusalOf, withDustShortfall, withNodeReason } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
-import { TransactionRefusedError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { dustShortfallOf, isColdStartRace, isDustShortage, mnCodeOf, nodeRefusalOf, refusalCodeOf, toEngineError, withDustShortfall, withEngineCode, withNodeReason } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { DustRequiredError, InsufficientBalanceError, ProofTimeoutError, StaleWalletStateError, TransactionRefusedError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { classifyByCode, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { createApiError } from '@kuiralabs/midnight-cli-core/lib/connector-api';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 /** wallet-sdk 2.0's dust InsufficientFundsError: tagged, with the token it could not balance. */
 function sdkInsufficientFunds(tokenType: string): Error {
@@ -166,6 +168,7 @@ describe("the node's reason for refusing a transaction", () => {
     expect(reported.message).toBe('The node refused the transaction: 1010: Invalid Transaction: Custom error: 170');
     expect(reported.cause).toBe(thrown);
     expect(classifyError(reported)).toEqual({ exitCode: 6, errorCode: 'INVALID_DUST_PROOF' });
+    expect(classifyByCode(reported, installedCommands)).toEqual({ exitCode: 6, errorCode: 'INVALID_DUST_PROOF' });
     // Unexplained, the same error was UNKNOWN.
     expect(classifyError(thrown).errorCode).toBe('UNKNOWN');
   });
@@ -189,5 +192,65 @@ describe("the node's reason for refusing a transaction", () => {
     const bare = await caught(refusal(undefined));
     expect(nodeRefusalOf(bare)).toBeUndefined();
     expect(withNodeReason(bare)).toBe(bare);
+  });
+});
+
+describe("the engine contract's reading of a failure", () => {
+  const FIBER_FAILURE_CAUSE = Symbol.for('effect/Runtime/FiberFailure/Cause');
+  const fiberFailure = (error: object, message: string) => Object.assign(new Error(message), { [FIBER_FAILURE_CAUSE]: { _tag: 'Fail', error } });
+
+  it("codes a node's refusal by its reason", () => {
+    expect(refusalCodeOf('1010: Invalid Transaction: Custom error: 115')).toBe('STALE_UTXO');
+    expect(refusalCodeOf('1010: Invalid Transaction: Custom error: 170')).toBe('INVALID_DUST_PROOF');
+    expect(refusalCodeOf('InvalidDustSpendProof')).toBe('INVALID_DUST_PROOF');
+    expect(refusalCodeOf('Transaction is invalid and was rejected by the node')).toBe('TX_REJECTED');
+  });
+
+  it('reports a failure it names as the typed error for its code, with the message and the failure as its cause', () => {
+    const dust = fiberFailure({ _tag: 'Wallet.InsufficientFunds', tokenType: 'dust' }, 'Insufficient Funds: could not balance dust');
+    const reported = toEngineError(dust) as Error;
+    expect(reported).toBeInstanceOf(DustRequiredError);
+    expect(reported.message).toBe(dust.message);
+    expect(reported.cause).toBe(dust);
+
+    const night = fiberFailure({ _tag: 'Wallet.InsufficientFunds', tokenType: '0'.repeat(64) }, 'Insufficient Funds: could not balance 0000');
+    expect(toEngineError(night)).toBeInstanceOf(InsufficientBalanceError);
+    // The ledger's words when a saved state is resumed on an indexer that numbers its events differently.
+    const resumed = toEngineError(new Error('Failed applying dust events: commitment inserted non-linearly')) as Error;
+    expect(resumed).toBeInstanceOf(StaleWalletStateError);
+    expect(classifyByCode(resumed, installedCommands)).toStrictEqual({ errorCode: 'STALE_CACHE', exitCode: 6 });
+  });
+
+  it("leaves an error that carries its own code, a refusal already reported, and one it doesn't name, as they are", () => {
+    const own = new ProofTimeoutError();
+    expect(toEngineError(own)).toBe(own);
+    const refused = new TransactionRefusedError('Custom error: 115', { code: 'STALE_UTXO' });
+    expect(toEngineError(refused)).toBe(refused);
+    const unnamed = new Error('Something unexpected happened');
+    expect(toEngineError(unnamed)).toBe(unnamed);
+    expect(toEngineError('a string')).toBe('a string');
+  });
+
+  it("reports a connector error marked with mn's code as the typed error for it, in its own words", () => {
+    const api = createApiError('InternalError', "Not enough Dust available for this transaction's fee", 'DUST_REQUIRED');
+    const reported = toEngineError(api) as Error;
+    expect(reported).toBeInstanceOf(DustRequiredError);
+    expect(reported.message).toBe(api.message);
+    expect(reported.cause).toBe(api);
+    // An API error with no mn code stays the connector's.
+    const plain = createApiError('InvalidRequest', 'tx is required');
+    expect(toEngineError(plain)).toBe(plain);
+  });
+
+  it("marks a connector's failure with mn's code, the error itself unchanged for the dApp", () => {
+    const dust = fiberFailure({ _tag: 'Wallet.InsufficientFunds', tokenType: 'dust' }, 'Insufficient Funds: could not balance dust');
+    const marked = withEngineCode(dust) as Error;
+    expect(marked).toBe(dust);
+    expect(marked.message).toBe('Insufficient Funds: could not balance dust');
+    expect(mnCodeOf(marked)).toBe('DUST_REQUIRED');
+    expect(Object.keys(marked)).not.toContain('mnCode');
+    const api = createApiError('Rejected', 'User rejected the request', 'TX_REJECTED');
+    expect(mnCodeOf(withEngineCode(api))).toBe('TX_REJECTED');
+    expect(mnCodeOf(withEngineCode(new Error('Something unexpected happened')))).toBeUndefined();
   });
 });

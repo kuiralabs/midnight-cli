@@ -18,7 +18,7 @@ import { resolveNetwork, type NetworkSettings } from './resolve-network.ts';
 import { settingsFromEnvironment } from './settings.ts';
 import { shieldedSyncEnabled } from './shielded-policy.ts';
 import { throwIfCancelled } from './errors.ts';
-import { isColdStartRace } from './sdk-errors.ts';
+import { isColdStartRace, toEngineError } from './sdk-errors.ts';
 import type { SwapLeg } from './swap-offer.ts';
 import type { OpenOffer } from './open-offers.ts';
 
@@ -123,10 +123,18 @@ export function sessionOver(
   let closed = false;
   // Once a transaction is built, reopening would revert it under the caller.
   let built = false;
+  // The connector answers as it answers a dApp; the session reports its failures as the engine does (a node's refusal in the node's words, each with its code).
+  const reported = async <T>(work: () => Promise<T>): Promise<T> => {
+    try {
+      return await work();
+    } catch (err) {
+      throw toEngineError(err);
+    }
+  };
   const call = async (method: string, params: Record<string, unknown>): Promise<unknown> => {
     if (closed) throw new Error('The wallet session is closed');
     const handler = handlerOf(current.connector, method);
-    return handler(params, { notify: () => {}, connectionId: SESSION_CONNECTION, requestId: ++requestId, metadata: {} });
+    return reported(() => handler(params, { notify: () => {}, connectionId: SESSION_CONNECTION, requestId: ++requestId, metadata: {} }));
   };
   /** Builds a transaction, through the cold-start race while it is the session's first. */
   const build = async (making: () => Promise<string>): Promise<string> => {
@@ -188,11 +196,11 @@ export function sessionOver(
     },
     async takeOffer(tx) {
       if (closed) throw new Error('The wallet session is closed');
-      return build(() => current.connector.takeOffer(SESSION_CONNECTION, tx));
+      return build(() => reported(() => current.connector.takeOffer(SESSION_CONNECTION, tx)));
     },
     async cancelOffers(offers) {
       if (closed) throw new Error('The wallet session is closed');
-      return build(() => current.connector.cancelOffers(SESSION_CONNECTION, offers));
+      return build(() => reported(() => current.connector.cancelOffers(SESSION_CONNECTION, offers)));
     },
     async sign(data, encoding) {
       return (await call('signData', { data, options: { encoding, keyType: 'unshielded' } })) as SignedData;

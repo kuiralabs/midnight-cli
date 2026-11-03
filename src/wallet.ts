@@ -6,12 +6,11 @@
 import { parseArgs, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { errorMessage, usageMessage } from '@kuiralabs/midnight-cli-core/ui/format';
 import { assertKnownFlags } from '@kuiralabs/midnight-cli-core/lib/command-flags';
-import { withNodeReason } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { installedCommands } from './lib/installed-commands.ts';
 import { commandNeedsWalletSdk, dispatchCommand, processOutput } from './lib/command-dispatch.ts';
 import type { CommandOutcome } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { classifyError, humanizeNetworkError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
-import { isUsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { asReported, isUsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { writeJsonError } from '@kuiralabs/midnight-cli-core/lib/json-output';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { migrateOldWallet } from './lib/wallet-paths.ts';
@@ -115,8 +114,8 @@ run().then((outcome) => {
     process.exit(process.exitCode ?? 0);
   }
 }).catch((thrown: Error) => {
-  // A node's refusal is reported with the node's words, which the wallet SDK keeps only among its causes.
-  const err = withNodeReason(thrown);
+  // A node's refusal is reported in the node's words, also when a command wrapped it.
+  const err = asReported(thrown);
   // The code and exit code come from the error's code, as the MCP server's do:
   // a usage error carries INVALID_ARGS unless its class names another
   // (PASSPHRASE_REQUIRED). Usage errors (missing/unknown subcommand, bad args)

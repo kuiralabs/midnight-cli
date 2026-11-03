@@ -52,12 +52,93 @@ export class CancelledError extends Error {
  */
 export class TransactionRefusedError extends Error {
   readonly reason: string;
+  /** What the node's reason makes it: a stale coin (STALE_UTXO), an invalid Dust proof (INVALID_DUST_PROOF), or any other refusal (TX_REJECTED). */
+  readonly code: RefusalCode;
 
-  constructor(reason: string, options?: { cause?: unknown }) {
-    super(`The node refused the transaction: ${reason}`, options);
+  constructor(reason: string, options?: { cause?: unknown; code?: RefusalCode }) {
+    super(`The node refused the transaction: ${reason}`, options?.cause === undefined ? undefined : { cause: options.cause });
     this.name = 'TransactionRefusedError';
     this.reason = reason;
+    this.code = options?.code ?? 'TX_REJECTED';
     Object.setPrototypeOf(this, TransactionRefusedError.prototype);
+  }
+}
+
+/** The codes a node's refusal is reported with. */
+export type RefusalCode = 'TX_REJECTED' | 'STALE_UTXO' | 'INVALID_DUST_PROOF';
+
+/**
+ * The error as it is reported: the node's refusal when one is among its
+ * causes (a command that wrapped a failed submission reports what the node
+ * said), any other error as it is.
+ */
+export function asReported(err: Error): Error {
+  const seen = new Set<unknown>();
+  for (let current: unknown = err; current instanceof Error && !seen.has(current); current = current.cause) {
+    if (current instanceof TransactionRefusedError) return current;
+    seen.add(current);
+  }
+  return err;
+}
+
+/**
+ * A failure of the engine contract, named by its code: what an engine reports
+ * an SDK or node failure as, with the SDK's own message and its error as the
+ * cause. Its subclasses name the codes mn tells apart.
+ */
+export class EngineError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.code = code;
+    this.name = 'EngineError';
+    Object.setPrototypeOf(this, EngineError.prototype);
+  }
+}
+
+/** A ZK proof took longer than mn waits for one. */
+export class ProofTimeoutError extends EngineError {
+  constructor(message: string = 'ZK proof generation timed out', options?: { cause?: unknown }) {
+    super('PROOF_TIMEOUT', message, options);
+    this.name = 'ProofTimeoutError';
+    Object.setPrototypeOf(this, ProofTimeoutError.prototype);
+  }
+}
+
+/** The proof server failed to prove a transaction (the SDK's "Failed to prove transaction"). */
+export class ProofFailureError extends EngineError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super('PROOF_FAILURE', message, options);
+    this.name = 'ProofFailureError';
+    Object.setPrototypeOf(this, ProofFailureError.prototype);
+  }
+}
+
+/** A transaction spent coins another transaction already spent (the node's error 115). */
+export class StaleUtxoError extends EngineError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super('STALE_UTXO', message, options);
+    this.name = 'StaleUtxoError';
+    Object.setPrototypeOf(this, StaleUtxoError.prototype);
+  }
+}
+
+/** The chain refused a Dust spend proof as malformed (the node's error 170, InvalidDustSpendProof). */
+export class InvalidDustProofError extends EngineError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super('INVALID_DUST_PROOF', message, options);
+    this.name = 'InvalidDustProofError';
+    Object.setPrototypeOf(this, InvalidDustProofError.prototype);
+  }
+}
+
+/** The wallet's saved state doesn't fit the chain (a reset chain, a re-indexed indexer): the SDK refused to resume from it. */
+export class StaleWalletStateError extends EngineError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super('STALE_CACHE', message, options);
+    this.name = 'StaleWalletStateError';
+    Object.setPrototypeOf(this, StaleWalletStateError.prototype);
   }
 }
 
@@ -65,8 +146,8 @@ export class TransactionRefusedError extends Error {
 export class DustRequiredError extends Error {
   readonly code = 'DUST_REQUIRED';
 
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'DustRequiredError';
     Object.setPrototypeOf(this, DustRequiredError.prototype);
   }
@@ -76,8 +157,8 @@ export class DustRequiredError extends Error {
 export class InsufficientBalanceError extends Error {
   readonly code = 'INSUFFICIENT_BALANCE';
 
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'InsufficientBalanceError';
     Object.setPrototypeOf(this, InsufficientBalanceError.prototype);
   }
@@ -87,8 +168,8 @@ export class InsufficientBalanceError extends Error {
 export class SyncTimeoutError extends Error {
   readonly code = 'SYNC_TIMEOUT';
 
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'SyncTimeoutError';
     Object.setPrototypeOf(this, SyncTimeoutError.prototype);
   }

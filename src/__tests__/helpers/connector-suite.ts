@@ -517,7 +517,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
           await expect(connector.handlers.signData({
             data: 'deadbeef',
             options: { encoding: 'hex', keyType: 'unshielded' },
-          }, ctx())).rejects.toThrow('User rejected the request');
+          }, ctx())).rejects.toMatchObject({ code: 'Rejected', message: 'User rejected the request', mnCode: 'TX_REJECTED' });
         } finally {
           Object.defineProperty(process.stdin, 'isTTY', { value: origIsTTY, configurable: true });
         }
@@ -853,6 +853,24 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
         expect(err.message).toContain('Transaction submission error');
         expect(err.message).toContain('1010: Invalid Transaction: Custom error: 139');
+        // Marked with mn's code for any refusal, its message and causes as the dApp reads them.
+        expect(err.mnCode).toBe('TX_REJECTED');
+        expect(err.code).toBeUndefined();
+      });
+
+      it.each([
+        ['1010: Invalid Transaction: Custom error: 115', 'STALE_UTXO'],
+        ['1010: Invalid Transaction: Custom error: 170', 'INVALID_DUST_PROOF'],
+      ])("marks the node's refusal \"%s\" with mn's code %s", async (reason, mnCode) => {
+        const sdkFailure = Effect.runPromise(Effect.fail(new engine.SubmissionError({ message: 'Transaction submission error', cause: new Error(reason) })));
+        sdkFailure.catch(() => {});
+        const bundle = createBundleStub({ submitTransaction: () => sdkFailure });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        const err: any = await connector.handlers.submitTransaction({ tx: SEALED_AGENT_TX }, ctx()).catch((e: any) => e);
+
+        expect(err.message).toContain(reason);
+        expect(err.mnCode).toBe(mnCode);
       });
 
       it('reports bytes the wallet cannot read as InvalidRequest, naming the stage, without balancing', async () => {
@@ -1115,6 +1133,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         expect(err.message).toContain('no balanced transaction is holding any back on this server');
         expect(err.message).not.toContain('Retry once they settle');
         expect(classifyError(err).errorCode).toBe('DUST_REQUIRED');
+        expect(err.mnCode).toBe('DUST_REQUIRED');
         expect(callCount).toBe(10); // DUST_RETRY_ATTEMPTS = 10
         vi.useRealTimers();
       });
@@ -1165,6 +1184,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
             "Not enough Dust available for this transaction's fee: the wallet has 0.35 DUST and the fee takes 2.00. "
             + 'Its registered NIGHT generates the rest in about 4 minutes: retry then, or register more NIGHT to get there sooner.');
           expect(classifyError(err).errorCode).toBe('DUST_REQUIRED');
+          expect(err.mnCode).toBe('DUST_REQUIRED');
         });
 
         it('waits longer when the caller allows it', async () => {
@@ -1408,6 +1428,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
             expect(err.message).toContain('No Dust is free to pay the fee ([Wallet.InsufficientFunds] Insufficient Funds: could not balance dust)');
             expect(err.message).toContain('1 balanced transaction(s) are waiting to be submitted on this server. Retry once they settle.');
             expect(classifyError(err).errorCode).toBe('DUST_REQUIRED');
+            expect(err.mnCode).toBe('DUST_REQUIRED');
           } finally {
             process.stderr.write = stderrWrite;
             vi.useRealTimers();
@@ -1527,6 +1548,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         // The agent learns why, not just that it was refused.
         expect(err.message).toBe('User rejected the request: this fee wallet (--approve-fees) approves without the operator only '
           + "paying the Dust fee for an agent's own transaction and submitting a transaction it balanced that way on the same connection");
+        expect(err.mnCode).toBe('TX_REJECTED');
         expect(submit).not.toHaveBeenCalled();
       });
 
@@ -1990,7 +2012,8 @@ export function connectorSuite(engine: ConnectorEngine): void {
           connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
           const call = connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx());
-          const outcome = expect(call).rejects.toThrow('ZK proof generation timed out');
+          // A ProofTimeoutError, which mn reports as PROOF_TIMEOUT and the wire carries as its mn code.
+          const outcome = expect(call).rejects.toMatchObject({ message: 'ZK proof generation timed out', code: 'PROOF_TIMEOUT' });
           await vi.advanceTimersByTimeAsync(PROOF_TIMEOUT_MS + 1);
           await outcome;
           expect(revertFn).toHaveBeenCalledWith(recipe);

@@ -47,6 +47,16 @@ describe('the layering', () => {
     expect(importRule('engine/rc/index.ts', 'lib/facade.ts')).toBe('engine → wallet');
   });
 
+  it("lets only an engine, and core's wallet session and Dust wait, read the SDK's errors", () => {
+    expect(importRule('engine/rc/transfer.ts', 'lib/sdk-errors.ts')).toBeUndefined();
+    expect(importRule('engine/beta/dapp-connector.ts', 'lib/sdk-errors.ts')).toBeUndefined();
+    expect(importRule('lib/wallet-session.ts', 'lib/sdk-errors.ts')).toBeUndefined();
+    expect(importRule('lib/dust-wait.ts', 'lib/sdk-errors.ts')).toBeUndefined();
+    expect(importRule('wallet.ts', 'lib/sdk-errors.ts')).toBe("shell → the SDK's errors (only an engine reads them)");
+    expect(importRule('lib/ws-rpc.ts', 'lib/sdk-errors.ts')).toBe("connect → the SDK's errors (only an engine reads them)");
+    expect(importRule('lib/exit-codes.ts', 'lib/sdk-errors.ts')).toBe("core → the SDK's errors (only an engine reads them)");
+  });
+
   it('lets only an engine import the SDK', () => {
     // findLayeringProblems above finds none elsewhere; core, chain and every package are held to it alike.
     expect(importRule('lib/wallet-create.ts', 'engine/rc/derivation.ts')).toBe('wallet → engine (reach it through lib/installed-engines.ts)');

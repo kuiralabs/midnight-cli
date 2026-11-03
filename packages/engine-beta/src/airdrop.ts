@@ -3,6 +3,8 @@
 // caller has already checked that the network is the local one.
 
 import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { EngineError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { toEngineError } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { executeTransfer, type TransferParams, type TransferResult } from './transfer.ts';
 import type { AirdropParams } from '@kuiralabs/midnight-cli-core/lib/engine';
 import type { WalletDataRepository } from './wallet-data-repository.ts';
@@ -15,11 +17,12 @@ export async function airdropNight(repo: WalletDataRepository, params: AirdropPa
     return await executeTransfer(repo, { ...params, seedBuffer: Buffer.from(GENESIS_SEED, 'hex') });
   } catch (err) {
     if (err instanceof Error && err.message.toLowerCase().includes('dust')) {
-      throw new Error(
-        `${err.message}\n\n` +
+      const message = `${err.message}\n\n` +
         `On a fresh localnet, the minimum airdrop is ~1 NIGHT.\n` +
-        `Try: midnight airdrop 1`
-      );
+        `Try: midnight airdrop 1`;
+      // The note keeps the failure's code: the one it carries, or the engine contract's for the SDK's error.
+      const code = (toEngineError(err) as { code?: unknown }).code;
+      throw typeof code === 'string' ? new EngineError(code, message, { cause: err }) : new Error(message, { cause: err });
     }
     throw err;
   }
