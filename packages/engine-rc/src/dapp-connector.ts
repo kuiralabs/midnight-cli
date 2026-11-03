@@ -2,7 +2,7 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import { notice } from '@kuiralabs/midnight-cli-core/lib/notices';
+import type { NoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
 import type { FacadeState, WalletEntry } from '@midnightntwrk/wallet-sdk/facade';
@@ -42,6 +42,8 @@ export interface DAppConnectorOptions {
   bundle: FacadeBundle;
   networkConfig: NetworkConfig;
   approvalOptions: ApprovalOptions;
+  /** Where the connector's lines for the person go (the host's notices): reverted transactions, fee estimates, waits for Dust. */
+  notice: NoticeSink;
   /** Under --approve-fees: the most a transaction may cost, and how many may wait unsubmitted. */
   feeLimits?: FeeLimits;
   /**
@@ -210,7 +212,7 @@ export function signatureScheme(tag: string): 'schnorr_bip340' {
 }
 
 export function createDAppConnector(options: DAppConnectorOptions): DAppConnector {
-  const { bundle, networkConfig, approvalOptions, callbacks } = options;
+  const { bundle, networkConfig, approvalOptions, callbacks, notice } = options;
   const feeLimits = options.feeLimits ?? DEFAULT_FEE_LIMITS;
   const { facade, keystore } = bundle;
   const networkId = getNetworkId(networkConfig.networkId);

@@ -11,7 +11,6 @@ import { Buffer } from 'node:buffer';
 import { captureCommand } from '../lib/run-command.ts';
 import { callDiagnostics } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { setNoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 import { deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { WalletDataRepository } from '@kuiralabs/midnight-engine-rc/wallet-data-repository';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
@@ -38,13 +37,11 @@ beforeEach(() => {
   process.env.HOME = home;
   process.env.MN_NO_LOCAL_DETECT = '1';
   notices = [];
-  setNoticeSink((line) => notices.push(line));
   io = captureOutput();
 });
 
 afterEach(() => {
   io.restore();
-  setNoticeSink(null);
   delete process.env.MN_NO_LOCAL_DETECT;
   process.env.HOME = originalHome;
   rmSync(home, { recursive: true, force: true });

@@ -437,6 +437,7 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
     sdkWarnings,
     log,
     root,
+    notice,
   } = params;
 
   const amount = nightToMicro(amountNight);
@@ -504,6 +505,7 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
       },
       {
         root,
+        notice,
         syncMode: 'lite',
         // Writes build ZK proofs — need strict sync or the commitment tree
         // is stale and chain rejects with MalformedError::InvalidDustSpendProof.

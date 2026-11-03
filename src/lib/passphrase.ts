@@ -1,7 +1,7 @@
 // mn's one passphrase: where it comes from, and the keystore's check that
 // holds it to being one. It comes from MN_PASSPHRASE (scripts, the MCP
 // server, CI; kept off the process list), else it is typed through the
-// prompter (at a terminal, nothing echoed), else the command is refused before it changes anything.
+// prompter its host gives (at a terminal, nothing echoed), else the command is refused before it changes anything.
 // The check is a known value sealed under the passphrase in ~/.midnight: once
 // it is there, every other passphrase is refused, so no secret is ever sealed
 // under a second one.
@@ -11,7 +11,8 @@ import * as path from 'node:path';
 import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { throwIfCancelled, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { openSecret, sealSecret } from '@kuiralabs/midnight-cli-core/lib/keystore';
-import { currentPrompter, type Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
+import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
+import { defineHostSlot, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { PASSPHRASE_ENV, settings } from '@kuiralabs/midnight-cli-core/lib/settings';
 
 /** The variable a non-interactive run sets the passphrase in (named in settings.ts). */
@@ -33,10 +34,9 @@ export class NoPassphraseError extends UsageError {
   }
 }
 
-/** Where the passphrase is read from: the environment, and a prompter (the one set, unless given) if it can ask. */
+/** Where the passphrase is read from besides the prompter: the environment (the settings', unless given). */
 export interface PassphraseSource {
   env?: Record<string, string | undefined>;
-  prompter?: Prompter | null;
   /** Ask twice and refuse two that differ: for setting the passphrase. */
   confirm?: boolean;
   /** The call's cancellation: a call cancelled while the passphrase was asked for saves none. */
@@ -51,11 +51,10 @@ const ask = async (prompter: Prompter, question: string): Promise<string> => {
   return line;
 };
 
-/** The passphrase: from MN_PASSPHRASE, else asked for at the terminal. */
-export async function readPassphrase(source: PassphraseSource = {}): Promise<string> {
+/** The passphrase: from MN_PASSPHRASE, else asked for through `prompter` (at the terminal) when it can ask. */
+export async function readPassphrase(prompter: Prompter | null, source: PassphraseSource = {}): Promise<string> {
   const fromEnv = source.env !== undefined ? source.env[PASSPHRASE_ENV] : settings().passphrase;
   if (fromEnv !== undefined && fromEnv.length > 0) return fromEnv;
-  const prompter = source.prompter === undefined ? currentPrompter() : source.prompter;
   if (prompter === null || !prompter.isInteractive()) throw new NoPassphraseError();
   const passphrase = await ask(prompter, source.confirm ? 'New passphrase for mn: ' : 'Passphrase for mn: ');
   if (source.confirm) {
@@ -88,20 +87,24 @@ export function checkPassphrase(root: string, passphrase: string): void {
 /** The shortest passphrase mn accepts when one is set. */
 export const MIN_PASSPHRASE_LENGTH = 12;
 
-// The passphrase this process has unlocked, by state root: one prompt per run.
-const unlocked = new Map<string, string>();
+/** What a passphrase is had through: the host's prompter, and the host's record of the passphrases it has unlocked. */
+export type PassphraseHost = Pick<Host, 'prompter' | 'slot'>;
+
+// The passphrase each host has unlocked, by state root: one prompt per run.
+const UNLOCKED = defineHostSlot('passphrase.unlocked', () => new Map<string, string>());
 
 /**
  * mn's passphrase, read and checked against the one set; asked for once per
- * run. One already checked is taken again only when the environment names no
- * other: a changed MN_PASSPHRASE is checked afresh.
+ * run of `host`. One already checked is taken again only when the environment
+ * names no other: a changed MN_PASSPHRASE is checked afresh.
  */
-export async function unlockPassphrase(root: string, source: PassphraseSource = {}): Promise<string> {
+export async function unlockPassphrase(host: PassphraseHost, root: string, source: PassphraseSource = {}): Promise<string> {
+  const unlocked = host.slot(UNLOCKED);
   const known = unlocked.get(root);
   const fromEnv = source.env !== undefined ? source.env[PASSPHRASE_ENV] : settings().passphrase;
   if (known !== undefined && (fromEnv === undefined || fromEnv === '' || fromEnv === known)) return known;
   if (!isPassphraseSet(root)) throw new UsageError('mn has no passphrase yet. Set one with: midnight wallet protect');
-  const passphrase = await readPassphrase(source);
+  const passphrase = await readPassphrase(host.prompter, source);
   checkPassphrase(root, passphrase);
   unlocked.set(root, passphrase);
   return passphrase;
@@ -111,14 +114,14 @@ export async function unlockPassphrase(root: string, source: PassphraseSource = 
  * The passphrase to seal a new secret under: the one set, or, on a machine
  * with none yet, a new one (asked twice at a terminal), which is then set.
  */
-export async function passphraseForNewSecret(root: string, source: PassphraseSource = {}): Promise<string> {
-  if (isPassphraseSet(root)) return unlockPassphrase(root, source);
-  const passphrase = await readPassphrase({ ...source, confirm: true });
+export async function passphraseForNewSecret(host: PassphraseHost, root: string, source: PassphraseSource = {}): Promise<string> {
+  if (isPassphraseSet(root)) return unlockPassphrase(host, root, source);
+  const passphrase = await readPassphrase(host.prompter, { ...source, confirm: true });
   if ([...passphrase].length < MIN_PASSPHRASE_LENGTH) {
     throw new UsageError(`mn's passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters.`);
   }
   throwIfCancelled(source.signal);
   establishPassphrase(root, passphrase);
-  unlocked.set(root, passphrase);
+  host.slot(UNLOCKED).set(root, passphrase);
   return passphrase;
 }

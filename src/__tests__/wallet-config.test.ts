@@ -8,6 +8,10 @@ import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './help
 import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { stateRootIn } from './helpers/state-root-in.ts';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+
+// The host the tests' calls run in: nobody to ask, notices dropped.
+const host = createHost();
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-wallet-test-${process.pid}`);
 
@@ -22,7 +26,7 @@ const VALID_CONFIG: WalletConfig = {
 
 const PASSPHRASE = 'correct horse battery staple';
 // Unlocking in the test's own home, a plain-text wallet's warning kept out of the output.
-const UNLOCK = { root: stateRootIn(TEST_DIR), source: { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null }, warn: () => {} };
+const UNLOCK = { root: stateRootIn(TEST_DIR), host, source: { env: { [PASSPHRASE_ENV]: PASSPHRASE } }, warn: () => {} };
 
 beforeEach(() => {
   fs.mkdirSync(TEST_DIR, { recursive: true });
@@ -236,7 +240,7 @@ describe('a wallet written before stagenet', () => {
     const config = await loadWalletConfig(filePath);
     expect(config.addresses.stagenet).toBe(stagenetAddress);
     expect(JSON.parse(fs.readFileSync(filePath, 'utf-8')).addresses).toEqual(VALID_ADDRESSES);
-    expect(await walletAddress(filePath, 'stagenet', stateRootIn(TEST_DIR))).toBe(stagenetAddress);
+    expect(await walletAddress(filePath, 'stagenet', stateRootIn(TEST_DIR), host)).toBe(stagenetAddress);
   });
 
   it('keeps a sealed wallet as written until it is unlocked, then derives and saves its stagenet addresses beside the sealed secret', async () => {

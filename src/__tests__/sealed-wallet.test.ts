@@ -14,6 +14,10 @@ import { loadWalletConfig, protectAllWallets, sealWalletInPlace, unlockWallet, w
 import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { stateRootIn } from './helpers/state-root-in.ts';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+
+// The host the tests' calls run in: nobody to ask, notices dropped.
+const host = createHost();
 
 const SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
 const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -26,7 +30,7 @@ const PUBLIC = {
 
 let home: string;
 let file: string;
-const withPassphrase = (passphrase: string) => ({ root: stateRootIn(home), source: { env: { [PASSPHRASE_ENV]: passphrase }, prompter: null } });
+const withPassphrase = (passphrase: string) => ({ root: stateRootIn(home), host, source: { env: { [PASSPHRASE_ENV]: passphrase } } });
 
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-sealed-wallet-'));
@@ -82,7 +86,7 @@ describe('a wallet an earlier mn wrote in plain text', () => {
   it('still opens, saying it is not protected', async () => {
     writePlain();
     const warnings: string[] = [];
-    const wallet = await unlockWallet(file, { root: stateRootIn(home), warn: (line) => warnings.push(line) });
+    const wallet = await unlockWallet(file, { root: stateRootIn(home), host, warn: (line) => warnings.push(line) });
     expect(wallet.seed).toBe(SEED);
     expect((await loadWalletConfig(file)).isSealed).toBe(false);
     expect(warnings.join('\n')).toMatch(/not protected[\s\S]*midnight wallet protect/);

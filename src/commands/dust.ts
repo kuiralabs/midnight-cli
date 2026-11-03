@@ -50,7 +50,7 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
     // The chain-id check connects to the node; keep polkadot-js's RPC-CORE noise off stderr.
     const stopListening = ctx.sdkWarnings.listen(undefined);
     try {
-      await dustExport(await resolveSeed(args, root), networkName, networkConfig, isJson, minimal, ctx);
+      await dustExport(await resolveSeed(args, root, ctx.host), networkName, networkConfig, isJson, minimal, ctx);
     } finally {
       stopListening();
     }
@@ -58,7 +58,7 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
   }
 
   // status / register: named wallet + its stored address (used by the registration pre-check).
-  const config = await unlockWallet(resolveWalletPath(root, getFlag(args, 'wallet')), { root });
+  const config = await unlockWallet(resolveWalletPath(root, getFlag(args, 'wallet')), { root, host: ctx.host });
   const seedBuffer = Buffer.from(config.seed, 'hex');
   const address = config.addresses[networkName];
 
@@ -103,6 +103,7 @@ async function dustExport(
   try {
     const result = await (await engineFor(networkName, ctx.config.paths.stateRoot)).wallet.exportDust(seedBuffer, networkName, networkConfig, {
       root: ctx.config.paths.stateRoot,
+      notice: ctx.host.notice,
       signal: ctx.signal,
       log: ctx.diagnostics.line,
       onProgress: (applied, maxIdSeen) => spinner.update(
@@ -262,6 +263,7 @@ async function dustRegister(
   try {
     const result = await (await engineFor(network, ctx.config.paths.stateRoot)).wallet.registerDust(seedBuffer, networkConfig, {
       root: ctx.config.paths.stateRoot,
+      notice: ctx.host.notice,
       signal: ctx.signal,
       sdkWarnings: ctx.sdkWarnings,
       log: ctx.diagnostics.line,
@@ -324,6 +326,7 @@ async function dustStatusDirect(
   try {
     const view = await (await engineFor(network, ctx.config.paths.stateRoot)).wallet.dustBalance(seedBuffer, networkConfig, {
       root: ctx.config.paths.stateRoot,
+      notice: ctx.host.notice,
       forceFresh: !useCache,
       signal: ctx.signal,
       log: ctx.diagnostics.line,

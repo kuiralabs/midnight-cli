@@ -1,6 +1,10 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
 import { createRpcServer, createApiError, type RpcServer } from '../lib/ws-rpc.ts';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+
+// The host the servers run in: notices dropped.
+const host = createHost();
 
 // Test helpers
 function sendRpc(ws: WebSocket, id: number, method: string, params?: Record<string, unknown>): void {
@@ -48,6 +52,7 @@ describe('ws-rpc', () => {
     it('starts a WebSocket server on the given port', async () => {
       const port = nextPort();
       server = createRpcServer({
+        host,
         port,
         handlers: {},
       });
@@ -59,7 +64,7 @@ describe('ws-rpc', () => {
 
     it('with refuseBrowsers, refuses a connection carrying an Origin (any web page) and accepts mn\'s own scripts', async () => {
       const port = nextPort();
-      server = createRpcServer({ port, handlers: {}, refuseBrowsers: true });
+      server = createRpcServer({ host, port, handlers: {}, refuseBrowsers: true });
       await server.ready;
 
       const fromPage = new WebSocket(`ws://127.0.0.1:${port}`, { origin: 'https://evil.example' });
@@ -78,7 +83,7 @@ describe('ws-rpc', () => {
 
     it('without refuseBrowsers, a browser dApp with an Origin still connects (plain mn serve)', async () => {
       const port = nextPort();
-      server = createRpcServer({ port, handlers: {} });
+      server = createRpcServer({ host, port, handlers: {} });
       await server.ready;
       const fromPage = new WebSocket(`ws://127.0.0.1:${port}`, { origin: 'http://localhost:5173' });
       await new Promise((resolve, reject) => { fromPage.once('open', resolve); fromPage.once('error', reject); });
@@ -89,6 +94,7 @@ describe('ws-rpc', () => {
     it('dispatches method calls to handlers', async () => {
       const port = nextPort();
       server = createRpcServer({
+        host,
         port,
         handlers: {
           echo: async (params) => params,
@@ -110,6 +116,7 @@ describe('ws-rpc', () => {
     it('returns method not found for unknown methods', async () => {
       const port = nextPort();
       server = createRpcServer({
+        host,
         port,
         handlers: {},
       });
@@ -129,7 +136,7 @@ describe('ws-rpc', () => {
       'treats %s, inherited from Object.prototype, as an unknown method',
       async (method) => {
         const port = nextPort();
-        server = createRpcServer({ port, handlers: { getDustBalance: async () => 'ok' } });
+        server = createRpcServer({ host, port, handlers: { getDustBalance: async () => 'ok' } });
         const ws = await connectClient(port);
         clients.push(ws);
 
@@ -145,6 +152,7 @@ describe('ws-rpc', () => {
     it('returns parse error for invalid JSON', async () => {
       const port = nextPort();
       server = createRpcServer({
+        host,
         port,
         handlers: {},
       });
@@ -162,6 +170,7 @@ describe('ws-rpc', () => {
     it('returns invalid request for malformed JSON-RPC', async () => {
       const port = nextPort();
       server = createRpcServer({
+        host,
         port,
         handlers: {},
       });
@@ -179,6 +188,7 @@ describe('ws-rpc', () => {
     it('serializes bigint values as strings in responses', async () => {
       const port = nextPort();
       server = createRpcServer({
+        host,
         port,
         handlers: {
           getBalance: async () => ({ balance: 5000000n }),
@@ -198,6 +208,7 @@ describe('ws-rpc', () => {
     it('maps APIError to JSON-RPC error with data', async () => {
       const port = nextPort();
       server = createRpcServer({
+        host,
         port,
         handlers: {
           reject: async () => {
@@ -224,6 +235,7 @@ describe('ws-rpc', () => {
     it('tracks connections', async () => {
       const port = nextPort();
       server = createRpcServer({
+        host,
         port,
         handlers: {},
       });
@@ -241,6 +253,7 @@ describe('ws-rpc', () => {
     it('returns internal error for non-APIError exceptions', async () => {
       const port = nextPort();
       server = createRpcServer({
+        host,
         port,
         handlers: {
           broken: async () => { throw new TypeError('Cannot read property of undefined'); },
@@ -263,6 +276,7 @@ describe('ws-rpc', () => {
       const disconnections: string[] = [];
       const port = nextPort();
       server = createRpcServer({
+        host,
         port,
         handlers: {},
         onDisconnect: (conn) => disconnections.push(conn.id),
@@ -284,6 +298,7 @@ describe('ws-rpc', () => {
       const events: string[] = [];
 
       server = createRpcServer({
+        host,
         port,
         handlers: {},
         onConnect: () => events.push('connect'),
@@ -305,6 +320,7 @@ describe('ws-rpc', () => {
       const port = nextPort();
       const counts: number[] = [];
       server = createRpcServer({
+        host,
         port,
         handlers: {
           ping: async () => 'pong',
@@ -331,6 +347,7 @@ describe('ws-rpc', () => {
       const port = nextPort();
       const responses: Array<{ method: string; result: unknown; error?: { message: string; code?: string } }> = [];
       server = createRpcServer({
+        host,
         port,
         handlers: {
           echo: async (params) => params,
@@ -356,6 +373,7 @@ describe('ws-rpc', () => {
       const port = nextPort();
       const responses: Array<{ method: string; result?: unknown; error?: { message: string; code?: string } }> = [];
       server = createRpcServer({
+        host,
         port,
         handlers: {
           fail: async () => { throw new Error('broken'); },
@@ -381,6 +399,7 @@ describe('ws-rpc', () => {
       const port = nextPort();
       let capturedDuration = -1;
       server = createRpcServer({
+        host,
         port,
         handlers: {
           slow: async () => {
@@ -408,6 +427,7 @@ describe('ws-rpc', () => {
       const port = nextPort();
       let capturedId = '';
       server = createRpcServer({
+        host,
         port,
         handlers: {
           whoami: async (_params, context) => {
@@ -453,6 +473,7 @@ describe('ws-rpc', () => {
     it('closes all connections and the server', async () => {
       const port = nextPort();
       server = createRpcServer({
+        host,
         port,
         handlers: {},
       });
@@ -472,6 +493,7 @@ describe('ws-rpc', () => {
       const disconnections: string[] = [];
       const p = nextPort();
       server = createRpcServer({
+        host,
         port: p,
         handlers: {},
         onDisconnect: (conn) => disconnections.push(conn.id),
@@ -494,7 +516,7 @@ describe('createRpcServer readiness', () => {
   // `mn serve` must not report ready (or keep running) when its port is taken:
   // a client would then talk to whatever already listens there.
   it('resolves ready once listening', async () => {
-    const server = createRpcServer({ port: 0, handlers: {} });
+    const server = createRpcServer({ host, port: 0, handlers: {} });
     await expect(server.ready).resolves.toBeUndefined();
     await server.close();
   });
@@ -507,7 +529,7 @@ describe('createRpcServer readiness', () => {
     const origWrite = process.stderr.write;
     process.stderr.write = (() => true) as any;
     try {
-      const server = createRpcServer({ port, handlers: {} });
+      const server = createRpcServer({ host, port, handlers: {} });
       await expect(server.ready).rejects.toMatchObject({ code: 'EADDRINUSE' });
       await server.close();
     } finally {

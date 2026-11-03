@@ -11,6 +11,7 @@ import { sdkSetOfNetwork, type NetworkConfig, type NetworkName } from './network
 import type { CallSdkWarnings } from './sdk-warnings.ts';
 import type { VerboseLog } from './verbose.ts';
 import type { ApprovalOptions } from './approval.ts';
+import type { NoticeSink } from './notices.ts';
 import type { FeeLimits } from './fee-limits.ts';
 import type { RpcHandler } from './connector-api.ts';
 import type { Spinner } from '../ui/spinner.ts';
@@ -218,6 +219,8 @@ export interface TransferParams {
   log?: VerboseLog;
   /** The state root the wallet's caches live under. */
   root: string;
+  /** Where its lines for the person go (the host's notices). */
+  notice: NoticeSink;
 }
 
 export interface TransferResult {
@@ -248,6 +251,8 @@ export interface DustRegisterOptions {
   log?: VerboseLog;
   /** The state root the wallet's caches live under. */
   root: string;
+  /** Where its lines for the person go (the host's notices). */
+  notice: NoticeSink;
 }
 
 export interface DustRegistration {
@@ -307,6 +312,8 @@ export interface ReadOptions {
 export interface CachedReadOptions extends ReadOptions {
   /** The state root the cache lives under. */
   root: string;
+  /** Where its lines for the person go (the host's notices). */
+  notice: NoticeSink;
 }
 
 /** A wallet's Dust, as mn's reader found it. */
@@ -355,6 +362,8 @@ export interface ShieldedTransferParams extends WalletSyncHooks {
   seed: Buffer;
   /** The state root the wallet's caches and open offers live under. */
   root: string;
+  /** Where its lines for the person go (the host's notices). */
+  notice: NoticeSink;
   network: NetworkName;
   networkConfig: NetworkConfig;
   /** The recipient's shielded address on `network`. */
@@ -376,6 +385,8 @@ export interface PrepWallet {
   seed: Buffer;
   /** The state root the wallet's caches live under. */
   root: string;
+  /** Where its lines for the person go (the host's notices). */
+  notice: NoticeSink;
   network: NetworkName;
   networkConfig: NetworkConfig;
   address: string;
@@ -435,15 +446,15 @@ export interface EngineWallet {
   /** Registers a seed's NIGHT for Dust, unless it has Dust already. */
   registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions): Promise<DustRegistration>;
   /** A seed's Dust as a snapshot another wallet restores from. */
-  exportDust(seed: Buffer, network: string, networkConfig: NetworkConfig, options: { root: string; signal?: AbortSignal; log?: VerboseLog; onProgress?: (eventsApplied: number, maxIdSeen: number) => void }): Promise<DustExportResult>;
+  exportDust(seed: Buffer, network: string, networkConfig: NetworkConfig, options: { root: string; notice: NoticeSink; signal?: AbortSignal; log?: VerboseLog; onProgress?: (eventsApplied: number, maxIdSeen: number) => void }): Promise<DustExportResult>;
   /** A test wallet's unshielded NIGHT after a quick sync; its state is saved when it holds some. */
   prepNightBalance(wallet: PrepWallet): Promise<bigint>;
   /** Makes sure a test wallet has Dust, registering and then waiting up to `waitMs` for it. */
   prepDust(wallet: PrepWallet, waitMs: number): Promise<{ alreadyAvailable: boolean; dustAvailable: boolean }>;
   /** The connector over a seed's wallet, synced and its Dust ready, for a command of mn's own. */
-  openConnector(options: { seed: Buffer; root: string; network: NetworkName; networkConfig: NetworkConfig; address: string; syncMode: 'full' | 'lite'; dustWaitMs?: number; signal?: AbortSignal; onMessage: (message: string) => void }): Promise<OpenedConnector>;
+  openConnector(options: { seed: Buffer; root: string; notice: NoticeSink; network: NetworkName; networkConfig: NetworkConfig; address: string; syncMode: 'full' | 'lite'; dustWaitMs?: number; signal?: AbortSignal; onMessage: (message: string) => void }): Promise<OpenedConnector>;
   /** Syncs a seed's wallet strictly for mn serve and runs `serve` with it; the wallet stops when `serve` ends. */
-  serveWallet<T>(options: { seed: Buffer; root: string; networkConfig: NetworkConfig; network: NetworkName; address: string; syncMode: 'full' | 'lite' } & WalletSyncHooks, serve: (session: ServedWalletSession) => Promise<T>): Promise<T>;
+  serveWallet<T>(options: { seed: Buffer; root: string; notice: NoticeSink; networkConfig: NetworkConfig; network: NetworkName; address: string; syncMode: 'full' | 'lite' } & WalletSyncHooks, serve: (session: ServedWalletSession) => Promise<T>): Promise<T>;
 }
 
 /** One SDK set, as mn uses it. */

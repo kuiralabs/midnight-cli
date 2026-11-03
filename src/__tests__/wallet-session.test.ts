@@ -8,7 +8,7 @@ import { DustAddress, MidnightBech32m, ShieldedAddress, UnshieldedAddress } from
 import { sessionOver, type WalletSession } from '@kuiralabs/midnight-cli-core/lib/wallet-session';
 import type { TransactionDetail } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { deriveShieldedAddress, deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { TEST_NETWORK_CONFIG, connectorStub } from './helpers/connector-stub.ts';
+import { NO_TERMINAL, TEST_NETWORK_CONFIG, connectorStub } from './helpers/connector-stub.ts';
 import { createDAppConnector } from '@kuiralabs/midnight-engine-rc/dapp-connector';
 import { FORK_SCHEDULE } from '@kuiralabs/midnight-engine-rc/fork-schedule';
 import { agentPaysMerchant, unsealedBytes } from './helpers/ledger-tx.ts';
@@ -34,7 +34,7 @@ function openSession(options: { bundleOverrides?: Parameters<typeof createBundle
   });
   const revert = vi.fn().mockResolvedValue(undefined);
   (bundle.facade as unknown as { revert: typeof revert }).revert = revert;
-  const connector = createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+  const connector = createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
   const stop = vi.fn(async () => { connector.dispose(); });
   const session: WalletSession = sessionOver('undeployed', { connector, stop }, options.readTransaction ?? (() => []));
   return { session, bundle, revert, stop };
@@ -146,7 +146,7 @@ describe('wallet session', () => {
     /** A wallet opened in this process whose swaps answer as `initSwap` says, and its stop. */
     function openedWith(initSwap: () => Promise<unknown>) {
       const bundle = createBundleStub({ initSwap });
-      const connector = createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { approveAll: true } });
+      const connector = createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
       return { connector, stop: vi.fn(async () => { connector.dispose(); }) };
     }
 

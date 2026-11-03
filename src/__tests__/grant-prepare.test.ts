@@ -11,6 +11,10 @@ import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { UnreachableByAccountError } from '../lib/grant/account.ts';
 import { NoAccountError, prepareGrant } from '../lib/grant/prepare.ts';
 import { createAccountKey, sealedOwnerStore } from '../lib/grant/sealed-account.ts';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+
+// The host the tests' calls run in: nobody to ask, notices dropped.
+const host = createHost();
 
 const ENDPOINTS = ['--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
 
@@ -23,7 +27,7 @@ let origHome: string | undefined;
 
 const accounts = () => path.join(home, '.midnight', 'accounts');
 const recordsOf = (wallet: string) => path.join(accounts(), 'undeployed', wallet);
-const prepare = (...argv: string[]) => prepareGrant(parseArgs(['grant', ...argv, ...ENDPOINTS]), path.join(home, '.midnight'));
+const prepare = (...argv: string[]) => prepareGrant(parseArgs(['grant', ...argv, ...ENDPOINTS]), path.join(home, '.midnight'), host);
 const asAlice = (...argv: string[]) => prepare(...argv, '--wallet', 'alice');
 // A wallet file, as far as preparing needs one: that it is there.
 const aliceWallet = () => {

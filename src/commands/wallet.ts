@@ -83,7 +83,7 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
 
   const secret = walletSecretFrom(seedHex !== undefined ? { seed: parseSeedHex(seedHex, '--seed') } : { mnemonic: mnemonicStr });
 
-  const passphrase = await passphraseForNewSecret(root, { signal: ctx.signal });
+  const passphrase = await passphraseForNewSecret(ctx.host, root, { signal: ctx.signal });
   // Cancelled while the passphrase was asked for: no wallet is written, and no new passphrase saved.
   throwIfCancelled(ctx.signal);
   // Checked above: an existing wallet is replaced only with --force.
@@ -240,7 +240,7 @@ async function walletInfo(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const config = await loadWalletConfig(walletPath);
   const isActive = name === getActiveWalletName(root);
   const networkName = resolveNetworkName({ args, configDir: root });
-  const activeAddress = await walletAddress(walletPath, networkName, root);
+  const activeAddress = await walletAddress(walletPath, networkName, root, ctx.host);
 
   if (hasFlag(args, 'json')) {
     // Agent-slim shape: drops the per-network addresses map (3× repetition
@@ -327,7 +327,7 @@ async function walletSeed(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const walletPath = resolveWalletPath(root, name);
 
   // The seed and mnemonic, opened with mn's passphrase.
-  const raw = await unlockWallet(walletPath, { root });
+  const raw = await unlockWallet(walletPath, { root, host: ctx.host });
 
   // `--entropy` adds the 32-byte BIP-39 entropy (derived from the mnemonic)
   // alongside the 64-byte PBKDF2 seed. They're DIFFERENT values that produce
@@ -391,7 +391,7 @@ async function walletSeed(args: ParsedArgs, ctx: CallContext): Promise<void> {
 /** Sets mn's passphrase where none is set, and seals every plain-text wallet under it. */
 async function walletProtect(args: ParsedArgs, ctx: WalletCommandContext): Promise<void> {
   const root = ctx.config.paths.stateRoot;
-  const passphrase = await passphraseForNewSecret(root, { signal: ctx.signal });
+  const passphrase = await passphraseForNewSecret(ctx.host, root, { signal: ctx.signal });
   // Cancelled, it stops between wallets and before a protector, never in the middle of a file.
   const report = await protectAllWallets(root, passphrase, ctx.signal);
   const sealed = report.filter((w) => w.sealedNow).map((w) => w.name);
@@ -400,7 +400,7 @@ async function walletProtect(args: ParsedArgs, ctx: WalletCommandContext): Promi
   const results: Array<{ name: string; result: ProtectorResult }> = [];
   for (const protector of ctx.protectors ?? []) {
     throwIfCancelled(ctx.signal);
-    results.push({ name: protector.name, result: await protector.protect(root, passphrase, (wallet) => coinKeyOfWallet(root, wallet)) });
+    results.push({ name: protector.name, result: await protector.protect(root, passphrase, (wallet) => coinKeyOfWallet(root, ctx.host, wallet)) });
   }
   if (hasFlag(args, 'json')) {
     ctx.output.result({ sealed, alreadySealed, ...Object.fromEntries(results.map(({ name, result }) => [name, result.report])) });

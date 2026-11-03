@@ -12,7 +12,7 @@ import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context'
 export default async function addressCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // `address` is a seed-derivation tool with no active-wallet notion → requireExplicit.
   const root = ctx.config.paths.stateRoot;
-  const seedBuffer = await resolveSeed(args, root, { requireExplicit: true, label: 'address' });
+  const seedBuffer = await resolveSeed(args, root, ctx.host, { requireExplicit: true, label: 'address' });
 
   const indexStr = getFlag(args, 'index');
   const keyIndex = indexStr !== undefined ? parseInt(indexStr, 10) : 0;

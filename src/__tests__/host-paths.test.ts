@@ -44,9 +44,10 @@ function hostAt(home: string): Host {
   return createHost({ paths: { stateRoot: path.join(home, MIDNIGHT_DIR), home } });
 }
 
-/** A wallet created under `root`, sealed under the passphrase set there. */
-async function walletIn(root: string, name: string): Promise<void> {
-  const passphrase = await passphraseForNewSecret(root, { env: { [PASSPHRASE_ENV]: PASSPHRASE }, prompter: null });
+/** A wallet created under `host`'s state root, sealed under the passphrase set there. */
+async function walletIn(host: Host, name: string): Promise<void> {
+  const root = host.paths().stateRoot;
+  const passphrase = await passphraseForNewSecret(host, root, { env: { [PASSPHRASE_ENV]: PASSPHRASE } });
   await createWallet(root, name, walletSecretFrom({ seed: Buffer.alloc(32, name.length) }), passphrase);
 }
 
@@ -80,8 +81,8 @@ describe('two hosts with different state roots', () => {
   });
 
   it('each create, list and activate their own wallets', async () => {
-    await walletIn(rootA, 'alice');
-    await walletIn(rootB, 'bob');
+    await walletIn(hostA, 'alice');
+    await walletIn(hostB, 'bob');
 
     expect((await listWallets(rootA)).map((w) => w.name)).toEqual(['alice']);
     expect((await listWallets(rootB)).map((w) => w.name)).toEqual(['bob']);

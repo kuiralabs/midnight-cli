@@ -13,6 +13,10 @@ import { getActiveWalletName, unlockWallet } from '../lib/wallet-config.ts';
 import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { PASSPHRASE_ENV, passphraseForNewSecret } from '../lib/passphrase.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+
+// The host the tests' calls run in: nobody to ask, notices dropped.
+const host = createHost();
 
 const CHOSEN = 'correct horse battery staple';
 // The passphrase as a caller gets it: the first secret in a new home sets it.
@@ -27,7 +31,7 @@ beforeEach(async () => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-wallet-create-'));
   process.env.HOME = home;
   process.env[PASSPHRASE_ENV] = CHOSEN;
-  PASSPHRASE = await passphraseForNewSecret(stateRootIn(home));
+  PASSPHRASE = await passphraseForNewSecret(host, stateRootIn(home));
 });
 
 afterEach(() => {
@@ -43,7 +47,7 @@ describe('createWallet', () => {
     expect(created.file).toBe(walletFilePath(stateRootIn(home), 'alice'));
     expect(created.mnemonic!.split(' ')).toHaveLength(24);
     expect(fs.readFileSync(created.file, 'utf8')).not.toContain(created.seed.toString('hex'));
-    const unlocked = await unlockWallet(created.file, { root: stateRootIn(home) });
+    const unlocked = await unlockWallet(created.file, { root: stateRootIn(home) , host});
     expect(unlocked.seed).toBe(created.seed.toString('hex'));
     expect(unlocked.mnemonic).toBe(created.mnemonic);
     expect(getActiveWalletName(stateRootIn(home))).toBe('alice');
@@ -57,7 +61,7 @@ describe('createWallet', () => {
   it('keeps a given seed and no mnemonic', async () => {
     const seed = Buffer.alloc(32, 2);
     const created = await createWallet(stateRootIn(home), 'carol', walletSecretFrom({ seed }), PASSPHRASE);
-    const unlocked = await unlockWallet(created.file, { root: stateRootIn(home) });
+    const unlocked = await unlockWallet(created.file, { root: stateRootIn(home) , host});
     expect(unlocked.seed).toBe(seed.toString('hex'));
     expect(unlocked.mnemonic).toBeUndefined();
   });
@@ -65,10 +69,10 @@ describe('createWallet', () => {
   it('replaces an existing wallet only when asked', async () => {
     const first = await createWallet(stateRootIn(home), 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 1) }), PASSPHRASE);
     await expect(createWallet(stateRootIn(home), 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE)).rejects.toThrow(`Wallet file already exists: ${first.file}`);
-    expect((await unlockWallet(first.file, { root: stateRootIn(home) })).seed).toBe(Buffer.alloc(32, 1).toString('hex'));
+    expect((await unlockWallet(first.file, { root: stateRootIn(home) , host})).seed).toBe(Buffer.alloc(32, 1).toString('hex'));
 
     await createWallet(stateRootIn(home), 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), PASSPHRASE, { overwrite: true });
-    expect((await unlockWallet(first.file, { root: stateRootIn(home) })).seed).toBe(Buffer.alloc(32, 2).toString('hex'));
+    expect((await unlockWallet(first.file, { root: stateRootIn(home) , host})).seed).toBe(Buffer.alloc(32, 2).toString('hex'));
   });
 
   it('refuses a name that is not a simple name, and an invalid mnemonic', () => {

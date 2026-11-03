@@ -8,7 +8,6 @@
 // owner key) and roster.json, with the private state in the directory's
 // midnight-level-db under the store name and password it was first made with.
 
-import { notice } from '@kuiralabs/midnight-cli-core/lib/notices';
 import { anyEngine } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { join } from 'node:path';
 import { artefactCache } from '@kuiralabs/midnight-account-chain/artefacts';
@@ -23,6 +22,7 @@ import {
 } from '@kuiralabs/midnight-account-chain/owner';
 import { PRIVATE_STATE_DATABASE } from '../contract/private-state.ts';
 import { type PassphraseSource, passphraseForNewSecret, unlockPassphrase } from '../passphrase.ts';
+import type { UnlockHost } from '../wallet-config.ts';
 import {
   AccountMigrationInterruptedError,
   type SealedDeviceKeys,
@@ -126,10 +126,12 @@ export interface GrantAccount {
   ownCode?: () => string;
 }
 
-/** Where an account's passphrase comes from, and where a warning about a plain-text account goes. */
+/** Where an account's passphrase comes from, and where a warning about a plain-text account goes (the host's notices, unless given). */
 export interface OpenAccountOptions {
   /** The state root holding mn's passphrase check and the proving artefacts. */
   root: string;
+  /** The host: who is asked for the passphrase, the passphrase it has unlocked, and its notices. */
+  host: UnlockHost;
   source?: PassphraseSource;
   warn?: (line: string) => void;
 }
@@ -163,19 +165,19 @@ export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir:
       return ownDeviceCode(recordsDir, key, device);
     },
   });
-  if (isSealedAccount(recordsDir)) return sealed(openAccountKey(recordsDir, await unlockPassphrase(root, options.source)));
+  if (isSealedAccount(recordsDir)) return sealed(openAccountKey(recordsDir, await unlockPassphrase(options.host, root, options.source)));
 
   // Caught half way through being sealed: its private state may be under its new password already.
   if (isAccountMigrating(recordsDir)) throw new AccountMigrationInterruptedError(recordsDir);
   const plainStore = directoryOwnerStore(recordsDir);
   const plainKeys = directoryDeviceKeys(recordsDir);
   if (plainStore.readOwner() !== undefined || plainKeys.read() !== undefined) {
-    (options.warn ?? notice)(
-      `Warning: the account in ${recordsDir} is not protected: its owner key and records are in plain text. Encrypt them with: midnight wallet protect`,
-    );
+    const warning = `Warning: the account in ${recordsDir} is not protected: its owner key and records are in plain text. Encrypt them with: midnight wallet protect`;
+    if (options.warn !== undefined) options.warn(warning);
+    else options.host.notice(warning);
     return { context, store: plainStore, keys: plainKeys, location: { database, store: PRIVATE_STATE_STORE, password: () => LEGACY_STORE_PASSWORD }, protection: 'plain-text' };
   }
-  return sealed(createAccountKey(recordsDir, await passphraseForNewSecret(root, options.source)));
+  return sealed(createAccountKey(recordsDir, await passphraseForNewSecret(options.host, root, options.source)));
 }
 
 /** The account's owner device, which its records hold. */

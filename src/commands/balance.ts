@@ -176,7 +176,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
   const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
   ctx.diagnostics.line('balance', `network=${networkName} indexerWS=${networkConfig.indexerWS}`);
   // Seed source: --seed → MN_SEED → --wallet <name> → active wallet (shared resolver).
-  const { seed: seedBuffer, walletPath, config } = await resolveSeedSource(args, root);
+  const { seed: seedBuffer, walletPath, config } = await resolveSeedSource(args, root, ctx.host);
   ctx.diagnostics.line('balance', `wallet path=${walletPath ?? '(from --seed/MN_SEED)'}`);
   // Derive the unshielded address from the seed so a --seed/MN_SEED caller (no wallet
   // file) behaves identically to a named wallet — for a wallet this equals the stored one.

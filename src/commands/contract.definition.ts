@@ -219,7 +219,7 @@ export const contractDefinition: CommandDefinition = {
             const { resolvePayingTarget } = await import('@kuiralabs/midnight-cli-core/lib/payer');
             const { assertContractRunsOn } = await import('../lib/contract/runtime-check.ts');
             const root = call.host.paths().stateRoot;
-            await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'deploy', root).network, root);
+            await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'deploy', root, call.host).network, root);
             await checkSendingWallet(params, root);
           },
         },
@@ -254,7 +254,7 @@ export const contractDefinition: CommandDefinition = {
             const { resolvePayingTarget } = await import('@kuiralabs/midnight-cli-core/lib/payer');
             const { assertContractRunsOn } = await import('../lib/contract/runtime-check.ts');
             const root = call.host.paths().stateRoot;
-            await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'call', root).network, root);
+            await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'call', root, call.host).network, root);
             await checkSendingWallet(params, root);
           },
         },

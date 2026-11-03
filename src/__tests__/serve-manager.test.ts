@@ -11,6 +11,10 @@ import { serveEndpointMismatch, serveWalletMismatch } from '../lib/serve-manager
 import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+
+// The host the tests' calls run in: nobody to ask, notices dropped.
+const host = createHost();
 
 const scratch = { node: 'ws://localhost:29944', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws' };
 
@@ -100,7 +104,7 @@ describe('startServeOrReuse against a running serve', () => {
     const serve = await fakeServe({ substrateNodeUri: requested.node, indexerWsUri: requested.indexerWS });
     try {
       const messages: string[] = [];
-      const handle = await startServeOrReuse({ root: emptyRoot, port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested, onMessage: (m) => messages.push(m) });
+      const handle = await startServeOrReuse({ root: emptyRoot, host, port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested, onMessage: (m) => messages.push(m) });
       expect(handle.port).toBe(serve.port);
       expect(messages).toContain(`Reusing existing mn serve on port ${serve.port}`);
       await handle.stop(); // a no-op for a reused serve: the fake must still answer
@@ -115,7 +119,7 @@ describe('startServeOrReuse against a running serve', () => {
     const { startServeOrReuse } = await import('../lib/serve-manager.ts');
     const serve = await fakeServe({ substrateNodeUri: 'ws://localhost:9944', indexerWsUri: 'ws://localhost:8088/api/v4/graphql/ws' });
     try {
-      await expect(startServeOrReuse({ root: emptyRoot, port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested }))
+      await expect(startServeOrReuse({ root: emptyRoot, host, port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested }))
         .rejects.toThrow(/on a different undeployed chain: node ws:\/\/localhost:9944 \(need ws:\/\/localhost:29944\)/);
     } finally {
       await serve.close();
@@ -151,7 +155,7 @@ describe('startServeOrReuse against a running serve', () => {
       const { startServeOrReuse } = await import('../lib/serve-manager.ts');
       const serve = await fakeServe(sameChain, deriveAllAddresses(TWO).undeployed);
       try {
-        const handle = await startServeOrReuse({ root: stateRootIn(home), port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested, wallet: 'two' });
+        const handle = await startServeOrReuse({ root: stateRootIn(home), host, port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested, wallet: 'two' });
         expect(handle.port).toBe(serve.port);
       } finally {
         await serve.close();
@@ -165,7 +169,7 @@ describe('startServeOrReuse against a running serve', () => {
       const bob = deriveAllAddresses(BOB).undeployed;
       const serve = await fakeServe(sameChain, bob);
       try {
-        await expect(startServeOrReuse({ root: stateRootIn(home), port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested, wallet: 'two' }))
+        await expect(startServeOrReuse({ root: stateRootIn(home), host, port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested, wallet: 'two' }))
           .rejects.toThrow(`can't pay for this command: it serves the wallet at ${bob}, and this command pays from two (${deriveAllAddresses(TWO).undeployed})`);
       } finally {
         await serve.close();

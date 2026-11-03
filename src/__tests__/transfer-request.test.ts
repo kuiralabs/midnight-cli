@@ -13,6 +13,10 @@ import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midni
 import { MIDNIGHT_DIR, WALLETS_DIR_NAME } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+
+// The host the tests' calls run in: nobody to ask, notices dropped.
+const host = createHost();
 
 const HOME = path.join(os.tmpdir(), `midnight-transfer-request-test-${process.pid}`);
 const WALLETS = path.join(HOME, MIDNIGHT_DIR, WALLETS_DIR_NAME);
@@ -34,7 +38,7 @@ function saveWallet(name: string, seed: Buffer, shielded = false): string {
   return file;
 }
 
-const request = (...argv: string[]) => resolveTransferRequest(parseArgs(['transfer', ...argv]), path.join(HOME, MIDNIGHT_DIR));
+const request = (...argv: string[]) => resolveTransferRequest(parseArgs(['transfer', ...argv]), path.join(HOME, MIDNIGHT_DIR), host);
 
 beforeEach(() => {
   origHome = process.env.HOME;

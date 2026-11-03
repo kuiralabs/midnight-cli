@@ -43,7 +43,7 @@ async function writeEveryOwnersFiles(root: string): Promise<void> {
   setConfigValue('network', 'preview', root);
   setConfigValue('node', 'ws://localhost:29944', root, 'undeployed');
   bindCachesToIndexer('undeployed', 'ws://localhost:28088/api/v4/graphql/ws', root);
-  await createWallet(root, 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), await passphraseForNewSecret(root));
+  await createWallet(root, 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), await passphraseForNewSecret(createHost(), root));
   fs.mkdirSync(accountRecordsDir('undeployed', 'alice', root), { recursive: true });
 }
 

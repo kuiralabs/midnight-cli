@@ -14,6 +14,10 @@ import { getNetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { openGrantAccount } from '../lib/grant/account.ts';
 import { createAccountKey, isSealedAccount, sealedOwnerStore } from '../lib/grant/sealed-account.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+
+// The host the tests' calls run in: nobody to ask, notices dropped.
+const host = createHost();
 
 const PASSPHRASE = 'correct horse battery staple';
 const RECORD = { contractAddress: '5e'.repeat(32), bootSalt: '3a'.repeat(32), encryptionSecret: '2b'.repeat(32) };
@@ -22,7 +26,7 @@ const NETWORK = getNetworkConfig('undeployed');
 let home: string;
 let dir: string;
 const open = (passphrase = PASSPHRASE, warn: (line: string) => void = () => {}) =>
-  openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), source: { env: { [PASSPHRASE_ENV]: passphrase }, prompter: null }, warn });
+  openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), host, source: { env: { [PASSPHRASE_ENV]: passphrase } }, warn });
 
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-grant-account-'));

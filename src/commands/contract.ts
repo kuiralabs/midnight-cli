@@ -118,7 +118,7 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
     ctx.output.stderr('\n' + header('Contract Deploy') + '\n\n');
   }
 
-  const target = resolvePayingTarget(args, 'contract', 'deploy', ctx.config.paths.stateRoot);
+  const target = resolvePayingTarget(args, 'contract', 'deploy', ctx.config.paths.stateRoot, ctx.host);
   const { network } = target;
   await assertContractRunsOn(info, network, target.root);
 
@@ -192,7 +192,7 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
     ctx.output.stderr('\n' + header('Contract Call') + '\n\n');
   }
 
-  const target = resolvePayingTarget(args, 'contract', 'call', ctx.config.paths.stateRoot);
+  const target = resolvePayingTarget(args, 'contract', 'call', ctx.config.paths.stateRoot, ctx.host);
   const { network } = target;
   await assertContractRunsOn(info, network, target.root);
 
@@ -238,7 +238,7 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
 
   const { runState } = await import('../lib/contract/runner.ts');
 
-  const { network, root, networkConfig } = resolvePayingTarget(args, 'contract', 'state', ctx.config.paths.stateRoot);
+  const { network, root, networkConfig } = resolvePayingTarget(args, 'contract', 'state', ctx.config.paths.stateRoot, ctx.host);
 
   if (!jsonMode) {
     ctx.output.stderr('\n' + header('Contract State') + '\n\n');

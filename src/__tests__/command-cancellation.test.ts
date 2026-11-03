@@ -16,7 +16,7 @@ import * as path from 'node:path';
 import { Buffer } from 'node:buffer';
 import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { installedCommands } from '../lib/installed-commands.ts';
-import { setPrompter, type Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
+import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { establishPassphrase, isPassphraseSet } from '../lib/passphrase.ts';
 import { deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
 import { getCachePath } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
@@ -33,6 +33,7 @@ import cacheCommand from '../commands/cache.ts';
 import testCommand from '../commands/test.ts';
 import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
+import { testHost } from './helpers/test-host.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from './helpers/stand-in-indexer.ts';
@@ -53,7 +54,6 @@ beforeEach(() => {
 
 afterEach(() => {
   io.restore();
-  setPrompter(null);
   process.env.HOME = originalHome;
   if (originalPassphrase === undefined) delete process.env.MN_PASSPHRASE;
   else process.env.MN_PASSPHRASE = originalPassphrase;
@@ -231,10 +231,9 @@ describe('commands that write check the call before each whole write', () => {
   it('generate: cancelled while the passphrase is asked for, it writes no wallet', async () => {
     const call = new AbortController();
     const prompter = cancellingPrompter(call);
-    setPrompter(prompter);
     const target = path.join(home, 'legacy-wallet.json');
 
-    await expect(cliCall(generateCommand, parseArgs(['generate', '--output', target, '--json']), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(cliCall(generateCommand, parseArgs(['generate', '--output', target, '--json']), { signal: call.signal, host: testHost({ prompter }) })).rejects.toMatchObject({ code: 'CANCELLED' });
 
     expect(prompter.asked).toBeGreaterThan(0);
     expect(fs.existsSync(target)).toBe(false);
@@ -245,9 +244,8 @@ describe('commands that write check the call before each whole write', () => {
   it('wallet generate: cancelled while the passphrase is asked for, it writes no wallet', async () => {
     const call = new AbortController();
     const prompter = cancellingPrompter(call);
-    setPrompter(prompter);
 
-    await expect(cliCall(walletCommand, parseArgs(['wallet', 'generate', 'alice', '--json']), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(cliCall(walletCommand, parseArgs(['wallet', 'generate', 'alice', '--json']), { signal: call.signal, host: testHost({ prompter }) })).rejects.toMatchObject({ code: 'CANCELLED' });
 
     expect(prompter.asked).toBeGreaterThan(0);
     expect(fs.existsSync(path.join(stateRootIn(home), 'wallets', 'alice.json'))).toBe(false);
@@ -269,9 +267,8 @@ describe('commands that write check the call before each whole write', () => {
     it('cancelled while the passphrase is asked for: no wallet is sealed', async () => {
       const files = [plainWallet('alice', 'a1'), plainWallet('bob', 'b2')];
       const call = new AbortController();
-      setPrompter(cancellingPrompter(call));
 
-      await expect(cliCall(walletCommand, parseArgs(['wallet', 'protect', '--json']), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+      await expect(cliCall(walletCommand, parseArgs(['wallet', 'protect', '--json']), { signal: call.signal, host: testHost({ prompter: cancellingPrompter(call) }) })).rejects.toMatchObject({ code: 'CANCELLED' });
 
       expect(await Promise.all(files.map(isSealed))).toEqual([false, false]);
       expect(io.stdout()).toBe('');
@@ -321,9 +318,8 @@ describe('commands that write check the call before each whole write', () => {
     fs.mkdirSync(path.dirname(cache), { recursive: true });
     fs.writeFileSync(cache, '{}');
     const call = new AbortController();
-    setPrompter(cancellingPrompter(call));
 
-    await expect(cliCall(cacheCommand, parseArgs(['cache', 'clear', '--wallet', 'alice', '--network', 'undeployed', '--json']), { signal: call.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(cliCall(cacheCommand, parseArgs(['cache', 'clear', '--wallet', 'alice', '--network', 'undeployed', '--json']), { signal: call.signal, host: testHost({ prompter: cancellingPrompter(call) }) })).rejects.toMatchObject({ code: 'CANCELLED' });
 
     expect(fs.existsSync(cache)).toBe(true);
     expect(io.stdout()).toBe('');

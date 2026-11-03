@@ -52,7 +52,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
   // ── Load wallet ──
 
   const root = ctx.config.paths.stateRoot;
-  const config = await unlockWallet(resolveWalletPath(root, getFlag(args, 'wallet')), { root });
+  const config = await unlockWallet(resolveWalletPath(root, getFlag(args, 'wallet')), { root, host: ctx.host });
   const seedBuffer = Buffer.from(config.seed, 'hex');
 
   const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root });
@@ -101,7 +101,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
   // preview/preprod). dApps there can only do unshielded + dust anyway.
   const syncMode = shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded')) ? 'full' : 'lite';
 
-  await (await engineFor(networkName, root)).wallet.serveWallet({ seed: seedBuffer, root, networkConfig, network: networkName, address, syncMode, signal: ctx.signal, log: ctx.diagnostics.line,
+  await (await engineFor(networkName, root)).wallet.serveWallet({ seed: seedBuffer, root, notice: ctx.host.notice, networkConfig, network: networkName, address, syncMode, signal: ctx.signal, log: ctx.diagnostics.line,
     onStatus: (s) => spinner.update(s),
     onSyncProgress: (applied, highest) => {
       if (highest > 0) {
@@ -166,7 +166,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
     // Reads answer from the state the Dust wait ended on, and from every
     // later one that is synced by the rule the sync used.
     connector = served.connect({
-      approvalOptions: { approveAll, approveFees, autoApproveReads },
+      approvalOptions: { approveAll, approveFees, autoApproveReads, prompter: ctx.host.prompter, notice: ctx.host.notice },
       feeLimits,
       callbacks: phaseCallbacks,
     });
@@ -174,6 +174,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
     // ── Start WebSocket server ──
 
     server = createRpcServer({
+      host: ctx.host,
       port,
       handlers: connector.handlers,
       onConnect: (conn) => {

@@ -1,8 +1,7 @@
 import { createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui/terminal-prompter';
-import { setPrompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
-import { setNoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
+import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { PassThrough } from 'node:stream';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   describeApprovalPolicy,
   renderApprovalBox,
@@ -153,18 +152,13 @@ describe('approval', () => {
       details: [],
     };
 
-    // What approval says goes out as notices; with no prompter set, there is no terminal to ask at.
+    // What approval says goes out as the notices it is given; with no prompter, there is no terminal to ask at.
     let stderrOutput: string[];
+    let asker: { prompter: Prompter | null; notice: (line: string) => void };
 
     beforeEach(() => {
       stderrOutput = [];
-      setNoticeSink((line) => stderrOutput.push(line + '\n'));
-      setPrompter(null);
-    });
-
-    afterEach(() => {
-      setNoticeSink(null);
-      setPrompter(null);
+      asker = { prompter: null, notice: (line) => stderrOutput.push(line + '\n') };
     });
 
     /** A terminal that answers through a stream, and the stream to type into. */
@@ -174,17 +168,17 @@ describe('approval', () => {
       const output = new PassThrough();
       shown = '';
       output.on('data', (chunk: Buffer) => { shown += chunk.toString('utf8'); });
-      setPrompter(createTerminalPrompter({ input, output, isTTY: true }));
+      asker.prompter = createTerminalPrompter({ input, output, isTTY: true });
       return input;
     };
 
     it('auto-approves when approveAll is true', async () => {
-      const result = await promptApproval(baseRequest, { approveAll: true });
+      const result = await promptApproval(baseRequest, { ...asker, approveAll: true });
       expect(result).toBe('approve');
     });
 
     it('logs auto-approval for approveAll', async () => {
-      await promptApproval(baseRequest, { approveAll: true });
+      await promptApproval(baseRequest, { ...asker, approveAll: true });
       const written = stripAnsi(stderrOutput.join(''));
       expect(written).toContain('Auto-approved: makeTransfer');
     });
@@ -195,7 +189,7 @@ describe('approval', () => {
         network: 'undeployed',
         details: [],
       };
-      const result = await promptApproval(readRequest, { autoApproveReads: true });
+      const result = await promptApproval(readRequest, { ...asker, autoApproveReads: true });
       expect(result).toBe('approve');
     });
 
@@ -205,7 +199,7 @@ describe('approval', () => {
         network: 'undeployed',
         details: [],
       };
-      await promptApproval(readRequest, { autoApproveReads: true });
+      await promptApproval(readRequest, { ...asker, autoApproveReads: true });
       const written = stripAnsi(stderrOutput.join(''));
       expect(written).toContain('Auto-approved (read-only)');
     });
@@ -217,7 +211,7 @@ describe('approval', () => {
       'prompts for %s even with autoApproveReads (no terminal: rejected), naming the flags that would approve it',
       async (method) => {
         try {
-          const result = await promptApproval({ method, network: 'undeployed', details: [] }, { autoApproveReads: true });
+          const result = await promptApproval({ method, network: 'undeployed', details: [] }, { ...asker, autoApproveReads: true });
           expect(result).toBe('reject');
           const written = stripAnsi(stderrOutput.join(''));
           expect(written).not.toContain('Auto-approved');
@@ -228,7 +222,7 @@ describe('approval', () => {
     );
 
     it.each(['balanceUnsealedTransaction', 'balanceSealedTransaction'])('approves %s with --approve-all', async (method) => {
-      expect(await promptApproval({ method, network: 'undeployed', details: [] }, { approveAll: true, autoApproveReads: true })).toBe('approve');
+      expect(await promptApproval({ method, network: 'undeployed', details: [] }, { ...asker, approveAll: true, autoApproveReads: true })).toBe('approve');
     });
 
     it('does not auto-approve balancing when autoApproveReads is false', async () => {
@@ -238,14 +232,14 @@ describe('approval', () => {
         network: 'undeployed',
         details: [],
       };
-      const result = await promptApproval(prepRequest, { autoApproveReads: false });
+      const result = await promptApproval(prepRequest, { ...asker, autoApproveReads: false });
       expect(result).toBe('reject'); // falls through to non-TTY rejection
     });
 
     it('does not auto-approve write methods when only autoApproveReads is set', async () => {
       // Non-TTY stdin will cause immediate rejection
 
-      const result = await promptApproval(baseRequest, { autoApproveReads: true });
+      const result = await promptApproval(baseRequest, { ...asker, autoApproveReads: true });
       expect(result).toBe('reject');
     });
 
@@ -256,7 +250,7 @@ describe('approval', () => {
       it.each(['balanceUnsealedTransaction', 'balanceSealedTransaction', 'submitTransaction'])(
         'auto-approves a fee-only %s and says why',
         async (method) => {
-          const result = await promptApproval({ ...baseRequest, method, feeOnly: true }, { approveFees: true });
+          const result = await promptApproval({ ...baseRequest, method, feeOnly: true }, { ...asker, approveFees: true });
           expect(result).toBe('approve');
           expect(stripAnsi(stderrOutput.join(''))).toContain(`Auto-approved (fee-only): ${method}`);
         },
@@ -265,21 +259,21 @@ describe('approval', () => {
       it.each(['makeTransfer', 'makeIntent', 'signData', 'submitTransaction', 'balanceUnsealedTransaction'])(
         'rejects %s when it is not fee-only',
         async (method) => {
-          const result = await promptApproval({ ...baseRequest, method }, { approveFees: true });
+          const result = await promptApproval({ ...baseRequest, method }, { ...asker, approveFees: true });
           expect(result).toBe('reject');
         },
       );
 
       it('grants nothing from a fee-only request when the server was not started with --approve-fees', async () => {
-        const result = await promptApproval({ ...baseRequest, method: 'submitTransaction', feeOnly: true }, {});
+        const result = await promptApproval({ ...baseRequest, method: 'submitTransaction', feeOnly: true }, asker);
         expect(result).toBe('reject');
       });
     });
 
     it('rejects when stdin is not a TTY', async () => {
-      setPrompter(createTerminalPrompter({ input: new PassThrough(), output: new PassThrough(), isTTY: false }));
+      asker.prompter = createTerminalPrompter({ input: new PassThrough(), output: new PassThrough(), isTTY: false });
 
-      const result = await promptApproval(baseRequest);
+      const result = await promptApproval(baseRequest, asker);
       expect(result).toBe('reject');
 
       const written = stripAnsi(stderrOutput.join(''));
@@ -287,23 +281,23 @@ describe('approval', () => {
     });
 
     it('rejects when the host set no prompter, saying so', async () => {
-      const result = await promptApproval(baseRequest);
+      const result = await promptApproval(baseRequest, asker);
       expect(result).toBe('reject');
 
       const written = stripAnsi(stderrOutput.join(''));
-      expect(written).toContain('Cannot prompt for approval: the host set no prompter (setPrompter)');
+      expect(written).toContain('Cannot prompt for approval: the host gave no prompter (createHost prompter)');
     });
 
     describe('without a terminal, the hint names what the server could have been started with', () => {
 
       it('suggests --approve-all, or --approve-fees for a fee wallet, on a server with neither', async () => {
-        expect(await promptApproval(baseRequest)).toBe('reject');
+        expect(await promptApproval(baseRequest, asker)).toBe('reject');
         const written = stripAnsi(stderrOutput.join(''));
         expect(written).toContain('makeTransfer needs a terminal to approve: use --approve-all for non-interactive environments, or --approve-fees for a fee wallet');
       });
 
       it('on a fee wallet, says the request is outside --approve-fees and names the method', async () => {
-        expect(await promptApproval(baseRequest, { approveFees: true })).toBe('reject');
+        expect(await promptApproval(baseRequest, { ...asker, approveFees: true })).toBe('reject');
         const written = stripAnsi(stderrOutput.join(''));
         expect(written).toContain("--approve-fees approves only paying the Dust fee for an agent's own balanced transaction");
         expect(written).toContain('makeTransfer needs a terminal to approve');
@@ -313,10 +307,10 @@ describe('approval', () => {
 
     it('rejects concurrent prompts when one is already active', async () => {
       const input = terminal();
-      const first = promptApproval(baseRequest);
+      const first = promptApproval(baseRequest, asker);
 
       // The second call rejects at once while the first is waiting for its answer.
-      expect(await promptApproval(baseRequest)).toBe('reject');
+      expect(await promptApproval(baseRequest, asker)).toBe('reject');
       expect(stripAnsi(stderrOutput.join(''))).toContain('another approval prompt is active');
 
       input.write('a\n');
@@ -325,7 +319,7 @@ describe('approval', () => {
 
     it('asks at the terminal, showing the request: Enter approves, r rejects, and an ended input rejects', async () => {
       let input = terminal();
-      const approving = promptApproval(baseRequest);
+      const approving = promptApproval(baseRequest, asker);
       input.write('\n');
       expect(await approving).toBe('approve');
       // The request is shown as part of the question, whatever the host does with notices.
@@ -334,17 +328,20 @@ describe('approval', () => {
       expect(stderrOutput.join('')).not.toContain('makeTransfer');
 
       input = terminal();
-      const rejecting = promptApproval(baseRequest);
+      const rejecting = promptApproval(baseRequest, asker);
       input.write('r\n');
       expect(await rejecting).toBe('reject');
 
       input = terminal();
-      const ended = promptApproval(baseRequest);
+      const ended = promptApproval(baseRequest, asker);
       input.end();
       expect(await ended).toBe('reject');
     });
   });
 });
+
+/** What a server is started with: the approval options but who asks and where it is said. */
+type ApprovalFlags = Omit<ApprovalOptions, 'prompter' | 'notice'>;
 
 describe('describeApprovalPolicy (what mn serve reports, in its header and --json)', () => {
   const limits = { maxFeeSpecks: 10n ** 15n / 2n, maxPending: 3 };
@@ -366,10 +363,8 @@ describe('describeApprovalPolicy (what mn serve reports, in its header and --jso
 
   describe('matches what promptApproval decides without a terminal', () => {
     // No prompter: no terminal to ask at. What approval says is dropped.
-    beforeEach(() => setPrompter(null));
-
-    const decide = (method: string, options: ApprovalOptions, feeOnly = false) =>
-      promptApproval({ method, network: 'undeployed', details: [], feeOnly }, options);
+    const decide = (method: string, flags: ApprovalFlags, feeOnly = false) =>
+      promptApproval({ method, network: 'undeployed', details: [], feeOnly }, { ...flags, prompter: null, notice: () => {} });
     // What each claim means for a request of that kind: 'auto' approves anything,
     // 'fee-only' approves only a fee-only request, 'prompt' approves nothing.
     const expectedFor = (claim: string, feeOnly: boolean) =>
@@ -380,7 +375,7 @@ describe('describeApprovalPolicy (what mn serve reports, in its header and --jso
       [{ approveFees: true, autoApproveReads: true }],
       [{ autoApproveReads: true }],
       [{}],
-    ] as Array<[ApprovalOptions]>)('%j', async (options) => {
+    ] as Array<[ApprovalFlags]>)('%j', async (options) => {
       const policy = describeApprovalPolicy(options, limits);
       for (const feeOnly of [false, true]) {
         for (const method of ['balanceUnsealedTransaction', 'balanceSealedTransaction']) {

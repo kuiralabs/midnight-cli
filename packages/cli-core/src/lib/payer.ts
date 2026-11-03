@@ -9,12 +9,15 @@ import { resolveNetwork } from './resolve-network.ts';
 import type { Spinner } from '../ui/spinner.ts';
 import type { CallSdkWarnings } from './sdk-warnings.ts';
 import type { WalletSession } from './wallet-session.ts';
+import type { Host } from './host.ts';
 
-/** The network a command acts on, with its endpoints resolved. */
+/** The network a command acts on, with its endpoints resolved, and the host it runs in. */
 export interface PayingTarget {
   network: NetworkName;
   /** The state root the command's config, wallets and caches live under. */
   root: string;
+  /** The host the command runs in: who unlocks the paying wallet, and where its notices go. */
+  host: Host;
   networkConfig: NetworkConfig;
   /** The endpoints given as flags, which a server started for the command must use too. */
   endpoints: EndpointOverrides;
@@ -25,9 +28,10 @@ export interface PayingTarget {
  * undeployed (as every other command), then explicit endpoint flags over the
  * defaults. Without endpoint flags, `undeployed` resolves to whatever local
  * stack docker shows, which is ambiguous when more than one runs. The saved
- * network and endpoints are the config's under the state root `root`.
+ * network and endpoints are the config's under the state root `root`; the
+ * command runs in `host`.
  */
-export function resolvePayingTarget(args: ParsedArgs, command: string, subcommand: string, root: string): PayingTarget {
+export function resolvePayingTarget(args: ParsedArgs, command: string, subcommand: string, root: string, host: Host): PayingTarget {
   const network = getFlag(args, 'network');
   const endpoints: EndpointOverrides = {
     node: getFlag(args, 'node'),
@@ -39,7 +43,7 @@ export function resolvePayingTarget(args: ParsedArgs, command: string, subcomman
     configDir: root,
   });
   applyEndpointOverrides(networkConfig, endpoints, name, root);
-  return { network: name, root, networkConfig, endpoints };
+  return { network: name, root, host, networkConfig, endpoints };
 }
 
 /** A wallet served over the DApp connector's WebSocket, for a script in another process to pay through. */

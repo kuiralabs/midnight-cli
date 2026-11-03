@@ -16,9 +16,9 @@ import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
  * active wallet is checked, the one the command's server will use. Returns
  * what it found, the Dust in Specks.
  */
-export async function assertWalletCanPay({ network, root, networkConfig }: PayingTarget, wallet: string | undefined, progress: Spinner, signal?: AbortSignal): Promise<{ nightBalance: bigint; dustBalance: bigint }> {
+export async function assertWalletCanPay({ network, root, host, networkConfig }: PayingTarget, wallet: string | undefined, progress: Spinner, signal?: AbortSignal): Promise<{ nightBalance: bigint; dustBalance: bigint }> {
   throwIfCancelled(signal);
-  const walletConfig = await unlockWallet(resolveWalletPath(root, wallet), { root });
+  const walletConfig = await unlockWallet(resolveWalletPath(root, wallet), { root, host });
   const seedBuffer = Buffer.from(walletConfig.seed, 'hex');
   const address = walletConfig.addresses[network as NetworkName];
   const { engineFor } = await import('@kuiralabs/midnight-cli-core/lib/engine');
@@ -43,7 +43,7 @@ export async function assertWalletCanPay({ network, root, networkConfig }: Payin
       );
     }
 
-    const dustView = await repo.dustBalance(seedBuffer, networkConfig, { root, signal, onStatus: (s) => progress.update(s) });
+    const dustView = await repo.dustBalance(seedBuffer, networkConfig, { root, notice: host.notice, signal, onStatus: (s) => progress.update(s) });
     if (dustView.balance === 0n && dustView.availableCoins === 0) {
       progress.fail('No dust available');
       throw new Error(

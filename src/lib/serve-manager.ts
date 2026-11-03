@@ -4,7 +4,7 @@
 // Always runs in approve-all mode.
 
 import { Socket } from 'node:net';
-import { resolveWalletPath, unlockWallet, walletAddress } from './wallet-config.ts';
+import { resolveWalletPath, unlockWallet, walletAddress, type UnlockHost } from './wallet-config.ts';
 import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { engineFor, type DAppConnectorCallbacks, type OpenedConnector } from '@kuiralabs/midnight-cli-core/lib/engine';
@@ -23,6 +23,8 @@ export interface ServeHandle {
 export interface ServeManagerOptions {
   /** The state root the wallets, config and caches live under. */
   root: string;
+  /** The host: who unlocks the wallet, where the wallet's and the server's notices go, and its connection ids. */
+  host: UnlockHost;
   port?: number;
   network?: string;
   /** Explicit endpoints; they win over the network defaults and docker auto-detection. */
@@ -197,7 +199,7 @@ export async function startServeOrReuse(options: ServeManagerOptions): Promise<S
 
     const runningAddress = await probeServeWallet(port);
     if (runningAddress !== null) {
-      const wanted = await walletAddress(resolveWalletPath(options.root, options.wallet), actualNetwork as NetworkName, options.root);
+      const wanted = await walletAddress(resolveWalletPath(options.root, options.wallet), actualNetwork as NetworkName, options.root, options.host);
       const walletMismatch = serveWalletMismatch(runningAddress, { address: wanted, name: options.wallet ?? 'the active wallet' });
       if (walletMismatch) {
         throw new Error(
@@ -232,7 +234,7 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
 
   throwIfCancelled(signal);
   // Load wallet
-  const config = await unlockWallet(resolveWalletPath(options.root, options.wallet), { root: options.root });
+  const config = await unlockWallet(resolveWalletPath(options.root, options.wallet), { root: options.root, host: options.host });
   const seedBuffer = Buffer.from(config.seed, 'hex');
 
   const { networkName, networkConfig } = resolveServeTarget(options);
@@ -249,6 +251,7 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
     opened = await (await engineFor(networkName, options.root)).wallet.openConnector({
       seed: seedBuffer,
       root: options.root,
+      notice: options.host.notice,
       network: networkName,
       networkConfig,
       address,
@@ -286,6 +289,7 @@ export async function startServe(options: ServeManagerOptions): Promise<ServeHan
 
   // Start WebSocket server
   const server = createRpcServer({
+    host: options.host,
     port,
     handlers: connector.handlers,
     // It approves every request, for mn's own scripts only: no web page may connect.

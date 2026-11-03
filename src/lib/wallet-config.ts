@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import { notice } from '@kuiralabs/midnight-cli-core/lib/notices';
 import * as path from 'path';
 import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, isValidWalletName } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { getValidNetworkNames, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
@@ -8,7 +7,8 @@ import { getWalletsDir } from './wallet-paths.ts';
 import { anyEngine, type EngineKeys } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { isSealedSecret, openSecret, sealSecret } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import { FileExistsError, writeJsonDurably } from '@kuiralabs/midnight-cli-core/lib/durable-file';
-import { type PassphraseSource, unlockPassphrase } from './passphrase.ts';
+import { type PassphraseHost, type PassphraseSource, unlockPassphrase } from './passphrase.ts';
+import { defineHostSlot, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 /** What anyone may read of a wallet: its addresses, and whether its secrets are sealed. No secret. */
@@ -80,16 +80,16 @@ export function getAddress(config: WalletConfig, network: NetworkName): string {
  * that network existed has none saved yet: it is unlocked, which derives and
  * saves it.
  */
-export async function walletAddress(walletPath: string, network: NetworkName, root: string): Promise<string> {
+export async function walletAddress(walletPath: string, network: NetworkName, root: string, host: UnlockHost): Promise<string> {
   const config = await loadWalletConfig(walletPath);
-  return config.addresses[network] ?? (await unlockWallet(walletPath, { root })).addresses[network];
+  return config.addresses[network] ?? (await unlockWallet(walletPath, { root, host })).addresses[network];
 }
 
 /** A wallet's shielded address on `network`, unlocking a sealed wallet that has none saved yet (see walletAddress); undefined when the wallet keeps no shielded addresses. */
-export async function walletShieldedAddress(walletPath: string, network: NetworkName, root: string): Promise<string | undefined> {
+export async function walletShieldedAddress(walletPath: string, network: NetworkName, root: string, host: UnlockHost): Promise<string | undefined> {
   const config = await loadWalletConfig(walletPath);
   if (config.shieldedAddresses === undefined || config.shieldedAddresses[network] !== undefined) return config.shieldedAddresses?.[network];
-  return (await unlockWallet(walletPath, { root })).shieldedAddresses?.[network];
+  return (await unlockWallet(walletPath, { root, host })).shieldedAddresses?.[network];
 }
 
 /** The networks an address map has no address for: a wallet written before they existed. */
@@ -553,15 +553,19 @@ export async function protectAllWallets(root: string, passphrase: string, signal
   return report;
 }
 
-/** How a wallet is unlocked: the state root holding mn's passphrase check, where the passphrase comes from, and where a warning goes. */
+/** What a wallet is unlocked through: the host's prompter and its record of the passphrase unlocked, its notices, and its record of the plain-text wallets warned about. */
+export type UnlockHost = PassphraseHost & Pick<Host, 'notice'>;
+
+/** How a wallet is unlocked: the state root holding mn's passphrase check, the host, where the passphrase comes from, and where a warning goes (the host's notices, unless given). */
 export interface UnlockOptions {
   root: string;
+  host: UnlockHost;
   source?: PassphraseSource;
   warn?: (line: string) => void;
 }
 
-// Each plain-text wallet is warned about once per run.
-const warnedPlain = new Set<string>();
+// Each plain-text wallet is warned about once per run of a host.
+const WARNED_PLAIN = defineHostSlot('wallet-config.warnedPlain', () => new Set<string>());
 
 /** A wallet with its secrets: opened with mn's passphrase, or read as it is from a plain-text file an earlier mn wrote. */
 export async function unlockWallet(walletPath: string, options: UnlockOptions): Promise<UnlockedWallet> {
@@ -569,15 +573,16 @@ export async function unlockWallet(walletPath: string, options: UnlockOptions): 
   const config = await loadWalletConfig(resolvedPath);
   const raw = JSON.parse(fs.readFileSync(resolvedPath, 'utf-8'));
   if (!config.isSealed) {
+    const warnedPlain = options.host.slot(WARNED_PLAIN);
     if (!warnedPlain.has(resolvedPath) || options.warn !== undefined) {
       warnedPlain.add(resolvedPath);
-      (options.warn ?? notice)(
-        `Warning: wallet ${resolvedPath} is not protected: its seed is in plain text. Encrypt it with: midnight wallet protect`,
-      );
+      const warning = `Warning: wallet ${resolvedPath} is not protected: its seed is in plain text. Encrypt it with: midnight wallet protect`;
+      if (options.warn !== undefined) options.warn(warning);
+      else options.host.notice(warning);
     }
     return typeof raw.mnemonic === 'string' ? { ...config, seed: raw.seed, mnemonic: raw.mnemonic } : { ...config, seed: raw.seed };
   }
-  const passphrase = await unlockPassphrase(options.root, options.source);
+  const passphrase = await unlockPassphrase(options.host, options.root, options.source);
   const secrets = JSON.parse(openSecret(raw.sealed, passphrase, 'wallet').toString('utf8')) as WalletSecrets;
   // A network added since the wallet was written: now that its seed is open,
   // derive that network's addresses and save them beside the sealed secrets.

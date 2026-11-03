@@ -6,7 +6,7 @@ import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, confirmati
 async function checkGrant(params: Readonly<Record<string, unknown>>, call: ToolCheckCall) {
   const { prepareGrant } = await import('../lib/grant/prepare.ts');
   const root = call.host.paths().stateRoot;
-  const prepared = await prepareGrant(call.argv(), root);
+  const prepared = await prepareGrant(call.argv(), root, call.host);
   const { loadWalletConfig, resolveWalletPath } = await import('../lib/wallet-config.ts');
   await loadWalletConfig(resolveWalletPath(root, params.wallet as string | undefined));
   return prepared;

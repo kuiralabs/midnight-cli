@@ -111,7 +111,7 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
   // On a ledger-8 chain the SDK's sync would retry forever.
   await assertLedgerSupported(network, networkConfig);
 
-  const walletConfig = await unlockWallet(resolveWalletPath(ctx.root), { root: ctx.root });
+  const walletConfig = await unlockWallet(resolveWalletPath(ctx.root), { root: ctx.root, host: ctx.host });
   const seedBuffer = Buffer.from(walletConfig.seed, 'hex');
   const address = walletConfig.addresses[network as NetworkName];
 
@@ -122,7 +122,7 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
     callbacks.onMessage(`SDK: ${msg}`);
   });
   try {
-    const balance = await engine.wallet.prepNightBalance({ seed: seedBuffer, root: ctx.root, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage });
+    const balance = await engine.wallet.prepNightBalance({ seed: seedBuffer, root: ctx.root, notice: ctx.host.notice, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage });
     if (balance > 0n) {
       callbacks.onMessage(`Balance OK: ${balance}`);
       return;
@@ -154,6 +154,7 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
     onSyncWarning(_tag, msg) { callbacks.onMessage(`Syncing genesis... (${msg})`); },
     sdkWarnings: ctx.sdkWarnings,
     root: ctx.root,
+    notice: ctx.host.notice,
   });
 
   callbacks.onMessage(`Airdropped ${amount} NIGHT`);
@@ -169,7 +170,7 @@ async function stepDust(config: DappTestConfig, ctx: PrepContext, callbacks: Pre
   });
   await assertLedgerSupported(network, networkConfig);
 
-  const walletConfig = await unlockWallet(resolveWalletPath(ctx.root), { root: ctx.root });
+  const walletConfig = await unlockWallet(resolveWalletPath(ctx.root), { root: ctx.root, host: ctx.host });
   const seedBuffer = Buffer.from(walletConfig.seed, 'hex');
   const address = walletConfig.addresses[network as NetworkName];
 
@@ -177,7 +178,7 @@ async function stepDust(config: DappTestConfig, ctx: PrepContext, callbacks: Pre
   const stopListening = ctx.sdkWarnings.listen(undefined);
   try {
     const { dustAvailable } = await (await engineFor(network, ctx.root)).wallet.prepDust(
-      { seed: seedBuffer, root: ctx.root, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage },
+      { seed: seedBuffer, root: ctx.root, notice: ctx.host.notice, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage },
       DUST_WAIT_TIMEOUT_MS,
     );
     // Verify dust is actually available — don't trust silent timeouts
@@ -206,6 +207,7 @@ async function stepMnServe(config: DappTestConfig, ctx: PrepContext, callbacks: 
   // before.
   const handle = await startServeOrReuse({
     root: ctx.root,
+    host: ctx.host,
     port: undefined, // use default
     network: config.network,
     onMessage: (msg) => callbacks.onMessage(`[serve] ${msg}`),

@@ -67,6 +67,7 @@ export declare function generateStateScript(opts: StateScript, parts: ScriptPart
 ## `@kuiralabs/midnight-engine-rc/dapp-connector`
 
 ```ts
+import type { NoticeSink } from "@kuiralabs/midnight-cli-core/lib/notices";
 import type { FacadeState, WalletEntry } from "@midnightntwrk/wallet-sdk/facade";
 import { type FacadeBundle } from "./facade.ts";
 import { type NetworkConfig } from "@kuiralabs/midnight-cli-core/lib/network";
@@ -80,6 +81,7 @@ export interface DAppConnectorOptions {
     bundle: FacadeBundle;
     networkConfig: NetworkConfig;
     approvalOptions: ApprovalOptions;
+    notice: NoticeSink;
     feeLimits?: FeeLimits;
     openOffers?: () => readonly OpenOffer[];
     callbacks?: DAppConnectorCallbacks;
@@ -199,14 +201,16 @@ export declare function validateDustCacheChainId(network: string, currentChainId
 import { type NetworkConfig } from "@kuiralabs/midnight-cli-core/lib/network";
 import { type WalletDataRepository } from "./wallet-data-repository.ts";
 import type { VerboseLog } from "@kuiralabs/midnight-cli-core/lib/verbose";
+import type { NoticeSink } from "@kuiralabs/midnight-cli-core/lib/notices";
 import type { DustExportResult } from "@kuiralabs/midnight-cli-core/lib/engine";
 export type { DustExportResult } from "@kuiralabs/midnight-cli-core/lib/engine";
 export interface DustExportOptions {
     root: string;
+    notice: NoticeSink;
     onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
     signal?: AbortSignal;
     repository?: WalletDataRepository;
-    buildBaseDust?: (seed: Buffer, networkConfig: NetworkConfig, root: string, log?: VerboseLog) => Promise<string>;
+    buildBaseDust?: (seed: Buffer, networkConfig: NetworkConfig, root: string, notice: NoticeSink, log?: VerboseLog) => Promise<string>;
     log?: VerboseLog;
 }
 export declare function exportDustSnapshot(seedBuffer: Buffer, network: string, networkConfig: NetworkConfig, options: DustExportOptions): Promise<DustExportResult>;
@@ -272,6 +276,7 @@ export declare function DustWallet(configuration: Parameters<typeof SdkDustWalle
 ## `@kuiralabs/midnight-engine-rc/facade`
 
 ```ts
+import type { NoticeSink } from "@kuiralabs/midnight-cli-core/lib/notices";
 import { type UnshieldedKeystore } from "@midnightntwrk/wallet-sdk/unshielded";
 import { WalletFacade, type FacadeState } from "@midnightntwrk/wallet-sdk/facade";
 import { type WalletSeeds } from "@midnightntwrk/wallet-sdk/hd";
@@ -298,7 +303,7 @@ export interface FacadeBundle {
     indexerWsUrl?: string;
     emptyStreams?: EmptyStreams;
 }
-export declare function buildFacade(seedBuffer: Buffer, networkConfig: NetworkConfig, root: string, cache?: WalletCacheData | null, log?: VerboseLog): Promise<FacadeBundle>;
+export declare function buildFacade(seedBuffer: Buffer, networkConfig: NetworkConfig, root: string, notice: NoticeSink, cache?: WalletCacheData | null, log?: VerboseLog): Promise<FacadeBundle>;
 export interface FacadeDustSnapshot {
     publicKey: {
         publicKey: string;
@@ -514,6 +519,7 @@ import { type WalletCacheData } from "@kuiralabs/midnight-cli-core/lib/wallet-ca
 import { type BalanceSummary } from "@kuiralabs/midnight-chain/lib/balance-subscription";
 import { type DustDirectResult, type DustRetention } from "./dust-direct.ts";
 import type { VerboseLog } from "@kuiralabs/midnight-cli-core/lib/verbose";
+import type { NoticeSink } from "@kuiralabs/midnight-cli-core/lib/notices";
 import { type LedgerEventStream } from "@kuiralabs/midnight-chain/lib/event-tip";
 import type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from "@kuiralabs/midnight-cli-core/lib/engine";
 export type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from "@kuiralabs/midnight-cli-core/lib/engine";
@@ -574,7 +580,7 @@ export declare class WalletDataRepository {
     private readonly tipMemo;
     constructor(deps?: RepoDeps);
     private keepCachesOfThisIndexer;
-    walletStateToRestore(seed: Buffer, network: NetworkConfig, networkName: NetworkName, root: string, log?: VerboseLog): Promise<WalletCacheData | null>;
+    walletStateToRestore(seed: Buffer, network: NetworkConfig, networkName: NetworkName, root: string, notice: NoticeSink, log?: VerboseLog): Promise<WalletCacheData | null>;
     private freshWalletOnDustCheckpoint;
     dust(seed: Buffer, network: NetworkConfig, opts: CachedReadOptions): Promise<DustView>;
     unshielded(identity: string | Buffer, network: NetworkConfig, opts?: ReadOptions): Promise<UnshieldedView>;

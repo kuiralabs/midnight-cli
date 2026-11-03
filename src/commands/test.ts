@@ -446,7 +446,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
   }
 
   // Prep context for resource tracking + teardown
-  const prep = createPrepContext(ctx.config.paths.stateRoot, ctx.sdkWarnings, signal);
+  const prep = createPrepContext(ctx.config.paths.stateRoot, ctx.host, ctx.sdkWarnings, signal);
   const prepResults: PrepStepResult[] = [];
 
   // Register teardown on abort

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { type ParsedArgs, getFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { type PayingTarget, resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
+import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { checkTerms, type SwapLeg, type SwapTerms } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
 import { assertOfferUnexpired } from '@kuiralabs/midnight-cli-core/lib/offer-envelope';
 import { readOfferFile, type ReadOffer } from './offers.ts';
@@ -36,11 +37,11 @@ export interface MakeRequest {
   out: string | undefined;
 }
 
-export function prepareMake(args: ParsedArgs, root: string, now: Date): MakeRequest {
+export function prepareMake(args: ParsedArgs, root: string, host: Host, now: Date): MakeRequest {
   const lifetime = getFlag(args, 'expires-in') ?? String(DEFAULT_OFFER_LIFETIME_S);
   if (!/^[1-9][0-9]*$/.test(lifetime)) throw new UsageError(`--expires-in must be a whole number of seconds above 0, not "${lifetime}"`);
   return {
-    target: resolvePayingTarget(args, 'swap', 'make', root),
+    target: resolvePayingTarget(args, 'swap', 'make', root, host),
     terms: termsOf(args),
     expiresAt: new Date(now.getTime() + Number(lifetime) * 1000),
     out: getFlag(args, 'out'),
@@ -67,8 +68,8 @@ export async function readOfferArg(args: ParsedArgs, target: PayingTarget): Prom
 }
 
 /** A take, checked as far as it can be without the chain: the file, its network, the agreed terms and the expiry. */
-export async function prepareTake(args: ParsedArgs, root: string, now: Date): Promise<TakeRequest> {
-  const target = resolvePayingTarget(args, 'swap', 'take', root);
+export async function prepareTake(args: ParsedArgs, root: string, host: Host, now: Date): Promise<TakeRequest> {
+  const target = resolvePayingTarget(args, 'swap', 'take', root, host);
   const agreed = termsOf(args);
   const offer = await readOfferArg(args, target);
   checkTerms(offer.contents.terms, agreed);
