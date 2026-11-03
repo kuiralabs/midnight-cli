@@ -29,18 +29,18 @@ import { ensureDust, executeTransfer } from './transfer.ts';
 import { airdropNight } from './airdrop.ts';
 import { registerDust } from './dust-register.ts';
 import { exportDustSnapshot } from './dust-export.ts';
-import { defaultRepository } from './wallet-data-repository.ts';
+import type { WalletDataRepository } from './wallet-data-repository.ts';
 import { createDAppConnector } from './dapp-connector.ts';
 
 const HOUR_MS = 60 * 60 * 1000;
 
-async function shieldedTransfer(params: ShieldedTransferParams): Promise<string> {
+async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTransferParams): Promise<string> {
   const { seed, root, notice, network, networkConfig, amount, progress, signal } = params;
   const networkId = getNetworkId(networkConfig.networkId);
   const nightToken = ledger.unshieldedToken().raw;
   const receiverAddress = decodeShieldedAddress(params.recipient, network);
 
-  return defaultRepository().withFacade(
+  return repo.withFacade(
     seed,
     networkConfig,
     async ({ bundle, state }) => {
@@ -177,7 +177,7 @@ async function prepDust(wallet: PrepWallet, waitMs: number): Promise<{ alreadyAv
   }
 }
 
-const openConnector: EngineWallet['openConnector'] = async (options): Promise<OpenedConnector> => {
+async function openConnector(repo: WalletDataRepository, options: Parameters<EngineWallet['openConnector']>[0]): Promise<OpenedConnector> {
   const { seed, root, notice, network, networkConfig, address, syncMode, signal, onMessage } = options;
   // On a ledger-8 chain the SDK's sync would retry forever.
   await assertLedgerSupported(network, networkConfig, undefined, signal);
@@ -193,7 +193,6 @@ const openConnector: EngineWallet['openConnector'] = async (options): Promise<Op
     // As the repository's own borrowers do: warm the Dust checkpoint, then
     // restore from it when there is no saved wallet, instead of the SDK
     // replaying the chain's whole Dust history (minutes on a hosted network).
-    const repo = defaultRepository();
     // Best-effort, as there: a failed warm-up leaves the sync below to do it.
     try {
       await repo.dust(seed, networkConfig, { root, notice, signal, onStatus: onMessage });
@@ -259,15 +258,15 @@ const openConnector: EngineWallet['openConnector'] = async (options): Promise<Op
       try { await stopFacade(started); } catch { /* best-effort */ }
     },
   };
-};
+}
 
-const serveWallet: EngineWallet['serveWallet'] = (options, serve) => {
+function serveWallet<T>(repo: WalletDataRepository, options: Parameters<EngineWallet['serveWallet']>[0], serve: (session: ServedWalletSession) => Promise<T>): Promise<T> {
   const { seed, root, notice, networkConfig, network, address, syncMode } = options;
   // The repository owns validating the caches, priming Dust, building the
   // facade, syncing (with retries) and stopping it. Its save is skipped: mn
   // serve saves only when no transaction is pending, since the SDK drops
   // pending Dust on serialization and would persist dust=0.
-  return defaultRepository().withFacade(seed, networkConfig, async ({ bundle }) => {
+  return repo.withFacade(seed, networkConfig, async ({ bundle }) => {
     let lastState: Awaited<ReturnType<typeof waitForDustAvailable>> | undefined;
     const session: ServedWalletSession = {
       async waitForDust() {
@@ -305,21 +304,24 @@ const serveWallet: EngineWallet['serveWallet'] = (options, serve) => {
     onSyncProgress: options.onSyncProgress,
     onSyncDetail: options.onSyncDetail,
   });
-};
+}
 
-export const rcWallet: EngineWallet = {
-  unshieldedBalance: (address, networkConfig, options) => defaultRepository().unshielded(address, networkConfig, options),
-  async dustBalance(seed, networkConfig, options) {
-    const { state: _state, ...balance } = await defaultRepository().dust(seed, networkConfig, options);
-    return balance;
-  },
-  transfer: executeTransfer,
-  airdrop: airdropNight,
-  shieldedTransfer,
-  registerDust,
-  exportDust: (seed, network, networkConfig, options) => exportDustSnapshot(seed, network, networkConfig, options),
-  prepNightBalance,
-  prepDust,
-  openConnector,
-  serveWallet,
-};
+/** The wallet of an engine whose repository (its caches) is `repo`. */
+export function createRcWallet(repo: WalletDataRepository): EngineWallet {
+  return {
+    unshieldedBalance: (address, networkConfig, options) => repo.unshielded(address, networkConfig, options),
+    async dustBalance(seed, networkConfig, options) {
+      const { state: _state, ...balance } = await repo.dust(seed, networkConfig, options);
+      return balance;
+    },
+    transfer: (params) => executeTransfer(repo, params),
+    airdrop: (params) => airdropNight(repo, params),
+    shieldedTransfer: (params) => shieldedTransfer(repo, params),
+    registerDust: (seed, networkConfig, options) => registerDust(repo, seed, networkConfig, options),
+    exportDust: (seed, network, networkConfig, options) => exportDustSnapshot(seed, network, networkConfig, { ...options, repository: repo }),
+    prepNightBalance,
+    prepDust,
+    openConnector: (options) => openConnector(repo, options),
+    serveWallet: (options, serve) => serveWallet(repo, options, serve),
+  };
+}

@@ -10,7 +10,7 @@ import * as rx from 'rxjs';
 import { type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
 import { type FacadeBundle, hasDustAvailable, quickSync } from './facade.ts';
-import { defaultRepository } from './wallet-data-repository.ts';
+import type { WalletDataRepository } from './wallet-data-repository.ts';
 import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
 import { nightToMicro } from '@kuiralabs/midnight-cli-core/lib/amount';
 import {
@@ -411,15 +411,15 @@ async function buildAndSubmitTransfer(
 // ── Main transfer flow ───────────────────────────────────────────────
 
 /**
- * Execute a full transfer flow. The lifecycle and recovery loops live in
- * `repo.withFacade(...)`: pre-prime dust, sync-retry on stale-cache /
+ * Execute a full transfer flow on the engine's repository `repo`. The
+ * lifecycle and recovery loops live in `repo.withFacade(...)`: pre-prime dust, sync-retry on stale-cache /
  * timeout, cold-start race retry on SDK InsufficientFunds, save+invalidate
  * on success, stopFacade in finally. This function only owns the
  * transfer-specific work: pre-flight checks (balance, dust threshold),
  * `ensureDust` orchestration, and the build/sign/prove/submit retry loop
  * (handled inside `buildAndSubmitTransfer` for stale-UTXO + dust errors).
  */
-export async function executeTransfer(params: TransferParams): Promise<TransferResult> {
+export async function executeTransfer(repo: WalletDataRepository, params: TransferParams): Promise<TransferResult> {
   const {
     seedBuffer,
     networkConfig,
@@ -447,7 +447,7 @@ export async function executeTransfer(params: TransferParams): Promise<TransferR
   const stopListening = sdkWarnings.listen(onSyncWarning);
 
   try {
-    return await defaultRepository().withFacade(
+    return await repo.withFacade(
       seedBuffer,
       networkConfig,
       async ({ bundle, state }) => {

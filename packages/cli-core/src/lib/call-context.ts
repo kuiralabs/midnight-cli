@@ -13,7 +13,6 @@
 
 import { isVerbose, type ParsedArgs } from './argv.ts';
 import { CancelledError } from './errors.ts';
-import { preferEngineOf } from './engine.ts';
 import { resolveNetworkName } from './resolve-network.ts';
 import type { Payer } from './payer.ts';
 import type { Settings } from './settings.ts';
@@ -150,8 +149,7 @@ export function createCallContext<Protector = unknown>(parts: CallParts<Protecto
 export async function runHandler<Protector>(handler: CommandHandler<Protector>, args: ParsedArgs, ctx: CallContext<Protector>): Promise<CommandOutcome | void> {
   if (ctx.signal.aborted) throw new CancelledError();
   try {
-    const root = ctx.config.paths.stateRoot;
-    preferEngineOf(resolveNetworkName({ args, configDir: root }), root);
+    ctx.host.engines.prefer(resolveNetworkName({ args, configDir: ctx.config.paths.stateRoot }));
   } catch { /* an invalid --network: the command says so */ }
   return handler(args, ctx);
 }

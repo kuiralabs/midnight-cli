@@ -7,7 +7,7 @@
 // passphrase it was made with.
 
 import * as fs from 'node:fs';
-import { rcEngine } from '@kuiralabs/midnight-engine-rc';
+import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -23,6 +23,9 @@ import { parseDeviceCode } from '../lib/grant/device-code.ts';
 import { createAccountKey, sealedDeviceKeys, sealedOwnerStore, sealedPrivateStatePassword } from '../lib/grant/sealed-account.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+
+// An rc engine, for what every host's has alike: its keys, ledger and contracts.
+const rcEngine = createRcEngine(createHost());
 
 // The host the tests' calls run in: nobody to ask, notices dropped.
 const host = createHost();

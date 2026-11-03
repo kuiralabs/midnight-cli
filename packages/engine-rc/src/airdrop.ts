@@ -5,13 +5,14 @@
 import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { executeTransfer, type TransferParams, type TransferResult } from './transfer.ts';
 import type { AirdropParams } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { WalletDataRepository } from './wallet-data-repository.ts';
 export type { AirdropParams } from '@kuiralabs/midnight-cli-core/lib/engine';
 
 
-/** Sends `amountNight` NIGHT from genesis to `recipientAddress`. */
-export async function airdropNight(params: AirdropParams): Promise<TransferResult> {
+/** Sends `amountNight` NIGHT from genesis to `recipientAddress`, on the engine's repository `repo`. */
+export async function airdropNight(repo: WalletDataRepository, params: AirdropParams): Promise<TransferResult> {
   try {
-    return await executeTransfer({ ...params, seedBuffer: Buffer.from(GENESIS_SEED, 'hex') });
+    return await executeTransfer(repo, { ...params, seedBuffer: Buffer.from(GENESIS_SEED, 'hex') });
   } catch (err) {
     if (err instanceof Error && err.message.toLowerCase().includes('dust')) {
       throw new Error(

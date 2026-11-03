@@ -18,9 +18,8 @@ import {
   INITIAL_DUST_GRACE_PERIOD_SECONDS,
 } from '@kuiralabs/midnight-cli-core/lib/constants';
 import { subscribeGraphqlWs } from '@kuiralabs/midnight-chain/lib/graphql-ws-subscription';
-import { settings } from '@kuiralabs/midnight-cli-core/lib/settings';
 
-// MN_DISABLE_DUST_COLLAPSE=1 disables the dust generation-tree collapse (debugging / safety valve): settings().isDustCollapseOff.
+// MN_DISABLE_DUST_COLLAPSE=1 disables the dust generation-tree collapse (debugging / safety valve): the repository then passes `collapse: false`, read from its host's settings.
 
 /**
  * Data the collapse needs to keep working correctly across restarts: which
@@ -151,7 +150,7 @@ export function readDustBalanceDirect(
     collapse,
   } = options;
 
-  const collapseEnabled = collapse !== false && !settings().isDustCollapseOff;
+  const collapseEnabled = collapse !== false;
 
   // Apply events in chunks as they arrive so the final step is cheap and
   // progress updates stay responsive. Replaying 100k events in a single

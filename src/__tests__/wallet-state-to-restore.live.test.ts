@@ -39,7 +39,7 @@ describe('walletStateToRestore', () => {
     const checkpoint = ledger.DustLocalState.deserialize(Buffer.from(DUST_STATE_OWNED_HEX, 'hex'));
     saveDustCache('undeployed', dustPublicKeyHexFromSeed(SEED), checkpoint, 395_185, root);
 
-    const state = await new WalletDataRepository().walletStateToRestore(SEED, NETWORK, 'undeployed', root, () => {});
+    const state = await new WalletDataRepository(testHost()).walletStateToRestore(SEED, NETWORK, 'undeployed', root, () => {});
 
     expect(state, 'a wallet to restore, not one built from its keys').not.toBeNull();
     const dust = JSON.parse(state!.dust) as { offset: string; state: string };
@@ -48,6 +48,6 @@ describe('walletStateToRestore', () => {
   }, 30_000);
 
   it('with no saved wallet and no checkpoint, is null: the wallet is built from its keys', async () => {
-    expect(await new WalletDataRepository().walletStateToRestore(SEED, NETWORK, 'undeployed', root, () => {})).toBeNull();
+    expect(await new WalletDataRepository(testHost()).walletStateToRestore(SEED, NETWORK, 'undeployed', root, () => {})).toBeNull();
   });
 });

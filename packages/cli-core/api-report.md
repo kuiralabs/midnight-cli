@@ -648,6 +648,7 @@ import type { NoticeSink } from "./notices.ts";
 import type { FeeLimits } from "./fee-limits.ts";
 import type { RpcHandler } from "./connector-api.ts";
 import type { Spinner } from "../ui/spinner.ts";
+import type { Host } from "./host.ts";
 export type SdkSet = "rc" | "beta";
 export interface EngineKeys {
     unshieldedAddress(seed: Buffer, network: NetworkName, keyIndex?: number): string;
@@ -949,16 +950,23 @@ export interface Engine {
     readonly wallet: EngineWallet;
 }
 export declare function sdkSetOf(network: NetworkName, root: string): SdkSet;
-export type EngineLoader = (set: SdkSet) => Promise<Engine>;
+export type EngineHost = Pick<Host, "settings" | "notice">;
+export type EngineLoader = (set: SdkSet, host: Host) => Promise<Engine>;
+export interface HostEngines {
+    load(set: SdkSet): Promise<Engine>;
+    for(network: NetworkName): Promise<Engine>;
+    any(): Promise<Engine>;
+    prefer(network: NetworkName): void;
+}
 export declare class OtherSdkSetError extends Error {
     readonly code = "OTHER_SDK_SET";
     readonly loadedSet: SdkSet;
     readonly wantedSet: SdkSet;
     constructor(loadedSet: SdkSet, wantedSet: SdkSet, message?: string);
 }
-export declare function setEngineLoader(next: EngineLoader): void;
+export declare function claimSdkSet(set: SdkSet): void;
+export declare function bridgeEngines(engines: HostEngines): void;
 export declare function engineFor(network: NetworkName, root: string): Promise<Engine>;
-export declare function preferEngineOf(network: NetworkName, root: string): void;
 export declare function anyEngine(): Promise<Engine>;
 ```
 
@@ -1095,6 +1103,7 @@ import type { HostPaths } from "./state-root.ts";
 import { type Settings } from "./settings.ts";
 import type { Prompter } from "./prompter.ts";
 import { type SdkWarningCalls } from "./sdk-warnings.ts";
+import { type EngineLoader, type HostEngines } from "./engine.ts";
 export interface HostSlot<T> {
     readonly name: string;
     readonly init: () => T;
@@ -1106,6 +1115,7 @@ export interface Host {
     notice(line: string): void;
     readonly prompter: Prompter | null;
     readonly sdkWarnings: SdkWarningCalls;
+    readonly engines: HostEngines;
     slot<T>(key: HostSlot<T>): T;
 }
 export type Supplied<T> = T | (() => T);
@@ -1115,6 +1125,7 @@ export interface HostOptions {
     readonly notice?: (line: string) => void;
     readonly prompter?: Prompter | null;
     readonly sdkWarnings?: SdkWarningCalls;
+    readonly engineLoader?: EngineLoader;
 }
 export declare function createHost(options?: HostOptions): Host;
 ```

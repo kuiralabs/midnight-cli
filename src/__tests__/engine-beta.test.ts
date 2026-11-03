@@ -5,13 +5,17 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import * as rx from 'rxjs';
-import { betaEngine } from '@kuiralabs/midnight-engine-beta';
+import { createBetaEngine } from '@kuiralabs/midnight-engine-beta';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import { createDAppConnector } from '@kuiralabs/midnight-engine-beta/dapp-connector';
 import type { FacadeBundle } from '@kuiralabs/midnight-engine-beta/facade';
 import { deriveShieldedAddress } from '@kuiralabs/midnight-engine-beta/derive-address';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { RpcHandlerContext } from '@kuiralabs/midnight-cli-core/lib/connector-api';
 import { NO_TERMINAL } from './helpers/connector-stub.ts';
+
+// A beta engine, for what every host's has alike: its keys, ledger and contracts.
+const betaEngine = createBetaEngine(createHost());
 
 // The beta set's own address classes, as the engine resolves them: the
 // repository's root holds the rc set's.

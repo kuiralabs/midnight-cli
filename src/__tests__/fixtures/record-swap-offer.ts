@@ -14,7 +14,7 @@ import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setSettingsSource, settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
-import { engineFor, setEngineLoader } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { loadInstalledEngine } from '../../lib/installed-engines.ts';
 
@@ -35,9 +35,9 @@ const networkConfig: NetworkConfig = {
 const home = mkdtempSync(join(tmpdir(), 'mn-record-offer-'));
 const root = join(home, '.midnight');
 setSettingsSource(() => settingsFromEnvironment(process.env));
-setEngineLoader(loadInstalledEngine);
+const host = createHost({ settings: () => settingsFromEnvironment(process.env), paths: { stateRoot: root, home }, engineLoader: loadInstalledEngine });
 
-const engine = await engineFor('undeployed', root);
+const engine = await host.engines.for('undeployed');
 const ctx = { notify: () => {}, connectionId: 'record', requestId: 1, metadata: {} };
 const open = (seed: Buffer) => engine.wallet.openConnector({
   seed, root, notice: () => {}, network: 'undeployed', networkConfig, address: engine.keys.unshieldedAddress(seed, 'undeployed'), syncMode: 'full',

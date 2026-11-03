@@ -22,8 +22,12 @@ import {
 } from '../lib/contract/runner.ts';
 import * as rcScripts from '@kuiralabs/midnight-engine-rc/contract-scripts';
 import { SCRIPT_PACKAGES, packageFolder } from '@kuiralabs/midnight-engine-rc/contract-scripts';
-import { rcEngine } from '@kuiralabs/midnight-engine-rc';
+import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
+import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import type { CallScript, DeployScript, StateScript } from '@kuiralabs/midnight-cli-core/lib/engine';
+
+// An rc engine, for what every host's has alike: its keys, ledger and contracts.
+const rcEngine = createRcEngine(createHost());
 
 // The rc engine's scripts, with the parts the runner gives every engine.
 const generateDeployScript = (opts: DeployScript & { dappDir?: string }): string => rcScripts.generateDeployScript(opts, SCRIPT_PARTS);

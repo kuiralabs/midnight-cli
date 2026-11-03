@@ -11,6 +11,7 @@ import { Buffer } from 'node:buffer';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { WalletDataRepository, type DustView, type UnshieldedView, type RepoDeps } from '@kuiralabs/midnight-engine-rc/wallet-data-repository';
+import { testHost } from './helpers/test-host.ts';
 import { UnsupportedLedgerError } from '@kuiralabs/midnight-chain/lib/ledger-guard';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { BalanceSummary } from '@kuiralabs/midnight-chain/lib/balance-subscription';
@@ -73,7 +74,7 @@ afterEach(() => { rmSync(TMP, { recursive: true, force: true }); });
 describe('WalletDataRepository — ledger guard', () => {
   it('refuses a ledger-8 chain before starting any dust sync', async () => {
     const fetchDust = vi.fn(async () => fakeDustResult());
-    const repo = new WalletDataRepository({
+    const repo = new WalletDataRepository(testHost(), {
       fetchProtocolVersion: async () => 1000300n,
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
@@ -88,7 +89,7 @@ describe('WalletDataRepository — ledger guard', () => {
 describe('WalletDataRepository — unshielded reads', () => {
   it('serves a memo hit when the chain tip has not changed', async () => {
     let tipCalls = 0, fetchCalls = 0;
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => 1_000_000,
       fetchTip: async () => { tipCalls++; return 'tip-A'; },
       fetchUnshielded: async () => { fetchCalls++; return fakeBalanceSummary({ utxoCount: 3 }); },
@@ -108,7 +109,7 @@ describe('WalletDataRepository — unshielded reads', () => {
   it('refetches when the chain tip changes between calls', async () => {
     let tip = 'tip-A', fetchCalls = 0;
     let nowMs = 1_000_000;
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => nowMs,
       fetchTip: async () => tip,
       fetchUnshielded: async () => { fetchCalls++; return fakeBalanceSummary({ utxoCount: fetchCalls }); },
@@ -127,7 +128,7 @@ describe('WalletDataRepository — unshielded reads', () => {
 
   it('forceFresh bypasses the memo even when the tip is unchanged', async () => {
     let fetchCalls = 0;
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => 1_000_000,
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => { fetchCalls++; return fakeBalanceSummary(); },
@@ -143,7 +144,7 @@ describe('WalletDataRepository — unshielded reads', () => {
   it('serves cached value when the tip-check itself fails (network down)', async () => {
     let fetchCalls = 0;
     let tipShouldFail = false;
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => 1_000_000,
       fetchTip: async () => {
         if (tipShouldFail) throw new Error('ECONNREFUSED');
@@ -167,7 +168,7 @@ describe('WalletDataRepository — unshielded reads', () => {
 describe('WalletDataRepository — dust reads', () => {
   it('hits the in-memory memo on the second call within the same tip', async () => {
     let fetchCalls = 0;
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => 1_000_000,
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
@@ -193,11 +194,11 @@ describe('WalletDataRepository — dust reads', () => {
       },
     });
     // Before the reset: the cache reaches event 500.
-    await new WalletDataRepository(deps(null, [], 500)).dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
+    await new WalletDataRepository(testHost(), deps(null, [], 500)).dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
 
     // After it: the chain's latest event is 106, so the cache can't be from this chain.
     const startIds: number[] = [];
-    const view = await new WalletDataRepository(deps(106, startIds, 106)).dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
+    const view = await new WalletDataRepository(testHost(), deps(106, startIds, 106)).dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
 
     expect(startIds).toEqual([0]);
     expect(view.fromCache).toBe(false);
@@ -216,8 +217,8 @@ describe('WalletDataRepository — dust reads', () => {
       fetchEventTip: async () => eventTip,
       fetchDust: async (_seed, _net, opts) => { startIds.push(opts.startFromId); return fakeDustResult({ lastAppliedEventId: lastId }); },
     });
-    await new WalletDataRepository(deps(null, 100)).dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
-    await new WalletDataRepository(deps(150, 150)).dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
+    await new WalletDataRepository(testHost(), deps(null, 100)).dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
+    await new WalletDataRepository(testHost(), deps(150, 150)).dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
     expect(startIds).toEqual([0, 101]);
   });
 
@@ -227,7 +228,7 @@ describe('WalletDataRepository — dust reads', () => {
     // fakeDustResult with lastAppliedEventId advancing by 250 each time.
     const startIds: number[] = [];
     let nextLastEventId = 249;
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => 1_000_000,
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
@@ -257,7 +258,7 @@ describe('WalletDataRepository — dust reads', () => {
   it('resumes through as many short windows as the sync needs, while each one moves', async () => {
     let calls = 0;
     let clock = 1_000_000;
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => clock,
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
@@ -278,7 +279,7 @@ describe('WalletDataRepository — dust reads', () => {
 
   it('gives up after three windows in a row that apply nothing, and says the state is short', async () => {
     let calls = 0;
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => 1_000_000,
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
@@ -301,7 +302,7 @@ describe('WalletDataRepository — dust reads', () => {
   it('keeps a completed sync when the tip fetch fails at memo time', async () => {
     // The tip probe is an optimization. A cold dust sync is minutes of work that
     // is already on disk by this point; a node blip must not turn it into a throw.
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => 1_000_000,
       fetchTip: async () => { throw new Error('node unreachable'); },
       fetchUnshielded: async () => fakeBalanceSummary(),
@@ -314,7 +315,7 @@ describe('WalletDataRepository — dust reads', () => {
   });
 
   it('reports partial: false and the synced offset once the resume loop reaches the tip', async () => {
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => 1_000_000,
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
@@ -335,7 +336,7 @@ describe('WalletDataRepository — dust reads', () => {
     let nextLastEventId = 249;
     // Each window takes ten minutes: the loop's hour is used up after six.
     let clock = 1_000_000;
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => clock,
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
@@ -372,12 +373,12 @@ describe('WalletDataRepository — dust reads', () => {
       fetchDust,
     });
 
-    const cold = await new WalletDataRepository(
+    const cold = await new WalletDataRepository(testHost(),
       deps(async () => fakeDustResult({ lastAppliedEventId: 900, eventCount: 901 })),
     ).dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
     expect(cold.lastAppliedEventId).toBe(900);
 
-    const warm = await new WalletDataRepository(
+    const warm = await new WalletDataRepository(testHost(),
       deps(async () => fakeDustResult({ lastAppliedEventId: -1, eventCount: 0 })),
     ).dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
     expect(warm.lastAppliedEventId).toBe(900);
@@ -387,7 +388,7 @@ describe('WalletDataRepository — dust reads', () => {
   it('forceFresh on dust bypasses both memos and disk cache', async () => {
     let fetchCalls = 0;
     let lastStartFromId = -999;
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => 1_000_000,
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
@@ -409,7 +410,7 @@ describe('WalletDataRepository — dust reads', () => {
 describe('WalletDataRepository — invalidation', () => {
   it('invalidate() drops the dust + unshielded memo entries for the given seed/network', async () => {
     let dustCalls = 0, unshieldedCalls = 0;
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => 1_000_000,
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => { unshieldedCalls++; return fakeBalanceSummary(); },
@@ -431,7 +432,7 @@ describe('WalletDataRepository — invalidation', () => {
 
   it('invalidate() with kinds: ["dust"] leaves the unshielded memo intact', async () => {
     let dustCalls = 0, unshieldedCalls = 0;
-    const repo = new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       now: () => 1_000_000,
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => { unshieldedCalls++; return fakeBalanceSummary(); },
@@ -475,7 +476,7 @@ function readDustCacheFile(): { chainId?: string; lastAppliedEventId?: number } 
 
 describe('WalletDataRepository — dust cache chain-reset guard', () => {
   const mkRepo = (chainId: string, fetchDust: NonNullable<RepoDeps['fetchDust']>) =>
-    new WalletDataRepository({ fetchProtocolVersion: LEDGER9_PROTOCOL,
+    new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
       fetchTip: async () => 'tip-A',
       fetchUnshielded: async () => fakeBalanceSummary(),
       fetchDust,

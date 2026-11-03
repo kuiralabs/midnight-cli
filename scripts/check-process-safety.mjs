@@ -83,16 +83,10 @@ export const ALLOWED = {
 // why. A call's state is allowed only until it moves into the call's context; what is shared on purpose holds no call's state.
 export const ALLOWED_STATE = {
   // Shared on purpose: none holds a call's state.
-  'engine/rc/wallet-data-repository.ts': { defaultRepo: 'shared on purpose: the wallet repository, whose cache long-lived MCP sessions share across calls' },
-  'engine/beta/wallet-data-repository.ts': {
-    defaultRepo: 'shared on purpose: the wallet repository, whose cache long-lived MCP sessions share across calls',
-    saidWasmDust: 'shared on purpose: the WASM Dust notice is said once per process',
-  },
   'lib/chain-id.ts': { CHAIN_ID_MEMO: 'shared on purpose: the chain-id memo, by endpoint' },
   'lib/engine.ts': {
-    loaded: 'shared on purpose: the one SDK engine this process loads (two WASM ledgers cannot share a process)',
-    loader: 'shared on purpose: the host sets the engine loader once',
-    preferred: 'shared on purpose: the set work every set does alike loads while no engine is loaded, the set of the call it runs for',
+    loadedSet: 'shared on purpose: the SDK set this process loads, whichever host loads it (two WASM ledgers cannot share a process)',
+    bridged: "temporary until slice 6: the shell's host's engines, for the libraries that don't take their host's engines yet",
   },
   // The host source, set once by the host at start (handlers see it through the context).
   'lib/settings.ts': { source: 'shared on purpose: the host sets the settings source once' },

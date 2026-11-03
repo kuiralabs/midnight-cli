@@ -20,7 +20,7 @@
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
 import { buildFacade, stopFacade, overlayDustDirectSnapshot } from './facade.ts';
 import { type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
-import { defaultRepository, type WalletDataRepository } from './wallet-data-repository.ts';
+import type { WalletDataRepository } from './wallet-data-repository.ts';
 import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
 import type { NoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
 import type { DustExportResult } from '@kuiralabs/midnight-cli-core/lib/engine';
@@ -34,8 +34,8 @@ export interface DustExportOptions {
   notice: NoticeSink;
   onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
   signal?: AbortSignal;
-  /** Injectable for tests; defaults to the process-wide repository. */
-  repository?: WalletDataRepository;
+  /** The engine's repository the sync runs through. */
+  repository: WalletDataRepository;
   /**
    * Produce the base (empty) dust snapshot to overlay onto. Injectable for tests;
    * defaults to building a fresh facade from keys and reading its dust snapshot.
@@ -77,7 +77,7 @@ export async function exportDustSnapshot(
   options: DustExportOptions,
 ): Promise<DustExportResult> {
   const pubkeyHex = dustPublicKeyHexFromSeed(seedBuffer);
-  const repo = options.repository ?? defaultRepository();
+  const repo = options.repository;
 
   const view = await repo.dust(seedBuffer, networkConfig, {
     root: options.root,
