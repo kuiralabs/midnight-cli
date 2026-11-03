@@ -52,6 +52,8 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => 
     'help': {}, 'info': {}, 'inspect-cost': {}, 'localnet': {}, 'manual': {}, 'serve': {},
     // Added since the registry: swap, which pays through the payer as grant does.
     'swap': { payer: true },
+    // And tx, which reads the indexer only.
+    'tx': {},
     'status': { unavailable: STATUS_REFUSAL }, 'test': {}, 'transfer': {},
     'wallet': { protectors: true },
   };
@@ -385,6 +387,7 @@ describe('the MCP tools, generated from the registry', () => {
     ['midnight_swap_take', { file: 'offer.json', give: '10', 'give-token': 'aa', want: '7', 'want-token': 'bb', wallet: 'bob' }, args('swap', 'take', ['offer.json'], { give: '10', 'give-token': 'aa', want: '7', 'want-token': 'bb', wallet: 'bob' })],
     ['midnight_swap_cancel', { id: '3fa1c0de' }, args('swap', 'cancel', ['3fa1c0de'], {})],
     ['midnight_swap_list', { network: 'undeployed' }, args('swap', 'list', [], { network: 'undeployed' })],
+    ['midnight_tx_status', { transaction: 'ab12', wait: true, timeout: '30' }, args('tx', 'status', ['ab12'], { wait: true, timeout: '30' })],
     ['midnight_grant_issue', { link: 'L', 'per-call': '2' }, args('grant', 'issue', ['L'], { 'per-call': '2', yes: true })],
     ['midnight_grant_revoke', { grant: '3' }, args('grant', 'revoke', ['3'], {})],
     ['midnight_grant_revoke_all', {}, args('grant', 'revoke-all', [], {})],

@@ -80,7 +80,9 @@ export const transferDefinition: CommandDefinition = {
       'midnight transfer mn_shield-addr_undeployed1... 50 --shielded',
     ],
     jsonFields: {
-      txHash: 'Transaction hash',
+      txHash: 'The transaction\'s identifier (midnight tx status takes it)',
+      receipt: 'The transaction once the indexer lists it: blockHeight, blockHash, blockTime, fee (DUST, exact), feeSpecks, result; null when it has not within 60 s',
+      receiptMissing: 'Why receipt is null; check later with midnight tx status <txHash>',
       amount: 'Amount transferred (NIGHT string)',
       recipient: 'Recipient address (bech32m)',
       network: 'Network name',

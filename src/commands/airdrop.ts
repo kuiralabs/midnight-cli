@@ -20,6 +20,8 @@ import { parseAmount, nightToMicro } from '@kuiralabs/midnight-cli-core/lib/amou
 import { header, keyValue, divider, formatAddress, successMessage } from '@kuiralabs/midnight-cli-core/ui/format';
 import { bold, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { receiptJson, receiptOf } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { receiptText } from '../ui/receipt.ts';
 
 export default async function airdropCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
@@ -207,6 +209,8 @@ async function unshieldedAirdrop(
       },
     });
 
+    spinner.update('Waiting for the indexer to list it...');
+    const receipt = await receiptOf(networkConfig.indexer, result.txHash, ctx.signal);
     spinner.stop('Transaction submitted');
 
     if (hasFlag(args, 'json')) {
@@ -215,6 +219,7 @@ async function unshieldedAirdrop(
         amount: amountNight,
         recipient: recipientAddress,
         network: networkName,
+        ...receiptJson(receipt),
       });
       return;
     }
@@ -225,6 +230,7 @@ async function unshieldedAirdrop(
       `Airdropped ${amountNight} NIGHT to your wallet`,
       result.txHash,
     ) + '\n');
+    ctx.output.stderr(receiptText(receipt, result.txHash));
     ctx.output.stderr('\n' + divider() + '\n');
     ctx.output.stderr(dim('  Verify:         midnight balance') + '\n');
     ctx.output.stderr(dim('  Register dust:  midnight dust register') + '\n');
@@ -292,14 +298,17 @@ async function shieldedAirdrop(
       onSyncDetail: (detail) => spinner.update(`Syncing genesis wallet... (waiting on: ${detail})`),
     });
 
+    spinner.update('Waiting for the indexer to list it...');
+    const receipt = await receiptOf(networkConfig.indexer, txHash, ctx.signal);
     spinner.stop('Transaction submitted');
 
     if (hasFlag(args, 'json')) {
-      ctx.output.result({ txHash, amount: amountNight, shieldedAddress: userShieldedAddrStr, network: networkName, type: 'shielded' });
+      ctx.output.result({ txHash, amount: amountNight, shieldedAddress: userShieldedAddrStr, network: networkName, type: 'shielded', ...receiptJson(receipt) });
       return;
     }
     ctx.output.stdout(txHash + '\n');
     ctx.output.stderr('\n' + successMessage(`Airdropped ${amountNight} shielded NIGHT to your wallet`, txHash) + '\n');
+    ctx.output.stderr(receiptText(receipt, txHash));
     ctx.output.stderr('\n' + divider() + '\n');
     ctx.output.stderr(dim('  Verify: midnight balance --shielded') + '\n\n');
   } catch (err) {

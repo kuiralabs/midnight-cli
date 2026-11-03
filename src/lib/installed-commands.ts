@@ -27,6 +27,7 @@ import { grantDefinition } from '../commands/grant.definition.ts';
 import { swapDefinition } from '../commands/swap.definition.ts';
 import { localnetDefinition } from '../commands/localnet.definition.ts';
 import { statusDefinition } from '@kuiralabs/midnight-chain/commands/status.definition';
+import { txDefinition } from '@kuiralabs/midnight-chain/commands/tx.definition';
 import { helpDefinition } from '../commands/help.definition.ts';
 import { manualDefinition } from '../commands/manual.definition.ts';
 import { coreGuidance } from '@kuiralabs/midnight-cli-core/commands/core.guidance';
@@ -65,7 +66,7 @@ const GLOBAL_FLAGS_HELP: readonly GlobalFlagHelp[] = [
 /** Every package, in the layering's order; the shell's own commands last, its guidance being the skeletons. */
 export const installedCommands = createPackageRegistry([
   { name: 'core', commands: [configDefinition], guidance: coreGuidance },
-  { name: 'chain', commands: [statusDefinition], guidance: chainGuidance },
+  { name: 'chain', commands: [statusDefinition, txDefinition], guidance: chainGuidance },
   {
     name: 'wallet',
     commands: [walletDefinition, generateDefinition, infoDefinition, balanceDefinition, addressDefinition, genesisAddressDefinition, airdropDefinition, transferDefinition, dustDefinition, cacheDefinition],

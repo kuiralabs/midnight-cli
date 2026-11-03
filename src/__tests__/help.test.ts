@@ -158,14 +158,15 @@ describe('help — the lists come from the registry', () => {
     Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true });
     await cliCall(helpCommand, parseArgs(['help']));
     const lines = introLines(io.stderr());
-    expect(lines.slice(9, 14)).toStrictEqual([
+    expect(lines.slice(9, 15)).toStrictEqual([
       'contract  Inspect, deploy, call contracts',
       'dev  Contract dev loop (watch + deploy)',
       'grant  Grants that let agents spend',
       'swap  Private swaps through offer files',
+      'tx  What became of a transaction',
       'config  Manage CLI config',
     ]);
-    expect(lines).toHaveLength(20);
+    expect(lines).toHaveLength(21);
   });
 
   it('the TTY intro lists grant after dev, with its brief', async () => {

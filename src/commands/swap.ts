@@ -16,6 +16,8 @@ import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import { resolveWalletPath, walletAddress } from '../lib/wallet-config.ts';
 import { cancelOffer, listOffers, makeOffer, standingOf, takeOffer } from '../lib/swap/offers.ts';
 import { prepareMake, prepareTake, readOfferArg } from '../lib/swap/request.ts';
+import { receiptJson, receiptOf } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { receiptText } from '../ui/receipt.ts';
 
 const legJson = ({ token, amount }: SwapLeg) => ({ token, amount: amount.toString() });
 const termsJson = ({ give, want }: SwapTerms) => ({ give: legJson(give), want: legJson(want) });
@@ -95,12 +97,15 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
       try {
         const spinner = spinnerFor('Checking the offer, adding this half and proving the swap...');
         const txHash = await takeOffer(session, offer, agreed, target.networkConfig, now, ctx.signal);
+        spinner.update('Waiting for the indexer to list it...');
+        const receipt = await receiptOf(target.networkConfig.indexer, txHash, ctx.signal);
         spinner.stop('Swap submitted');
         if (jsonMode) {
-          ctx.output.result({ subcommand: 'take', network: target.network, id: offer.envelope.id, txHash });
+          ctx.output.result({ subcommand: 'take', network: target.network, id: offer.envelope.id, txHash, ...receiptJson(receipt) });
           return;
         }
         ctx.output.stdout(txHash + '\n');
+        ctx.output.stderr('\n' + receiptText(receipt, txHash));
         ctx.output.stderr('\n' + dim('  Verify: midnight balance --shielded') + '\n\n');
       } finally {
         await session.close();
@@ -117,13 +122,18 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
       try {
         const spinner = spinnerFor('Spending the offer\'s coins back to this wallet...');
         const outcome = await cancelOffer(session, target.networkConfig, address, id, ctx.signal);
+        if (outcome.txHash !== undefined) spinner.update('Waiting for the indexer to list it...');
+        const receipt = outcome.txHash === undefined ? undefined : await receiptOf(target.networkConfig.indexer, outcome.txHash, ctx.signal);
         spinner.stop(outcome.txHash === undefined ? 'It was taken already' : 'Offer cancelled');
         const offer = [...outcome.cancelled, ...outcome.alreadyTaken][0]!;
         if (jsonMode) {
-          ctx.output.result({ subcommand: 'cancel', network: target.network, id: offer.id, cancelled: outcome.txHash !== undefined, txHash: outcome.txHash ?? null });
+          ctx.output.result({ subcommand: 'cancel', network: target.network, id: offer.id, cancelled: outcome.txHash !== undefined, txHash: outcome.txHash ?? null, ...(receipt === undefined ? {} : receiptJson(receipt)) });
           return;
         }
-        if (outcome.txHash !== undefined) ctx.output.stdout(outcome.txHash + '\n');
+        if (outcome.txHash !== undefined) {
+          ctx.output.stdout(outcome.txHash + '\n');
+          if (receipt !== undefined) ctx.output.stderr('\n' + receiptText(receipt, outcome.txHash) + '\n');
+        }
         else ctx.output.stderr('\n' + dim(`  ${offer.id.slice(0, 16)}… was taken before it could be cancelled; it is closed.`) + '\n\n');
       } finally {
         await session.close();

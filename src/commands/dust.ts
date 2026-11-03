@@ -14,6 +14,8 @@ import { header, keyValue, divider, formatDust, successMessage, toDust } from '@
 import { bold, dim, yellow } from '@kuiralabs/midnight-cli-core/ui/colors';
 
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { type Receipt, receiptJson, receiptOf } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { receiptText } from '../ui/receipt.ts';
 
 export default async function dustCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const subcommand = args.subcommand;
@@ -271,12 +273,18 @@ async function dustRegister(
       onSyncWarning: (_tag, msg) => spinner.update(`Syncing wallet... (${msg}, retrying)`),
     });
     const dustBal = result.dustBalance;
+    let receipt: Receipt | undefined;
+    if (result.txHash) {
+      spinner.update('Waiting for the indexer to list it...');
+      receipt = await receiptOf(networkConfig.indexer, result.txHash, ctx.signal);
+    }
 
     spinner.stop(result.alreadyAvailable ? 'Dust already available' : 'Dust registration complete');
 
     if (jsonMode) {
       const json: Record<string, unknown> = { subcommand: 'register', dustBalance: toDust(dustBal) };
       if (result.txHash) json.txHash = result.txHash;
+      if (receipt) Object.assign(json, receiptJson(receipt));
       ctx.output.result(json);
       return;
     }
@@ -286,7 +294,8 @@ async function dustRegister(
       result.alreadyAvailable
         ? `Dust tokens already available: ${formatDust(dustBal)}`
         : `Dust tokens available: ${formatDust(dustBal)}`,
-    ) + '\n\n');
+    ) + '\n');
+    ctx.output.stderr((receipt && result.txHash ? receiptText(receipt, result.txHash) : '') + '\n');
   } catch (err) {
     spinner.fail('Failed');
     throw err;

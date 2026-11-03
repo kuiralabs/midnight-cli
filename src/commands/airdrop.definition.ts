@@ -59,7 +59,9 @@ export const airdropDefinition: CommandDefinition = {
       'midnight airdrop 100 --shielded --wallet mn_shield-addr_undeployed1...',
     ],
     jsonFields: {
-      txHash: 'Transaction hash',
+      txHash: 'The transaction\'s identifier (midnight tx status takes it)',
+      receipt: 'The transaction once the indexer lists it: blockHeight, blockHash, blockTime, fee (DUST, exact), feeSpecks, result; null when it has not within 60 s',
+      receiptMissing: 'Why receipt is null; check later with midnight tx status <txHash>',
       amount: 'Amount airdropped (NIGHT string)',
       recipient: 'Recipient address (unshielded airdrop)',
       shieldedAddress: 'Shielded address (--shielded airdrop)',
