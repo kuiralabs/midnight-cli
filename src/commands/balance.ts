@@ -1,20 +1,16 @@
 // balance command — check unshielded + shielded balance via full wallet sync
-// For positional address: unshielded only (GraphQL, no facade needed)
+// For positional address: unshielded only (GraphQL, no facade)
 
-import { type ParsedArgs, getFlag, hasFlag, isMinimalMode } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { type NetworkName, isValidNetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { saveShieldedAddress, findWalletByAddress } from '../lib/wallet-config.ts';
-import { resolveSeedSource } from '../lib/seed-resolver.ts';
-import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import { applyEndpointOverrides } from '@kuiralabs/midnight-cli-core/lib/network';
-import { shieldedSyncEnabled, shieldedDisabledReason } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
+import { type ParsedArgs, hasFlag, isMinimalMode } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { findWalletByAddress } from '../lib/wallet-config.ts';
+import { walletSourceOf } from '../lib/seed-resolver.ts';
+import { networkChoiceFromArgs, networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
+import { shieldedDisabledReason } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
 import { isNativeToken } from '@kuiralabs/midnight-chain/lib/balance-subscription';
-import { assertLedgerSupported, fetchProtocolVersion } from '@kuiralabs/midnight-chain/lib/ledger-guard';
-import { getChainGenesisHash } from '@kuiralabs/midnight-chain/lib/chain-id';
-import { createEtaEstimator, formatSyncStatus } from '../lib/sync-eta.ts';
+import { addressNetwork, readAddressBalance, readWalletBalance } from '../lib/wallet/balance.ts';
 import { header, keyValue, divider, formatNight, formatAddress, toNight } from '@kuiralabs/midnight-cli-core/ui/format';
 import { bold, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
-import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import { spinnerReporter } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
@@ -28,51 +24,19 @@ export default async function balanceCommand(args: ParsedArgs, ctx: CallContext)
   return walletBalance(args, ctx);
 }
 
-/**
- * Pull the network name out of a Bech32m address HRP. Addresses look like
- * `mn_addr_<network>1...` so we slice between the second underscore and the
- * `1` separator. Returns null when the format doesn't match a known network.
- */
-function inferNetworkFromAddress(address: string): NetworkName | null {
-  const match = address.match(/^mn_addr_([a-z]+)1/);
-  if (!match) return null;
-  const candidate = match[1];
-  return isValidNetworkName(candidate) ? candidate : null;
-}
-
 // ── Positional address: unshielded only via GraphQL ──
 
 async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const address = args.subcommand!;
   ctx.diagnostics.line('balance', `address=${address}`);
-
-  // Bech32m addresses encode the network in their HRP
-  // (mn_addr_undeployed1..., mn_addr_preprod1..., mn_addr_preview1...).
-  // When the caller didn't pass --network, infer from the address rather
-  // than defaulting to whatever the config says — otherwise users hit a
-  // confusing "expected HRP X, but was Y" error from the indexer.
-  // When --network is explicit and disagrees with the HRP, fail loudly so
-  // the mismatch surfaces at the CLI layer instead of as a GraphQL error.
-  const inferredNetwork = inferNetworkFromAddress(address);
-  const explicitNetwork = getFlag(args, 'network');
-  if (explicitNetwork && inferredNetwork && explicitNetwork !== inferredNetwork) {
-    throw new UsageError(
-      `Address belongs to ${inferredNetwork} but --network is ${explicitNetwork}.\n` +
-      `Drop --network (we'll infer from the address) or pass an address for ${explicitNetwork}.`
-    );
-  }
-  if (!explicitNetwork && inferredNetwork) {
-    args = { ...args, flags: { ...args.flags, network: inferredNetwork } };
-  }
-
-  const root = ctx.config.paths.stateRoot;
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root }, ctx.config.settings);
+  const choice = networkChoiceFromArgs(args);
 
   // Shielded balances are private: reading one needs the wallet's secret key,
   // which an address alone doesn't carry. If this address belongs to one of our
   // wallets we have the seed → run the full wallet sync (which shows shielded).
   // Otherwise there's nothing to decrypt with → fail with a clear, actionable error.
   if (hasFlag(args, 'shielded')) {
+    const { network: networkName, root } = networkTargetOf(ctx.host, { ...choice, network: addressNetwork(address, choice.network) });
     const owned = await findWalletByAddress(root, address, ctx.host.engines);
     if (owned) {
       ctx.diagnostics.line('balance', `shielded positional → wallet ${owned.wallet.name} on ${owned.network}`);
@@ -90,28 +54,16 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
     );
   }
 
-  applyEndpointOverrides(networkConfig, {
-    proofServer: getFlag(args, 'proof-server'),
-    node: getFlag(args, 'node'),
-    indexerWS: getFlag(args, 'indexer-ws'),
-  }, networkName, root);
-
-  const spinner = ctx.progress.start(`Checking balance on ${networkName}...`);
-
+  const progress = spinnerReporter(ctx.progress, false);
   try {
-    const result = await (await ctx.host.engines.for(networkName)).wallet.unshieldedBalance(address, networkConfig, {
+    const result = await readAddressBalance(ctx.host, address, {
+      ...choice,
       forceFresh: hasFlag(args, 'no-cache'),
       signal: ctx.signal,
       log: ctx.diagnostics.line,
-      onProgress: (current, highest) => {
-        if (highest > 0) {
-          const pct = Math.round((current / highest) * 100);
-          spinner.update(`Syncing transactions... ${pct}%`);
-        }
-      },
+      onProgress: progress.report,
     });
-
-    spinner.stop(`Synced ${result.txCount} transactions`);
+    const networkName = result.network;
 
     if (hasFlag(args, 'json')) {
       const balances: Record<string, string> = {};
@@ -164,7 +116,7 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
 
     ctx.output.stderr('\n' + divider() + '\n\n');
   } catch (err) {
-    spinner.fail('Failed');
+    progress.fail('Failed');
     throw err;
   }
 }
@@ -172,143 +124,53 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
 // ── Wallet-based: full facade sync, both unshielded + shielded ──
 
 async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> {
-  const root = ctx.config.paths.stateRoot;
-  const { name: networkName, config: networkConfig } = resolveNetwork({ args, configDir: root }, ctx.config.settings);
-  ctx.diagnostics.line('balance', `network=${networkName} indexerWS=${networkConfig.indexerWS}`);
-  // Seed source: --seed → MN_SEED → --wallet <name> → active wallet (shared resolver).
-  const { seed: seedBuffer, walletPath, config } = await resolveSeedSource(args, root, ctx.host);
-  ctx.diagnostics.line('balance', `wallet path=${walletPath ?? '(from --seed/MN_SEED)'}`);
-  // Derive the unshielded address from the seed so a --seed/MN_SEED caller (no wallet
-  // file) behaves identically to a named wallet — for a wallet this equals the stored one.
-  const engine = await ctx.host.engines.for(networkName);
-  const address = config?.addresses[networkName] ?? engine.keys.unshieldedAddress(seedBuffer, networkName);
-  const shieldedAddrStr = config?.shieldedAddresses?.[networkName] ?? '';
-
-  applyEndpointOverrides(networkConfig, {
-    proofServer: getFlag(args, 'proof-server'),
-    node: getFlag(args, 'node'),
-    indexerWS: getFlag(args, 'indexer-ws'),
-  }, networkName, root);
-
-  // Keep the SDK's transient errors and RPC noise off the terminal while this runs.
-  const stopListening = ctx.sdkWarnings.listen(undefined);
-  const noCache = hasFlag(args, 'no-cache');
   const isJson = hasFlag(args, 'json');
-  const nightToken = engine.ledger.nightTokenId();
-
-  let activeSpinner: Spinner | null = null;
+  // --json shows no step on the terminal.
+  const progress = spinnerReporter(ctx.progress, isJson);
 
   try {
-
-    // Header + address chrome (we already have everything except live balances).
-    if (!isJson) {
-      ctx.output.stderr('\n' + header('Balance') + '\n\n');
-      ctx.output.stderr(keyValue('Address', formatAddress(address)) + '\n');
-      if (shieldedAddrStr) {
-        ctx.output.stderr(keyValue('Shielded', formatAddress(shieldedAddrStr)) + '\n');
-      }
-      ctx.output.stderr(keyValue('Network', networkName) + '\n');
-      ctx.output.stderr('\n  ' + bold('Unshielded') + '\n');
-    }
-
-    // ── Phase 1: fast unshielded via GraphQL (no facade, no proof server) ──
-    if (!isJson) activeSpinner = ctx.progress.start('Checking unshielded...');
-    ctx.diagnostics.line('balance', `phase=unshielded forceFresh=${noCache}`);
-    const unshieldedResult = await (await ctx.host.engines.for(networkName)).wallet.unshieldedBalance(address, networkConfig, {
-      forceFresh: noCache,
+    const result = await readWalletBalance(ctx.host, walletSourceOf(args, ctx.config.settings), {
+      ...networkChoiceFromArgs(args),
+      forceFresh: hasFlag(args, 'no-cache'),
+      forceShielded: hasFlag(args, 'force-shielded'),
       signal: ctx.signal,
       log: ctx.diagnostics.line,
-      // Quiet by design — this finishes in <1s on most networks.
+      sdkWarnings: ctx.sdkWarnings,
+      onProgress: (event) => {
+        if (event.kind === 'wallet-opened') {
+          // Header + address chrome (everything but the balances, which follow as they are read).
+          if (isJson) return;
+          ctx.output.stderr('\n' + header('Balance') + '\n\n');
+          ctx.output.stderr(keyValue('Address', formatAddress(event.address)) + '\n');
+          if (event.shieldedAddress) {
+            ctx.output.stderr(keyValue('Shielded', formatAddress(event.shieldedAddress)) + '\n');
+          }
+          ctx.output.stderr(keyValue('Network', event.network) + '\n');
+          ctx.output.stderr('\n  ' + bold('Unshielded') + '\n');
+        } else if (event.kind === 'unshielded-read') {
+          if (isJson) return;
+          if (event.night > 0n) {
+            ctx.output.stderr(keyValue('  NIGHT', bold(formatNight(event.night))) + '\n');
+            ctx.output.stderr(keyValue('  UTXOs', event.utxoCount.toString()) + '\n');
+          } else {
+            ctx.output.stderr(`    ${dim('No unshielded balance')}\n`);
+          }
+          // Pipeable stdout for unshielded — emit immediately so consumers don't
+          // have to wait for the shielded sync to read the unshielded value.
+          ctx.output.stdout(`NIGHT=${event.night}\n`);
+          ctx.output.stderr('\n  ' + bold('Shielded') + '\n');
+        } else {
+          progress.report(event);
+        }
+      },
     });
-    const unshieldedBalance = unshieldedResult.balances.get(nightToken) ?? 0n;
-    const unshieldedUtxos = unshieldedResult.utxoCount;
-    ctx.diagnostics.line('balance', `unshielded fromCache=${unshieldedResult.fromCache} utxos=${unshieldedUtxos} txs=${unshieldedResult.txCount}`);
 
-    if (activeSpinner) {
-      activeSpinner.stop('Unshielded ready');
-      activeSpinner = null;
-      if (unshieldedBalance > 0n) {
-        ctx.output.stderr(keyValue('  NIGHT', bold(formatNight(unshieldedBalance))) + '\n');
-        ctx.output.stderr(keyValue('  UTXOs', unshieldedUtxos.toString()) + '\n');
-      } else {
-        ctx.output.stderr(`    ${dim('No unshielded balance')}\n`);
-      }
-    }
-
-    // Pipeable stdout for unshielded — emit immediately so consumers don't
-    // have to wait for the shielded sync to read the unshielded value.
-    if (!isJson) {
-      ctx.output.stdout(`NIGHT=${unshieldedBalance}\n`);
-      ctx.output.stderr('\n  ' + bold('Shielded') + '\n');
-    }
-
-    // ── Phase 2: shielded via facade sync (slower — needs ZK keys + WASM state) ──
-    // Skipped where shielded is unusable (no faucet on preview/preprod) unless
-    // --force-shielded is passed. This is the slow part of `mn balance`; skipping
-    // it makes hosted-network balance checks near-instant.
-    const shieldedEnabled = shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded'));
-    let liveShieldedAddrStr = shieldedAddrStr;
-    let shieldedBalance = 0n;
-    let shieldedCoins = 0;
-    let pendingCoins = 0;
-    let shieldedTokens: ReadonlyMap<string, bigint> = new Map();
-
-    if (shieldedEnabled) {
-      if (!isJson) activeSpinner = ctx.progress.start('Syncing shielded...');
-      const eta = createEtaEstimator();
-
-      // Live shielded address is pure key derivation — no facade sync needed.
-      liveShieldedAddrStr = engine.keys.shieldedAddress(seedBuffer, networkName);
-      // Cache the shielded address only when there's a backing wallet file (skip for --seed/MN_SEED).
-      if (walletPath) saveShieldedAddress(walletPath, networkName, liveShieldedAddrStr);
-
-      // Shielded balance via the indexer-direct zswap-event reader + cache: it
-      // replays `zswapLedgerEvents` with the full secret keys (reconciling
-      // receives AND spends), replacing the facade's cold sync — ~50-70s first
-      // time on hosted nets, incremental after, memory-bounded. chainId
-      // invalidates the cache on chain reset.
-      await assertLedgerSupported(networkName, networkConfig, fetchProtocolVersion, ctx.signal);
-      // Null when the node can't say (the cache check is then skipped); a cancelled call stops here.
-      const chainId = (await getChainGenesisHash(networkConfig.node, ctx.signal)) ?? undefined;
-      const shieldedResult = await engine.readers.shieldedBalance(
-        seedBuffer,
-        networkName,
-        networkConfig.indexerWS,
-        {
-          root,
-          forceFresh: noCache,
-          chainId,
-          signal: ctx.signal,
-          onProgress: (applied, highest) => {
-            if (!activeSpinner) return;
-            const snap = eta.sample({ applied, highest, t: Date.now() });
-            activeSpinner.update(formatSyncStatus(snap, 'Syncing shielded'));
-          },
-        },
-      );
-      shieldedBalance = shieldedResult.balance;
-      shieldedCoins = shieldedResult.availableCoins;
-      shieldedTokens = shieldedResult.tokens;
-      pendingCoins = 0; // confirmed chain state from events; no in-flight coins
-
-      if (activeSpinner) {
-        activeSpinner.stop('Shielded ready');
-        activeSpinner = null;
-        if (shieldedBalance > 0n) {
-          ctx.output.stderr(keyValue('  NIGHT', bold(formatNight(shieldedBalance))) + '\n');
-          ctx.output.stderr(keyValue('  Coins', `${shieldedCoins} available, ${pendingCoins} pending`) + '\n');
-        }
-        // Other tokens by their full raw type: what `mn swap` and transfers take.
-        for (const [tokenType, amount] of shieldedTokens) {
-          ctx.output.stderr(keyValue('  Token', `${bold(amount.toString())} ${dim(tokenType)}`) + '\n');
-        }
-        if (shieldedBalance === 0n && shieldedTokens.size === 0) {
-          ctx.output.stderr(`    ${dim('No shielded balance')}\n`);
-        }
-      }
-    } else if (!isJson) {
-      ctx.output.stderr(`    ${dim('Skipped — ' + shieldedDisabledReason(networkName))}\n`);
-    }
+    const { network: networkName, unshielded, shielded } = result;
+    const shieldedNight = shielded?.night ?? 0n;
+    const shieldedCoins = shielded?.availableCoins ?? 0;
+    // Confirmed chain state from events: no coins in flight.
+    const pendingCoins = 0;
+    const shieldedTokens: ReadonlyMap<string, bigint> = shielded?.tokens ?? new Map();
 
     if (isJson) {
       const tokens = Object.fromEntries([...shieldedTokens].map(([tokenType, amount]) => [tokenType, amount.toString()]));
@@ -319,32 +181,46 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
       if (isMinimalMode(args)) {
         ctx.output.result({
           network: networkName,
-          unshielded: { NIGHT: toNight(unshieldedBalance), utxoCount: unshieldedUtxos },
-          shielded: { NIGHT: toNight(shieldedBalance), availableCoins: shieldedCoins, pendingCoins, tokens },
-          shieldedSynced: shieldedEnabled,
+          unshielded: { NIGHT: toNight(unshielded.night), utxoCount: unshielded.utxoCount },
+          shielded: { NIGHT: toNight(shieldedNight), availableCoins: shieldedCoins, pendingCoins, tokens },
+          shieldedSynced: shielded !== null,
         });
         return;
       }
       ctx.output.result({
-        address,
-        shieldedAddress: liveShieldedAddrStr,
+        address: result.address,
+        shieldedAddress: result.shieldedAddress ?? '',
         network: networkName,
-        unshielded: { NIGHT: toNight(unshieldedBalance), utxoCount: unshieldedUtxos },
-        shielded: { NIGHT: toNight(shieldedBalance), availableCoins: shieldedCoins, pendingCoins, tokens },
-        shieldedSynced: shieldedEnabled,
+        unshielded: { NIGHT: toNight(unshielded.night), utxoCount: unshielded.utxoCount },
+        shielded: { NIGHT: toNight(shieldedNight), availableCoins: shieldedCoins, pendingCoins, tokens },
+        shieldedSynced: shielded !== null,
       });
       return;
     }
 
+    if (shielded !== null) {
+      if (shieldedNight > 0n) {
+        ctx.output.stderr(keyValue('  NIGHT', bold(formatNight(shieldedNight))) + '\n');
+        ctx.output.stderr(keyValue('  Coins', `${shieldedCoins} available, ${pendingCoins} pending`) + '\n');
+      }
+      // Other tokens by their full raw type: what `mn swap` and transfers take.
+      for (const [tokenType, amount] of shieldedTokens) {
+        ctx.output.stderr(keyValue('  Token', `${bold(amount.toString())} ${dim(tokenType)}`) + '\n');
+      }
+      if (shieldedNight === 0n && shieldedTokens.size === 0) {
+        ctx.output.stderr(`    ${dim('No shielded balance')}\n`);
+      }
+    } else {
+      ctx.output.stderr(`    ${dim('Skipped — ' + shieldedDisabledReason(networkName))}\n`);
+    }
+
     // When shielded was skipped, say so on stdout too — `=0` would read as a
     // confirmed zero to a script parsing the pipeable output.
-    ctx.output.stdout(`SHIELDED_NIGHT=${shieldedEnabled ? shieldedBalance : 'skipped'}\n`);
+    ctx.output.stdout(`SHIELDED_NIGHT=${shielded !== null ? shieldedNight : 'skipped'}\n`);
     for (const [tokenType, amount] of shieldedTokens) ctx.output.stdout(`SHIELDED_${tokenType}=${amount}\n`);
     ctx.output.stderr('\n' + divider() + '\n\n');
   } catch (err) {
-    activeSpinner?.fail('Failed');
+    progress.fail('Failed');
     throw err;
-  } finally {
-    stopListening();
   }
 }

@@ -10,6 +10,8 @@ import * as path from 'node:path';
 import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
 import { NoPayerError, resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
+import { networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
+import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { NoAccountError } from '../lib/grant/prepare.ts';
 import { servePayerAt } from '../lib/serve-payer.ts';
 import { probeServeNetwork } from '../lib/serve-manager.ts';
@@ -56,6 +58,41 @@ describe('resolvePayingTarget', () => {
     saveCliConfig({ network: 'preprod' }, stateRootIn(home));
     expect(resolvePayingTarget(parseArgs(['contract', 'deploy']), 'contract', 'deploy', stateRootIn(home), host).network).toBe('preprod');
     expect(resolvePayingTarget(parseArgs(['contract', 'deploy', '--network', 'preview']), 'contract', 'deploy', stateRootIn(home), host).network).toBe('preview');
+  });
+});
+
+describe('networkTargetOf', () => {
+  const GIVEN = { node: 'ws://localhost:29944', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws', proofServer: 'http://localhost:26300' };
+  const hostAt = (root: string) => createHost({ paths: { stateRoot: root, home } });
+
+  it('acts on undeployed when no network is given, with the endpoints given, under the host\'s state root', () => {
+    const target = networkTargetOf(hostAt(stateRootIn(home)), GIVEN);
+    expect(target.network).toBe('undeployed');
+    expect(target.root).toBe(stateRootIn(home));
+    expect(target.endpoints).toEqual(GIVEN);
+    expect(target.networkConfig.indexer).toBe('http://localhost:28088/api/v4/graphql');
+    expect(target.networkConfig.proofServer).toBe('http://localhost:26300');
+  });
+
+  it('acts on the network saved under each host\'s own state root, and on the one given over it', () => {
+    const rootA = path.join(home, 'a');
+    const rootB = path.join(home, 'b');
+    saveCliConfig({ network: 'preprod' }, rootA);
+    saveCliConfig({ network: 'preview' }, rootB);
+    expect(networkTargetOf(hostAt(rootA), GIVEN).network).toBe('preprod');
+    expect(networkTargetOf(hostAt(rootB), GIVEN).network).toBe('preview');
+    expect(networkTargetOf(hostAt(rootA), { ...GIVEN, network: 'undeployed' }).network).toBe('undeployed');
+  });
+
+  it('refuses a name that is no network\'s', () => {
+    expect(() => networkTargetOf(hostAt(stateRootIn(home)), { ...GIVEN, network: 'mainnet' as NetworkName })).toThrow('Invalid network: "mainnet"');
+  });
+
+  it('gives what resolvePayingTarget gives for the same flags', () => {
+    const args = parseArgs(['contract', 'deploy', '--network', 'undeployed', ...ENDPOINTS]);
+    const { host: _a, ...fromArgs } = resolvePayingTarget(args, 'contract', 'deploy', stateRootIn(home), host);
+    const { host: _b, ...fromChoice } = networkTargetOf(hostAt(stateRootIn(home)), { network: 'undeployed', ...GIVEN });
+    expect(fromChoice).toEqual(fromArgs);
   });
 });
 

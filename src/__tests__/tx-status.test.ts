@@ -10,7 +10,8 @@ import { join } from 'node:path';
 import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { CancelledError, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { IndexerQueryError } from '@kuiralabs/midnight-chain/lib/indexer-graphql';
-import { fetchTransactionStatus, parseTxReference, waitForTransactionStatus } from '@kuiralabs/midnight-chain/lib/tx-status';
+import { fetchTransactionStatus, parseTxReference, transactionStatus, waitForTransactionStatus } from '@kuiralabs/midnight-chain/lib/tx-status';
+import type { ProgressEvent } from '@kuiralabs/midnight-cli-core/lib/progress';
 import { receiptJson, receiptOf, transactionStatusJson } from '@kuiralabs/midnight-chain/lib/tx-receipt';
 import txCommand from '@kuiralabs/midnight-chain/commands/tx';
 import { startLocalIndexer, type LocalIndexer } from './helpers/local-indexer.ts';
@@ -113,6 +114,38 @@ describe('waitForTransactionStatus', () => {
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 50);
     await expect(waitForTransactionStatus(indexer.url, { identifier: IDENTIFIER }, 10_000, controller.signal, 20)).rejects.toThrow(CancelledError);
+  });
+});
+
+describe('transactionStatus', () => {
+  it('asks once, saying so, and gives what the indexer knows', async () => {
+    indexer = await startLocalIndexer(() => answer([regular('SUCCESS')]));
+    const said: ProgressEvent[] = [];
+    const status = await transactionStatus({ indexer: indexer.url, ref: { hash: HASH }, onProgress: (event) => said.push(event) });
+    expect(status).toMatchObject({ state: 'final', result: 'SUCCESS', feeSpecks: 845170285714286n, block: { height: BLOCK.height } });
+    expect(indexer.requests).toHaveLength(1);
+    expect(said).toEqual([{ kind: 'start', message: 'Asking the indexer...' }, { kind: 'done', message: 'Final' }]);
+  });
+
+  it('with wait, asks until the time passes, and says it was not found', async () => {
+    indexer = await startLocalIndexer(() => answer([]));
+    const said: ProgressEvent[] = [];
+    const status = await transactionStatus({ indexer: indexer.url, ref: { identifier: IDENTIFIER }, wait: true, timeoutMs: 100, onProgress: (event) => said.push(event) });
+    expect(status).toEqual({ state: 'notFound' });
+    expect(said).toEqual([{ kind: 'start', message: 'Waiting for the indexer to list it...' }, { kind: 'done', message: 'Not found' }]);
+  });
+
+  it('never asks when its call is cancelled already', async () => {
+    indexer = await startLocalIndexer(() => answer([regular('SUCCESS')]));
+    const said: ProgressEvent[] = [];
+    await expect(transactionStatus({ indexer: indexer.url, ref: { hash: HASH }, signal: AbortSignal.abort(), onProgress: (event) => said.push(event) })).rejects.toThrow(CancelledError);
+    expect(indexer.requests).toEqual([]);
+    expect(said).toEqual([]);
+  });
+
+  it('throws IndexerQueryError when the indexer refuses', async () => {
+    indexer = await startLocalIndexer(() => JSON.stringify({ errors: [{ message: 'invalid transaction hash' }] }));
+    await expect(transactionStatus({ indexer: indexer.url, ref: { hash: HASH } })).rejects.toBeInstanceOf(IndexerQueryError);
   });
 });
 

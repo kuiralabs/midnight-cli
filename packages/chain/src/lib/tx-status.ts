@@ -7,12 +7,15 @@
 // (33 bytes): what mn reports as a submitted transaction's `txHash` is the
 // wallet SDK's identifier.
 
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { sleep } from '@kuiralabs/midnight-cli-core/lib/sleep';
+import { progressSteps, type ProgressListener } from '@kuiralabs/midnight-cli-core/lib/progress';
 import { queryIndexer } from './indexer-graphql.ts';
 
 const QUERY_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 2_000;
+/** How long a wait for the indexer to list a transaction lasts when not told. */
+export const TX_STATUS_WAIT_MS = 120_000;
 
 /** How a transaction was looked up: by its hash or by one of its identifiers. */
 export type TxReference = { hash: string } | { identifier: string };
@@ -113,4 +116,34 @@ export async function waitForTransactionStatus(
     if (status.state === 'final' || left <= 0) return status;
     await sleep(Math.min(intervalMs, left), signal);
   }
+}
+
+export interface TransactionStatusOptions {
+  /** The indexer's GraphQL URL (HTTP), as a network's `indexer` endpoint. */
+  indexer: string;
+  ref: TxReference;
+  /** Ask until the indexer has the transaction or `timeoutMs` passes; otherwise ask once. */
+  wait?: boolean;
+  /** How long `wait` asks, in milliseconds (TX_STATUS_WAIT_MS when not given). */
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  onProgress?: ProgressListener;
+}
+
+/**
+ * What became of a transaction: what the indexer knows of it now, or, with
+ * `wait`, once it lists it or the time passes. Throws CancelledError when
+ * `signal` cancels it (a call cancelled already never asks), and
+ * IndexerQueryError when the indexer can't answer.
+ */
+export async function transactionStatus(options: TransactionStatusOptions): Promise<TransactionStatus> {
+  const { indexer, ref, wait = false, timeoutMs = TX_STATUS_WAIT_MS, signal } = options;
+  throwIfCancelled(signal);
+  const steps = progressSteps(options.onProgress);
+  steps.start(wait ? 'Waiting for the indexer to list it...' : 'Asking the indexer...');
+  const status = wait
+    ? await waitForTransactionStatus(indexer, ref, timeoutMs, signal)
+    : await fetchTransactionStatus(indexer, ref, signal);
+  steps.done(status.state === 'final' ? 'Final' : 'Not found');
+  return status;
 }

@@ -2,6 +2,7 @@
 // Supports interleaved log lines without breaking the animation
 
 import { teal, isColorEnabled } from './colors.ts';
+import type { ProgressEvent } from '../lib/progress.ts';
 
 const BRAILLE_FRAMES: readonly string[] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const FRAME_INTERVAL_MS = 80;
@@ -57,6 +58,46 @@ export function createProgress(report: ProgressReport = reportNowhere): Progress
     },
     silent: () => silentSpinner(report),
     active: () => active,
+  };
+}
+
+/** A library function's progress, shown on a call's spinners: one spinner per step. */
+export interface SpinnerReporter {
+  /** Shows one event: a step's start opens a spinner, its updates change it, its end stops it. */
+  report(event: ProgressEvent): void;
+  /** Stops the running step's spinner with a failure mark, as a handler does when the function throws. */
+  fail(message?: string): void;
+}
+
+/**
+ * Shows a library function's steps on `progress`'s spinners. `silent` (a
+ * `--json` call) shows nothing on the terminal, while what each step says,
+ * its start included, still reaches the call's report (the MCP server's
+ * progress notifications).
+ */
+export function spinnerReporter(progress: Progress, silent: boolean): SpinnerReporter {
+  let current: Spinner | null = null;
+  return {
+    report(event) {
+      if (event.kind === 'start') {
+        current?.stop();
+        if (silent) {
+          current = progress.silent();
+          current.update(event.message);
+        } else {
+          current = progress.start(event.message);
+        }
+      } else if (event.kind === 'update') {
+        current?.update(event.message);
+      } else {
+        current?.stop(event.message);
+        current = null;
+      }
+    },
+    fail(message) {
+      current?.fail(message);
+      current = null;
+    },
   };
 }
 
