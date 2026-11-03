@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { assertEndpointUsable, endpointRefusalFromWsError } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
 import { NATIVE_TOKEN_TYPE, BALANCE_CHECK_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { CancelledError, NetworkError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export type { BalanceSummary } from '@kuiralabs/midnight-cli-core/lib/engine';
 import type { BalanceSummary } from '@kuiralabs/midnight-cli-core/lib/engine';
@@ -207,7 +207,7 @@ export function checkBalance(
         const reason = error.message?.trim()
           ? error.message
           : `unable to reach ${indexerWS} (connection refused, DNS, or TLS error). Is the indexer running?`;
-        reject(endpointRefusalFromWsError(indexerWS, error) ?? new Error(`WebSocket connection failed: ${reason}`));
+        reject(endpointRefusalFromWsError(indexerWS, error) ?? new NetworkError(`WebSocket connection failed: ${reason}`, { cause: error }));
       }
     });
 

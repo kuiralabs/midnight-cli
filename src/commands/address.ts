@@ -7,6 +7,7 @@ import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-net
 import { keyValue, divider, formatAddress } from '@kuiralabs/midnight-cli-core/ui/format';
 import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export default async function addressCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // `address` is a seed-derivation tool with no active-wallet notion → requireExplicit.
@@ -16,7 +17,7 @@ export default async function addressCommand(args: ParsedArgs, ctx: CallContext)
   const indexStr = getFlag(args, 'index');
   const keyIndex = indexStr !== undefined ? parseInt(indexStr, 10) : 0;
   if (isNaN(keyIndex) || keyIndex < 0 || !Number.isInteger(Number(indexStr ?? '0'))) {
-    throw new Error('Key index must be a non-negative integer');
+    throw new UsageError('Key index must be a non-negative integer');
   }
 
   const networkName = resolveNetworkName({ args, configDir: root });

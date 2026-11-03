@@ -16,6 +16,7 @@ import { header, keyValue, divider, formatNight, formatAddress, toNight } from '
 import { bold, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
 import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export default async function balanceCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // Positional address → unshielded only (lightweight, no facade)
@@ -55,7 +56,7 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
   const inferredNetwork = inferNetworkFromAddress(address);
   const explicitNetwork = getFlag(args, 'network');
   if (explicitNetwork && inferredNetwork && explicitNetwork !== inferredNetwork) {
-    throw new Error(
+    throw new UsageError(
       `Address belongs to ${inferredNetwork} but --network is ${explicitNetwork}.\n` +
       `Drop --network (we'll infer from the address) or pass an address for ${explicitNetwork}.`
     );
@@ -81,7 +82,7 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
       };
       return walletBalance(delegated, ctx);
     }
-    throw new Error(
+    throw new UsageError(
       `Shielded balances are private — they can only be read with the wallet's secret key, ` +
       `not from an address alone.\n` +
       `This address isn't one of your wallets. Check its shielded balance from the wallet that owns it:\n` +

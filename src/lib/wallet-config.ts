@@ -11,6 +11,17 @@ import { type PassphraseHost, type PassphraseSource, unlockPassphrase } from './
 import { defineHostSlot, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
+/** No wallet by that name, or no wallet file at that path; the message says how to list or make one. */
+export class WalletNotFoundError extends Error {
+  readonly code = 'WALLET_NOT_FOUND';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'WalletNotFoundError';
+    Object.setPrototypeOf(this, WalletNotFoundError.prototype);
+  }
+}
+
 /** What anyone may read of a wallet: its addresses, and whether its secrets are sealed. No secret. */
 export interface WalletConfig {
   addresses: Record<NetworkName, string>;
@@ -160,7 +171,7 @@ export function setActiveWallet(root: string, name: string): void {
   }
   const walletPath = path.join(getWalletsDir(root), `${name}.json`);
   if (!fs.existsSync(walletPath)) {
-    throw new Error(
+    throw new WalletNotFoundError(
       `Wallet "${name}" not found.\nRun "midnight wallet list" to see available wallets.`
     );
   }
@@ -285,7 +296,7 @@ export function assertWalletRemovable(root: string, name: string): string {
   const walletPath = path.join(walletsDir, `${name}.json`);
 
   if (!fs.existsSync(walletPath)) {
-    throw new Error(
+    throw new WalletNotFoundError(
       `Wallet "${name}" not found.\nRun "midnight wallet list" to see available wallets.`
     );
   }
@@ -316,7 +327,7 @@ export function removeWallet(root: string, name: string): void {
 /** Throws, with how to make one, when there is no wallet file at `resolvedPath`. */
 export function assertWalletFileExists(resolvedPath: string): void {
   if (!fs.existsSync(resolvedPath)) {
-    throw new Error(
+    throw new WalletNotFoundError(
       `Wallet file not found: ${resolvedPath}\n` +
       `Generate a wallet first: midnight wallet generate <name> --network <name>`
     );

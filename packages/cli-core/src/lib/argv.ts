@@ -132,7 +132,7 @@ export function rejectNoCacheForWrites(args: ParsedArgs): void {
 export function requireFlag(args: ParsedArgs, name: string, description: string): string {
   const value = getFlag(args, name);
   if (value === undefined) {
-    throw new Error(`Missing required flag: --${name} <${description}>`);
+    throw new UsageError(`Missing required flag: --${name} <${description}>`);
   }
   return value;
 }

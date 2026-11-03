@@ -130,7 +130,15 @@ export declare function subscribeGraphqlWs<TResult>(wsUrl: string, sub: GraphqlW
 
 ```ts
 export declare class IndexerQueryError extends Error {
-    constructor(reason: string);
+    constructor(reason: string, options?: {
+        cause?: unknown;
+    });
+}
+export declare class IndexerUnreachableError extends IndexerQueryError {
+    readonly code = "NETWORK_ERROR";
+    constructor(reason: string, options?: {
+        cause?: unknown;
+    });
 }
 export declare function queryIndexer<TData>(indexerHttpUrl: string, query: string, variables: Record<string, unknown> | undefined, timeoutMs: number, signal?: AbortSignal): Promise<TData>;
 ```

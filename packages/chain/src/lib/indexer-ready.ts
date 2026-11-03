@@ -6,7 +6,7 @@
 // on localnet), confirming state has been ingested end-to-end.
 
 import { checkBalance } from './balance-subscription.ts';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { SyncTimeoutError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { sleep } from '@kuiralabs/midnight-cli-core/lib/sleep';
 
 export interface WaitForIndexerOptions {
@@ -44,5 +44,5 @@ export async function waitForAddressFunded(
     await sleep(pollIntervalMs, opts.signal);
   }
 
-  throw new Error(`Indexer did not report funds for ${address.slice(0, 20)}… within ${timeoutMs / 1000}s`);
+  throw new SyncTimeoutError(`Indexer did not report funds for ${address.slice(0, 20)}… within ${timeoutMs / 1000}s`);
 }

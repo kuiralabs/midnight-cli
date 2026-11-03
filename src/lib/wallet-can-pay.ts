@@ -3,7 +3,7 @@
 // and no strict sync is needed.
 
 import { NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { DustRequiredError, InsufficientBalanceError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import type { PayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
 import { resolveWalletPath, unlockWallet } from './wallet-config.ts';
@@ -33,7 +33,7 @@ export async function assertWalletCanPay({ network, root, host, networkConfig }:
 
     if (nightBalance === 0n) {
       progress.fail('No NIGHT balance');
-      throw new Error(
+      throw new InsufficientBalanceError(
         `Wallet has 0 NIGHT on ${network}.\n\n` +
         `  Fund your wallet before deploying:\n` +
         `    Address: ${address}\n` +
@@ -46,7 +46,7 @@ export async function assertWalletCanPay({ network, root, host, networkConfig }:
     const dustView = await repo.dustBalance(seedBuffer, networkConfig, { root, notice: host.notice, signal, onStatus: (s) => progress.update(s) });
     if (dustView.balance === 0n && dustView.availableCoins === 0) {
       progress.fail('No dust available');
-      throw new Error(
+      throw new DustRequiredError(
         `Wallet has no dust on ${network}. Dust is required to pay transaction fees.\n\n` +
         `  Register for dust generation:\n` +
         `    Run: midnight dust register --network ${network}\n` +

@@ -19,7 +19,7 @@
 // `partial=true` means "state is valid but not caught up — persist and resume".
 
 import WebSocket from 'ws';
-import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { CancelledError, NetworkError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { assertEndpointUsable, endpointRefusalFromWsError } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
 
 /** Why the subscription settled. `timeout`/`closed-early` are the partial cases. */
@@ -180,7 +180,7 @@ export function subscribeGraphqlWs<TResult>(
       if (caughtUp) finishOk('caught-up', false);
     });
 
-    ws.on('error', (err: Error) => finishErr(endpointRefusalFromWsError(wsUrl, err) ?? new Error(`WebSocket error: ${err.message}`)));
+    ws.on('error', (err: Error) => finishErr(endpointRefusalFromWsError(wsUrl, err) ?? new NetworkError(`WebSocket error: ${err.message}`, { cause: err })));
 
     ws.on('close', () => {
       if (settled) return;

@@ -5,7 +5,7 @@
 // until a non-zero block number appears.
 
 import { callNodeRpc } from './node-rpc.ts';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { SyncTimeoutError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { sleep } from '@kuiralabs/midnight-cli-core/lib/sleep';
 
 export interface WaitForFirstBlockOptions {
@@ -46,5 +46,5 @@ export async function waitForFirstBlock(
     await sleep(pollIntervalMs, opts.signal);
   }
 
-  throw new Error(`Node did not produce a block within ${timeoutMs / 1000}s`);
+  throw new SyncTimeoutError(`Node did not produce a block within ${timeoutMs / 1000}s`);
 }

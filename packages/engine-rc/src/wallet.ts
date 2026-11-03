@@ -16,7 +16,7 @@ import type {
   ServedWalletSession,
   ShieldedTransferParams,
 } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { InsufficientBalanceError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
 import { bindCachesToIndexer, describeIndexerChange } from '@kuiralabs/midnight-cli-core/lib/cache-indexer';
 import { loadWalletCache, saveWalletCache } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
@@ -48,7 +48,7 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
 
       const shieldedBalance = state.shielded.balances[nightToken] ?? 0n;
       if (shieldedBalance < amount) {
-        throw new Error(params.insufficient((Number(shieldedBalance) / 1_000_000).toFixed(6)));
+        throw new InsufficientBalanceError(params.insufficient((Number(shieldedBalance) / 1_000_000).toFixed(6)));
       }
 
       progress.update('Checking dust...');

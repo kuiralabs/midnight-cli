@@ -6,6 +6,7 @@
 import { formatWait } from './duration.ts';
 import { sleep } from './sleep.ts';
 import { DUST_RETRY_DELAY_MS } from './constants.ts';
+import { DustRequiredError } from './errors.ts';
 import { dustShortfallOf } from './sdk-errors.ts';
 import { roughDust, toDust } from '../ui/format.ts';
 
@@ -42,11 +43,11 @@ export function msUntilDust(dust: DustBalanceSource, needed: bigint, now: Date, 
 }
 
 /** Not enough Dust for the fee, with how long until there is. */
-export function dustShortError(have: bigint, needed: bigint, waitMs: number | null): Error {
+export function dustShortError(have: bigint, needed: bigint, waitMs: number | null): DustRequiredError {
   const when = waitMs === null
     ? "This wallet's registered NIGHT won't generate that within a day: register more NIGHT (midnight dust register)."
     : `This wallet's NIGHT generates that in ${formatWait(waitMs)}; retry then.`;
-  return new Error(`Insufficient dust for transaction fees.\nAvailable: ${toDust(have)} DUST, need ≥${toDust(needed)} DUST.\n${when}`);
+  return new DustRequiredError(`Insufficient dust for transaction fees.\nAvailable: ${toDust(have)} DUST, need ≥${toDust(needed)} DUST.\n${when}`);
 }
 
 /**

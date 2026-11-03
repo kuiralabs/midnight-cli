@@ -30,8 +30,10 @@ export class ProgramFailedError extends Error {
   }
 }
 
-/** The program ran past its time limit and was killed. */
+/** The program ran past its time limit and was killed. Its code is NETWORK_ERROR: the programs mn runs with a limit are Docker's, which hang when its daemon or the network does. */
 export class ProgramTimedOutError extends Error {
+  readonly code = 'NETWORK_ERROR';
+
   constructor(readonly command: string, timeoutMs: number) {
     super(`Command timed out (ETIMEDOUT) after ${timeoutMs / 1000}s: ${command}`);
     this.name = 'ProgramTimedOutError';

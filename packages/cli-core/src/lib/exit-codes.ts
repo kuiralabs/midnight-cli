@@ -118,10 +118,23 @@ interface ClassifiedError {
  * the rules below, which read its message.
  */
 export function classifyError(err: Error, codes?: CodeRegistry): ClassifiedError {
+  return (codes === undefined ? undefined : byCode(err, codes)) ?? legacyByMessage(err);
+}
+
+/**
+ * The classification by the error's code alone: UNKNOWN for an error that
+ * carries no code `codes` defines, whatever its message says. Tests use it to
+ * check that a typed error reports its code without the message rules.
+ */
+export function classifyByCode(err: Error, codes: CodeRegistry): ClassifiedError {
+  return byCode(err, codes) ?? { exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.UNKNOWN };
+}
+
+/** The definition of the code `err` carries, as an exit code and code; undefined when `codes` defines none. */
+function byCode(err: Error, codes: CodeRegistry): ClassifiedError | undefined {
   const code = (err as { code?: unknown }).code;
-  const defined = typeof code === 'string' ? codes?.code(code) : undefined;
-  if (defined !== undefined) return { exitCode: defined.exitCode, errorCode: defined.code };
-  return legacyByMessage(err);
+  const defined = typeof code === 'string' ? codes.code(code) : undefined;
+  return defined === undefined ? undefined : { exitCode: defined.exitCode, errorCode: defined.code };
 }
 
 /**

@@ -12,8 +12,21 @@ import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallb
 import { startServeOrReuse } from '../serve-manager.ts';
 import { OWN_COMMAND_DUST_WAIT_MS } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
 import { startBuild } from './build-manager.ts';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { DustRequiredError, InsufficientBalanceError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { sdkSetOf } from '@kuiralabs/midnight-cli-core/lib/engine';
+
+/** A prep step failed: the step's own error is its cause, and its code (DUST_REQUIRED, …) is this one's. */
+export class PrepStepFailedError extends Error {
+  readonly code: string | undefined;
+
+  constructor(step: PrepStepId, cause: unknown) {
+    super(`Prep step "${step}" failed: ${(cause as Error).message}`, { cause });
+    const code = (cause as { code?: unknown } | null)?.code;
+    this.code = typeof code === 'string' ? code : undefined;
+    this.name = 'PrepStepFailedError';
+    Object.setPrototypeOf(this, PrepStepFailedError.prototype);
+  }
+}
 
 /**
  * Run all prep steps defined in the config, in order.
@@ -42,7 +55,7 @@ export async function runPrepSteps(
       const error = (err as Error).message;
       results.push({ step, status: 'fail', duration, error });
       callbacks.onStepComplete(step, 'fail', duration, error);
-      throw new Error(`Prep step "${step}" failed: ${error}`);
+      throw new PrepStepFailedError(step, err);
     }
   }
 
@@ -133,7 +146,7 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
 
   // Balance is zero
   if (network !== 'undeployed') {
-    throw new Error(
+    throw new InsufficientBalanceError(
       `Wallet has 0 NIGHT on ${network}. Fund your wallet before running tests:\n` +
       `  mn airdrop ${amount}   (if faucet available)\n` +
       `  Or transfer NIGHT from another wallet.`
@@ -184,13 +197,13 @@ async function stepDust(config: DappTestConfig, ctx: PrepContext, callbacks: Pre
     // Verify dust is actually available — don't trust silent timeouts
     if (!dustAvailable) {
       if (network !== 'undeployed') {
-        throw new Error(
+        throw new DustRequiredError(
           `Dust not available on ${network}. Register dust and wait for it to generate:\n` +
           `  mn dust register\n` +
           `  mn dust status   (check until dustAvailable: true)`
         );
       }
-      throw new Error(`Dust not available after ${DUST_WAIT_TIMEOUT_MS / 1000}s. The chain may be slow — try again.`);
+      throw new DustRequiredError(`Dust not available after ${DUST_WAIT_TIMEOUT_MS / 1000}s. The chain may be slow — try again.`);
     }
   } finally {
     stopListening();

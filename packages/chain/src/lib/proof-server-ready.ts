@@ -5,7 +5,7 @@
 // polls the proof-server's `/` status endpoint until it returns a 2xx with
 // `{"status":"ok",...}` before `mn localnet up` claims readiness.
 
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { SyncTimeoutError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { sleep } from '@kuiralabs/midnight-cli-core/lib/sleep';
 
 export interface WaitForProofServerOptions {
@@ -57,5 +57,5 @@ export async function waitForProofServerReady(
     await sleep(pollIntervalMs, opts.signal);
   }
 
-  throw new Error(`Proof server at ${probeUrl} did not respond within ${timeoutMs / 1000}s`);
+  throw new SyncTimeoutError(`Proof server at ${probeUrl} did not respond within ${timeoutMs / 1000}s`);
 }
