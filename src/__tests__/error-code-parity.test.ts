@@ -16,66 +16,24 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
-import { CancelledError, CommandFailedError, DustRequiredError, InsufficientBalanceError, ProofTimeoutError, SyncTimeoutError, TransactionRefusedError, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { createApiError, OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core/lib/connector-api';
-import { withEngineCode } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
-import { sessionOver } from '@kuiralabs/midnight-cli-core/lib/wallet-session';
+import { classifyError, CancelledError, CommandFailedError, DustRequiredError, InsufficientBalanceError, SyncTimeoutError, TransactionRefusedError, UsageError, createApiError, OPERATOR_REJECTED_MESSAGE, withTransportCode, parseArgs, requireFlag, dustShortError, ProgramTimedOutError, NATIVE_TOKEN_TYPE, type NetworkConfig, type CommandHandler, createHost, payerFor, openSecret, sealSecret, checkTerms, assertOfferUnexpired, OfferCoinsInUseError, AmbiguousLocalStacksError, BlockfrostLimitError, BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, EndpointShutDownError, OtherSdkSetError, createSdkWarningRouter } from '@kuiralabs/midnight-cli-core';
+import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
+import { ProofTimeoutError, withEngineCode, NotAnOfferError, MixedSdkLayoutError, DustFeeNotGeneratedError, planRegistration } from '@kuiralabs/midnight-cli-core/engine';
 import { Effect } from 'effect';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import { ProvingError } from '@midnightntwrk/wallet-sdk/capabilities/proving';
 import { InsufficientFundsError as NoCoinsCoverIt } from '@midnightntwrk/wallet-sdk/capabilities';
 import { WalletError } from '@midnightntwrk/wallet-sdk/dust/v2';
-import { DustAddress, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
-import { createDAppConnector } from '@kuiralabs/midnight-engine-rc/dapp-connector';
-import { deriveShieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { FORK_SCHEDULE } from '@kuiralabs/midnight-engine-rc/fork-schedule';
-import { NO_TERMINAL, TEST_NETWORK_CONFIG, connectorStub } from './helpers/connector-stub.ts';
-import { agentPaysMerchant, unsealedBytes } from './helpers/ledger-tx.ts';
 import { scriptFailureAtServe } from './helpers/serve-script-failure.ts';
-import { closedPort } from './helpers/closed-port.ts';
+import { closedPort } from '../../test-support/closed-port.ts';
 import { SCRIPT_PRELUDE, executeScript, rpcClientCode } from '../lib/contract/runner.ts';
-import { withTransportCode } from '@kuiralabs/midnight-cli-core/lib/transport-failure';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { WebSocket } from 'ws';
-import { parseArgs, requireFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { dustShortError } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
-import { ProgramTimedOutError } from '@kuiralabs/midnight-cli-core/lib/exec-program';
-import { NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core/lib/constants';
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
-import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import type { CommandHandler } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import { payerFor } from '@kuiralabs/midnight-cli-core/lib/payer';
-import { openSecret, sealSecret } from '@kuiralabs/midnight-cli-core/lib/keystore';
-import { checkTerms, NotAnOfferError } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
-import { assertOfferUnexpired } from '@kuiralabs/midnight-cli-core/lib/offer-envelope';
-import { OfferCoinsInUseError } from '@kuiralabs/midnight-cli-core/lib/open-offers';
-import { AmbiguousLocalStacksError } from '@kuiralabs/midnight-cli-core/lib/network';
-import {
-  BlockfrostLimitError,
-  BlockfrostProjectIdRejectedError,
-  BlockfrostProjectIdRequiredError,
-  EndpointShutDownError,
-} from '@kuiralabs/midnight-cli-core/lib/blockfrost';
-import { MixedSdkLayoutError } from '@kuiralabs/midnight-cli-core/lib/sdk-layout';
-import { OtherSdkSetError } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { DustFeeNotGeneratedError, planRegistration } from '@kuiralabs/midnight-cli-core/lib/dust-registration-plan';
-import { LocalStackUnreachableError, UnsupportedLedgerError } from '@kuiralabs/midnight-chain/lib/ledger-guard';
-import { ChainClockBehindError } from '@kuiralabs/midnight-chain/lib/chain-clock';
-import { waitForFirstBlock } from '@kuiralabs/midnight-chain/lib/node-ready';
-import { waitForAddressFunded } from '@kuiralabs/midnight-chain/lib/indexer-ready';
-import { waitForProofServerReady } from '@kuiralabs/midnight-chain/lib/proof-server-ready';
-import { callNodeRpc } from '@kuiralabs/midnight-chain/lib/node-rpc';
-import { subscribeGraphqlWs } from '@kuiralabs/midnight-chain/lib/graphql-ws-subscription';
-import { checkBalance } from '@kuiralabs/midnight-chain/lib/balance-subscription';
-import { queryIndexer } from '@kuiralabs/midnight-chain/lib/indexer-graphql';
-import { StaleCacheError } from '@kuiralabs/midnight-engine-rc/facade';
+import { LocalStackUnreachableError, UnsupportedLedgerError, ChainClockBehindError, waitForFirstBlock, waitForAddressFunded, waitForProofServerReady, callNodeRpc, subscribeGraphqlWs, checkBalance, queryIndexer } from '@kuiralabs/midnight-chain';
 import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
-import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import * as rx from 'rxjs';
 import { readPassphrase } from '../lib/passphrase.ts';
 import { assertWalletFileExists, assertWalletRemovable, setActiveWallet } from '../lib/wallet-config.ts';
 import { walletSecretFrom } from '../lib/wallet-create.ts';
@@ -83,7 +41,6 @@ import { resolveTransferRequest } from '../lib/transfer-request.ts';
 import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
 import { PrepStepFailedError, runPrepSteps } from '../lib/test/prep-runner.ts';
 import { createPrepContext, type DappTestConfig } from '../lib/test/types.ts';
-import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import walletCommand from '../commands/wallet.ts';
 import generateCommand from '../commands/generate.ts';
@@ -108,8 +65,8 @@ beforeAll(() => {
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 
 const SEED = Buffer.from('00'.repeat(31) + '11', 'hex');
-const ADDRESSES = deriveAllAddresses(SEED);
-const OTHER_ADDRESSES = deriveAllAddresses(Buffer.from('00'.repeat(31) + '22', 'hex'));
+const ADDRESSES = rcKeys.unshieldedAddresses(SEED);
+const OTHER_ADDRESSES = rcKeys.unshieldedAddresses(Buffer.from('00'.repeat(31) + '22', 'hex'));
 
 /** A host on the test's state root, never ~/.midnight, with the engines mn ships. */
 const hostOnRoot = () => createHost({ paths: { stateRoot: root, home: root }, engineLoader: loadInstalledEngine });
@@ -147,19 +104,6 @@ const nodeRefusal = (reason: string) => () => sdkRejection(new SubmissionError({
 const throughRcEngine = (failure: () => Promise<never>) => () => createRcEngine(createHost({ paths: { stateRoot: root, home: root } }), {
   repository: { fetchUnshielded: failure, fetchTip: async () => 'tip-1' },
 }).wallet.unshieldedBalance(ADDRESSES.undeployed, STAND_IN, { forceFresh: true });
-/** A program's wallet session over the rc engine's connector, its facade stubbed at the SDK boundary, submitting what the node refuses with `reason`. */
-const { createBundleStub, mockState } = connectorStub({ createDAppConnector, deriveShieldedAddress, DustAddress, UnshieldedAddress, ledger9ProtocolVersion: FORK_SCHEDULE.v9 });
-const throughSession = (reason: string) => async () => {
-  const bundle = createBundleStub({ stateFn: () => rx.of(mockState({})), submitTransaction: nodeRefusal(reason) });
-  (bundle.facade as unknown as { revert: () => Promise<void> }).revert = async () => {};
-  const connector = createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
-  const session = sessionOver('undeployed', { connector, stop: async () => { connector.dispose(); } }, () => []);
-  try {
-    await session.submit(await session.balanceTransaction(Buffer.from(await unsealedBytes(agentPaysMerchant())).toString('hex')));
-  } finally {
-    await session.close();
-  }
-};
 /** The connector's answer to a submission the node refused with `reason`: its own words over the SDK's error, marked with mn's code. */
 const connectorRefusal = async (reason: string) => {
   const thrown = await nodeRefusal(reason)().catch((e: Error) => e);
@@ -228,7 +172,7 @@ const ROWS: Row[] = [
   ['airdrop with no amount', run(airdropCommand, 'airdrop'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
   ["balance of an address on another network than --network", run(balanceCommand, 'balance', OTHER_ADDRESSES.undeployed, '--network', 'preprod'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
   ["the shielded balance of someone else's address", run(balanceCommand, 'balance', OTHER_ADDRESSES.preview, '--shielded', '--network', 'preview'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
-  ['a shielded transfer where shielded is off', () => resolveTransferRequest(parseArgs(['transfer', deriveAllShieldedAddresses(SEED).preprod, '1', '--wallet', 'alice', '--shielded', '--network', 'preprod']), root, hostOnRoot()), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
+  ['a shielded transfer where shielded is off', () => resolveTransferRequest(parseArgs(['transfer', rcKeys.shieldedAddresses(SEED).preprod, '1', '--wallet', 'alice', '--shielded', '--network', 'preprod']), root, hostOnRoot()), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
 
   // No such wallet: exit 3, by its message.
   ['no wallet of that name', () => setActiveWallet(root, 'nobody'), as('WALLET_NOT_FOUND', 3), as('WALLET_NOT_FOUND', 3)],
@@ -287,14 +231,12 @@ const ROWS: Row[] = [
   ["a saved state the indexer's events don't fit, through the engine", throughRcEngine(() => Promise.reject(new Error('Failed applying dust events: commitment inserted non-linearly'))), as('STALE_CACHE', 6), as('STALE_CACHE', 6)],
   ['a wallet sync past its deadline, in the engine', () => { throw new SyncTimeoutError('Wallet sync timed out'); }, as('SYNC_TIMEOUT', 4), as('SYNC_TIMEOUT', 4)],
   ['a ZK proof that timed out, in the engine (approved Y54: was UNKNOWN)', () => { throw new ProofTimeoutError(); }, as('UNKNOWN', 1), as('PROOF_TIMEOUT', 6)],
-  // A program's wallet session: the connector in this process, reporting as the engine does.
-  ["the node refusing a spent coin, through a program's wallet session", throughSession('1010: Invalid Transaction: Custom error: 115'), as('STALE_UTXO', 6), as('STALE_UTXO', 6)],
+  // A program's wallet session (the connector in this process) and an escaped stale cache are the engines' own errors: their rows are in each engine's tests (wallet-session.test.ts, stale-cache.test.ts).
   // A contract run: the connector at mn serve, the wire, and the script's process.
   ['a contract run the node refused at mn serve (approved Y54: was UNKNOWN)', async () => { const refusal = await connectorRefusal('1010: Invalid Transaction: Custom error: 199'); return scriptFailureAtServe(() => refusal).then((err) => { throw err; }); }, as('UNKNOWN', 1), as('TX_REJECTED', 6)],
   ['a contract run refused a spent coin at mn serve', async () => { const refusal = await connectorRefusal('1010: Invalid Transaction: Custom error: 115'); return scriptFailureAtServe(() => refusal).then((err) => { throw err; }); }, as('STALE_UTXO', 6), as('STALE_UTXO', 6)],
   ['a contract run whose proof timed out at mn serve (approved Y54: was UNKNOWN)', () => scriptFailureAtServe(() => new ProofTimeoutError()).then((err) => { throw err; }), as('UNKNOWN', 1), as('PROOF_TIMEOUT', 6)],
   ['a contract run the operator refused at mn serve', () => scriptFailureAtServe(() => createApiError('Rejected', OPERATOR_REJECTED_MESSAGE, 'TX_REJECTED')).then((err) => { throw err; }), as('TX_REJECTED', 6), as('TX_REJECTED', 6)],
-  ['a stale cache that escapes (approved: was UNKNOWN)', () => { throw new StaleCacheError('applied 120 of 80 events'); }, as('UNKNOWN', 1), as('STALE_CACHE', 6)],
 
   // Cancelled: exit 7.
   ['a cancelled call', () => { throw new CancelledError(); }, as('CANCELLED', 7), as('CANCELLED', 7)],

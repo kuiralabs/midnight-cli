@@ -6,16 +6,14 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { parseArgs, createHost, settingsFromEnvironment } from '@kuiralabs/midnight-cli-core';
 import { parseSeedHex, resolveSeedSource, resolveSeed, seedOf, walletSourceOf } from '../lib/seed-resolver.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { mkdirSync } from 'node:fs';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { type WalletPublic, writeSealedWallet } from '../lib/wallet-config.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { testHost } from './helpers/test-host.ts';
+import { testHost } from '../../test-support/test-host.ts';
 
 // The host the tests' calls run in (test-host.ts): settings from the test's environment, nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
 const host = testHost();

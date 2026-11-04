@@ -2,11 +2,10 @@
 // Transport layer for the DApp Connector — dispatches RPC calls to handler functions
 
 import { WebSocketServer, WebSocket } from 'ws';
-import { defineHostSlot, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import type { APIError, RpcHandler, RpcHandlerContext } from '@kuiralabs/midnight-cli-core/lib/connector-api';
+import { defineHostSlot, type Host, type APIError, type RpcHandler, type RpcHandlerContext } from '@kuiralabs/midnight-cli-core';
 
 // The wire types the connector's handlers use, from where every package can reach them.
-export { createApiError, type APIError, type ErrorCode, type RpcHandler, type RpcHandlerContext } from '@kuiralabs/midnight-cli-core/lib/connector-api';
+export { createApiError, type APIError, type ErrorCode, type RpcHandler, type RpcHandlerContext } from '@kuiralabs/midnight-cli-core';
 
 // ── JSON-RPC 2.0 types ──
 

@@ -5,7 +5,7 @@
 
 import { queryIndexer } from './indexer-graphql.ts';
 import { subscribeGraphqlWs } from './graphql-ws-subscription.ts';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 
 const SPENT_NULLIFIERS = `subscription Spent($prefixes: [HexEncoded!]!, $fromBlock: Int, $toBlock: Int) {
   shieldedNullifierTransactions(nullifierPrefixes: $prefixes, fromBlock: $fromBlock, toBlock: $toBlock) {

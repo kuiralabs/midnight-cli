@@ -2,8 +2,7 @@
 // secrets for a wallet (grant's accounts) provides a protector, and the
 // caller passes it in the call context: wallet never imports that domain.
 
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import type { HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { CallContext, HostEngines } from '@kuiralabs/midnight-cli-core';
 import { resolveWalletPath, unlockWallet, type UnlockHost } from './wallet-config.ts';
 
 /** What protecting one item did: sealed now, already sealed, or why it could not be. */

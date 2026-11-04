@@ -8,13 +8,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { WrongPassphraseError } from '@kuiralabs/midnight-cli-core/lib/keystore';
+import { WrongPassphraseError, getNetworkConfig, createHost } from '@kuiralabs/midnight-cli-core';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
-import { getNetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 import { openGrantAccount } from '../lib/grant/account.ts';
 import { createAccountKey, isSealedAccount, sealedOwnerStore } from '../lib/grant/sealed-account.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.

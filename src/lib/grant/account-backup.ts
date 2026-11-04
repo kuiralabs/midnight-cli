@@ -10,13 +10,10 @@
 // a second device (`midnight grant device add`).
 
 import * as fs from 'node:fs';
-import type { HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { type HostEngines, UsageError, FileExistsError, writeJsonDurably, type SealedSecret, openSecret, sealSecret } from '@kuiralabs/midnight-cli-core';
 import * as path from 'node:path';
 import type { Arm } from '@kuiralabs/midnight-account';
 import { type OwnerRecord, type Roster, ownerDeviceFromSecret } from '@kuiralabs/midnight-account-chain/owner';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { FileExistsError, writeJsonDurably } from '@kuiralabs/midnight-cli-core/lib/durable-file';
-import { type SealedSecret, openSecret, sealSecret } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import { privateStateLocationOf } from './account.ts';
 import { type DeviceIdentity, deviceCodeOf } from './device-code.ts';
 import {

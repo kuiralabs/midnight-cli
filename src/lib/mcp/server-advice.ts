@@ -2,8 +2,7 @@
 // runs: a server loads one set's engine, so a call on a network of the other
 // set is told to use a server of its own.
 
-import { OtherSdkSetError } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { networksOnSdkSet } from '@kuiralabs/midnight-cli-core/lib/network';
+import { OtherSdkSetError, networksOnSdkSet } from '@kuiralabs/midnight-cli-core';
 
 /** The server runs one SDK set: a call on the other set's network (by the config under the state root `root`) is told to use a server of its own. */
 export function withServerAdvice(error: Error, root: string): Error {

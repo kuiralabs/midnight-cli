@@ -1,5 +1,6 @@
 // mn as a release publishes it, packed into a folder: the workspace packages
-// mn depends on (each engine with its shrinkwrap), and mn with the shrinkwrap
+// mn depends on (each engine with its shrinkwrap, each with the manifest it is
+// published with: scripts/publish-manifest.mjs), and mn with the shrinkwrap
 // the release job writes, its workspace packages' tarballs and integrity as a
 // local registry on `port` serves them (scripts/local-registry.mjs). Until those packages are on npm, a
 // consumer's npm finds them nowhere else, and npm honours mn's shrinkwrap only
@@ -17,6 +18,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startLocalRegistryProcess } from './local-registry.mjs';
 import { makeShrinkwrap, registryDist } from './make-shrinkwrap.mjs';
+import { packPublished } from './publish-manifest.mjs';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 const run = (command, args, cwd) => execFileSync(command, args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -40,7 +42,7 @@ export async function packRelease(dir, port = 0) {
     const engine = name.startsWith('@kuiralabs/midnight-engine-');
     if (engine) makeShrinkwrap({ dir: folder });
     try {
-      run('npm', ['pack', '--pack-destination', dir], join(repo, folder));
+      packPublished(join(repo, folder), dir);
     } finally {
       if (engine) rmSync(join(repo, folder, 'npm-shrinkwrap.json'), { force: true });
     }

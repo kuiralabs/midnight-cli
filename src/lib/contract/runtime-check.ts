@@ -3,9 +3,7 @@
 // front, naming the compiler this network's set needs, instead of failing in
 // its script after the wallet has synced ("Version mismatch").
 
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { sdkSetOf, type HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import { UsageError, sdkSetOf, type HostEngines, type NetworkName } from '@kuiralabs/midnight-cli-core';
 import type { ContractInfo } from './inspect.ts';
 
 /** A deploy's or call's contract runs on the network's runtime: paying for it starts next. */

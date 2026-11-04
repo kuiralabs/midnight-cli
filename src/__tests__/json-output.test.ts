@@ -1,10 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
-import { classifyError, EXIT_NETWORK_ERROR, EXIT_INSUFFICIENT_BALANCE, EXIT_TX_REJECTED, EXIT_GENERAL_ERROR, ERROR_CODES } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
-import { toEngineError } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { parseArgs, classifyError, EXIT_NETWORK_ERROR, EXIT_INSUFFICIENT_BALANCE, EXIT_TX_REJECTED, EXIT_GENERAL_ERROR, ERROR_CODES, writeJsonResult, writeJsonError, loadCliConfig } from '@kuiralabs/midnight-cli-core';
+import { toEngineError } from '@kuiralabs/midnight-cli-core/engine';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
-import { writeJsonResult, writeJsonError } from '@kuiralabs/midnight-cli-core/lib/json-output';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -15,14 +13,16 @@ import infoCommand from '../commands/info.ts';
 import addressCommand from '../commands/address.ts';
 import genesisAddressCommand from '../commands/genesis-address.ts';
 import inspectCostCommand from '../commands/inspect-cost.ts';
-import configCommand from '@kuiralabs/midnight-cli-core/commands/config';
+import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
 import helpCommand from '../commands/help.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { loadCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import { localIndexerFlags } from './helpers/local-indexer.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { localIndexerFlags } from '../../test-support/local-indexer.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
+
+// The config handler, as the shell loads it.
+const { default: configCommand } = await configDefinition.load();
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-json-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
@@ -30,7 +30,7 @@ const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000
 const TEST_CONFIG_SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
 const TEST_CONFIG: WalletConfig = {
   seed: TEST_CONFIG_SEED,
-  addresses: deriveAllAddresses(Buffer.from(TEST_CONFIG_SEED, 'hex')),
+  addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_CONFIG_SEED, 'hex')),
   createdAt: '2026-01-15T10:30:00.000Z',
 };
 

@@ -8,15 +8,8 @@
 import { describe, expect, it } from 'vitest';
 import { join } from 'node:path';
 import { installedCommands } from '../lib/installed-commands.ts';
-import {
-  CommandDefinitionError,
-  createPackageRegistry,
-  type CommandDefinition,
-  type CommandPackage,
-  type CommandRegistry,
-} from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { GuidanceError, assembleGuidance, manualCodeRow, sectionsWithAdded, type GuidancePiece, type GuidanceText } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
-import { chainCodes } from '@kuiralabs/midnight-chain/commands/chain.codes';
+import { CommandDefinitionError, createPackageRegistry, type CommandDefinition, type CommandPackage, type CommandRegistry, GuidanceError, assembleGuidance, manualCodeRow, sectionsWithAdded, type GuidancePiece, type GuidanceText } from '@kuiralabs/midnight-cli-core';
+import { chainCodes } from '@kuiralabs/midnight-chain/commands';
 import { AGENT_MANUAL_SECTIONS, TOOL_GROUPS, agentManual } from '../lib/agent-manual.ts';
 import { SKILL_CORE_SECTIONS, SKILL_FULL_SECTIONS, skillCore, skillFull } from '../lib/mcp/skills.ts';
 import { listedTools } from '../lib/mcp/registry-tools.ts';

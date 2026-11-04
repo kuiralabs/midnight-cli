@@ -7,18 +7,7 @@
 
 import { type CommandRun, captureCommand } from '../run-command.ts';
 import { listedNames } from '../code-tables.ts';
-import { getEndpointOverridesForNetwork, loadCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import {
-  type CommandRegistry,
-  type RegisteredTool,
-  type ToolAnnotations,
-  type ToolInputSchema,
-  commandOwnCodes,
-  confirmationText,
-  declaredSets,
-  toolArgv,
-} from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { getEndpointOverridesForNetwork, loadCliConfig, resolveNetworkName, type CommandRegistry, type RegisteredTool, type ToolAnnotations, type ToolInputSchema, commandOwnCodes, confirmationText, declaredSets, toolArgv } from '@kuiralabs/midnight-cli-core';
 
 /** A tool as tools/list sends it. */
 export interface ListedTool {

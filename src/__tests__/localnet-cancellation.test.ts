@@ -13,11 +13,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runLocalnet } from '../commands/localnet.ts';
 import { startLocalnet, type DockerCall } from '../lib/localnet.ts';
-import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { ExecRun, ExecRunner } from '@kuiralabs/midnight-cli-core/lib/exec-program';
+import { CancelledError, type ExecRun, type ExecRunner, parseArgs } from '@kuiralabs/midnight-cli-core';
 import { captureCommand } from '../lib/run-command.ts';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { ownCall } from './helpers/own-call.ts';
 
 /** One run the stand-in was given. */

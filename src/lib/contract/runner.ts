@@ -11,16 +11,12 @@ import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdir
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { assertEndpointUsable } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
-import type { NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { sdkSetOf, type EngineContractScripts, type HostEngines, type ScriptParts } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { assertEndpointUsable, type NetworkConfig, type NetworkName, sdkSetOf, type EngineContractScripts, type HostEngines, type ScriptParts, CancelledError, throwIfCancelled, isTransportFailure } from '@kuiralabs/midnight-cli-core';
 import { findContractInfo } from './inspect.ts';
 import { assertContractRunsOn } from './runtime-check.ts';
 import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
 import { coerceArg } from './arg-coerce.ts';
 import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
-import { CancelledError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { isTransportFailure } from '@kuiralabs/midnight-cli-core/lib/transport-failure';
 
 // The generated deploy/call script imports SDK packages by bare specifier
 // (`@midnight-ntwrk/midnight-js-contracts`, `ws`, etc.); without help, Node

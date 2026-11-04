@@ -3,10 +3,7 @@
 // account yet, and for a command that starts one, that its wallet exists. The CLI runs it first; the MCP server runs it before it issues a
 // confirmation token.
 
-import { type ParsedArgs, getFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { type PayingTarget, resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
+import { type ParsedArgs, getFlag, UsageError, type PayingTarget, resolvePayingTarget, type Host } from '@kuiralabs/midnight-cli-core';
 import { assertWalletFileExists, getActiveWalletName, resolveWalletPath } from '../wallet-config.ts';
 import { assertAccountNetwork, assertNodeRunsAccount } from './account.ts';
 import { accountRecordsDir, accountWalletName, ensureAccountRecordsDir } from './account-records.ts';

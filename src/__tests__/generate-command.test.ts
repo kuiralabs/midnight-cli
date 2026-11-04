@@ -3,14 +3,14 @@ import { mnemonicToSeedSync } from '@scure/bip39';
 import generateCommand from '../commands/generate.ts';
 import { unlockWallet } from '../lib/wallet-config.ts';
 import { PASSPHRASE_ENV } from '../lib/passphrase.ts';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { cliCall } from './helpers/cli-call.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { testHost } from './helpers/test-host.ts';
+import { testHost } from '../../test-support/test-host.ts';
 
 // The host the tests' calls run in (test-host.ts): settings from the test's environment, nobody to ask, notices dropped.
 const host = testHost();

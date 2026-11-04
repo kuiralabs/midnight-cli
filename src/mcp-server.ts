@@ -16,20 +16,16 @@ import {
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { CommandRun } from './lib/run-command.ts';
 import { servePayer } from './lib/serve-payer.ts';
-import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
-import { asReported } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { classifyError, asReported, trimAgentMessage, needsConfirmation, type Host } from '@kuiralabs/midnight-cli-core';
 import { withServerAdvice } from './lib/mcp/server-advice.ts';
-import { trimAgentMessage } from '@kuiralabs/midnight-cli-core/lib/error-trim';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { createConfirmationStore } from './lib/mcp/confirmation.ts';
 import { assertKnownParams, assertParamTypes } from './lib/mcp/known-params.ts';
 import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from './lib/mcp/registry-tools.ts';
-import { needsConfirmation } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { createCliHost } from './lib/cli-host.ts';
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { installedCommands } from './lib/installed-commands.ts';
 import { skillCore, skillFull } from './lib/mcp/skills.ts';
 

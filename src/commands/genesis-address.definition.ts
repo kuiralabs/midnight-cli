@@ -1,7 +1,7 @@
 // The `genesis-address` command, described once.
 
-import { type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { LOADS_ENGINE, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core';
+import { LOADS_ENGINE, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 
 export const genesisAddressDefinition: CommandDefinition = {
   name: 'genesis-address',

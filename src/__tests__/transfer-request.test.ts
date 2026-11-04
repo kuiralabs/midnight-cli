@@ -7,14 +7,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { resolveTransferRequest } from '../lib/transfer-request.ts';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { parseArgs, MIDNIGHT_DIR, WALLETS_DIR_NAME, UsageError, classifyError, createHost } from '@kuiralabs/midnight-cli-core';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
-import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { MIDNIGHT_DIR, WALLETS_DIR_NAME } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
@@ -24,8 +20,8 @@ const HOME = path.join(os.tmpdir(), `midnight-transfer-request-test-${process.pi
 const WALLETS = path.join(HOME, MIDNIGHT_DIR, WALLETS_DIR_NAME);
 const SENDER_SEED = Buffer.from('00'.repeat(31) + '11', 'hex');
 const RECIPIENT_SEED = Buffer.from('00'.repeat(31) + '22', 'hex');
-const RECIPIENT = deriveAllAddresses(RECIPIENT_SEED);
-const RECIPIENT_SHIELDED = deriveAllShieldedAddresses(RECIPIENT_SEED);
+const RECIPIENT = rcKeys.unshieldedAddresses(RECIPIENT_SEED);
+const RECIPIENT_SHIELDED = rcKeys.shieldedAddresses(RECIPIENT_SEED);
 
 let origHome: string | undefined;
 
@@ -33,8 +29,8 @@ function saveWallet(name: string, seed: Buffer, shielded = false): string {
   const file = path.join(WALLETS, `${name}.json`);
   saveWalletConfig({
     seed: seed.toString('hex'),
-    addresses: deriveAllAddresses(seed),
-    ...(shielded ? { shieldedAddresses: deriveAllShieldedAddresses(seed) } : {}),
+    addresses: rcKeys.unshieldedAddresses(seed),
+    ...(shielded ? { shieldedAddresses: rcKeys.shieldedAddresses(seed) } : {}),
     createdAt: new Date(0).toISOString(),
   }, file);
   return file;

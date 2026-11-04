@@ -2,9 +2,8 @@
 // Subcommands: up, down, status, logs
 
 import { spawn } from 'child_process';
-import { type ParsedArgs, hasFlag, getFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { CancelledError, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { execProgram, ProgramFailedError, type ExecRunner } from '@kuiralabs/midnight-cli-core/lib/exec-program';
+import { type ParsedArgs, hasFlag, getFlag, CancelledError, UsageError, execProgram, ProgramFailedError, type ExecRunner, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { header, divider, bold, green, red, dim, yellow } from '@kuiralabs/midnight-cli-core/ui';
 import {
   assertLocalnetCanStart,
   checkDockerAvailable,
@@ -18,10 +17,7 @@ import {
   type DockerCall,
   type ServiceStatus,
 } from '../lib/localnet.ts';
-import { header, divider } from '@kuiralabs/midnight-cli-core/ui/format';
-import { bold, green, red, dim, yellow } from '@kuiralabs/midnight-cli-core/ui/colors';
 
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 
 const VALID_SUBCOMMANDS = ['up', 'stop', 'down', 'status', 'logs', 'clean'] as const;
 type Subcommand = typeof VALID_SUBCOMMANDS[number];
@@ -68,11 +64,11 @@ async function handleUp(jsonMode: boolean, ctx: CallContext, docker: DockerCall)
       //     prove time with "Failed to prove transaction".
       spinner.update('Waiting for chain to produce first block...');
       try {
-        const { waitForFirstBlock } = await import('@kuiralabs/midnight-chain/lib/node-ready');
-        const { waitForAddressFunded } = await import('@kuiralabs/midnight-chain/lib/indexer-ready');
-        const { waitForProofServerReady } = await import('@kuiralabs/midnight-chain/lib/proof-server-ready');
-        const { getNetworkConfig } = await import('@kuiralabs/midnight-cli-core/lib/network');
-        const { GENESIS_SEED } = await import('@kuiralabs/midnight-cli-core/lib/constants');
+        const { waitForFirstBlock } = await import('@kuiralabs/midnight-chain');
+        const { waitForAddressFunded } = await import('@kuiralabs/midnight-chain');
+        const { waitForProofServerReady } = await import('@kuiralabs/midnight-chain');
+        const { getNetworkConfig } = await import('@kuiralabs/midnight-cli-core');
+        const { GENESIS_SEED } = await import('@kuiralabs/midnight-cli-core');
 
         const netCfg = getNetworkConfig('undeployed');
         await waitForFirstBlock(netCfg.node, { timeoutMs: 30_000, signal: ctx.signal });

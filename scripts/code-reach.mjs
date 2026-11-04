@@ -9,6 +9,10 @@
 // DYNAMIC_MODULES); a module constructing a class whose code is not a literal
 // and that the first table lacks fails the scan.
 //
+// An import of a barrel (an entry point made only of `export { … } from`
+// lists) reaches the modules defining the names it imports, not every module
+// the barrel lists: the others load, but nothing of theirs runs.
+//
 // Reaches that don't show as imports are added:
 //   - the engine: a module that asks the host for one (`engines.load(`,
 //     `.for(`, `.any(`) reaches the host's engines and loads every shipped
@@ -29,10 +33,10 @@
 // modules), the tables, and declaredCodeProblems, which the suite runs
 // (src/__tests__/declared-codes.test.ts).
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { importTarget, importsOf, sourceFiles } from './check-layering.mjs';
+import { importTarget, importedModules, importsOf, sourceFiles, tsSourceOf } from './check-layering.mjs';
 import { codeOnly } from './check-process-safety.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -232,19 +236,24 @@ export function moduleCodes(file) {
 /** The source file an import names, with its .ts or index.ts filled in; undefined for an outside package or a file that isn't there. */
 function sourceOf(file, specifier) {
   const target = importTarget(file, specifier);
-  if (target === undefined) return undefined;
-  for (const candidate of [target, `${target}.ts`, join(target, 'index.ts')]) {
-    if (existsSync(candidate) && statSync(candidate).isFile() && candidate.endsWith('.ts')) return candidate;
-  }
-  return undefined;
+  return target === undefined ? undefined : tsSourceOf(target);
 }
 
-/** The modules a module reaches directly: its imports that run, and the engine its calls reach. */
+/**
+ * The modules a module reaches directly: the modules its imports that run
+ * bring in (through a barrel, the modules defining the names it imports),
+ * and the engine its calls reach.
+ */
 function nextModules(file) {
   const cut = new Set(CUT_IMPORTS.filter(([from]) => fromRoot(from) === file).map(([, to]) => fromRoot(to)));
   // A definition is data: its load() and its tools' checks run only when the shell or the MCP server calls them.
   const isDefinition = file.endsWith('.definition.ts');
-  const next = importsOf(file).filter((each) => !each.typeOnly && !(isDefinition && each.dynamic)).map((each) => sourceOf(file, each.specifier)).filter((target) => target !== undefined && !cut.has(target));
+  const next = importsOf(file)
+    .filter((each) => !each.typeOnly && !(isDefinition && each.dynamic))
+    .flatMap((each) => importedModules(file, each)?.modules ?? [])
+    .filter((module) => !module.typeOnly)
+    .map((module) => tsSourceOf(module.file))
+    .filter((target) => target !== undefined && !cut.has(target));
   const code = codeOnly(readFileSync(file, 'utf8'));
   for (const { site, reaches } of ENGINE_SITES) if (site.test(code)) next.push(...reaches.map(fromRoot));
   return next;

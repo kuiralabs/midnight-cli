@@ -2,11 +2,10 @@
 // Subcommands: generate, list, use, info, remove
 
 import * as fs from 'fs';
-import { type ParsedArgs, getFlag, hasFlag, isMinimalMode } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, UsageError, throwIfCancelled, resolveNetworkName, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { header, keyValue, divider, formatAddress, bold, yellow, dim, green, teal } from '@kuiralabs/midnight-cli-core/ui';
 import { mnemonicToEntropy } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { parseSeedHex } from '../lib/seed-resolver.ts';
 import {
   loadWalletConfig,
@@ -22,9 +21,6 @@ import {
 import { passphraseForNewSecret } from '../lib/passphrase.ts';
 import { createWallet, walletFilePath, walletSecretFrom } from '../lib/wallet-create.ts';
 import { coinKeyOfWallet, type ProtectorResult, type WalletCommandContext } from '../lib/wallet-protector.ts';
-import { header, keyValue, divider, formatAddress } from '@kuiralabs/midnight-cli-core/ui/format';
-import { bold, yellow, dim, green, teal } from '@kuiralabs/midnight-cli-core/ui/colors';
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 
 export default async function walletCommand(args: ParsedArgs, ctx: WalletCommandContext): Promise<void> {
   const subcommand = args.subcommand;

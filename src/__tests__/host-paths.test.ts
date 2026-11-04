@@ -7,14 +7,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { loadCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import { sdkSetOf } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { openOffersFile, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core/lib/open-offers';
-import { cacheRootDir, getCachePath, networkCacheFolder } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
-import configCommand from '@kuiralabs/midnight-cli-core/commands/config';
+import { createHost, type Host, parseArgs, MIDNIGHT_DIR, loadCliConfig, sdkSetOf, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
+import { cacheRootDir, getCachePath, networkCacheFolder } from '@kuiralabs/midnight-cli-core/engine';
+import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
 import { captureCommand } from '../lib/run-command.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { createWallet, walletSecretFrom } from '../lib/wallet-create.ts';
@@ -22,6 +17,9 @@ import { getActiveWalletName, listWallets } from '../lib/wallet-config.ts';
 import { PASSPHRASE_ENV, passphraseForNewSecret } from '../lib/passphrase.ts';
 import { clearChainCaches } from '../lib/chain-caches.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
+
+// The config handler, as the shell loads it.
+const { default: configCommand } = await configDefinition.load();
 
 const PASSPHRASE = 'correct horse battery staple';
 const MAKER = 'mn_addr_undeployed1maker';
@@ -105,7 +103,7 @@ describe('two hosts with different state roots', () => {
 
     expect(readOpenOffers(rootA, 'undeployed', MAKER)).toEqual([OFFER]);
     expect(readOpenOffers(rootB, 'undeployed', MAKER)).toEqual([]);
-    expect(openOffersFile(rootA, 'undeployed', MAKER)).toBe(path.join(rootA, 'swap-offers', 'undeployed', `${MAKER}.json`));
+    expect(fs.existsSync(path.join(rootA, 'swap-offers', 'undeployed', `${MAKER}.json`))).toBe(true);
     expect(fs.existsSync(path.join(rootB, 'swap-offers'))).toBe(false);
   });
 

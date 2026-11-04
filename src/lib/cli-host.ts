@@ -11,10 +11,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { installSdkNoiseFilters } from './sdk-noise.ts';
-import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
-import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
-import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
+import { settingsFromEnvironment, type Prompter, MIDNIGHT_DIR, createHost, type Host } from '@kuiralabs/midnight-cli-core';
 import { loadInstalledEngine } from './installed-engines.ts';
 
 /** The CLI's host, or the MCP server's (`prompter` null: no terminal there). */

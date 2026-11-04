@@ -2,13 +2,11 @@
 // devnet. `mn airdrop` and `mn dev` both fund wallets through here; the
 // caller has already checked that the network is the local one.
 
-import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { EngineError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { toEngineError } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { EngineError, toEngineError, type AirdropParams } from '@kuiralabs/midnight-cli-core/engine';
+import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core';
 import { executeTransfer, type TransferParams, type TransferResult } from './transfer.ts';
-import type { AirdropParams } from '@kuiralabs/midnight-cli-core/lib/engine';
 import type { WalletDataRepository } from './wallet-data-repository.ts';
-export type { AirdropParams } from '@kuiralabs/midnight-cli-core/lib/engine';
+export type { AirdropParams } from '@kuiralabs/midnight-cli-core/engine';
 
 
 /** Sends `amount` micro-NIGHT from genesis to `recipientAddress`, on the engine's repository `repo`. */

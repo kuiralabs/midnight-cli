@@ -1,13 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { classifyError, humanizeNetworkError, ERROR_CODES, EXIT_GENERAL_ERROR, EXIT_NETWORK_ERROR, EXIT_INVALID_ARGS } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { classifyError, humanizeNetworkError, ERROR_CODES, EXIT_GENERAL_ERROR, EXIT_NETWORK_ERROR, EXIT_INVALID_ARGS, WrongPassphraseError, OtherSdkSetError, UsageError } from '@kuiralabs/midnight-cli-core';
+import { MixedSdkLayoutError, toEngineError } from '@kuiralabs/midnight-cli-core/engine';
 import { NodeTooOldForAccountError, UnreachableByAccountError } from '../lib/grant/account.ts';
 import { NoAccountError } from '../lib/grant/prepare.ts';
-import { WrongPassphraseError } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import { NoPassphraseError } from '../lib/passphrase.ts';
-import { OtherSdkSetError } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { MixedSdkLayoutError } from '@kuiralabs/midnight-cli-core/lib/sdk-layout';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { toEngineError } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { installedCommands } from '../lib/installed-commands.ts';
 
 describe('humanizeNetworkError', () => {
@@ -57,10 +53,10 @@ describe('classifyError usage errors (positional-address balance)', () => {
 describe('classifyError: typed setup errors keep their own code', () => {
   // Agents read errorCode from --json / MCP; these must not collapse to UNKNOWN.
   it.each([
-    ['UNSUPPORTED_LEDGER', async () => new (await import('@kuiralabs/midnight-chain/lib/ledger-guard')).UnsupportedLedgerError('preview', 1000300n)],
-    ['LOCAL_STACK_UNREACHABLE', async () => new (await import('@kuiralabs/midnight-chain/lib/ledger-guard')).LocalStackUnreachableError('indexer', 'http://localhost:8088/api/v4/graphql')],
+    ['UNSUPPORTED_LEDGER', async () => new (await import('@kuiralabs/midnight-chain')).UnsupportedLedgerError('preview', 1000300n)],
+    ['LOCAL_STACK_UNREACHABLE', async () => new (await import('@kuiralabs/midnight-chain')).LocalStackUnreachableError('indexer', 'http://localhost:8088/api/v4/graphql')],
     ['LOCALNET_UNAVAILABLE', async () => new (await import('../lib/localnet.ts')).LocalnetUnavailableError()],
-    ['AMBIGUOUS_LOCAL_STACKS', async () => new (await import('@kuiralabs/midnight-cli-core/lib/network')).AmbiguousLocalStacksError({ node: [9944, 29944], indexer: [8088, 28088], proofServer: [6300] })],
+    ['AMBIGUOUS_LOCAL_STACKS', async () => new (await import('@kuiralabs/midnight-cli-core')).AmbiguousLocalStacksError({ node: [9944, 29944], indexer: [8088, 28088], proofServer: [6300] })],
   ])('%s', async (code, make) => {
     const result = classifyError(await make(), installedCommands);
     expect(result.errorCode).toBe(code);

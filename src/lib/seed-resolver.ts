@@ -3,10 +3,7 @@
 // `MN_SEED` / `--wallet` separately, which is how `balance` drifted and never
 // learned `MN_SEED`. Centralizing it keeps the precedence identical everywhere.
 
-import { getFlag, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import type { Settings } from '@kuiralabs/midnight-cli-core/lib/settings';
+import { getFlag, type ParsedArgs, UsageError, type Host, type Settings } from '@kuiralabs/midnight-cli-core';
 import { resolveWalletPath, unlockWallet, type UnlockHost, type WalletConfig } from './wallet-config.ts';
 
 export interface ResolvedSeed {

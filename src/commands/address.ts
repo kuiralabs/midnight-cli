@@ -1,13 +1,9 @@
 // address command — derive and display an unshielded address from a seed
 // Bare address to stdout (pipeable), formatted details to stderr
 
-import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { type ParsedArgs, getFlag, hasFlag, resolveNetworkName, type CallContext, UsageError } from '@kuiralabs/midnight-cli-core';
+import { keyValue, divider, formatAddress, dim } from '@kuiralabs/midnight-cli-core/ui';
 import { resolveSeed } from '../lib/seed-resolver.ts';
-import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import { keyValue, divider, formatAddress } from '@kuiralabs/midnight-cli-core/ui/format';
-import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export default async function addressCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // `address` is a seed-derivation tool with no active-wallet notion → requireExplicit.

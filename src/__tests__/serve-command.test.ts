@@ -2,9 +2,7 @@
 
 import { describe, it, expect } from 'vitest';
 import serveCommand from '../commands/serve.ts';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { findUnknownFlags } from '@kuiralabs/midnight-cli-core/lib/command-flags';
+import { parseArgs, UsageError, findUnknownFlags } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { cliCall } from './helpers/cli-call.ts';
 

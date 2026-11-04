@@ -10,24 +10,20 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
-import { saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
-import type { ProgressEvent } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { deriveAllAddresses, deriveAllShieldedAddresses, deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { createHost, type Host, settingsFromEnvironment, saveCliConfig, type Prompter, type ProgressEvent } from '@kuiralabs/midnight-cli-core';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { PASSPHRASE_ENV } from '../lib/passphrase.ts';
 import { transferNight, type TransferNightOptions } from '../lib/wallet/transfer.ts';
 import type { WalletOpened } from '../lib/wallet/wallet-call.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
-import { startLedger8Indexer, startRefusingEndpoint, type Ledger8Indexer } from './helpers/stand-in-indexer.ts';
+import { startLedger8Indexer, startRefusingEndpoint, type Ledger8Indexer } from '../../test-support/stand-in-indexer.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const SEED_A = 'e5'.repeat(32);
 const RECIPIENT_SEED = Buffer.from('f6'.repeat(32), 'hex');
-const RECIPIENT = deriveAllAddresses(RECIPIENT_SEED).undeployed;
-const RECIPIENT_SHIELDED = deriveAllShieldedAddresses(RECIPIENT_SEED).undeployed;
+const RECIPIENT = rcKeys.unshieldedAddresses(RECIPIENT_SEED).undeployed;
+const RECIPIENT_SHIELDED = rcKeys.shieldedAddresses(RECIPIENT_SEED).undeployed;
 // Above what a JS number carries exactly (2^53 micro-NIGHT): 9007199254.740993 NIGHT.
 const LARGE = 9_007_199_254_740_993n;
 
@@ -64,7 +60,7 @@ function programHost(name: string): Host & { asked: () => number } {
 function aliceOf(host: Host, seed: string): string {
   const root = host.paths().stateRoot;
   const file = path.join(root, 'wallets', 'alice.json');
-  saveWalletConfig({ seed, addresses: deriveAllAddresses(Buffer.from(seed, 'hex')), createdAt: new Date().toISOString() }, file);
+  saveWalletConfig({ seed, addresses: rcKeys.unshieldedAddresses(Buffer.from(seed, 'hex')), createdAt: new Date().toISOString() }, file);
   saveCliConfig({ network: 'undeployed', wallet: 'alice' }, root);
   return file;
 }
@@ -90,7 +86,7 @@ describe('transferNight', () => {
 
     await expect(transferNight(host, { wallet: 'alice' }, transfer({ onProgress: (event) => said.push(event) }))).rejects.toMatchObject({ code: 'UNSUPPORTED_LEDGER' });
 
-    expect(said[0]).toEqual({ kind: 'wallet-opened', network: 'undeployed', address: deriveUnshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed') });
+    expect(said[0]).toEqual({ kind: 'wallet-opened', network: 'undeployed', address: rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed') });
     expect(said[1]).toEqual({ kind: 'start', message: 'Starting wallet...' });
     expect(said.filter((event) => event.kind === 'done')).toEqual([]);
     expect(indexer.queries).toEqual(['{ block { protocolVersion } }']);
@@ -100,7 +96,7 @@ describe('transferNight', () => {
     const seed = Buffer.from(SEED_A, 'hex');
     const said: Said[] = [];
     await expect(transferNight(programHost('a'), { seed }, transfer({ recipient: RECIPIENT_SHIELDED, shielded: true, onProgress: (event) => said.push(event) }))).rejects.toMatchObject({ code: 'UNSUPPORTED_LEDGER' });
-    expect(said[0]).toEqual({ kind: 'wallet-opened', network: 'undeployed', address: deriveUnshieldedAddress(seed, 'undeployed') });
+    expect(said[0]).toEqual({ kind: 'wallet-opened', network: 'undeployed', address: rcKeys.unshieldedAddress(seed, 'undeployed') });
     expect(said[1]).toEqual({ kind: 'start', message: 'Syncing wallet...' });
   });
 
@@ -117,7 +113,7 @@ describe('transferNight', () => {
     const host = programHost('a');
     aliceOf(host, SEED_A);
     const said: Said[] = [];
-    const preprod = { ...transfer({ recipient: deriveAllShieldedAddresses(RECIPIENT_SEED).preprod, shielded: true }), network: 'preprod' as const, onProgress: (event: Said) => said.push(event) };
+    const preprod = { ...transfer({ recipient: rcKeys.shieldedAddresses(RECIPIENT_SEED).preprod, shielded: true }), network: 'preprod' as const, onProgress: (event: Said) => said.push(event) };
     const refused = transferNight(host, { wallet: 'alice' }, preprod);
     await expect(refused).rejects.toMatchObject({ code: 'INVALID_ARGS' });
     await expect(refused).rejects.toThrow('Shielded is unavailable on preprod (no faucet). Use --force-shielded to sync anyway, or --network undeployed.');

@@ -4,8 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { loadCliConfig, saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
+import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE, loadCliConfig, saveCliConfig } from '@kuiralabs/midnight-cli-core';
 /** The wallets folder under the state root `root`. */
 export function getWalletsDir(root: string): string {
   return path.join(root, WALLETS_DIR_NAME);

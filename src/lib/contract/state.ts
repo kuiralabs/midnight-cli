@@ -3,13 +3,7 @@
 // that can't run (no compiled contract there, a script that fails), the
 // untyped state tree the indexer holds for the address.
 
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { CancelledError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { networkTargetOf, type NetworkChoice } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { progressSteps, type ProgressEvent } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { untilCancelled } from '@kuiralabs/midnight-cli-core/lib/sleep';
-import type { RawStateValue } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { type Host, CancelledError, throwIfCancelled, type NetworkName, networkTargetOf, type NetworkChoice, progressSteps, type ProgressEvent, untilCancelled, type RawStateValue } from '@kuiralabs/midnight-cli-core';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
 import { findContractInfo } from './inspect.ts';
 import { validateContractAddress } from './validate.ts';

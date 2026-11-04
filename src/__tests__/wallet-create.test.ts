@@ -10,10 +10,10 @@ import * as path from 'node:path';
 import { mnemonicToSeedSync } from '@scure/bip39';
 import { createWallet, walletFilePath, walletSecretFrom } from '../lib/wallet-create.ts';
 import { getActiveWalletName, unlockWallet } from '../lib/wallet-config.ts';
-import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { PASSPHRASE_ENV, passphraseForNewSecret } from '../lib/passphrase.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { testHost } from './helpers/test-host.ts';
+import { testHost } from '../../test-support/test-host.ts';
 
 // The host the tests' calls run in (test-host.ts): settings from the test's environment, nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
 const host = testHost();
@@ -55,7 +55,7 @@ describe('createWallet', () => {
 
   it('derives its addresses from a given mnemonic', async () => {
     const created = await createWallet(stateRootIn(home), 'bob', walletSecretFrom({ mnemonic: MNEMONIC }), PASSPHRASE, await host.engines.any());
-    expect(created.addresses).toEqual(deriveAllAddresses(Buffer.from(mnemonicToSeedSync(MNEMONIC))));
+    expect(created.addresses).toEqual(rcKeys.unshieldedAddresses(Buffer.from(mnemonicToSeedSync(MNEMONIC))));
   });
 
   it('keeps a given seed and no mnemonic', async () => {

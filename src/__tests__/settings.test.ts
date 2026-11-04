@@ -6,11 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import { resolveBlockfrostProjectId } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import { detectLocalStacks } from '@kuiralabs/midnight-cli-core/lib/network';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { settingsFromEnvironment, createHost, resolveBlockfrostProjectId, detectLocalStacks, parseArgs } from '@kuiralabs/midnight-cli-core';
 import { readPassphrase, passphraseForNewSecret, NoPassphraseError } from '../lib/passphrase.ts';
 import { resolveSeedSource } from '../lib/seed-resolver.ts';
 

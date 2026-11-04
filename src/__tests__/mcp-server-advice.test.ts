@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { OtherSdkSetError } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { OtherSdkSetError } from '@kuiralabs/midnight-cli-core';
 import { withServerAdvice } from '../lib/mcp/server-advice.ts';
 
 // A state root with no config: every network on the set the table names.

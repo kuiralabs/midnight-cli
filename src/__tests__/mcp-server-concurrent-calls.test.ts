@@ -21,15 +21,15 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { JSONRPCMessage, Progress } from '@modelcontextprotocol/sdk/types.js';
-import { deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { toNight } from '@kuiralabs/midnight-cli-core/ui/format';
-import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from './helpers/stand-in-indexer.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { toNight } from '@kuiralabs/midnight-cli-core/ui';
+import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from '../../test-support/stand-in-indexer.ts';
 import { expectDeclaredToolResult } from './helpers/expect-declared.ts';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const TSX = path.join(REPO, 'node_modules', '.bin', 'tsx');
 
-const addressOf = (byte: string): string => deriveUnshieldedAddress(Buffer.from(byte.repeat(32), 'hex'), 'undeployed');
+const addressOf = (byte: string): string => rcKeys.unshieldedAddress(Buffer.from(byte.repeat(32), 'hex'), 'undeployed');
 const ADDRESS_A = addressOf('aa');
 const ADDRESS_B = addressOf('bb');
 const ADDRESS_C = addressOf('cc');

@@ -9,23 +9,21 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Buffer } from 'node:buffer';
 import { captureCommand } from '../lib/run-command.ts';
-import { callDiagnostics } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { WalletDataRepository } from '@kuiralabs/midnight-engine-rc/wallet-data-repository';
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import { callDiagnostics, parseArgs, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
 import balanceCommand from '../commands/balance.ts';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { ownCall } from './helpers/own-call.ts';
-import { testHost } from './helpers/test-host.ts';
+import { testHost } from '../../test-support/test-host.ts';
 
 // One host for every call, as the MCP server has: its notices are where verbose lines go.
 const host = testHost({ notice: (line) => notices.push(line) });
 
 // Nothing listens here: each call fails at its first connection, after its first diagnostic.
 const UNREACHABLE = ['--indexer-ws', 'ws://127.0.0.1:1/api/v4/graphql/ws', '--node', 'ws://127.0.0.1:1', '--proof-server', 'http://127.0.0.1:1'];
-const VERBOSE_ADDRESS = deriveUnshieldedAddress(Buffer.from('aa'.repeat(32), 'hex'), 'undeployed');
-const QUIET_ADDRESS = deriveUnshieldedAddress(Buffer.from('bb'.repeat(32), 'hex'), 'undeployed');
+const VERBOSE_ADDRESS = rcKeys.unshieldedAddress(Buffer.from('aa'.repeat(32), 'hex'), 'undeployed');
+const QUIET_ADDRESS = rcKeys.unshieldedAddress(Buffer.from('bb'.repeat(32), 'hex'), 'undeployed');
 
 let notices: string[];
 let io: CapturedOutput;
@@ -72,17 +70,17 @@ describe('verbose, per call', () => {
 
   it("a library writes its diagnostics to the log of the call that reached it, and only a verbose call's shows them", async () => {
     const network: NetworkConfig = { indexer: 'http://test/indexer', indexerWS: 'ws://test/indexer/ws', node: 'ws://test/node', proofServer: 'http://test/proof', networkId: 'Undeployed' };
-    // The chain's tip can't be read, which the repository notes as a diagnostic.
-    const repo = new WalletDataRepository(testHost(), {
+    // The chain's tip can't be read, which the engine's wallet repository notes as a diagnostic.
+    const { wallet } = createRcEngine(testHost(), { repository: {
       fetchProtocolVersion: async () => 2001000n,
       fetchTip: async () => { throw new Error('node unreachable'); },
       fetchUnshielded: async () => ({ balances: new Map(), utxoCount: 0, txCount: 0, highestTxId: 0, registeredUtxos: 0, unregisteredUtxos: 0 }),
-    });
+    } });
     const verboseLines: string[] = [];
     const quietLines: string[] = [];
     await Promise.all([
-      repo.unshielded('addr-verbose', network, { log: callDiagnostics(true, (line) => verboseLines.push(line)).line }),
-      repo.unshielded('addr-quiet', network, { log: callDiagnostics(false, (line) => quietLines.push(line)).line }),
+      wallet.unshieldedBalance('addr-verbose', network, { log: callDiagnostics(true, (line) => verboseLines.push(line)).line }),
+      wallet.unshieldedBalance('addr-quiet', network, { log: callDiagnostics(false, (line) => quietLines.push(line)).line }),
     ]);
     expect(verboseLines).toHaveLength(1);
     expect(verboseLines[0]).toContain('repo: tip unavailable; skipping memo for');

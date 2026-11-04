@@ -14,30 +14,31 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { Buffer } from 'node:buffer';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { parseArgs, type Prompter, type CommandHandler } from '@kuiralabs/midnight-cli-core';
+import { getCachePath } from '@kuiralabs/midnight-cli-core/engine';
 import { installedCommands } from '../lib/installed-commands.ts';
-import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
 import { establishPassphrase, isPassphraseSet } from '../lib/passphrase.ts';
-import { deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { getCachePath } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { loadWalletConfig, protectAllWallets } from '../lib/wallet-config.ts';
 import { createWallet, walletSecretFrom } from '../lib/wallet-create.ts';
 import type { WalletProtector } from '../lib/wallet-protector.ts';
-import type { CommandHandler } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import balanceCommand from '../commands/balance.ts';
 import inspectCostCommand from '../commands/inspect-cost.ts';
-import statusCommand from '@kuiralabs/midnight-chain/commands/status';
+import { statusDefinition } from '@kuiralabs/midnight-chain/commands';
 import generateCommand from '../commands/generate.ts';
 import walletCommand from '../commands/wallet.ts';
 import cacheCommand from '../commands/cache.ts';
 import testCommand from '../commands/test.ts';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { declaredOutcome } from './helpers/expect-declared.ts';
-import { testHost } from './helpers/test-host.ts';
+import { testHost } from '../../test-support/test-host.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from './helpers/stand-in-indexer.ts';
+import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from '../../test-support/stand-in-indexer.ts';
+
+// The status handler, as the shell loads it.
+const { default: statusCommand } = await statusDefinition.load();
 
 const PASSPHRASE = 'correct horse battery staple';
 
@@ -123,7 +124,7 @@ describe('balance passes the signal into its reads', () => {
   const endpoints = (): string[] => ['--indexer-ws', indexer.url, '--node', `ws://127.0.0.1:${refusing.port}`, '--proof-server', `http://127.0.0.1:${refusing.port}`];
 
   it('an address\'s balance: the subscription closes at once and the call answers CANCELLED with no result', async () => {
-    const address = deriveUnshieldedAddress(Buffer.from('aa'.repeat(32), 'hex'), 'undeployed');
+    const address = rcKeys.unshieldedAddress(Buffer.from('aa'.repeat(32), 'hex'), 'undeployed');
     const call = new AbortController();
     void indexer.sentAtLeast(1).then(() => call.abort());
 
@@ -259,7 +260,7 @@ describe('commands that write check the call before each whole write', () => {
       const seed = seedByte.repeat(32);
       return saveWalletConfig({
         seed,
-        addresses: { undeployed: deriveUnshieldedAddress(Buffer.from(seed, 'hex'), 'undeployed') } as never,
+        addresses: { undeployed: rcKeys.unshieldedAddress(Buffer.from(seed, 'hex'), 'undeployed') } as never,
         createdAt: '2026-10-31T00:00:00.000Z',
       }, path.join(stateRootIn(home), 'wallets', `${name}.json`));
     };

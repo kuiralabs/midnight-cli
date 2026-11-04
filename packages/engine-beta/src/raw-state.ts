@@ -3,7 +3,7 @@
 // layout the fields have no names, so cells show their field-aligned bytes in
 // hex and maps show their size, as the parsed state does.
 
-import type { RawStateValue } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { RawStateValue } from '@kuiralabs/midnight-cli-core/engine';
 
 const toHex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 

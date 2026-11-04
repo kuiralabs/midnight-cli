@@ -2,8 +2,7 @@
 // refuses it without saying why, so mn finds out first. The endpoints mn
 // connects to itself are checked where the connection is made.
 
-import { assertEndpointUsable, endpointRefusal, isBlockfrostUrl } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import { assertEndpointUsable, endpointRefusal, isBlockfrostUrl, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
 
 const PROBE_TIMEOUT_MS = 10_000;
 

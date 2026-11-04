@@ -1,9 +1,8 @@
 // What an owner is told when an account deploy stops for want of Dust.
 
 import { describe, expect, it } from 'vitest';
-import { ERROR_CODES, EXIT_INSUFFICIENT_BALANCE, classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { ERROR_CODES, EXIT_INSUFFICIENT_BALANCE, classifyError, DustRequiredError } from '@kuiralabs/midnight-cli-core';
 import { MEASURED_ACCOUNT_DEPLOY, deployShortOfDustNote } from '../lib/grant/deploy-cost.ts';
-import { DustRequiredError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { installedCommands } from '../lib/installed-commands.ts';
 
 describe('deployShortOfDustNote', () => {

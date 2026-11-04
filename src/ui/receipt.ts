@@ -1,8 +1,7 @@
 // A submitted transaction's receipt, as a command shows it on stderr.
 
-import type { Receipt } from '@kuiralabs/midnight-chain/lib/tx-receipt';
-import { keyValue, formatDust } from '@kuiralabs/midnight-cli-core/ui/format';
-import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
+import type { Receipt } from '@kuiralabs/midnight-chain';
+import { keyValue, formatDust, dim } from '@kuiralabs/midnight-cli-core/ui';
 
 /** The receipt's lines: block, fee and a result other than success; or why there is none yet. */
 export function receiptText(receipt: Receipt, txId: string): string {

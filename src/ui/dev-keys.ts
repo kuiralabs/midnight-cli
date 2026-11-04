@@ -1,4 +1,4 @@
-import type { NoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
+import type { NoticeSink } from '@kuiralabs/midnight-cli-core';
 // Raw-mode single-keystroke dispatcher for `mn dev`.
 // Registers {key → handler} pairs; reads one char at a time from stdin.
 // Always restores the terminal's cooked mode on stop() so a crash or Ctrl+C

@@ -2,8 +2,7 @@
 
 import type { ServeHandle } from '../serve-manager.ts';
 import type { UnlockHost } from '../wallet-config.ts';
-import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import type { CallSdkWarnings, NetworkName } from '@kuiralabs/midnight-cli-core';
 
 // ── DApp Test Config (dapp.test.json in dApp root) ──
 

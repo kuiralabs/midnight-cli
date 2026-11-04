@@ -1,13 +1,8 @@
 // tx command: what became of a transaction, from the indexer
 // Usage: midnight tx status <hash or identifier> [--wait [--timeout <seconds>]] [--network <name>] [--json]
 
-import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { header, keyValue, formatDust } from '@kuiralabs/midnight-cli-core/ui/format';
-import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
-import { spinnerReporter } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import { type ParsedArgs, getFlag, hasFlag, UsageError, resolveNetwork, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { header, keyValue, formatDust, dim, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { parseTxReference, transactionStatus, TX_STATUS_WAIT_MS } from '../lib/tx-status.ts';
 import { transactionStatusJson } from '../lib/tx-receipt.ts';
 

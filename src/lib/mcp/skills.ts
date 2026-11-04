@@ -6,8 +6,7 @@
 // at each resources/read; scripts/write-skill-docs.ts writes the same text to
 // docs/SKILL-CORE.md and docs/SKILL.md, the copies the README links to.
 
-import { assembleGuidance, sectionsWithAdded, type GuidancePiece } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
-import { declaredCodeSets, type CommandRegistry } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { assembleGuidance, sectionsWithAdded, type GuidancePiece, declaredCodeSets, type CommandRegistry } from '@kuiralabs/midnight-cli-core';
 
 /** skill/core's sections, in order. */
 export const SKILL_CORE_SECTIONS = ['title', 'intent-routing', 'safety-rules', 'when-to-fetch'] as const;

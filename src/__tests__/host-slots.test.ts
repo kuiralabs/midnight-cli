@@ -9,14 +9,13 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { WebSocket } from 'ws';
-import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
+import { createHost, type Host, type Prompter } from '@kuiralabs/midnight-cli-core';
+import { promptApproval } from '@kuiralabs/midnight-cli-core/engine';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
-import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
-import { promptApproval } from '@kuiralabs/midnight-cli-core/lib/approval';
 import { NoPassphraseError, PASSPHRASE_ENV, establishPassphrase, unlockPassphrase } from '../lib/passphrase.ts';
 import { unlockWallet } from '../lib/wallet-config.ts';
 import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
-import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 
@@ -94,7 +93,7 @@ describe('the plain-text wallet warning', () => {
   it("is said once per host, through that host's notices", async () => {
     const root = stateRootIn(home);
     const wallet = saveWalletConfig(
-      { seed: SEED, addresses: deriveAllAddresses(Buffer.from(SEED, 'hex')), createdAt: '2026-11-03T00:00:00.000Z' },
+      { seed: SEED, addresses: rcKeys.unshieldedAddresses(Buffer.from(SEED, 'hex')), createdAt: '2026-11-03T00:00:00.000Z' },
       path.join(root, 'wallets', 'plain.json'),
     );
     const saidA: string[] = [];

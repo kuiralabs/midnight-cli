@@ -236,7 +236,7 @@ try {
     }
   }
   writeFileSync(join(outside, 'load.mjs'), `
-    import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+    import { createHost } from '@kuiralabs/midnight-cli-core';
     const host = createHost({
       paths: { stateRoot: ${JSON.stringify(join(outside, 'state'))}, home: ${JSON.stringify(outside)} },
       engineLoader: async (set, host) => set === 'beta' ? (await import('@kuiralabs/midnight-engine-beta')).createBetaEngine(host) : (await import('@kuiralabs/midnight-engine-rc')).createRcEngine(host),
@@ -246,6 +246,34 @@ try {
   for (const [network, set] of [['undeployed', 'rc'], ['stagenet', 'beta']]) {
     const loaded = run(process.execPath, ['load.mjs', network], outside).trim();
     check(`a program outside mn loads the ${set} engine for ${network}`, loaded === set, loaded);
+  }
+
+  // The installed packages are imported by their entry points alone: each
+  // named entry point loads, the published manifests name no source file,
+  // and a module that is not an entry point is refused.
+  writeFileSync(join(outside, 'entry.mjs'), `
+    try { await import(process.argv[2]); console.log('loaded'); } catch (error) { console.log(error.code ?? error.message); }
+  `);
+  for (const { name } of workspaces) {
+    const manifest = readFileSync(join(outside, 'node_modules', name, 'package.json'), 'utf-8');
+    check(`a program outside mn: ${name}'s manifest names no source file`, !manifest.includes('midnight-cli-source'));
+    for (const entry of Object.keys(JSON.parse(manifest).exports).filter((key) => !key.includes('*'))) {
+      const specifier = entry === '.' ? name : `${name}${entry.slice(1)}`;
+      const loaded = run(process.execPath, ['entry.mjs', specifier], outside).trim();
+      check(`a program outside mn imports ${specifier}`, loaded === 'loaded', loaded);
+    }
+  }
+  // A module of each package that is not an entry point, named as the open
+  // `./*` used to export it (core's lib/errors as `<name>/lib/errors`).
+  for (const [name, deepPath] of [
+    ['@kuiralabs/midnight-cli-core', 'lib/errors'],
+    ['@kuiralabs/midnight-chain', 'lib/chain-id'],
+    ['@kuiralabs/midnight-engine-rc', 'derive-address'],
+    ['@kuiralabs/midnight-engine-beta', 'derive-address'],
+  ]) {
+    check(`a program outside mn finds ${name}'s ${deepPath} built`, existsSync(join(outside, 'node_modules', name, 'dist', `${deepPath}.js`)));
+    const deep = run(process.execPath, ['entry.mjs', `${name}/${deepPath}`], outside).trim();
+    check(`a program outside mn is refused ${name}/${deepPath}`, deep === 'ERR_PACKAGE_PATH_NOT_EXPORTED', deep);
   }
 } catch (error) {
   check('the fresh install and its checks ran', false, String(error.stderr || error.message).trim().split('\n').slice(-3).join(' | '));

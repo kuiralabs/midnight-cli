@@ -2,7 +2,9 @@
 // Each public package's API, as a report checked in beside it: every module a
 // program can import through the package's exports map, with the declarations
 // it exports (functions, types, classes, constants and their signatures), as
-// TypeScript emits them, without comments. A change to an export shows in the
+// TypeScript emits them, without comments. An entry point that is a barrel
+// (only `export { … } from` lists) shows each name it exports, resolved by the
+// type checker to the declaration in the module that defines it. A change to an export shows in the
 // report's diff, and the suite fails until the report is written again.
 //
 // Usage:
@@ -14,6 +16,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
+import { barrelExports } from './check-layering.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -26,8 +29,8 @@ export function reportPath(dir) {
 }
 
 /**
- * The modules the exports map lets a program import, as [subpath, source file]
- * pairs: a subpath pattern (`./*`) stands for every source module it matches.
+ * The entry points the exports map lets a program import, as [subpath, source
+ * file] pairs: a subpath pattern (`./*`) stands for every source module it matches.
  */
 function entryModules(pkgDir, srcFiles) {
   const pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
@@ -68,7 +71,48 @@ function emitDeclarations(pkgDir) {
   }, undefined, true);
   const errors = result.diagnostics.filter((d) => d.category === ts.DiagnosticCategory.Error);
   if (errors.length > 0) throw new Error(ts.formatDiagnostics(errors, { getCanonicalFileName: (f) => f, getCurrentDirectory: () => pkgDir, getNewLine: () => '\n' }));
-  return { declarations, srcFiles: parsed.fileNames };
+  return { program, declarations, srcFiles: parsed.fileNames };
+}
+
+const DECLARATION_KINDS = [ts.SyntaxKind.FunctionDeclaration, ts.SyntaxKind.ClassDeclaration, ts.SyntaxKind.InterfaceDeclaration, ts.SyntaxKind.TypeAliasDeclaration, ts.SyntaxKind.EnumDeclaration, ts.SyntaxKind.ModuleDeclaration];
+
+/**
+ * The statements of an emitted declaration file that declare `name` (a
+ * function's overloads, a merged interface's parts), or the re-export of it
+ * from another package.
+ */
+function statementsDeclaring(text, name) {
+  const file = ts.createSourceFile('x.d.ts', text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const found = file.statements.filter((statement) => {
+    if (ts.isVariableStatement(statement)) return statement.declarationList.declarations.some((d) => ts.isIdentifier(d.name) && d.name.text === name);
+    return DECLARATION_KINDS.includes(statement.kind) && statement.name?.text === name;
+  });
+  if (found.length > 0) return found.map((statement) => printer.printNode(ts.EmitHint.Unspecified, statement, file));
+  const reExport = file.statements.find((statement) => ts.isExportDeclaration(statement) && statement.moduleSpecifier !== undefined && statement.exportClause !== undefined && ts.isNamedExports(statement.exportClause) && statement.exportClause.elements.some((element) => element.name.text === name));
+  return reExport === undefined ? [] : [`export ${reExport.isTypeOnly ? 'type ' : ''}{ ${name} } from ${reExport.moduleSpecifier.getText(file)};`];
+}
+
+/**
+ * The declarations a barrel exports, walked with the type checker: each name
+ * resolved to the module that defines it, and printed from that module's
+ * emitted declarations, in the barrel's order.
+ */
+function barrelDeclarations(program, declarations, barrel) {
+  const checker = program.getTypeChecker();
+  const moduleSymbol = checker.getSymbolAtLocation(program.getSourceFile(barrel));
+  const printed = [];
+  for (const exported of checker.getExportsOfModule(moduleSymbol)) {
+    const symbol = exported.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(exported) : exported;
+    if (symbol.name !== exported.name) throw new Error(`${relative(ROOT, barrel)} exports ${symbol.name} as ${exported.name}: a barrel re-exports each name as it is`);
+    // A name another package defines is shown as re-exported by the module the barrel lists.
+    const declared = symbol.declarations?.[0]?.getSourceFile().fileName;
+    const definer = declarations.has(declared) ? declared : barrelExports(barrel).get(exported.name)?.file;
+    const text = definer === undefined ? undefined : declarations.get(definer);
+    const statements = text === undefined ? [] : statementsDeclaring(text, symbol.name);
+    if (statements.length === 0) throw new Error(`${relative(ROOT, barrel)}: no declaration found for ${exported.name}`);
+    printed.push(...statements);
+  }
+  return printed.join('\n');
 }
 
 const printer = ts.createPrinter({ removeComments: true, newLine: ts.NewLineKind.LineFeed });
@@ -83,12 +127,12 @@ function normalise(text) {
 export function apiReport(dir) {
   const pkgDir = join(ROOT, 'packages', dir);
   const name = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8')).name;
-  const { declarations, srcFiles } = emitDeclarations(pkgDir);
-  let report = `# API report: ${name}\n\nGenerated by \`node scripts/api-report.mjs write\` from the code: every module the exports map makes importable, with what it exports. Don't edit it by hand.\n`;
+  const { program, declarations, srcFiles } = emitDeclarations(pkgDir);
+  let report = `# API report: ${name}\n\nGenerated by \`node scripts/api-report.mjs write\` from the code: every entry point the exports map makes importable, with what it exports. Don't edit it by hand.\n`;
   for (const [subpath, source] of entryModules(pkgDir, srcFiles)) {
     const text = declarations.get(source);
     if (text === undefined) throw new Error(`${name}: export ${subpath} has no declarations (${relative(ROOT, source)})`);
-    const body = normalise(text);
+    const body = barrelExports(source) === undefined ? normalise(text) : barrelDeclarations(program, declarations, source);
     report += `\n## \`${name}${subpath === '.' ? '' : subpath.slice(1)}\`\n\n` + (body === '' ? '(exports nothing)\n' : '```ts\n' + body + '\n```\n');
   }
   return report;

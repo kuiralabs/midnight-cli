@@ -10,7 +10,7 @@ export default defineConfig({
   ssr: base.ssr,
   test: {
     ...base.test,
-    include: ['src/**/*.live.test.ts'],
+    include: ['src/**/*.live.test.ts', 'packages/*/src/**/*.live.test.ts'],
     exclude: [...configDefaults.exclude, '**/.claude/**'],
   },
 });

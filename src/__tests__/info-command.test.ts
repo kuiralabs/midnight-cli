@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import infoCommand from '../commands/info.ts';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { parseArgs } from '@kuiralabs/midnight-cli-core';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -12,7 +12,7 @@ import { cliCall } from './helpers/cli-call.ts';
 const TEST_DIR = path.join(os.tmpdir(), `midnight-info-cmd-test-${process.pid}`);
 
 const TEST_SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
-const TEST_ADDRESSES = deriveAllAddresses(Buffer.from(TEST_SEED, 'hex'));
+const TEST_ADDRESSES = rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex'));
 
 const TEST_CONFIG: WalletConfig = {
   seed: TEST_SEED,

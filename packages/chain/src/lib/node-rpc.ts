@@ -4,8 +4,7 @@
 // this is used at cold-start moments where heavyweight init would hurt.
 
 import WebSocket from 'ws';
-import { assertEndpointUsable, endpointRefusalFromWsError } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
-import { CancelledError, NetworkError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { assertEndpointUsable, endpointRefusalFromWsError, CancelledError, NetworkError } from '@kuiralabs/midnight-cli-core';
 
 export interface RpcOptions {
   url: string;

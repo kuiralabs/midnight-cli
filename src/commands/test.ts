@@ -2,16 +2,11 @@
 // Usage: midnight test <run|list|results> [options]
 // Discovers dapp.test.json in the current directory and executes test suites.
 
-import { isValidNetworkName, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import { isValidNetworkName, type NetworkName, type ParsedArgs, getFlag, hasFlag, CancelledError, throwIfCancelled, UsageError, type CallContext, type CallOutput, type CallProgress, type CommandOutcome } from '@kuiralabs/midnight-cli-core';
+import { header, keyValue, divider, bold, dim, green, red, teal, yellow, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { StringDecoder } from 'node:string_decoder';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
-import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { CancelledError, throwIfCancelled, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { CallContext, CallOutput, CallProgress, CommandOutcome } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { header, keyValue, divider } from '@kuiralabs/midnight-cli-core/ui/format';
-import { bold, dim, green, red, teal, yellow } from '@kuiralabs/midnight-cli-core/ui/colors';
-import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
 
 import { discoverDappConfig, discoverTestSuites, loadAssertions, loadActions, loadPrompt } from '../lib/test/discovery.ts';
 import { createPrepContext, type TestRunResult, type PrepStepResult } from '../lib/test/types.ts';
@@ -544,7 +539,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
         }
 
         const { runActions, diffState } = await import('../lib/test/actions-runner.ts');
-        const { resolveNetwork } = await import('@kuiralabs/midnight-cli-core/lib/resolve-network');
+        const { resolveNetwork } = await import('@kuiralabs/midnight-cli-core');
 
         const network = config.network ?? 'undeployed';
         const { config: networkConfig } = resolveNetwork({
@@ -554,7 +549,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
 
         // mn serve should already be started by the prep step (mn-serve)
         // Use the serve port from the prep context if available, otherwise default
-        const { DEFAULT_SERVE_PORT } = await import('@kuiralabs/midnight-cli-core/lib/constants');
+        const { DEFAULT_SERVE_PORT } = await import('@kuiralabs/midnight-cli-core');
         const servePort = prep.serveHandle?.port ?? DEFAULT_SERVE_PORT;
 
         const redeployFlag = hasFlag(args, 'redeploy');

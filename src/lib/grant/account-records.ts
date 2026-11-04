@@ -5,7 +5,7 @@
 
 import { mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { DIR_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { DIR_MODE } from '@kuiralabs/midnight-cli-core';
 
 /** The directory under ~/.midnight that holds each network's accounts. */
 export const ACCOUNTS_DIR_NAME = 'accounts';

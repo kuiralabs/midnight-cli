@@ -7,23 +7,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import { NoPayerError, resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
-import { networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import { parseArgs, saveCliConfig, NoPayerError, resolvePayingTarget, networkTargetOf, type NetworkName, createSdkWarningRouter, CancelledError, createHost } from '@kuiralabs/midnight-cli-core';
+import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
 import { NoAccountError } from '../lib/grant/prepare.ts';
 import { servePayerAt } from '../lib/serve-payer.ts';
 import { probeServeNetwork } from '../lib/serve-manager.ts';
-import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
 import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
 import contractCommand from '../commands/contract.ts';
 import grantCommand from '../commands/grant.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 
 // The host the tests' calls run in: nobody to ask, notices dropped.
 const host = createHost();

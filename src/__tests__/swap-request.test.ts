@@ -6,14 +6,12 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { encodeOfferEnvelope, OfferExpiredError } from '@kuiralabs/midnight-cli-core/lib/offer-envelope';
-import { NotAnOfferError, TermsMismatchError } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
-import { readOffer } from '@kuiralabs/midnight-engine-rc/offer-reader';
+import { parseArgs, UsageError, encodeOfferEnvelope, OfferExpiredError, TermsMismatchError } from '@kuiralabs/midnight-cli-core';
+import { NotAnOfferError } from '@kuiralabs/midnight-cli-core/engine';
 import { DEFAULT_OFFER_LIFETIME_S, prepareMake, prepareTake, termsOf } from '../lib/swap/request.ts';
-import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from './fixtures/swap-offer.ts';
-import { testHost } from './helpers/test-host.ts';
+import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from '../../test-support/fixtures/swap-offer.ts';
+import { testHost } from '../../test-support/test-host.ts';
+import { rcEngine } from '../../test-support/rc-engine.ts';
 
 // The host the tests' calls run in (test-host.ts): settings from the test's environment, nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
 const host = testHost();
@@ -57,7 +55,7 @@ describe('take', () => {
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
   const offerFile = (overrides: { network?: string; expiresAt?: Date; tx?: string } = {}) => {
-    const read = readOffer(SWAP_OFFER_HEX);
+    const read = rcEngine.ledger.readOffer(SWAP_OFFER_HEX);
     const file = join(dir, 'offer.json');
     writeFileSync(file, encodeOfferEnvelope({
       network: (overrides.network ?? 'undeployed') as 'undeployed', id: read.id, terms: read.terms,

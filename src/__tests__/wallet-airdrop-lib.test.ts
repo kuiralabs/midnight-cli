@@ -10,22 +10,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
-import { saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
-import type { ProgressEvent } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { createHost, type Host, settingsFromEnvironment, saveCliConfig, type Prompter, type ProgressEvent } from '@kuiralabs/midnight-cli-core';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { PASSPHRASE_ENV } from '../lib/passphrase.ts';
 import { airdropNight, type AirdropAddressed, type AirdropNightOptions } from '../lib/wallet/airdrop.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
-import { startLedger8Indexer, startRefusingEndpoint, type Ledger8Indexer } from './helpers/stand-in-indexer.ts';
+import { startLedger8Indexer, startRefusingEndpoint, type Ledger8Indexer } from '../../test-support/stand-in-indexer.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const SEED = Buffer.from('a7'.repeat(32), 'hex');
-const ADDRESS = deriveAllAddresses(SEED);
-const SHIELDED = deriveAllShieldedAddresses(SEED);
+const ADDRESS = rcKeys.unshieldedAddresses(SEED);
+const SHIELDED = rcKeys.shieldedAddresses(SEED);
 // Above what a JS number carries exactly (2^53 micro-NIGHT): 9007199254.740993 NIGHT.
 const LARGE = 9_007_199_254_740_993n;
 

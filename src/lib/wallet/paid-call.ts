@@ -3,11 +3,8 @@
 // events: a payer reports on a Spinner (payer.ts), which stepSpinner turns
 // into the operation's events.
 
-import type { NetworkChoice } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
-import type { ProgressEvent } from '@kuiralabs/midnight-cli-core/lib/progress';
-import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import type { Spinner, SpinnerReporter } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import type { NetworkChoice, Payer, ProgressEvent, CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
+import type { Spinner, SpinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 
 /** A step ended in failure, saying so: the payer found no NIGHT, the script failed. The operation's error follows. */
 export interface StepFailed {

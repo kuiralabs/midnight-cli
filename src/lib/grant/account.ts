@@ -35,9 +35,7 @@ import {
   sealedOwnerStore,
   sealedPrivateStatePassword,
 } from './sealed-account.ts';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { isValidNetworkName, sdkSetOfNetwork, type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
-import type { SdkSet } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { UsageError, isValidNetworkName, sdkSetOfNetwork, type NetworkConfig, type SdkSet } from '@kuiralabs/midnight-cli-core';
 
 /** Where the account package caches its proving artefacts, under ~/.midnight: each file is fetched the first time a command proves with it. */
 const ACCOUNT_ARTIFACTS_DIR_NAME = 'account-artifacts';

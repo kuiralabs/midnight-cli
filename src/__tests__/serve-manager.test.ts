@@ -6,12 +6,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { serveEndpointMismatch, serveWalletMismatch } from '../lib/serve-manager.ts';
-import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import { createSdkWarningRouter, createHost } from '@kuiralabs/midnight-cli-core';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
@@ -141,7 +140,7 @@ describe('startServeOrReuse against a running serve', () => {
       fs.mkdirSync(path.join(home, '.midnight', 'wallets'), { recursive: true });
       for (const [name, seed] of [['two', TWO], ['bob', BOB]] as const) {
         saveWalletConfig(
-          { seed: seed.toString('hex'), addresses: deriveAllAddresses(seed), createdAt: new Date(0).toISOString() },
+          { seed: seed.toString('hex'), addresses: rcKeys.unshieldedAddresses(seed), createdAt: new Date(0).toISOString() },
           path.join(home, '.midnight', 'wallets', `${name}.json`),
         );
       }
@@ -154,7 +153,7 @@ describe('startServeOrReuse against a running serve', () => {
 
     it('reuses a serve that pays from that wallet', async () => {
       const { startServeOrReuse } = await import('../lib/serve-manager.ts');
-      const serve = await fakeServe(sameChain, deriveAllAddresses(TWO).undeployed);
+      const serve = await fakeServe(sameChain, rcKeys.unshieldedAddresses(TWO).undeployed);
       try {
         const handle = await startServeOrReuse({ root: stateRootIn(home), host, port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested, wallet: 'two' });
         expect(handle.port).toBe(serve.port);
@@ -167,11 +166,11 @@ describe('startServeOrReuse against a running serve', () => {
     // for bob had bob pay, with no word of it.
     it('refuses a serve that pays from another wallet, on the same chain', async () => {
       const { startServeOrReuse } = await import('../lib/serve-manager.ts');
-      const bob = deriveAllAddresses(BOB).undeployed;
+      const bob = rcKeys.unshieldedAddresses(BOB).undeployed;
       const serve = await fakeServe(sameChain, bob);
       try {
         await expect(startServeOrReuse({ root: stateRootIn(home), host, port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested, wallet: 'two' }))
-          .rejects.toThrow(`can't pay for this command: it serves the wallet at ${bob}, and this command pays from two (${deriveAllAddresses(TWO).undeployed})`);
+          .rejects.toThrow(`can't pay for this command: it serves the wallet at ${bob}, and this command pays from two (${rcKeys.unshieldedAddresses(TWO).undeployed})`);
       } finally {
         await serve.close();
       }

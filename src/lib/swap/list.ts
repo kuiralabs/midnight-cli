@@ -1,11 +1,7 @@
 // Listing a wallet's open swap offers, each asked of the indexer: the ones
 // taken since are closed in mn's record. No wallet opens.
 
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { networkTargetOf, type NetworkChoice } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { progressSteps, type ProgressEvent } from '@kuiralabs/midnight-cli-core/lib/progress';
+import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, type NetworkChoice, progressSteps, type ProgressEvent } from '@kuiralabs/midnight-cli-core';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
 import { listOffers, type ListedOffer } from './offers.ts';
 import { offerWalletAddress } from './swap-session.ts';

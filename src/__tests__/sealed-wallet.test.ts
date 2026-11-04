@@ -8,13 +8,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { WrongPassphraseError } from '@kuiralabs/midnight-cli-core/lib/keystore';
+import { WrongPassphraseError, FILE_MODE, createHost } from '@kuiralabs/midnight-cli-core';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { loadWalletConfig, protectAllWallets, sealWalletInPlace, unlockWallet, writeSealedWallet } from '../lib/wallet-config.ts';
-import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
@@ -24,8 +22,8 @@ const SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
 const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const PASSPHRASE = 'correct horse battery staple';
 const PUBLIC = {
-  addresses: deriveAllAddresses(Buffer.from(SEED, 'hex')),
-  shieldedAddresses: deriveAllShieldedAddresses(Buffer.from(SEED, 'hex')),
+  addresses: rcKeys.unshieldedAddresses(Buffer.from(SEED, 'hex')),
+  shieldedAddresses: rcKeys.shieldedAddresses(Buffer.from(SEED, 'hex')),
   createdAt: '2026-10-19T00:00:00.000Z',
 };
 

@@ -2,12 +2,9 @@
 // shell builds one, its result written at once to stdout as one JSON line.
 // Tests that read a command's output from the process's streams call it so.
 
-import type { ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { createCallContext, runHandler, type CommandHandler, type CommandOutcome } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { type ParsedArgs, createCallContext, runHandler, type CommandHandler, type CommandOutcome, type Payer, type Host } from '@kuiralabs/midnight-cli-core';
 import { processOutput } from '../../lib/command-dispatch.ts';
-import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { testHost } from './test-host.ts';
+import { testHost } from '../../../test-support/test-host.ts';
 
 export interface CliCallOptions<Protector> {
   /** The call's cancellation; none: it is never cancelled. */

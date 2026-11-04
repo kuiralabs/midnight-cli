@@ -1,9 +1,8 @@
 // The `contract` command, described once.
 
-import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import type { HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
-import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands/chain.codes';
+import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget, type HostEngines } from '@kuiralabs/midnight-cli-core';
+import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
+import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
 import { OPENS_WALLET } from './wallet.codes.ts';
 
 /** The subcommands that reach a chain: inspect reads only the compiled contract (--path, --managed, --name). */
@@ -221,7 +220,7 @@ export const contractDefinition: CommandDefinition = {
             const { resolveContractDeployRequest } = await import('../lib/contract/request.ts');
             const args = call.argv();
             const { info } = resolveContractDeployRequest(args, process.cwd());
-            const { resolvePayingTarget } = await import('@kuiralabs/midnight-cli-core/lib/payer');
+            const { resolvePayingTarget } = await import('@kuiralabs/midnight-cli-core');
             const { assertContractRunsOn } = await import('../lib/contract/runtime-check.ts');
             const root = call.host.paths().stateRoot;
             await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'deploy', root, call.host).network, root, call.host.engines);
@@ -256,7 +255,7 @@ export const contractDefinition: CommandDefinition = {
             const { resolveContractCallRequest } = await import('../lib/contract/request.ts');
             const args = call.argv();
             const { info } = resolveContractCallRequest(args, process.cwd());
-            const { resolvePayingTarget } = await import('@kuiralabs/midnight-cli-core/lib/payer');
+            const { resolvePayingTarget } = await import('@kuiralabs/midnight-cli-core');
             const { assertContractRunsOn } = await import('../lib/contract/runtime-check.ts');
             const root = call.host.paths().stateRoot;
             await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'call', root, call.host).network, root, call.host.engines);

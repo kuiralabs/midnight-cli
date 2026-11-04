@@ -5,7 +5,7 @@
 // length of 32"), and a wrong argument count as the runtime's count, which
 // includes its own context ("expected 1 argument ... received 4" for 3 args).
 
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { UsageError } from '@kuiralabs/midnight-cli-core';
 import type { ContractInfo } from './inspect.ts';
 
 /** A contract address is 32 bytes as 64 hex characters. */

@@ -3,15 +3,8 @@
 // the terms are the agreed ones, the expiry hasn't passed), the wallet adds
 // its half once the offer is found live, and the swap is submitted.
 
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { progressSteps } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { withCallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import { checkTerms, type SwapTerms } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
-import { assertOfferUnexpired } from '@kuiralabs/midnight-cli-core/lib/offer-envelope';
-import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, checkTerms, type SwapTerms, assertOfferUnexpired } from '@kuiralabs/midnight-cli-core';
+import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
 import type { PaidCallOptions } from '../wallet/paid-call.ts';
 import { receiptOfSubmitted } from '../wallet/submit-steps.ts';

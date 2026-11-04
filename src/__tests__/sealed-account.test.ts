@@ -8,7 +8,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { createHost, WrongPassphraseError } from '@kuiralabs/midnight-cli-core';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -16,7 +16,6 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { freshOwnerDevice } from '@kuiralabs/midnight-account-chain/owner';
 import { validatePassword } from '@midnight-ntwrk/midnight-js-utils';
-import { WrongPassphraseError } from '@kuiralabs/midnight-cli-core/lib/keystore';
 import {
   contractAddressOnRecord,
   createAccountKey,

@@ -7,9 +7,7 @@
 // (33 bytes): what mn reports as a submitted transaction's `txHash` is the
 // wallet SDK's identifier.
 
-import { UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { sleep } from '@kuiralabs/midnight-cli-core/lib/sleep';
-import { progressSteps, type ProgressListener } from '@kuiralabs/midnight-cli-core/lib/progress';
+import { UsageError, throwIfCancelled, sleep, progressSteps, type ProgressListener } from '@kuiralabs/midnight-cli-core';
 import { queryIndexer } from './indexer-graphql.ts';
 
 const QUERY_TIMEOUT_MS = 10_000;

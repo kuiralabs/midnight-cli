@@ -1,8 +1,8 @@
 // What a wallet operation that pays says while the engine syncs, proves and
 // submits, in the words mn has always shown, and its receipt after.
 
-import type { ProgressSteps } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { type Receipt, receiptOf } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import type { ProgressSteps } from '@kuiralabs/midnight-cli-core';
+import { type Receipt, receiptOf } from '@kuiralabs/midnight-chain';
 
 /** Says a sync's progress as "`label`... N%", and "`label`..." once it reaches the tip. */
 export function saySyncPercent(steps: ProgressSteps, label: string, applied: number, highest: number): void {

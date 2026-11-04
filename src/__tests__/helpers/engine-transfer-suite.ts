@@ -11,11 +11,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Engine, EngineHost, TransferParams } from '@kuiralabs/midnight-cli-core/lib/engine';
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import { withCallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import { type Engine, type NetworkConfig, createHost, withCallSdkWarnings } from '@kuiralabs/midnight-cli-core';
+import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
+import type { EngineHost, TransferParams } from '@kuiralabs/midnight-cli-core/engine';
 
 /** What the suite takes from an engine: how to make it with its repository's protocol-version read. */
 export interface TransferEngine {

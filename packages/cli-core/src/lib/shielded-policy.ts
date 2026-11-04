@@ -6,7 +6,7 @@
 // keep shielded on. Overridable with `--force-shielded` for the rare case a
 // wallet did receive shielded funds out of band.
 
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import type { NetworkName } from './network.ts';
 
 /** Networks with no shielded faucet — shielded sync is skipped by default. */
 const NO_SHIELDED_FAUCET: readonly NetworkName[] = ['preview', 'preprod', 'stagenet'];

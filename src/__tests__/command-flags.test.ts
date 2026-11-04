@@ -9,11 +9,8 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { sourceFiles } from '../../scripts/check-layering.mjs';
 import { join } from 'node:path';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { findUnknownFlags as findUnknownFlagsIn, findMisplacedFlags as findMisplacedFlagsIn, assertKnownFlags as assertKnownFlagsIn } from '@kuiralabs/midnight-cli-core/lib/command-flags';
+import { parseArgs, UsageError, findUnknownFlags as findUnknownFlagsIn, findMisplacedFlags as findMisplacedFlagsIn, assertKnownFlags as assertKnownFlagsIn, type ParsedArgs } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
-import type { ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 
 // The refusal reads the installed commands' registry, as the CLI's does.
 const findUnknownFlags = (args: ParsedArgs) => findUnknownFlagsIn(args, installedCommands);

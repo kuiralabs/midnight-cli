@@ -5,13 +5,8 @@
 // The server is loaded when first needed, so a command that pays nothing
 // doesn't load it.
 
-import { DEFAULT_SERVE_PORT } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { OWN_COMMAND_DUST_WAIT_MS } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
-import type { ConnectOptions, Payer, PayingTarget, ServedWallet } from '@kuiralabs/midnight-cli-core/lib/payer';
-import { sdkSetOf } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { sessionOver, type WalletSession } from '@kuiralabs/midnight-cli-core/lib/wallet-session';
-import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import { DEFAULT_SERVE_PORT, OWN_COMMAND_DUST_WAIT_MS, type ConnectOptions, type Payer, type PayingTarget, type ServedWallet, sdkSetOf, sessionOver, type WalletSession, type CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
+import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { assertWalletCanPay } from './wallet-can-pay.ts';
 
 /**

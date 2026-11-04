@@ -1,13 +1,9 @@
 // info command — display wallet metadata (no secrets)
 // Shows addresses for all networks + shielded, creation date, file path
 
-import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { type ParsedArgs, getFlag, hasFlag, resolveNetworkName, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { header, divider, formatAddress, bold, dim, teal } from '@kuiralabs/midnight-cli-core/ui';
 import { loadWalletConfig, resolveWalletPath, walletAddress } from '../lib/wallet-config.ts';
-import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import { header, divider } from '@kuiralabs/midnight-cli-core/ui/format';
-import { formatAddress } from '@kuiralabs/midnight-cli-core/ui/format';
-import { bold, dim, teal } from '@kuiralabs/midnight-cli-core/ui/colors';
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 
 export default async function infoCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const root = ctx.config.paths.stateRoot;

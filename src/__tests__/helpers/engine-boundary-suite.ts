@@ -14,11 +14,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 // The wallet SDK's copy of Effect (both engines' SDKs share it).
 import { Effect } from 'effect';
-import type { Engine, EngineHost } from '@kuiralabs/midnight-cli-core/lib/engine';
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
-import { DustRequiredError, InsufficientBalanceError, ProofFailureError, TransactionRefusedError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { type Engine, type NetworkConfig, createHost, classifyError, DustRequiredError, InsufficientBalanceError, ProofFailureError, TransactionRefusedError } from '@kuiralabs/midnight-cli-core';
+import type { EngineHost } from '@kuiralabs/midnight-cli-core/engine';
 import { installedCommands } from '../../lib/installed-commands.ts';
 
 /** What the suite takes from an engine: how to make it with its repository's seams, and the SDK's error classes from its own copy. */

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { freshGrantee, grantRequestFor, grantRequestLink } from '@kuiralabs/midnight-account-chain/agent';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { UsageError } from '@kuiralabs/midnight-cli-core';
 import { DEFAULT_GRANT_LIMITS, grantRequestOf, issuePreview } from '../lib/grant/owner-commands.ts';
 
 const ACCOUNT = '5e'.repeat(32);

@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 import type { AddressInfo } from 'node:net';
 import { SCRIPT_PRELUDE, executeScript, rpcClientCode } from '../../lib/contract/runner.ts';
 import { createRpcServer } from '../../lib/ws-rpc.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { createHost } from '@kuiralabs/midnight-cli-core';
 
 /** What the runner rejects with when a script's call to mn serve fails with what `failure` throws. */
 export async function scriptFailureAtServe(failure: () => unknown): Promise<Error> {

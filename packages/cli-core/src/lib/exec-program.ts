@@ -21,10 +21,21 @@ const KILL_GRACE_MS = 2_000;
 /** Runs `file` with `args` and returns its stdout once it exits with code 0. */
 export type ExecRunner = (file: string, args: readonly string[], run: ExecRun) => Promise<string>;
 
+// Fields are declared, not parameter properties, so Node's own TypeScript type
+// stripping can load core's source (the tests' child processes do).
 /** The program exited with a code other than 0 (null: killed by a signal from elsewhere); its stderr is in the message, and what it printed is kept. */
 export class ProgramFailedError extends Error {
-  constructor(readonly command: string, readonly exitCode: number | null, readonly stderr: string, readonly stdout: string) {
+  readonly command: string;
+  readonly exitCode: number | null;
+  readonly stderr: string;
+  readonly stdout: string;
+
+  constructor(command: string, exitCode: number | null, stderr: string, stdout: string) {
     super(`Command failed: ${command}\n${stderr}`);
+    this.command = command;
+    this.exitCode = exitCode;
+    this.stderr = stderr;
+    this.stdout = stdout;
     this.name = 'ProgramFailedError';
     Object.setPrototypeOf(this, ProgramFailedError.prototype);
   }
@@ -32,10 +43,12 @@ export class ProgramFailedError extends Error {
 
 /** The program ran past its time limit and was killed. Its code is NETWORK_ERROR: the programs mn runs with a limit are Docker's, which hang when its daemon or the network does. */
 export class ProgramTimedOutError extends Error {
+  readonly command: string;
   readonly code = 'NETWORK_ERROR';
 
-  constructor(readonly command: string, timeoutMs: number) {
+  constructor(command: string, timeoutMs: number) {
     super(`Command timed out (ETIMEDOUT) after ${timeoutMs / 1000}s: ${command}`);
+    this.command = command;
     this.name = 'ProgramTimedOutError';
     Object.setPrototypeOf(this, ProgramTimedOutError.prototype);
   }
