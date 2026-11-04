@@ -1,6 +1,6 @@
 {
   "name": "midnight-wallet-cli",
-  "version": "0.6.0-rc.12",
+  "version": "0.6.0-rc.13",
   "type": "module",
   "description": "Git-style CLI wallet for the Midnight blockchain",
   "license": "Apache-2.0",
@@ -70,15 +70,15 @@
     "readme-commands": "tsx --conditions=midnight-cli-source scripts/write-readme-commands.ts"
   },
   "dependencies": {
-    "@kuiralabs/midnight-chain": "0.1.0-rc.1",
-    "@kuiralabs/midnight-cli-core": "0.1.0-rc.0",
-    "@kuiralabs/midnight-connect": "0.1.0-rc.1",
-    "@kuiralabs/midnight-contract": "0.1.0-rc.1",
-    "@kuiralabs/midnight-dev": "0.1.0-rc.1",
-    "@kuiralabs/midnight-engine-beta": "0.1.0-rc.1",
-    "@kuiralabs/midnight-engine-rc": "0.1.0-rc.1",
-    "@kuiralabs/midnight-grant": "0.1.0-rc.1",
-    "@kuiralabs/midnight-wallet": "0.1.0-rc.1",
+    "@kuiralabs/midnight-chain": "0.1.0-rc.2",
+    "@kuiralabs/midnight-cli-core": "0.1.0-rc.2",
+    "@kuiralabs/midnight-connect": "0.1.0-rc.2",
+    "@kuiralabs/midnight-contract": "0.1.0-rc.2",
+    "@kuiralabs/midnight-dev": "0.1.0-rc.2",
+    "@kuiralabs/midnight-engine-beta": "0.1.0-rc.2",
+    "@kuiralabs/midnight-engine-rc": "0.1.0-rc.2",
+    "@kuiralabs/midnight-grant": "0.1.0-rc.2",
+    "@kuiralabs/midnight-wallet": "0.1.0-rc.2",
     "@modelcontextprotocol/sdk": "^1.27.1"
   },
   "devDependencies": {
