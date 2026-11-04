@@ -5,7 +5,7 @@
 // where the witnesses may be) comes from the runner as ScriptParts.
 
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import type { CallScript, DeployScript, ScriptParts, StateScript } from '@kuiralabs/midnight-cli-core/engine';
@@ -32,21 +32,25 @@ export const SCRIPT_PACKAGES = [
   'ws',
 ] as const;
 
-/** The folder of the installed package `name`, as mn resolves it; null when it isn't installed. */
-export function packageFolder(name: string): string | null {
+/**
+ * The folder of the installed package `name`, as mn resolves it from `from`
+ * (this engine's module); null when it isn't installed.
+ */
+export function packageFolder(name: string, from: string = import.meta.url): string | null {
   // node:module's createRequire works in every host (Node, the test runner,
   // the bundle); a package exported to `import` only is found through
-  // import.meta.resolve where the host has it.
-  let entry: string;
+  // import.meta.resolve where the host has it. bun answers some names (ws)
+  // with a module of its own, not a file: those are looked up in the
+  // node_modules folders above this module, where the script finds them too.
+  let entry: string | undefined;
   try {
-    entry = createRequire(import.meta.url).resolve(name);
+    entry = createRequire(from).resolve(name);
   } catch {
     try {
       entry = fileURLToPath(import.meta.resolve(name));
-    } catch {
-      return null;
-    }
+    } catch { /* not resolvable here: looked up below */ }
   }
+  if (entry === undefined || !isAbsolute(entry)) return installedFolder(name, dirname(fileURLToPath(from)));
   for (let dir = dirname(entry); ; dir = dirname(dir)) {
     const manifest = join(dir, 'package.json');
     if (existsSync(manifest)) {
@@ -55,6 +59,15 @@ export function packageFolder(name: string): string | null {
       } catch { /* not this one: keep looking up */ }
     }
     if (dirname(dir) === dir) return null;
+  }
+}
+
+/** The package `name` in the nearest node_modules above `dir` that holds it, as Node's resolution walks; null when none does. */
+function installedFolder(name: string, dir: string): string | null {
+  for (let at = dir; ; at = dirname(at)) {
+    const folder = join(at, 'node_modules', name);
+    if (existsSync(join(folder, 'package.json'))) return folder;
+    if (dirname(at) === at) return null;
   }
 }
 

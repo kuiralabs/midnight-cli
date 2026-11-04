@@ -7,7 +7,9 @@
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core';
 import type { ScriptParts } from '@kuiralabs/midnight-cli-core/engine';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as ledger from '@midnightntwrk/ledger-v9';
@@ -222,5 +224,19 @@ describe('generated scripts', () => {
   it('includes the provider imports in deploy and call scripts', () => {
     expect(scripts.deploy).toContain(PROVIDER_IMPORTS);
     expect(scripts.call).toContain(PROVIDER_IMPORTS);
+  });
+});
+
+// Regression: under bun, require.resolve('ws') answers with bun's own ws, not a
+// file, so the engine found no folder for it and the contract script (run under
+// Node) could not import it: a deploy from a program on bun failed.
+describe('packageFolder on bun', () => {
+  const bunInstalled = spawnSync('bun', ['--version'], { encoding: 'utf8' }).status === 0;
+  it.skipIf(!bunInstalled)('finds the installed ws, a folder holding its package.json, where bun answers with its own', () => {
+    const source = fileURLToPath(new URL('../contract-scripts.ts', import.meta.url));
+    const found = spawnSync('bun', ['--conditions=midnight-cli-source', '-e', `const { packageFolder } = await import(${JSON.stringify(source)}); console.log(packageFolder('ws'));`], { encoding: 'utf8' });
+    const folder = found.stdout.trim();
+    expect(folder, found.stderr).toMatch(/node_modules\/ws$/);
+    expect(existsSync(join(folder, 'package.json'))).toBe(true);
   });
 });
