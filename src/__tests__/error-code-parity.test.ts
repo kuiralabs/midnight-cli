@@ -37,8 +37,7 @@ import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { saveWalletConfig } from '../../test-support/plain-wallet.ts';
 import { UnsupportedNodeError } from '../lib/node-version.ts';
-import { NoAccountError } from '../lib/grant/prepare.ts';
-import { NodeTooOldForAccountError, UnreachableByAccountError } from '../lib/grant/account.ts';
+import { NoAccountError, NodeTooOldForAccountError, UnreachableByAccountError } from '@kuiralabs/midnight-grant';
 import { installedCommands } from '../lib/installed-commands.ts';
 
 // The handlers, as the shell loads them.

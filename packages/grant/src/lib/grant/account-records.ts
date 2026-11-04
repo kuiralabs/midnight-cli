@@ -1,7 +1,8 @@
 // Where an account's records live: one directory per network and wallet under
 // ~/.midnight/accounts/, never in the account build's own directory. The build
 // writes them there (the owner's keys, the roster of grants, its private-state
-// stores); mn only names the place.
+// stores); mn only names the place. The account package caches its proving
+// artefacts beside them, in ~/.midnight/account-artifacts/.
 
 import { mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -27,4 +28,11 @@ export function accountRecordsDir(network: string, walletName: string, root: str
 /** Creates the records directory, readable by its owner only: it will hold keys. */
 export function ensureAccountRecordsDir(dir: string): void {
   mkdirSync(dir, { recursive: true, mode: DIR_MODE });
+}
+
+/** Where the account package caches its proving artefacts, under ~/.midnight: each file is fetched the first time a command proves with it. */
+const ACCOUNT_ARTIFACTS_DIR_NAME = 'account-artifacts';
+
+export function accountArtifactsDir(root: string): string {
+  return join(root, ACCOUNT_ARTIFACTS_DIR_NAME);
 }

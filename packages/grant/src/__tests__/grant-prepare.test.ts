@@ -7,8 +7,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { parseArgs, UsageError, createHost } from '@kuiralabs/midnight-cli-core';
-import { UnreachableByAccountError } from '../lib/grant/account.ts';
-import { NoAccountError, prepareGrant } from '../lib/grant/prepare.ts';
+import { NoAccountError, UnreachableByAccountError } from '../lib/grant/account-errors.ts';
+import { prepareGrant } from '../lib/grant/prepare.ts';
 import { createAccountKey, sealedOwnerStore } from '../lib/grant/sealed-account.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped.

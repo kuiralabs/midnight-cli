@@ -157,6 +157,7 @@ export const WORKSPACE_PACKAGES = [
   { name: '@kuiralabs/midnight-contract', root: join(ROOT, 'packages', 'contract'), dir: join(ROOT, 'packages', 'contract', 'src'), home: 'contract' },
   { name: '@kuiralabs/midnight-connect', root: join(ROOT, 'packages', 'connect'), dir: join(ROOT, 'packages', 'connect', 'src'), home: 'connect' },
   { name: '@kuiralabs/midnight-dev', root: join(ROOT, 'packages', 'dev'), dir: join(ROOT, 'packages', 'dev', 'src'), home: 'dev' },
+  { name: '@kuiralabs/midnight-grant', root: join(ROOT, 'packages', 'grant'), dir: join(ROOT, 'packages', 'grant', 'src'), home: 'grant' },
   // The rc engine: its files read as engine/rc/<file>, its index the package itself.
   { name: '@kuiralabs/midnight-engine-rc', root: join(ROOT, 'packages', 'engine-rc'), dir: join(ROOT, 'packages', 'engine-rc', 'src'), prefix: 'engine/rc/', home: 'engine' },
   { name: '@kuiralabs/midnight-engine-beta', root: join(ROOT, 'packages', 'engine-beta'), dir: join(ROOT, 'packages', 'engine-beta', 'src'), prefix: 'engine/beta/', home: 'engine' },

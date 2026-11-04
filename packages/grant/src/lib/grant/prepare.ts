@@ -6,6 +6,7 @@
 import { type ParsedArgs, getFlag, UsageError, type PayingTarget, resolvePayingTarget, type Host } from '@kuiralabs/midnight-cli-core';
 import { assertWalletFileExists, getActiveWalletName, resolveWalletPath } from '@kuiralabs/midnight-wallet';
 import { assertAccountNetwork, assertNodeRunsAccount } from './account.ts';
+import { NoAccountError } from './account-errors.ts';
 import { accountRecordsDir, accountWalletName, ensureAccountRecordsDir } from './account-records.ts';
 import { type GrantRequest, resolveGrantRequest } from './request.ts';
 import { contractAddressOnRecord } from './sealed-account.ts';
@@ -24,17 +25,6 @@ export interface PreparedGrant {
   recordsDir: string;
   /** The account on record; null only for a deploy of a new one. */
   account: AccountOnRecord | null;
-}
-
-/** The wallet has no account to run an owner command on. */
-export class NoAccountError extends Error {
-  readonly code = 'NO_ACCOUNT';
-
-  constructor(walletName: string, network: string) {
-    super(`Wallet "${walletName}" has no account on ${network} yet.\nDeploy one: midnight grant deploy`);
-    this.name = 'NoAccountError';
-    Object.setPrototypeOf(this, NoAccountError.prototype);
-  }
 }
 
 /** The account the records in `recordsDir` name, if any. Reads the records alone: no chain, no wallet. */

@@ -13,10 +13,12 @@
 // under it, and its tarball and integrity from `dist`.
 //
 // Each SDK engine ships one too (`--package packages/engine-*`), so a program
-// that installs an engine without mn gets the set the tests ran on. It leaves
-// out the workspace packages the engine depends on (core and chain): those
-// are shared with the program that loads the engine, which installs them
-// itself, so the process holds one copy of each.
+// that installs an engine without mn gets the set the tests ran on; and so
+// does grant (`--package packages/grant`), whose account chain is built on the
+// rc set. It leaves out the workspace packages the package depends on (core
+// and chain; for grant also wallet and contract): those are shared with the
+// program that loads it, which installs them itself, so the process holds one
+// copy of each.
 //
 // The release job writes them beside each package.json just before
 // publishing (npm packs npm-shrinkwrap.json with the package, as each `files`

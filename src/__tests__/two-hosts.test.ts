@@ -95,7 +95,7 @@ async function run(host: Host, argv: string[]): Promise<Record<string, unknown>>
     output,
     host,
     loadPayer: async () => (await import('@kuiralabs/midnight-connect')).servePayer,
-    loadProtectors: async () => [(await import('../lib/grant/account-protector.ts')).accountProtector],
+    loadProtectors: async () => [(await import('@kuiralabs/midnight-grant')).accountProtector],
   });
   if (result === undefined) throw new Error(`${argv.join(' ')} wrote no result`);
   return result;

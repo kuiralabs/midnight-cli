@@ -2,9 +2,9 @@
 // depends on, serves them from a local registry as npm serves published
 // packages, installs mn globally from it into an empty prefix, and checks the
 // tree the install holds still works: one copy of each WASM package per SDK
-// engine (the shrinkwrap mn ships keeps each engine's set apart), each engine
-// loading, the packages a contract run's script imports, and the files the
-// code reads at run time.
+// engine (the shrinkwrap mn ships keeps each engine's set apart), grant on the
+// rc engine's copies, each engine loading, the packages a contract run's
+// script imports, and the files the code reads at run time.
 //
 // The test suite runs on the lockfile's tree, which a consumer never sees. Two
 // features broke that way without a test noticing: a newer @scure/base refused
@@ -20,10 +20,40 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { PUBLIC_PACKAGES } from './api-report.mjs';
 import { packRelease } from './pack-release.mjs';
+import { SOURCE_CONDITION } from './publish-manifest.mjs';
 
 const repo = new URL('..', import.meta.url).pathname;
 const run = (command, args, cwd) => execFileSync(command, args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+/** Each public package's name, read from its manifest in the workspace. */
+const PUBLIC_NAMES = PUBLIC_PACKAGES.map((dir) => JSON.parse(readFileSync(join(repo, 'packages', dir, 'package.json'), 'utf-8')).name);
+
+/**
+ * What an installed package's manifest says of its source, which no published
+ * manifest may: the source condition, and each exports target that is a
+ * source file (under ./src/, or a .ts file that is not a declaration).
+ */
+function sourceInManifest(manifest) {
+  const found = [];
+  const walk = (value, at) => {
+    if (typeof value === 'string') {
+      if (value.startsWith('./src/') || (value.endsWith('.ts') && !value.endsWith('.d.ts'))) found.push(`${at} → ${value}`);
+      return;
+    }
+    if (typeof value !== 'object' || value === null) return;
+    for (const [key, inner] of Object.entries(value)) {
+      if (key === SOURCE_CONDITION) found.push(`${at} ${SOURCE_CONDITION}`);
+      walk(inner, at === '' ? key : `${at} ${key}`);
+    }
+  };
+  walk(manifest.exports ?? {}, '');
+  return found;
+}
+
+/** The SDK's WASM packages: an object one copy of them makes, another copy refuses. */
+const WASM_PACKAGES = ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4'];
 
 /** Every installed copy of a package under `root`, as its versions. */
 function copiesOf(root, name) {
@@ -125,6 +155,23 @@ const check = (what, ok, detail = '') => {
   if (!ok) failures.push(what);
 };
 
+/**
+ * grant's account chain is built on the rc set: in the install at `root`,
+ * grant resolves one copy of each WASM package, at the rc engine's version.
+ * With `sameCopy`, the very copy the rc engine resolves: mn's shrinkwrap lays
+ * the two out on one tree. A program that installs both packages itself gets
+ * each one's shrinkwrapped tree under it, so the copies match by version only.
+ */
+function checkGrantOnRcSet(root, who, { sameCopy }) {
+  const at = (copies) => copies.map((c) => `${c.version} ${c.dir.slice(realpathSync(root).length)}`).join(', ');
+  for (const sdk of WASM_PACKAGES) {
+    const grant = resolvedCopies(join(root, 'node_modules', '@kuiralabs', 'midnight-grant'), sdk);
+    const rc = resolvedCopies(join(root, 'node_modules', '@kuiralabs', 'midnight-engine-rc'), sdk);
+    const matches = grant.length === 1 && rc.length === 1 && (sameCopy ? grant[0].dir === rc[0].dir : grant[0].version === rc[0].version);
+    check(`${who}@kuiralabs/midnight-grant resolves one copy of ${sdk}, ${sameCopy ? "the rc engine's" : "at the rc engine's version"}`, matches, `grant: ${at(grant)}; rc engine: ${at(rc)}`);
+  }
+}
+
 const work = mkdtempSync(join(tmpdir(), 'mn-fresh-install-'));
 let registry;
 try {
@@ -143,19 +190,25 @@ try {
   check('the installed mn runs', run(mn, ['--version'], work).trim() === version, version);
   check('the package shipped its shrinkwrap', existsSync(join(installed, 'npm-shrinkwrap.json')));
 
+  // mn depends on every public package, so the checks below of each package mn installed cover them all.
+  const missing = PUBLIC_NAMES.filter((name) => !workspaces.some((pkg) => pkg.name === name));
+  check('mn installs every public package', missing.length === 0, missing.length > 0 ? `not a dependency of mn: ${missing.join(', ')}` : `${PUBLIC_NAMES.length} packages`);
   // One copy of each workspace package: a second copy of core's module state (its settings, its typed errors) splits the process.
   for (const { name } of workspaces) {
     const copies = copiesOf(installed, name);
     check(`one copy of ${name}`, copies.length === 1, copies.join(', '));
+    const source = sourceInManifest(JSON.parse(readFileSync(join(installed, 'node_modules', name, 'package.json'), 'utf-8')));
+    check(`the installed ${name} manifest names no source`, source.length === 0, source.join(', '));
   }
   // Each engine resolves one copy of each WASM package: an object made by one copy is refused by another.
   for (const { name } of workspaces.filter(({ name }) => name.startsWith('@kuiralabs/midnight-engine-'))) {
     const engine = join(installed, 'node_modules', name);
-    for (const sdk of ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4']) {
+    for (const sdk of WASM_PACKAGES) {
       const copies = resolvedCopies(engine, sdk);
       check(`${name} resolves one copy of ${sdk}`, copies.length === 1, copies.map((c) => `${c.version} ${c.dir.slice(realpathSync(installed).length)}`).join(', '));
     }
   }
+  checkGrantOnRcSet(installed, '', { sameCopy: true });
 
   // A shielded address is longer than bech32's 90 characters; the address
   // library must still read the one the installed mn derives.
@@ -265,9 +318,10 @@ try {
     check(`${uri} names only tools the server has`, unknown.length === 0, unknown.length > 0 ? `not a tool: ${unknown.join(', ')}` : `${named.length} of ${tools.length} tools named`);
   }
 
-  // A program that loads an engine without mn: it installs core, chain and the
-  // engines from the registry, each engine with the shrinkwrap it ships, and
-  // gets each engine's SDK set once beside one core and one chain it shares.
+  // A program that loads an engine without mn: it installs the workspace
+  // packages from the registry, each engine and grant with the shrinkwrap it
+  // ships, and gets each engine's SDK set once beside one copy of each package
+  // it shares.
   const outside = join(work, 'outside');
   mkdirSync(outside);
   writeFileSync(join(outside, 'package.json'), JSON.stringify({ name: 'outside', private: true, type: 'module' }));
@@ -278,11 +332,12 @@ try {
   }
   for (const { name } of workspaces.filter(({ name }) => name.startsWith('@kuiralabs/midnight-engine-'))) {
     const engine = join(outside, 'node_modules', name);
-    for (const sdk of ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4']) {
+    for (const sdk of WASM_PACKAGES) {
       const copies = resolvedCopies(engine, sdk);
       check(`a program outside mn: ${name} resolves one copy of ${sdk}`, copies.length === 1, copies.map((c) => `${c.version} ${c.dir.slice(realpathSync(outside).length)}`).join(', '));
     }
   }
+  checkGrantOnRcSet(outside, 'a program outside mn: ', { sameCopy: false });
   writeFileSync(join(outside, 'load.mjs'), `
     import { createHost } from '@kuiralabs/midnight-cli-core';
     const host = createHost({
@@ -297,14 +352,16 @@ try {
   }
 
   // The installed packages are imported by their entry points alone: each
-  // named entry point loads, the published manifests name no source file,
-  // and a module that is not an entry point is refused.
+  // named entry point loads, the published manifests name no source (neither
+  // the source condition nor a source file), and a module that is not an
+  // entry point is refused.
   writeFileSync(join(outside, 'entry.mjs'), `
     try { await import(process.argv[2]); console.log('loaded'); } catch (error) { console.log(error.code ?? error.message); }
   `);
   for (const { name } of workspaces) {
     const manifest = readFileSync(join(outside, 'node_modules', name, 'package.json'), 'utf-8');
-    check(`a program outside mn: ${name}'s manifest names no source file`, !manifest.includes('midnight-cli-source'));
+    const source = sourceInManifest(JSON.parse(manifest));
+    check(`a program outside mn: ${name}'s manifest names no source`, source.length === 0 && !manifest.includes(SOURCE_CONDITION), source.join(', '));
     for (const entry of Object.keys(JSON.parse(manifest).exports).filter((key) => !key.includes('*'))) {
       const specifier = entry === '.' ? name : `${name}${entry.slice(1)}`;
       const loaded = run(process.execPath, ['entry.mjs', specifier], outside).trim();
@@ -312,8 +369,9 @@ try {
     }
   }
   // A module of each package that is not an entry point, named as the open
-  // `./*` used to export it (core's lib/errors as `<name>/lib/errors`).
-  for (const [name, deepPath] of [
+  // `./*` used to export it (core's lib/errors as `<name>/lib/errors`): one
+  // for every public package.
+  const deepPaths = [
     ['@kuiralabs/midnight-cli-core', 'lib/errors'],
     ['@kuiralabs/midnight-chain', 'lib/chain-id'],
     ['@kuiralabs/midnight-engine-rc', 'derive-address'],
@@ -322,7 +380,11 @@ try {
     ['@kuiralabs/midnight-contract', 'lib/contract/runner'],
     ['@kuiralabs/midnight-connect', 'lib/ws-rpc'],
     ['@kuiralabs/midnight-dev', 'lib/localnet'],
-  ]) {
+    ['@kuiralabs/midnight-grant', 'lib/grant/account'],
+  ];
+  const untried = PUBLIC_NAMES.filter((name) => !deepPaths.some(([each]) => each === name));
+  check('a deep path is tried for every public package', untried.length === 0, untried.length > 0 ? `none for ${untried.join(', ')}` : '');
+  for (const [name, deepPath] of deepPaths) {
     check(`a program outside mn finds ${name}'s ${deepPath} built`, existsSync(join(outside, 'node_modules', name, 'dist', `${deepPath}.js`)));
     const deep = run(process.execPath, ['entry.mjs', `${name}/${deepPath}`], outside).trim();
     check(`a program outside mn is refused ${name}/${deepPath}`, deep === 'ERR_PACKAGE_PATH_NOT_EXPORTED', deep);
