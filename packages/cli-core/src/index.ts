@@ -4,7 +4,8 @@
 // wallet session and swap offer types, and the rest the packages above core
 // import. Each name is listed, so the API is what this file says.
 // Engine implementors also import "./engine"; terminal output is "./ui";
-// core's command, codes and guidance are "./commands".
+// core's command, codes and guidance are "./commands"; what a host does to its
+// own process (the SDK rejection guard, the sync heap) is "./process".
 
 export {
   assembleGuidance, codeGuidancePieces, GuidanceError, type GuidancePiece, type GuidanceText,
@@ -112,4 +113,4 @@ export { checkTerms, type OfferContents, type SwapLeg, type SwapTerms, TermsMism
 export { isTransportFailure, withTransportCode } from './lib/transport-failure.ts';
 export { type VerboseLog } from './lib/verbose.ts';
 export { clearWalletCache } from './lib/wallet-cache.ts';
-export { sessionOver, type WalletSession } from './lib/wallet-session.ts';
+export { openWalletSession, type OpenWalletSessionOptions, sessionOver, type WalletSession } from './lib/wallet-session.ts';

@@ -1,58 +1,26 @@
-// Cold-sync heap headroom guard.
+// Cold-sync heap headroom guard: mn's re-exec.
 //
-// The first shielded/dust sync against a hosted network (preprod/preview) streams
-// the whole chain history through the wallet SDK. The live working set is small
-// (~300 MB), but the scan churns through a firehose of short-lived JS objects;
-// under Node's default old-space cap (~4 GB) GC can't keep pace with the
-// allocation rate and the process dies with "JavaScript heap out of memory"
-// before it can finish — and write the cache that makes every later run cheap.
-//
-// Fix: before any SDK/WASM module loads, re-exec the process with a larger
-// `--max-old-space-size`. Because the CLI dispatches command handlers via dynamic
-// import, calling this from the entry point ahead of dispatch means the parent
-// re-execs before the SDK is ever loaded — no double load. It is a no-op when the
-// heap is already large enough (e.g. the user set NODE_OPTIONS) or when we're
-// already running as the re-exec'd child.
+// A cold shielded or Dust sync against a hosted network overflows Node's
+// default old-space limit (core's process/sync-heap.ts says why). The limit is
+// fixed at start, so before any SDK/WASM module loads mn re-execs itself with
+// the `--max-old-space-size` core's syncHeapTargetMb gives. Because the CLI
+// dispatches command handlers via dynamic import, calling this from the entry
+// point ahead of dispatch means the parent re-execs before the SDK is ever
+// loaded — no double load. It is a no-op when the heap is already large enough
+// (e.g. the user set NODE_OPTIONS) or when we're already running as the
+// re-exec'd child.
 
 import v8 from 'node:v8';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 
-import { SYNC_HEAP_TARGET_MB, SYNC_HEAP_RAM_FRACTION, SYNC_HEAP_MIN_GAIN_MB } from '@kuiralabs/midnight-cli-core';
+import { syncHeapTargetMb } from '@kuiralabs/midnight-cli-core/process';
 
 /** Set on the re-exec'd child so it doesn't recurse. */
 const BUMP_ENV = 'MN_HEAP_BUMPED';
 /** Power-user override for the target cap, in MB (e.g. on a small machine). */
 const OVERRIDE_ENV = 'MN_MAX_OLD_SPACE_MB';
 const MB = 1024 * 1024;
-
-/**
- * Decide the old-space cap (in MB) to re-exec with, or `null` when a bump isn't
- * worthwhile. Pure — every input is passed in, so it's unit-testable without a
- * real process.
- *
- *  - never exceed `ramFraction` of physical RAM (avoid thrashing small machines)
- *  - never downgrade below, or only trivially above, the current limit
- */
-export function computeHeapTargetMb(opts: {
-  totalMb: number;
-  currentLimitMb: number;
-  desiredMb?: number;
-  ramFraction?: number;
-  minGainMb?: number;
-}): number | null {
-  const desired = opts.desiredMb ?? SYNC_HEAP_TARGET_MB;
-  const ramFraction = opts.ramFraction ?? SYNC_HEAP_RAM_FRACTION;
-  const minGain = opts.minGainMb ?? SYNC_HEAP_MIN_GAIN_MB;
-
-  if (!Number.isFinite(desired) || desired <= 0) return null;
-  if (!Number.isFinite(opts.totalMb) || opts.totalMb <= 0) return null;
-
-  const ramCap = Math.floor(opts.totalMb * ramFraction);
-  const target = Math.min(Math.floor(desired), ramCap);
-  if (target <= opts.currentLimitMb + minGain) return null;
-  return target;
-}
 
 /**
  * Re-exec the current process with more old-space headroom when a cold sync
@@ -79,7 +47,9 @@ export async function ensureHeapForSync(): Promise<void> {
   const overrideRaw = process.env[OVERRIDE_ENV];
   const desiredMb = overrideRaw !== undefined ? Number(overrideRaw) : undefined;
 
-  const target = computeHeapTargetMb({
+  // Read here rather than through syncHeapAdvice, which advises nothing under
+  // bun: mn re-execs under whichever runtime runs it, as it always has.
+  const target = syncHeapTargetMb({
     totalMb: Math.floor(os.totalmem() / MB),
     currentLimitMb: Math.floor(v8.getHeapStatistics().heap_size_limit / MB),
     desiredMb,

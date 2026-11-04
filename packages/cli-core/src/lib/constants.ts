@@ -56,7 +56,7 @@ export const BALANCE_CHECK_TIMEOUT_MS = 60_000; // 1 minute — GraphQL balance 
 // default old-space cap (~4 GB) GC can't keep pace with the allocation rate and the
 // process dies with "JavaScript heap out of memory" before it can finish — and write
 // the cache that makes every later run cheap. Measured cold preprod shielded-sync
-// high-water: ~8.4 GB. lib/heap-guard.ts re-execs sync commands with this headroom.
+// high-water: ~8.4 GB. process/sync-heap.ts advises this headroom; mn's shell re-execs sync commands with it.
 // Note: the cap must sit comfortably *above* the high-water, not just at it —
 // crowding the limit makes V8 thrash on full GCs, which starves the sync loop
 // and trips the per-attempt timeout. A 12 GB cap timed out; 16 GB completes.

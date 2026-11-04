@@ -36,6 +36,11 @@
       "midnight-cli-source": "./src/commands.ts",
       "types": "./dist/commands.d.ts",
       "default": "./dist/commands.js"
+    },
+    "./process": {
+      "midnight-cli-source": "./src/process.ts",
+      "types": "./dist/process.d.ts",
+      "default": "./dist/process.js"
     }
   },
   "files": [

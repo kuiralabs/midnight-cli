@@ -1,4 +1,6 @@
 // Types for what scripts/check-process-safety.mjs exports when imported.
+/** Core's host-called process directory: what only a host calls, on its own process. */
+export const CORE_PROCESS_DIR: string;
 export const ALLOWED: Record<string, string[]>;
 export const ALLOWED_STATE: Record<string, Record<string, string>>;
 export const ALLOWED_SETTERS: Record<string, Record<string, string>>;

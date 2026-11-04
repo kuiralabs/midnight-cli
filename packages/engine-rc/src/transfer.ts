@@ -105,7 +105,7 @@ async function submitDustRegistration(
  * Each retry rebuilds the transaction with a newer timestamp, giving a
  * larger time delta and thus a larger allow_fee_payment.
  *
- * The shell keeps the RPC noise off the terminal (sdk-noise.ts).
+ * The host's process guard keeps the RPC noise off the terminal (core's "./process", its console option).
  */
 export async function registerNightUtxos(
   bundle: FacadeBundle,
@@ -181,7 +181,7 @@ export async function registerNightUtxos(
  * outputs) can be registered later via `midnight dust register`.
  *
  * Used by: executeTransfer (transfer/airdrop commands), dustRegister command.
- * The shell keeps the RPC noise off the terminal (sdk-noise.ts).
+ * The host's process guard keeps the RPC noise off the terminal (core's "./process", its console option).
  */
 export async function ensureDust(
   bundle: FacadeBundle,

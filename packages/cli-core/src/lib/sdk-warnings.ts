@@ -1,12 +1,12 @@
 // The SDK's transient errors (Wallet.Sync: Internal Server Error, …) surface
-// as unhandled rejections and console.error calls, which the shell filters
-// (sdk-noise.ts) while some call listens. A call that runs the SDK listens
-// through its context (ctx.sdkWarnings) for its length, to show them as
-// progress ("…, retrying") or only to keep them off the terminal; it never
-// touches the process itself.
+// as unhandled rejections and console.error calls, which the host's process
+// guard (core's "./process") takes while some call listens. A call that runs
+// the SDK listens through its context (ctx.sdkWarnings) for its length, to
+// show them as progress ("…, retrying") or only to keep them off the
+// terminal; it never touches the process itself.
 //
 // Each call's warnings are its own. The host keeps one router; each
-// call it runs is opened on it, and the shell tags the noise raised while a
+// call it runs is opened on it, and the guard tags the noise raised while a
 // call runs with that call's identity. A warning with an identity goes to
 // that call's newest listener, and to no other call. One without (raised
 // where the identity didn't carry) goes to the one call listening; with
@@ -77,7 +77,7 @@ export function createSdkWarningRouter(): SdkWarningRouter {
   };
 }
 
-/** How a runner gives each call it runs its SDK warnings. The host's knows which call raised one (sdk-noise.ts). */
+/** How a runner gives each call it runs its SDK warnings. The host's process guard knows which call raised one (process/sdk-process-guard.ts). */
 export interface SdkWarningCalls {
   /** Runs one call, its warnings given to `run`. */
   run<T>(run: (warnings: CallSdkWarnings) => Promise<T>): Promise<T>;

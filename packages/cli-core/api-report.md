@@ -767,6 +767,21 @@ export declare function isTransportFailure(failure: unknown): boolean;
 export declare function withTransportCode(err: unknown): unknown;
 export type VerboseLog = (phase: string, message: string) => void;
 export declare function clearWalletCache(address: string | undefined, network: string | undefined, root: string): void;
+export declare function openWalletSession(options: OpenWalletSessionOptions): Promise<WalletSession>;
+export interface OpenWalletSessionOptions {
+    seed: Buffer;
+    network: NetworkName;
+    root: string;
+    notice: NoticeSink;
+    engines: HostEngines;
+    networkConfig?: NetworkConfig;
+    settings?: NetworkSettings;
+    forceShielded?: boolean;
+    dustWaitMs?: number;
+    signal?: AbortSignal;
+    onMessage?: (message: string) => void;
+    sdkWarnings?: CallSdkWarnings;
+}
 export declare function sessionOver(network: NetworkName, opened: OpenedConnector, readTransaction: (tx: string, stage: 'unsealed' | 'sealed') => TransactionDetail[], reopening?: SessionReopening): WalletSession;
 export interface WalletSession {
     readonly network: NetworkName;
@@ -1414,6 +1429,36 @@ export interface WalletCacheData {
     shielded: string;
     unshielded: string;
     dust: string;
+}
+```
+
+## `@kuiralabs/midnight-cli-core/process`
+
+```ts
+export declare function installSdkProcessGuard(options?: SdkProcessGuardOptions): SdkProcessGuard;
+export interface SdkProcessGuard {
+    readonly calls: SdkWarningCalls;
+    uninstall(): void;
+}
+export interface SdkProcessGuardOptions {
+    readonly console?: boolean;
+    readonly outsideCalls?: 'exit' | 'report';
+    readonly onWarning?: (tag: string, message: string) => void;
+}
+export interface SyncHeapAdvice {
+    readonly maxOldSpaceMb: number;
+    readonly nodeOptions: string;
+}
+export declare function syncHeapAdvice(options?: {
+    readonly desiredMb?: number;
+}): SyncHeapAdvice | null;
+export declare function syncHeapTargetMb(opts: SyncHeapTargetOptions): number | null;
+export interface SyncHeapTargetOptions {
+    readonly totalMb: number;
+    readonly currentLimitMb: number;
+    readonly desiredMb?: number;
+    readonly ramFraction?: number;
+    readonly minGainMb?: number;
 }
 ```
 

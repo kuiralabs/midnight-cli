@@ -9,6 +9,10 @@
 // and the MCP server dispatch to one. A package's codes file is data, not a
 // command: a package below lends its sets of codes to the definitions above.
 //
+// Core's process code (packages/cli-core/src/process/, its "./process" entry
+// point) is host-called: only the shell imports it, and no package source does,
+// by name or by path; a host calls it on its own process.
+//
 // A workspace package is imported by its entry points only: an import of
 // `@kuiralabs/<package>/<subpath>` resolves through that package's exports map,
 // and a subpath the map lacks is a deep import, refused. An import of an entry
@@ -25,7 +29,7 @@
 //
 // Usage: node scripts/check-layering.mjs
 // Imported, it exports sourceFiles and homeOf: which package each file of src/ is in;
-// importRule and guidanceRule: the rule an import breaks; findLayeringProblems,
+// importRule, guidanceRule and processCodeRule: the rule an import breaks; findLayeringProblems,
 // which the suite runs, and testProblems, one test file's; importsOf and
 // importedModules, a file's imports and the modules they bring in
 // (scripts/code-reach.mjs walks them); and the workspace packages' entry
@@ -34,7 +38,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { codeOnly } from './check-process-safety.mjs';
+import { codeOnly, CORE_PROCESS_DIR } from './check-process-safety.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'src');
@@ -60,7 +64,7 @@ const HOMES = [
   // help plays the shell's intro, and manual builds the full manual; both render the installed registry.
   ['shell', /^commands\/(help|manual)(\.definition)?\.ts$/],
   // pkg reads mn's own package.json: its name, version and repository.
-  ['shell', /^lib\/(pkg|heap-guard|node-version|intro-marker|output-redaction|run-command|sdk-noise|cli-host|installed-commands|installed-engines|command-dispatch|agent-manual|readme-commands|code-tables)\.ts$/],
+  ['shell', /^lib\/(pkg|heap-guard|node-version|intro-marker|output-redaction|run-command|cli-host|installed-commands|installed-engines|command-dispatch|agent-manual|readme-commands|code-tables)\.ts$/],
   ['shell', /^ui\/(animate|art)\.ts$/],
   ['mcp', /^mcp-server\.ts$/],
   ['mcp', /^lib\/mcp\//],
@@ -75,6 +79,8 @@ const HOMES = [
 
   ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|verbose|error-trim|command-flags|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|error-codes|wallet-cache|cache-indexer|reader-cache-files|connector-api|dust-wait|fee-limits|tx-serde|sign-data|approval|dust-balancing-plan|dust-registration-plan|shielded-policy|wallet-session|sdk-layout|swap-offer|offer-envelope|open-offers|host|transport-failure|progress|network-target)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
+  // What a host calls on its own process: the SDK rejection guard, the sync heap advice.
+  ['core', /^process\//],
   ['dev', /^ui\/(test-create-prompt|dev-keys)\.ts$/],
 
   ['chain', /^commands\/(status|tx)(\.definition)?\.ts$/],
@@ -467,6 +473,15 @@ export function importedModules(file, { specifier, typeOnly, names }) {
   return { modules: [...modules].map(([each, typesAlone]) => ({ file: each, typeOnly: typesAlone })) };
 }
 
+/** Whether a file is core's host-called process code: its process directory, or the "./process" entry point listing it. */
+const isProcessCode = (file) => file.startsWith(CORE_PROCESS_DIR + '/') || file === `${CORE_PROCESS_DIR}.ts`;
+
+/** The rule an import from `file` (whose package is `home`) of `modules` breaks by reaching core's process code, or undefined. */
+export function processCodeRule(file, home, modules) {
+  if (home === 'shell' || isProcessCode(file)) return undefined;
+  return modules.some((module) => isProcessCode(module.file)) ? `${home} → core's process code (only a host calls it, through "./process")` : undefined;
+}
+
 /** The refusal of a deep import into `pkg`, naming its entry points. */
 const deepImportRule = (pkg, entries) => `deep import into ${pkg} (its entry points: ${entries.join(', ')})`;
 
@@ -490,6 +505,12 @@ function sourceProblems(file) {
       continue;
     }
     if (resolved !== undefined) {
+      // No package reaches core's process code, not even through a barrel of its own.
+      const processRule = processCodeRule(file, home, resolved.modules);
+      if (processRule !== undefined) {
+        violations.push({ home, rule: processRule, where, specifier });
+        continue;
+      }
       // A barrel only lists its own package's modules for the packages above; it calls nothing.
       if (barrelExports(file) !== undefined) continue;
       const rules = new Set(resolved.modules.map((module) => importRule(rel, relOf(module.file))).filter((rule) => rule !== undefined));

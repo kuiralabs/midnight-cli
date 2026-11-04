@@ -10,6 +10,10 @@
 // - An indexer of a ledger-8 chain: its HTTP GraphQL endpoint answers every
 //   query with a protocol version below the ledger-9 fork, which mn refuses
 //   before a wallet syncs (lib/ledger-guard.ts).
+// - A silent network: an indexer and a node on one port that take every
+//   connection and never answer (the indexer acknowledges graphql-transport-ws
+//   and sends no event; the node takes JSON-RPC and replies to none), counting
+//   the WebSockets a wallet opens and how many it has closed.
 
 import { createServer, type Server, type Socket } from 'node:net';
 import { createServer as createHttpServer } from 'node:http';
@@ -143,6 +147,67 @@ export async function startLedger8Indexer(): Promise<Ledger8Indexer> {
     url: `ws://127.0.0.1:${port}/api/v4/graphql/ws`,
     queries,
     close: () => new Promise<void>((resolve) => {
+      server.closeAllConnections();
+      server.close(() => resolve());
+    }),
+  };
+}
+
+/** An indexer and a node that take every connection and never answer. */
+export interface SilentNetwork {
+  /** The indexer's HTTP and WebSocket URLs, and the node's, as a network config takes them. */
+  readonly indexer: string;
+  readonly indexerWS: string;
+  readonly node: string;
+  /** The WebSockets opened to it, by path, and how many of them are still open. */
+  readonly opened: string[];
+  open(): number;
+  /** Resolves once every WebSocket opened to it has closed. */
+  allClosed(): Promise<void>;
+  close(): Promise<void>;
+}
+
+/** A silent network on 127.0.0.1: the indexer at /api/v4/graphql(/ws), the node at /node. */
+export async function startSilentNetwork(): Promise<SilentNetwork> {
+  const opened: string[] = [];
+  let open = 0;
+  let wakeWhenClosed: Array<() => void> = [];
+  const server = createHttpServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ data: null }));
+    });
+  });
+  const sockets = new WebSocketServer({ server, handleProtocols: (protocols) => (protocols.has('graphql-transport-ws') ? 'graphql-transport-ws' : false) });
+  sockets.on('connection', (ws: WebSocket, req) => {
+    opened.push(req.url ?? '');
+    open += 1;
+    ws.on('close', () => {
+      open -= 1;
+      if (open === 0) for (const wake of wakeWhenClosed.splice(0)) wake();
+    });
+    ws.on('message', (raw) => {
+      const message = JSON.parse(raw.toString()) as { type?: string };
+      if (message.type === 'connection_init') ws.send(JSON.stringify({ type: 'connection_ack' }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  const base = `127.0.0.1:${port}`;
+  return {
+    indexer: `http://${base}/api/v4/graphql`,
+    indexerWS: `ws://${base}/api/v4/graphql/ws`,
+    node: `ws://${base}/node`,
+    opened,
+    open: () => open,
+    allClosed: () => new Promise<void>((resolve) => {
+      if (open === 0) resolve();
+      else wakeWhenClosed = [...wakeWhenClosed, resolve];
+    }),
+    close: () => new Promise<void>((resolve) => {
+      for (const client of sockets.clients) client.terminate();
+      sockets.close();
       server.closeAllConnections();
       server.close(() => resolve());
     }),

@@ -1,11 +1,18 @@
 // The wallet session over the rc engine's DApp connector, its facade stubbed
 // at the SDK boundary: each operation answers in the session's own types, and
-// closing reverts what was built but never submitted.
+// closing reverts what was built but never submitted. A program opens one with
+// openWalletSession, through its host's engine, listening for the SDK's
+// warnings from the open until close().
 
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import * as rx from 'rxjs';
 import { DustAddress, MidnightBech32m, ShieldedAddress, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
-import { sessionOver, type WalletSession, DustRequiredError, TransactionRefusedError, classifyError } from '@kuiralabs/midnight-cli-core';
+import { sessionOver, type WalletSession, DustRequiredError, TransactionRefusedError, classifyError, createHost, createSdkWarningRouter, openWalletSession, type Engine, type OpenWalletSessionOptions } from '@kuiralabs/midnight-cli-core';
+import type { OpenedConnector } from '@kuiralabs/midnight-cli-core/engine';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createRcEngine } from '../index.ts';
 import type { TransactionDetail } from '@kuiralabs/midnight-cli-core/engine';
 import { deriveShieldedAddress, deriveUnshieldedAddress } from '../derive-address.ts';
 import { NO_TERMINAL, TEST_NETWORK_CONFIG, connectorStub } from '../../../../test-support/connector-stub.ts';
@@ -265,5 +272,97 @@ describe("a program's wallet session, in the error-code parity table", () => {
       }
     })();
     expect(classifyError(err!, CORE_CODES)).toStrictEqual({ errorCode: 'STALE_UTXO', exitCode: 6 });
+  });
+});
+
+// What a program calls: the session opened through its host's engine. The rc
+// engine is real but for its wallet's openConnector, which syncs a facade: here
+// it gives the engine's own DApp connector over the facade stubbed at the SDK
+// boundary, as the tests above build it.
+describe('openWalletSession', () => {
+  const SEED = Buffer.from('00'.repeat(31) + '07', 'hex');
+  let root: string;
+  beforeAll(() => { root = mkdtempSync(join(tmpdir(), 'mn-open-session-')); });
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  /** A host's engines over the rc engine, its openConnector standing in; what it was asked, and how often its connector stopped. */
+  function rcEngines(open: (options: Parameters<Engine['wallet']['openConnector']>[0]) => Promise<OpenedConnector> = async () => openedOverStub()) {
+    const asked: Parameters<Engine['wallet']['openConnector']>[0][] = [];
+    const host = createHost({
+      paths: { stateRoot: root, home: root },
+      engineLoader: async (_set, loading) => {
+        const engine = createRcEngine(loading);
+        return { ...engine, wallet: { ...engine.wallet, openConnector: (options) => { asked.push(options); return open(options); } } };
+      },
+    });
+    return { engines: host.engines, asked };
+  }
+  let stops = 0;
+  function openedOverStub(): OpenedConnector {
+    const bundle = createBundleStub({ stateFn: () => rx.of(mockState({ unshieldedBalances: { [NIGHT_RAW]: 5n }, dustBalance: 1n })) });
+    (bundle.facade as unknown as { revert: () => Promise<void> }).revert = async () => {};
+    const connector = createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+    return { connector, stop: async () => { stops += 1; connector.dispose(); } };
+  }
+  const options = (engines: OpenWalletSessionOptions['engines'], more: Partial<OpenWalletSessionOptions> = {}): OpenWalletSessionOptions => ({
+    seed: SEED, network: 'undeployed', root, notice: NO_TERMINAL.notice, engines, networkConfig: TEST_NETWORK_CONFIG, ...more,
+  });
+
+  it("opens the seed's wallet through the network's engine and stops it on close", async () => {
+    const { engines, asked } = rcEngines();
+    const before = stops;
+    const session = await openWalletSession(options(engines, { dustWaitMs: 1234 }));
+    expect(session.network).toBe('undeployed');
+    expect(await session.balances()).toEqual({ unshielded: { [NIGHT_RAW]: 5n }, shielded: {}, dust: 1n });
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatchObject({ seed: SEED, root, network: 'undeployed', networkConfig: TEST_NETWORK_CONFIG, address: deriveUnshieldedAddress(SEED, 'undeployed'), syncMode: 'full', dustWaitMs: 1234 });
+    await session.close();
+    expect(stops).toBe(before + 1);
+  });
+
+  it("listens for the SDK's warnings from the open until close, as progress lines", async () => {
+    const router = createSdkWarningRouter();
+    const call = router.openCall();
+    const said: string[] = [];
+    let listeningWhileOpening = false;
+    const { engines } = rcEngines(async () => {
+      listeningWhileOpening = router.isListening();
+      router.route(call.id, 'Wallet.Sync', 'Internal Server Error');
+      return openedOverStub();
+    });
+    const session = await openWalletSession(options(engines, { sdkWarnings: call.warnings, onMessage: (line) => said.push(line) }));
+    expect(listeningWhileOpening).toBe(true);
+    router.route(call.id, 'Wallet.Indexer', 'socket closed');
+    expect(router.isListening()).toBe(true);
+    await session.close();
+    expect(router.isListening()).toBe(false);
+    router.route(call.id, 'Wallet.Sync', 'after close');
+    expect(said.filter((line) => line.startsWith('SDK: '))).toEqual(['SDK: Internal Server Error', 'SDK: socket closed']);
+  });
+
+  it('listens with no listener when given no progress callback: the warnings are only taken', async () => {
+    const router = createSdkWarningRouter();
+    const call = router.openCall();
+    const session = await openWalletSession(options(rcEngines().engines, { sdkWarnings: call.warnings }));
+    expect(router.isListening()).toBe(true);
+    await session.close();
+    expect(router.isListening()).toBe(false);
+  });
+
+  it('stops listening when the open fails, and says why it failed', async () => {
+    const router = createSdkWarningRouter();
+    const call = router.openCall();
+    const { engines } = rcEngines(async () => { throw new Error('the indexer refused'); });
+    await expect(openWalletSession(options(engines, { sdkWarnings: call.warnings }))).rejects.toThrow('the indexer refused');
+    expect(router.isListening()).toBe(false);
+  });
+
+  it('refuses a cancelled open before anything listens or opens', async () => {
+    const router = createSdkWarningRouter();
+    const call = router.openCall();
+    const { engines, asked } = rcEngines();
+    await expect(openWalletSession(options(engines, { sdkWarnings: call.warnings, signal: AbortSignal.abort() }))).rejects.toMatchObject({ name: 'CancelledError' });
+    expect(router.isListening()).toBe(false);
+    expect(asked).toEqual([]);
   });
 });

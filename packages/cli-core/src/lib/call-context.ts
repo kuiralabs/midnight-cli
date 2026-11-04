@@ -4,8 +4,8 @@
 // and the payer and protectors its caller gives. Nothing about a call lives in
 // a module global, so two calls in one process cannot mix. The context reaches
 // libraries as explicit parameters, never as ambient per-call storage; the one
-// exception is the shell's, which tags the SDK's noise with the call that
-// raised it (lib/sdk-noise.ts).
+// exception is the host's process guard, which tags the SDK's noise with the
+// call that raised it (core's "./process", process/sdk-process-guard.ts).
 //
 // The CLI builds one from the process's streams, its signal and --verbose
 // (lib/command-dispatch.ts); the MCP server builds one per request
