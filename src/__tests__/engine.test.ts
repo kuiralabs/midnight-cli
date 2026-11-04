@@ -7,15 +7,14 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { OtherSdkSetError, sdkSetOf, type Engine, type SdkSet } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
-import { getValidNetworkNames, sdkSetOfNetwork, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import type { BalanceSummary } from '@kuiralabs/midnight-chain/lib/balance-subscription';
-import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
-import type { RepoDeps } from '@kuiralabs/midnight-engine-rc/wallet-data-repository';
+import { OtherSdkSetError, sdkSetOf, type Engine, type SdkSet, createHost, type Host, settingsFromEnvironment, getValidNetworkNames, sdkSetOfNetwork, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core';
+import type { BalanceSummary } from '@kuiralabs/midnight-chain';
+import { createRcEngine, type RcEngineOptions } from '@kuiralabs/midnight-engine-rc';
+
+/** The seams an rc engine's wallet repository takes, as its options name them. */
+type RepoDeps = NonNullable<RcEngineOptions['repository']>;
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
-import { startRefusingEndpoint } from './helpers/stand-in-indexer.ts';
+import { startRefusingEndpoint } from '../../test-support/stand-in-indexer.ts';
 
 // A state root with no config: every network on the set the table names.
 const ROOT = mkdtempSync(join(tmpdir(), 'mn-engine-test-'));

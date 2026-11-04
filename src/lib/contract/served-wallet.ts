@@ -2,10 +2,8 @@
 // can pay, serve it through the payer, run the script against it with a
 // progress line, and stop serving whatever happens.
 
-import type { Payer, PayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
-import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { type Payer, type PayingTarget, type CallSdkWarnings, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 
 export interface ServedWalletParams {
   target: PayingTarget;

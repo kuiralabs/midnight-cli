@@ -5,14 +5,8 @@
 // what the file says, that the terms are the agreed ones, that the maker's
 // expiry hasn't passed, and that none of its coins is spent.
 
-import { sdkSetOf, type Engine, type HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
-import type { NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import type { WalletSession } from '@kuiralabs/midnight-cli-core/lib/wallet-session';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { checkTerms, type OfferContents, type SwapTerms } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
-import { assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope, type OfferEnvelope } from '@kuiralabs/midnight-cli-core/lib/offer-envelope';
-import { closeOpenOffers, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core/lib/open-offers';
-import { spendsOf, type CoinSpend } from '@kuiralabs/midnight-chain/lib/offer-liveness';
+import { sdkSetOf, type Engine, type HostEngines, type NetworkConfig, type NetworkName, type WalletSession, UsageError, checkTerms, type OfferContents, type SwapTerms, assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope, type OfferEnvelope, closeOpenOffers, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
+import { spendsOf, type CoinSpend } from '@kuiralabs/midnight-chain';
 
 /** An offer made: its file's text and what it is. */
 export interface MadeOffer {

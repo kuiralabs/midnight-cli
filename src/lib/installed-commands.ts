@@ -6,8 +6,8 @@
 // server's tools, the agent manual and skills, and the shell's and the MCP
 // server's classification of an error by its code.
 
-import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
-import { createPackageRegistry, type FlagDefinition, type GlobalFlagHelp } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { getValidNetworkNames, createPackageRegistry, type FlagDefinition, type GlobalFlagHelp } from '@kuiralabs/midnight-cli-core';
+import { configDefinition, coreGuidance, coreCodes } from '@kuiralabs/midnight-cli-core/commands';
 import { walletDefinition } from '../commands/wallet.definition.ts';
 import { generateDefinition } from '../commands/generate.definition.ts';
 import { infoDefinition } from '../commands/info.definition.ts';
@@ -18,7 +18,6 @@ import { inspectCostDefinition } from '../commands/inspect-cost.definition.ts';
 import { airdropDefinition } from '../commands/airdrop.definition.ts';
 import { transferDefinition } from '../commands/transfer.definition.ts';
 import { dustDefinition } from '../commands/dust.definition.ts';
-import { configDefinition } from '@kuiralabs/midnight-cli-core/commands/config.definition';
 import { cacheDefinition } from '../commands/cache.definition.ts';
 import { serveDefinition } from '../commands/serve.definition.ts';
 import { testDefinition } from '../commands/test.definition.ts';
@@ -27,20 +26,15 @@ import { contractDefinition } from '../commands/contract.definition.ts';
 import { grantDefinition } from '../commands/grant.definition.ts';
 import { swapDefinition } from '../commands/swap.definition.ts';
 import { localnetDefinition } from '../commands/localnet.definition.ts';
-import { statusDefinition } from '@kuiralabs/midnight-chain/commands/status.definition';
-import { txDefinition } from '@kuiralabs/midnight-chain/commands/tx.definition';
+import { statusDefinition, txDefinition, chainGuidance, chainCodes } from '@kuiralabs/midnight-chain/commands';
 import { helpDefinition } from '../commands/help.definition.ts';
 import { manualDefinition } from '../commands/manual.definition.ts';
-import { coreGuidance } from '@kuiralabs/midnight-cli-core/commands/core.guidance';
-import { chainGuidance } from '@kuiralabs/midnight-chain/commands/chain.guidance';
 import { walletGuidance } from '../commands/wallet.guidance.ts';
 import { contractGuidance } from '../commands/contract.guidance.ts';
 import { connectGuidance } from '../commands/connect.guidance.ts';
 import { devGuidance } from '../commands/dev.guidance.ts';
 import { grantGuidance } from '../commands/grant.guidance.ts';
 import { swapGuidance } from '../commands/swap.guidance.ts';
-import { coreCodes } from '@kuiralabs/midnight-cli-core/commands/core.codes';
-import { chainCodes } from '@kuiralabs/midnight-chain/commands/chain.codes';
 import { walletCodes } from '../commands/wallet.codes.ts';
 import { contractCodes } from '../commands/contract.codes.ts';
 import { devCodes } from '../commands/dev.codes.ts';

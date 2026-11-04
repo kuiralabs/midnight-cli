@@ -8,8 +8,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
-import { DustRequiredError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { classifyError, DustRequiredError } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
 
 /** `error` with a message getter that throws, as an object from a broken bridge can have. */

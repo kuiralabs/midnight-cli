@@ -7,10 +7,8 @@
 // The manual's and the skills' rows come from each package's guidance
 // (codeGuidancePieces).
 
-import { declaredCodeSets, type CommandHelpSpec, type CommandRegistry } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { EVERY_COMMAND } from '@kuiralabs/midnight-cli-core/commands/core.codes';
-import type { CodeDefinition } from '@kuiralabs/midnight-cli-core/lib/error-codes';
-import { wrapWords } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { declaredCodeSets, type CommandHelpSpec, type CommandRegistry, type CodeDefinition, wrapWords } from '@kuiralabs/midnight-cli-core';
+import { EVERY_COMMAND } from '@kuiralabs/midnight-cli-core/commands';
 import { withGeneratedBlock } from './readme-commands.ts';
 
 /** The markers around the generated table in docs/JSON_CONTRACT.md. */

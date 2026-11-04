@@ -2,20 +2,13 @@
 // Usage: midnight dust register | midnight dust status | midnight dust export
 
 
-import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, rejectNoCacheForWrites } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { networkChoiceFromArgs } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import type { ProgressEvent } from '@kuiralabs/midnight-cli-core/lib/progress';
-import type { DustExportResult } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, rejectNoCacheForWrites, UsageError, networkChoiceFromArgs, type ProgressEvent, type DustExportResult, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { header, keyValue, divider, formatDust, successMessage, toDust, bold, dim, yellow, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { walletSourceOf } from '../lib/seed-resolver.ts';
 import { exportDustSnapshot, readDustStatus, registerDust, type DustRegistrationResult, type DustStatus } from '../lib/wallet/dust.ts';
 import type { WalletOpened } from '../lib/wallet/wallet-call.ts';
-import { header, keyValue, divider, formatDust, successMessage, toDust } from '@kuiralabs/midnight-cli-core/ui/format';
-import { bold, dim, yellow } from '@kuiralabs/midnight-cli-core/ui/colors';
-import { spinnerReporter } from '@kuiralabs/midnight-cli-core/ui/spinner';
 
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { receiptJson } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { receiptJson } from '@kuiralabs/midnight-chain';
 import { receiptText } from '../ui/receipt.ts';
 
 export default async function dustCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {

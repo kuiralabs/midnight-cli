@@ -1,19 +1,12 @@
 // Contract commands — inspect, deploy, call, and query state for compiled Midnight contracts.
 
-import { type ParsedArgs, getFlag, hasFlag, requireFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { CallContext, CallOutput } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { networkChoiceFromArgs } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { header, keyValue } from '@kuiralabs/midnight-cli-core/ui/format';
-import { bold, dim, teal, yellow, green } from '@kuiralabs/midnight-cli-core/ui/colors';
-import { spinnerReporter } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import { type ParsedArgs, getFlag, hasFlag, requireFlag, UsageError, type CallContext, type CallOutput, networkChoiceFromArgs, type Payer, payerFor, type RawStateValue } from '@kuiralabs/midnight-cli-core';
+import { header, keyValue, bold, dim, teal, yellow, green, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 
-import { type Payer, payerFor } from '@kuiralabs/midnight-cli-core/lib/payer';
 import { deployContract } from '../lib/contract/deploy.ts';
 import { callContract } from '../lib/contract/call.ts';
 import { readContractState } from '../lib/contract/state.ts';
 import { showPaidStep } from '../lib/wallet/paid-call.ts';
-import type { RawStateValue } from '@kuiralabs/midnight-cli-core/lib/engine';
 import { resolveContractCallRequest, resolveContractDeployRequest, resolveDappDir, resolveScanDir } from '../lib/contract/request.ts';
 import {
   findContractInfo,

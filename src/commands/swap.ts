@@ -5,15 +5,8 @@
 // payer's wallet session: no server, no port. inspect and list open no wallet.
 
 import { existsSync, writeFileSync } from 'node:fs';
-import { type ParsedArgs, hasFlag, getFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { networkChoiceFromArgs } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { payerFor } from '@kuiralabs/midnight-cli-core/lib/payer';
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import type { SwapLeg, SwapTerms } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
-import { header, keyValue } from '@kuiralabs/midnight-cli-core/ui/format';
-import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
-import { spinnerReporter } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import { type ParsedArgs, hasFlag, getFlag, UsageError, networkChoiceFromArgs, payerFor, type CallContext, type SwapLeg, type SwapTerms } from '@kuiralabs/midnight-cli-core';
+import { header, keyValue, dim, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { showPaidStep } from '../lib/wallet/paid-call.ts';
 import { makeSwapOffer } from '../lib/swap/make.ts';
 import { inspectSwapOffer } from '../lib/swap/inspect.ts';
@@ -21,7 +14,7 @@ import { takeSwapOffer } from '../lib/swap/take.ts';
 import { cancelSwapOffer } from '../lib/swap/cancel.ts';
 import { listSwapOffers } from '../lib/swap/list.ts';
 import { makeTermsOf, readOfferText, termsOf } from '../lib/swap/request.ts';
-import { receiptJson } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { receiptJson } from '@kuiralabs/midnight-chain';
 import { receiptText } from '../ui/receipt.ts';
 
 const legJson = ({ token, amount }: SwapLeg) => ({ token, amount: amount.toString() });

@@ -10,17 +10,17 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import walletCommand from '../commands/wallet.ts';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { parseArgs } from '@kuiralabs/midnight-cli-core';
 import { PASSPHRASE_ENV, isPassphraseSet } from '../lib/passphrase.ts';
 import { loadWalletConfig } from '../lib/wallet-config.ts';
-import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 import { accountProtector } from '../lib/grant/account-protector.ts';
 import type { WalletProtector } from '../lib/wallet-protector.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
 import { cliCall } from './helpers/cli-call.ts';
-import { testHost } from './helpers/test-host.ts';
+import { testHost } from '../../test-support/test-host.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
@@ -29,7 +29,7 @@ let home: string;
 let io: CapturedOutput;
 
 const plainWallet = (name: string): string =>
-  saveWalletConfig({ seed: SEED, addresses: deriveAllAddresses(Buffer.from(SEED, 'hex')), createdAt: '2026-10-19T00:00:00.000Z' }, path.join(home, '.midnight', 'wallets', `${name}.json`));
+  saveWalletConfig({ seed: SEED, addresses: rcKeys.unshieldedAddresses(Buffer.from(SEED, 'hex')), createdAt: '2026-10-19T00:00:00.000Z' }, path.join(home, '.midnight', 'wallets', `${name}.json`));
 
 /** `wallet protect --json`, given the protectors the CLI gives it unless told otherwise. */
 const protect = async (protectors: WalletProtector[] = [accountProtector]): Promise<Record<string, unknown>> => {

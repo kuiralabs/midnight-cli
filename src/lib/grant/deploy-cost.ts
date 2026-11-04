@@ -13,7 +13,7 @@
 //   12.23, 9.87, 10.00, 1.37, 0.26: 33.74 in fees, 43.74 from the wallet, 15.62 for the largest
 //   13.40, 10.74, 10.82, 1.53, 0.27: 36.75 in fees, 47.51 from the wallet, 17.08 for the largest
 
-import { formatDust } from '@kuiralabs/midnight-cli-core/ui/format';
+import { formatDust } from '@kuiralabs/midnight-cli-core/ui';
 
 export const MEASURED_ACCOUNT_DEPLOY = {
   transactions: 5,

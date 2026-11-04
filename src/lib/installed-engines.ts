@@ -2,8 +2,7 @@
 // makes its engine with (its engine loader). Each loads its SDK, so each is
 // imported only when a call needs it.
 
-import type { Engine, SdkSet } from '@kuiralabs/midnight-cli-core/lib/engine';
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
+import type { Engine, SdkSet, Host } from '@kuiralabs/midnight-cli-core';
 
 /** The engine for an SDK set, as this build ships it, made for `host`. */
 export async function loadInstalledEngine(set: SdkSet, host: Host): Promise<Engine> {

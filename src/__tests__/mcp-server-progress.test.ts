@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { JSONRPCMessage, Progress } from '@modelcontextprotocol/sdk/types.js';
-import { startRefusingEndpoint } from './helpers/stand-in-indexer.ts';
+import { startRefusingEndpoint } from '../../test-support/stand-in-indexer.ts';
 import { expectDeclaredToolResult } from './helpers/expect-declared.ts';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));

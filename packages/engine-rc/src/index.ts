@@ -4,8 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Engine, EngineHost } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { assertOneSdkCopy } from '@kuiralabs/midnight-cli-core/lib/sdk-layout';
+import { type Engine, type EngineHost, assertOneSdkCopy } from '@kuiralabs/midnight-cli-core/engine';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { checkRuntimeVersion, versionString as compactRuntimeVersion } from '@midnight-ntwrk/compact-runtime';
 import { validatePassword } from '@midnight-ntwrk/midnight-js-utils';

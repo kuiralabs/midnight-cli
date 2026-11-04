@@ -8,7 +8,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { WrongPassphraseError } from '@kuiralabs/midnight-cli-core/lib/keystore';
+import { WrongPassphraseError, FILE_MODE, createHost } from '@kuiralabs/midnight-cli-core';
+import { createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui';
 import {
   NoPassphraseError,
   PASSPHRASE_ENV,
@@ -19,10 +20,7 @@ import {
   readPassphrase,
   unlockPassphrase,
 } from '../lib/passphrase.ts';
-import { FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui/terminal-prompter';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 
 // The host the tests' calls run in: nobody to ask, notices dropped.
 const host = createHost();

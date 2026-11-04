@@ -8,20 +8,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
-import { NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
-import type { ProgressEvent } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { deriveAllAddresses, deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { createHost, type Host, settingsFromEnvironment, NATIVE_TOKEN_TYPE, saveCliConfig, type Prompter, type ProgressEvent } from '@kuiralabs/midnight-cli-core';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { establishPassphrase, PASSPHRASE_ENV } from '../lib/passphrase.ts';
 import { writeSealedWallet, type WalletPublic } from '../lib/wallet-config.ts';
 import { readAddressBalance, readWalletBalance, type UnshieldedRead } from '../lib/wallet/balance.ts';
 import type { WalletOpened } from '../lib/wallet/wallet-call.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
-import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from './helpers/stand-in-indexer.ts';
+import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from '../../test-support/stand-in-indexer.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const SEED_A = 'a1'.repeat(32);
@@ -61,7 +56,7 @@ const endpoints = () => ({ indexerWS: indexer.url, node: `ws://127.0.0.1:${refus
 
 describe('readAddressBalance', () => {
   it('reads an address on the network its prefix names: balances in the smallest unit as bigint, with each step said', async () => {
-    const address = deriveUnshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed');
+    const address = rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed');
     const said: ProgressEvent[] = [];
     const result = await readAddressBalance(programHost('a'), address, { ...endpoints(), forceFresh: true, onProgress: (event) => said.push(event) });
 
@@ -73,19 +68,19 @@ describe('readAddressBalance', () => {
   });
 
   it('refuses a network other than the one the address is for, as a usage error, before reading', async () => {
-    const address = deriveUnshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed');
+    const address = rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed');
     await expect(readAddressBalance(programHost('a'), address, { ...endpoints(), network: 'preprod' })).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('Address belongs to undeployed but --network is preprod') });
     expect(indexer.subscriptions).toEqual([]);
   });
 
   it('fails with NETWORK_ERROR when the indexer refuses the connection', async () => {
-    const address = deriveUnshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed');
+    const address = rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed');
     await expect(readAddressBalance(programHost('a'), address, { ...endpoints(), indexerWS: `ws://127.0.0.1:${refusing.port}/api/v4/graphql/ws`, forceFresh: true })).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
   });
 
   it('cancelled already: CancelledError, and nothing asked of the indexer or said', async () => {
     const said: ProgressEvent[] = [];
-    const address = deriveUnshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed');
+    const address = rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed');
     await expect(readAddressBalance(programHost('a'), address, { ...endpoints(), signal: AbortSignal.abort(), onProgress: (event) => said.push(event) })).rejects.toMatchObject({ code: 'CANCELLED' });
     expect(indexer.subscriptions).toEqual([]);
     expect(said).toEqual([]);
@@ -98,7 +93,7 @@ describe('readWalletBalance', () => {
   it('reads a seed the program holds: unshielded NIGHT as bigint, shielded not read where the network has no faucet', async () => {
     const said: Said[] = [];
     const seed = Buffer.from(SEED_A, 'hex');
-    const address = deriveUnshieldedAddress(seed, 'preview');
+    const address = rcKeys.unshieldedAddress(seed, 'preview');
     const result = await readWalletBalance(programHost('a'), { seed }, { ...endpoints(), network: 'preview', forceFresh: true, onProgress: (event) => said.push(event) });
 
     expect(result).toEqual({ network: 'preview', address, unshielded: { night: 3_500_000n, utxoCount: 2 }, shielded: null });
@@ -114,7 +109,7 @@ describe('readWalletBalance', () => {
     const host = programHost('a');
     const root = host.paths().stateRoot;
     establishPassphrase(root, PASSPHRASE);
-    const addresses = deriveAllAddresses(Buffer.from(SEED_B, 'hex'));
+    const addresses = rcKeys.unshieldedAddresses(Buffer.from(SEED_B, 'hex'));
     const shieldedAddresses = { preview: 'mn_shield-addr_preview1saved' } as WalletPublic['addresses'];
     writeSealedWallet(path.join(root, 'wallets', 'alice.json'), { addresses, shieldedAddresses, createdAt: new Date().toISOString() }, { seed: SEED_B }, PASSPHRASE);
     const said: Said[] = [];
@@ -132,7 +127,7 @@ describe('readWalletBalance', () => {
     const hostB = programHost('b');
     for (const [host, seed, network] of [[hostA, SEED_A, 'preview'], [hostB, SEED_B, 'preprod']] as const) {
       const root = host.paths().stateRoot;
-      saveWalletConfig({ seed, addresses: deriveAllAddresses(Buffer.from(seed, 'hex')), createdAt: new Date().toISOString() }, path.join(root, 'wallets', 'alice.json'));
+      saveWalletConfig({ seed, addresses: rcKeys.unshieldedAddresses(Buffer.from(seed, 'hex')), createdAt: new Date().toISOString() }, path.join(root, 'wallets', 'alice.json'));
       saveCliConfig({ network, wallet: 'alice' }, root);
     }
 
@@ -141,8 +136,8 @@ describe('readWalletBalance', () => {
       readWalletBalance(hostB, {}, { ...endpoints(), forceFresh: true }),
     ]);
 
-    expect(a).toMatchObject({ network: 'preview', address: deriveUnshieldedAddress(Buffer.from(SEED_A, 'hex'), 'preview'), unshielded: { night: 3_500_000n } });
-    expect(b).toMatchObject({ network: 'preprod', address: deriveUnshieldedAddress(Buffer.from(SEED_B, 'hex'), 'preprod'), unshielded: { night: 3_500_000n } });
+    expect(a).toMatchObject({ network: 'preview', address: rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'preview'), unshielded: { night: 3_500_000n } });
+    expect(b).toMatchObject({ network: 'preprod', address: rcKeys.unshieldedAddress(Buffer.from(SEED_B, 'hex'), 'preprod'), unshielded: { night: 3_500_000n } });
   });
 
   it('refuses a wallet that is not there with WALLET_NOT_FOUND, and a seed of the wrong size with INVALID_ARGS, before reading', async () => {

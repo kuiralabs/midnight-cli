@@ -2,12 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import configCommand from '@kuiralabs/midnight-cli-core/commands/config';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { loadCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
+import { parseArgs, loadCliConfig } from '@kuiralabs/midnight-cli-core';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
+
+// The config handler, as the shell loads it.
+const { default: configCommand } = await configDefinition.load();
 
 let io: CapturedOutput;
 

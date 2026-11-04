@@ -1,17 +1,12 @@
 // transfer command — send NIGHT from my wallet to another address
 // Usage: midnight transfer <to> <amount> [--shielded]
 
-import { type ParsedArgs, hasFlag, rejectNoCacheForWrites } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { networkChoiceFromArgs } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { nightAmountJson, nightAmountText } from '@kuiralabs/midnight-cli-core/lib/amount';
+import { type ParsedArgs, hasFlag, rejectNoCacheForWrites, networkChoiceFromArgs, nightAmountJson, nightAmountText, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { header, keyValue, divider, formatAddress, successMessage, bold, dim, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { resolveTransferRequest, type TransferRequest } from '../lib/transfer-request.ts';
 import { transferNight, type NightTransfer } from '../lib/wallet/transfer.ts';
 import type { WalletOpened } from '../lib/wallet/wallet-call.ts';
-import { header, keyValue, divider, formatAddress, successMessage } from '@kuiralabs/midnight-cli-core/ui/format';
-import { bold, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
-import { spinnerReporter } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { receiptJson } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { receiptJson } from '@kuiralabs/midnight-chain';
 import { receiptText } from '../ui/receipt.ts';
 
 export default async function transferCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {

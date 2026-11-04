@@ -5,18 +5,14 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { type ParsedArgs, getFlag, hasFlag, resolveNetworkName, type CallContext, UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { header, keyValue, divider, formatAddress, bold, yellow, dim, green } from '@kuiralabs/midnight-cli-core/ui';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
 import { type WalletPublic, writeSealedWallet } from '../lib/wallet-config.ts';
 import { passphraseForNewSecret } from '../lib/passphrase.ts';
 import { parseSeedHex } from '../lib/seed-resolver.ts';
-import { header, keyValue, divider, formatAddress } from '@kuiralabs/midnight-cli-core/ui/format';
-import { bold, yellow, dim, green } from '@kuiralabs/midnight-cli-core/ui/colors';
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { getDefaultWalletPath } from '../lib/wallet-paths.ts';
-import { UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export default async function generateCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const root = ctx.config.paths.stateRoot;

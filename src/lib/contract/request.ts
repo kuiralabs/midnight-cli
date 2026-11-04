@@ -5,8 +5,7 @@
 // working directory the caller gives as their default folder.
 
 import { resolve } from 'node:path';
-import { type ParsedArgs, getFlag, requireFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { type ParsedArgs, getFlag, requireFlag, UsageError } from '@kuiralabs/midnight-cli-core';
 import { findContractInfo, type ContractInfo } from './inspect.ts';
 import { findWitnessFile, buildMissingWitnessError } from './witness-discovery.ts';
 import { validateCallRequest, validateContractAddress } from './validate.ts';

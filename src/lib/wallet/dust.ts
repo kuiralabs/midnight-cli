@@ -2,15 +2,8 @@
 // much it has, registering it, and a snapshot of its Dust another wallet
 // restores from instead of syncing it cold.
 
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { progressSteps } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { withCallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import type { DustExportResult } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { checkBalance } from '@kuiralabs/midnight-chain/lib/balance-subscription';
-import { type Receipt, RECEIPT_WAIT_MS, receiptOf } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, type DustExportResult } from '@kuiralabs/midnight-cli-core';
+import { checkBalance, type Receipt, RECEIPT_WAIT_MS, receiptOf } from '@kuiralabs/midnight-chain';
 import { seedOf, type WalletSource } from '../seed-resolver.ts';
 import { networkChoiceOf, unshieldedAddressOf, type WalletCallOptions, type WalletOpened } from './wallet-call.ts';
 

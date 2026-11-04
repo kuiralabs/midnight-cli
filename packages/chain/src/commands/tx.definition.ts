@@ -1,7 +1,7 @@
 // The `tx` command, described once.
 
-import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core';
+import { RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 
 export const txDefinition: CommandDefinition = {
   name: 'tx',

@@ -7,7 +7,7 @@
 // Code auth — no API key plumbing needed.
 
 import { execFileSync, spawn } from 'node:child_process';
-import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { CancelledError } from '@kuiralabs/midnight-cli-core';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 

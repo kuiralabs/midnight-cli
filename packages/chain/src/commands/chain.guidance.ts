@@ -2,7 +2,7 @@
 // its pieces of `help --agent` and of the two skills, each
 // naming its section and its place there.
 
-import { codeGuidancePieces, type PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { codeGuidancePieces, type PackageGuidance } from '@kuiralabs/midnight-cli-core';
 import { chainCodes } from './chain.codes.ts';
 
 export const chainGuidance: PackageGuidance = {

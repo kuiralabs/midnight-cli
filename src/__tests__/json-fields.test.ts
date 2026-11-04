@@ -7,10 +7,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { parseArgs, type CommandHandler } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { captureCommand } from '../lib/run-command.ts';
-import type { CommandHandler } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { ownCall } from './helpers/own-call.ts';
 import { declaredOutcome } from './helpers/expect-declared.ts';
 

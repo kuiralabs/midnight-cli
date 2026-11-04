@@ -5,16 +5,9 @@
 // canary data from the dashboard (hourly monitoring history).
 // No wallet or SDK needed — works from anywhere.
 
-import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { DASHBOARD_BASE_URL } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { BlockfrostProjectIdRequiredError, assertEndpointUsable, endpointRefusal } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
-import { isValidNetworkName, resolveNetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { resolveBlockfrostProjectId, type NetworkSettings } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { header, divider } from '@kuiralabs/midnight-cli-core/ui/format';
-import { bold, dim, teal, green, red, gray } from '@kuiralabs/midnight-cli-core/ui/colors';
+import { type ParsedArgs, getFlag, hasFlag, DASHBOARD_BASE_URL, BlockfrostProjectIdRequiredError, assertEndpointUsable, endpointRefusal, isValidNetworkName, resolveNetworkConfig, type NetworkName, resolveBlockfrostProjectId, type NetworkSettings, CancelledError, type CallContext, type CallOutput, type CommandOutcome } from '@kuiralabs/midnight-cli-core';
+import { header, divider, bold, dim, teal, green, red, gray } from '@kuiralabs/midnight-cli-core/ui';
 
-import type { CallContext, CallOutput, CommandOutcome } from '@kuiralabs/midnight-cli-core/lib/call-context';
 
 // ── Types matching status.json contract ──
 
@@ -149,7 +142,7 @@ async function tryDetectNetwork(args: ParsedArgs, root: string): Promise<string 
 
   // Check config file for default network
   try {
-    const { loadCliConfig } = await import('@kuiralabs/midnight-cli-core/lib/cli-config');
+    const { loadCliConfig } = await import('@kuiralabs/midnight-cli-core');
     const config = loadCliConfig(root);
     if (config.network && isValidNetworkName(config.network)) return config.network;
   } catch {

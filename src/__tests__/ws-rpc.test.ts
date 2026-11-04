@@ -1,8 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
 import { createRpcServer, createApiError, type RpcServer } from '../lib/ws-rpc.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import { DustRequiredError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { createHost, DustRequiredError } from '@kuiralabs/midnight-cli-core';
 
 // The host the servers run in: notices dropped.
 const host = createHost();

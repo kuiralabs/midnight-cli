@@ -3,9 +3,8 @@
 // M2: `d` keypress deploys the current compiled artifact, `q` quits cleanly.
 
 import { resolve, relative } from 'node:path';
-import { type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { payerFor } from '@kuiralabs/midnight-cli-core/lib/payer';
-import type { CallContext, CallOutput } from '@kuiralabs/midnight-cli-core/lib/call-context';
+import { type ParsedArgs, payerFor, type CallContext, type CallOutput } from '@kuiralabs/midnight-cli-core';
+import { header, divider, keyValue, bold, dim, red, teal, yellow } from '@kuiralabs/midnight-cli-core/ui';
 import { isPassphraseSet, unlockPassphrase } from '../lib/passphrase.ts';
 import { detectProject, type ProjectInfo } from '../lib/dev/detect-project.ts';
 import { runCompile, type CompileResult } from '../lib/dev/compile.ts';
@@ -19,8 +18,6 @@ import {
 } from '../lib/dev/provision-wallets.ts';
 import { startKeyDispatcher } from '../ui/dev-keys.ts';
 import { findWitnessFile, buildMissingWitnessError } from '../lib/contract/witness-discovery.ts';
-import { header, divider, keyValue } from '@kuiralabs/midnight-cli-core/ui/format';
-import { bold, dim, red, teal, yellow } from '@kuiralabs/midnight-cli-core/ui/colors';
 
 
 /** Wallet used when `d` deploys. Must be one of the provisioned dev-* names. */

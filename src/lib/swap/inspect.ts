@@ -1,13 +1,8 @@
 // Inspecting a swap offer: what its file says, checked against its own bytes,
 // and whether it is still live, asked of the indexer. No wallet opens.
 
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { networkTargetOf, type NetworkChoice } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { progressSteps, type ProgressEvent } from '@kuiralabs/midnight-cli-core/lib/progress';
-import type { SwapTerms } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
-import type { CoinSpend } from '@kuiralabs/midnight-chain/lib/offer-liveness';
+import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, type NetworkChoice, progressSteps, type ProgressEvent, type SwapTerms } from '@kuiralabs/midnight-cli-core';
+import type { CoinSpend } from '@kuiralabs/midnight-chain';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
 import { readOfferFile, standingOf } from './offers.ts';
 

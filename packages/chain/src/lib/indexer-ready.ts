@@ -6,8 +6,7 @@
 // on localnet), confirming state has been ingested end-to-end.
 
 import { checkBalance } from './balance-subscription.ts';
-import { SyncTimeoutError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { sleep } from '@kuiralabs/midnight-cli-core/lib/sleep';
+import { SyncTimeoutError, throwIfCancelled, sleep } from '@kuiralabs/midnight-cli-core';
 
 export interface WaitForIndexerOptions {
   /** Overall deadline for the wait. Default 30s. */

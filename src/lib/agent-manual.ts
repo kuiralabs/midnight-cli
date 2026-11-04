@@ -6,8 +6,7 @@
 
 import { PKG_VERSION } from './pkg.ts';
 import { codeSetLines } from './code-tables.ts';
-import { GuidanceError, assembleGuidance, sectionsWithAdded, type GuidancePiece, type ToolsTableRow } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
-import { commandHelpSpecs, type CommandRegistry, type RegisteredTool } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { GuidanceError, assembleGuidance, sectionsWithAdded, type GuidancePiece, type ToolsTableRow, commandHelpSpecs, type CommandRegistry, type RegisteredTool } from '@kuiralabs/midnight-cli-core';
 
 /** The manual's sections, in order. */
 export const AGENT_MANUAL_SECTIONS = [

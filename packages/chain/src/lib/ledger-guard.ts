@@ -3,11 +3,9 @@
 // events. So check the chain's protocol version up front and fail with a
 // clear message instead of hanging or failing on a deserialize error.
 
-import { LEDGER_9_FORK_VERSION, type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import { LEDGER_9_FORK_VERSION, type NetworkConfig, isEndpointError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import { getChainGenesisHash } from './chain-id.ts';
-import { isEndpointError } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
 import { queryIndexer } from './indexer-graphql.ts';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export class UnsupportedLedgerError extends Error {
   readonly code = 'UNSUPPORTED_LEDGER';

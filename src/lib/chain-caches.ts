@@ -3,10 +3,7 @@
 // still referring to it is stale and would fail the next command, and
 // `cache clear` clears the same set.
 
-import { clearWalletCache } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
-import { clearDustDirectCache } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
-import { clearShieldedDirectCache } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
-import { clearNativeDustCheckpoint } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
+import { clearWalletCache, clearDustDirectCache, clearShieldedDirectCache, clearNativeDustCheckpoint } from '@kuiralabs/midnight-cli-core';
 
 /**
  * Clears every wallet cache kept for `network` (all networks when undefined)

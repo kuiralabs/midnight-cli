@@ -9,16 +9,10 @@
 //      file required, useful for funding externally-generated addresses.
 //      A shielded address implies --shielded; the flag is optional there.
 
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { networkChoiceFromArgs } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { nightAmountJson, nightAmountText, parseAmount } from '@kuiralabs/midnight-cli-core/lib/amount';
+import { UsageError, type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites, networkChoiceFromArgs, nightAmountJson, nightAmountText, parseAmount, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { header, keyValue, divider, formatAddress, successMessage, bold, dim, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { airdropNight, type AirdropAddressed, type AirdropRecipient, type NightAirdrop } from '../lib/wallet/airdrop.ts';
-import { header, keyValue, divider, formatAddress, successMessage } from '@kuiralabs/midnight-cli-core/ui/format';
-import { bold, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
-import { spinnerReporter } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { receiptJson } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { receiptJson } from '@kuiralabs/midnight-chain';
 import { receiptText } from '../ui/receipt.ts';
 
 export default async function airdropCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {

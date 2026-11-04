@@ -10,18 +10,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
-import { saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import type { Prompter } from '@kuiralabs/midnight-cli-core/lib/prompter';
-import type { ProgressEvent } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { deriveAllAddresses, deriveUnshieldedAddress } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { createHost, type Host, settingsFromEnvironment, saveCliConfig, type Prompter, type ProgressEvent } from '@kuiralabs/midnight-cli-core';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { PASSPHRASE_ENV } from '../lib/passphrase.ts';
 import { exportDustSnapshot, readDustStatus, registerDust } from '../lib/wallet/dust.ts';
 import type { WalletOpened } from '../lib/wallet/wallet-call.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
-import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from './helpers/stand-in-indexer.ts';
+import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from '../../test-support/stand-in-indexer.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const SEED_A = 'c3'.repeat(32);
@@ -59,7 +55,7 @@ function programHost(name: string): Host & { asked: () => number } {
 /** Writes `seed`'s wallet as `alice` under the host's state root, and makes it the active one. */
 function aliceOf(host: Host, seed: string): void {
   const root = host.paths().stateRoot;
-  saveWalletConfig({ seed, addresses: deriveAllAddresses(Buffer.from(seed, 'hex')), createdAt: new Date().toISOString() }, path.join(root, 'wallets', 'alice.json'));
+  saveWalletConfig({ seed, addresses: rcKeys.unshieldedAddresses(Buffer.from(seed, 'hex')), createdAt: new Date().toISOString() }, path.join(root, 'wallets', 'alice.json'));
   saveCliConfig({ network: 'undeployed', wallet: 'alice' }, root);
 }
 
@@ -73,7 +69,7 @@ describe('readDustStatus', () => {
     const host = programHost('a');
     aliceOf(host, SEED_A);
     const said: Said[] = [];
-    const address = deriveUnshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed');
+    const address = rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed');
 
     const status = await readDustStatus(host, { wallet: 'alice' }, { ...endpoints(), onProgress: (event) => said.push(event) });
 
@@ -89,7 +85,7 @@ describe('readDustStatus', () => {
     const seed = Buffer.from(SEED_B, 'hex');
     const status = await readDustStatus(programHost('a'), { seed }, endpoints());
     expect(status).toMatchObject({ registered: false, unregisteredUtxos: 2 });
-    expect(indexer.subscriptions.map((s) => s.address)).toEqual([deriveUnshieldedAddress(seed, 'undeployed')]);
+    expect(indexer.subscriptions.map((s) => s.address)).toEqual([rcKeys.unshieldedAddress(seed, 'undeployed')]);
   });
 
   it('reads each host\'s own active wallet, two hosts in one process', async () => {
@@ -99,8 +95,8 @@ describe('readDustStatus', () => {
     aliceOf(hostB, SEED_B);
     await Promise.all([readDustStatus(hostA, {}, endpoints()), readDustStatus(hostB, {}, endpoints())]);
     expect(indexer.subscriptions.map((s) => s.address).sort()).toEqual([
-      deriveUnshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed'),
-      deriveUnshieldedAddress(Buffer.from(SEED_B, 'hex'), 'undeployed'),
+      rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed'),
+      rcKeys.unshieldedAddress(Buffer.from(SEED_B, 'hex'), 'undeployed'),
     ].sort());
   });
 

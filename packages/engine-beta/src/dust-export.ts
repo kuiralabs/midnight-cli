@@ -19,12 +19,10 @@
 
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
 import { buildFacade, stopFacade, overlayDustDirectSnapshot } from './facade.ts';
-import { type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import type { DustExportResult } from '@kuiralabs/midnight-cli-core/engine';
+import type { NetworkConfig, VerboseLog, NoticeSink } from '@kuiralabs/midnight-cli-core';
 import type { WalletDataRepository } from './wallet-data-repository.ts';
-import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
-import type { NoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
-import type { DustExportResult } from '@kuiralabs/midnight-cli-core/lib/engine';
-export type { DustExportResult } from '@kuiralabs/midnight-cli-core/lib/engine';
+export type { DustExportResult } from '@kuiralabs/midnight-cli-core/engine';
 
 
 export interface DustExportOptions {

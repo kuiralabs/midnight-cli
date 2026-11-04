@@ -1,7 +1,7 @@
 // What the swap package (mn swap) tells agents: its pieces of `help --agent`
 // and of the full skill, the manual section it adds, and its tools' rows.
 
-import type { PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import type { PackageGuidance } from '@kuiralabs/midnight-cli-core';
 
 export const swapGuidance: PackageGuidance = {
   sections: [{ text: 'agent-manual', name: 'swaps', after: 'grants' }],

@@ -1,8 +1,15 @@
 // The package layering, checked on every run of the suite: every file of src/
 // has a package, and no import crosses the layering the planned split needs.
+// A workspace package is imported by its entry points alone, in code, tests
+// and scripts.
 
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { findLayeringProblems, importRule } from '../../scripts/check-layering.mjs';
+import { findLayeringProblems, importRule, importedModules, testProblems } from '../../scripts/check-layering.mjs';
+
+const ROOT = join(import.meta.dirname, '..', '..');
+const FIXTURES = join(import.meta.dirname, 'fixtures', 'layering');
+const fromRoot = (file: string) => file.slice(ROOT.length + 1);
 
 describe('the layering', () => {
   it('holds across src/', () => {
@@ -67,5 +74,34 @@ describe('the layering', () => {
   it('lets only an engine import the SDK', () => {
     // findLayeringProblems above finds none elsewhere; core, chain and every package are held to it alike.
     expect(importRule('lib/wallet-create.ts', 'engine/rc/derivation.ts')).toBe('wallet → engine (reach it through lib/installed-engines.ts)');
+  });
+});
+
+describe('a workspace package imported by its entry points', () => {
+  it('refuses a deep import across packages, naming the entry points', () => {
+    expect(testProblems(join(FIXTURES, 'deep-import.ts')).map((v) => `${v.rule}: ${v.where} ${v.specifier}`)).toStrictEqual([
+      'deep import into @kuiralabs/midnight-cli-core (its entry points: ., ./engine, ./ui, ./commands): src/__tests__/fixtures/layering/deep-import.ts:5 @kuiralabs/midnight-cli-core/lib/errors',
+    ]);
+  });
+
+  it("refuses a test reaching into another package's source by path", () => {
+    expect(testProblems(join(FIXTURES, 'by-path.ts')).map((v) => `${v.rule}: ${v.where}`)).toStrictEqual([
+      'test → another package by path (a test imports another package by its entry points): src/__tests__/fixtures/layering/by-path.ts:4',
+    ]);
+  });
+
+  it('passes an import of an entry point', () => {
+    expect(testProblems(join(FIXTURES, 'by-entry-point.ts'))).toStrictEqual([]);
+  });
+
+  it('judges an import of a barrel by the modules defining the names it imports', () => {
+    const file = join(ROOT, 'src', 'lib', 'facade.ts');
+    const modules = (names: { name: string; typeOnly: boolean }[] | null) =>
+      importedModules(file, { specifier: '@kuiralabs/midnight-cli-core/engine', typeOnly: false, names })!.modules!.map((each) => fromRoot(each.file));
+    expect(modules([{ name: 'toEngineError', typeOnly: false }])).toStrictEqual(['packages/cli-core/src/lib/sdk-errors.ts']);
+    expect(modules([{ name: 'toHex', typeOnly: false }, { name: 'EngineHost', typeOnly: true }])).toStrictEqual(['packages/cli-core/src/lib/tx-serde.ts', 'packages/cli-core/src/lib/engine.ts']);
+    // So a package that may not read the SDK's errors is refused them through the barrel too.
+    expect(importRule('lib/facade.ts', 'lib/sdk-errors.ts')).toBe("wallet → the SDK's errors (only an engine reads them)");
+    expect(modules(null)).toContain('packages/cli-core/src/lib/wallet-cache.ts');
   });
 });

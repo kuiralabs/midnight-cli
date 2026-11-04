@@ -5,9 +5,8 @@
 // search and scroll. Disable with --no-pager.
 
 import { spawn } from 'node:child_process';
-import { type ParsedArgs, hasFlag, getFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import type { CallContext, CallOutput } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { bold, dim, teal, yellow, white } from '@kuiralabs/midnight-cli-core/ui/colors';
+import { type ParsedArgs, hasFlag, getFlag, type CallContext, type CallOutput } from '@kuiralabs/midnight-cli-core';
+import { bold, dim, teal, yellow, white } from '@kuiralabs/midnight-cli-core/ui';
 import { helpSpecs, type CommandSpec } from './help.ts';
 import { PKG_NAME, PKG_VERSION, PKG_REPOSITORY_URL } from '../lib/pkg.ts';
 import { installedCommands } from '../lib/installed-commands.ts';

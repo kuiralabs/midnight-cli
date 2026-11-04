@@ -3,16 +3,9 @@
 // address. The call syncs the wallet, proves, submits, and waits for the
 // indexer to list the transaction.
 
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { throwIfCancelled, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { progressSteps } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { withCallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import { nightAmountText } from '@kuiralabs/midnight-cli-core/lib/amount';
-import { shieldedDisabledReason, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
-import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { type Host, throwIfCancelled, UsageError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, nightAmountText, shieldedDisabledReason, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core';
+import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
+import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
 import { saveShieldedAddress } from '../wallet-config.ts';
 import { seedOf, type WalletSource } from '../seed-resolver.ts';
 import { receiptOfSubmitted, saySyncPercent, submitSteps } from './submit-steps.ts';

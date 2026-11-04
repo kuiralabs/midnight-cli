@@ -12,12 +12,8 @@
 import WebSocket from 'ws';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { collapseForeignGenerations } from './dust-collapse.ts';
-import {
-  INITIAL_NIGHT_DUST_RATIO,
-  INITIAL_GENERATION_DECAY_RATE,
-  INITIAL_DUST_GRACE_PERIOD_SECONDS,
-} from '@kuiralabs/midnight-cli-core/lib/constants';
-import { subscribeGraphqlWs } from '@kuiralabs/midnight-chain/lib/graphql-ws-subscription';
+import { INITIAL_NIGHT_DUST_RATIO, INITIAL_GENERATION_DECAY_RATE, INITIAL_DUST_GRACE_PERIOD_SECONDS } from '@kuiralabs/midnight-cli-core/engine';
+import { subscribeGraphqlWs } from '@kuiralabs/midnight-chain';
 
 // MN_DISABLE_DUST_COLLAPSE=1 disables the dust generation-tree collapse (debugging / safety valve): the repository then passes `collapse: false`, read from its host's settings.
 

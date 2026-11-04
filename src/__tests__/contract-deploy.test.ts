@@ -9,10 +9,8 @@ import * as path from 'node:path';
 import { contractDeployRequest } from '../lib/contract/request.ts';
 import { deployContract } from '../lib/contract/deploy.ts';
 import { servePayerAt } from '../lib/serve-payer.ts';
-import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { createSdkWarningRouter, CancelledError, createHost, type Host } from '@kuiralabs/midnight-cli-core';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 const ENDPOINTS = { network: 'undeployed' as const, node: 'ws://localhost:29944', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws', proofServer: 'http://localhost:26300' };

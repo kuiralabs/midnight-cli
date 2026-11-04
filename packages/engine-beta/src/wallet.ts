@@ -4,26 +4,13 @@
 // themselves before the SDK moved behind the engine.
 
 import { deriveUnshieldedAddress } from './derive-address.ts';
-import { assertSpendsNoOfferCoin, readOpenOffers } from '@kuiralabs/midnight-cli-core/lib/open-offers';
+import { assertSpendsNoOfferCoin, type DAppConnector, type EngineWallet, type OpenedConnector, type PrepWallet, type ServedWalletSession, type ShieldedTransferParams, reportingEngineErrors, getNetworkId, bindCachesToIndexer, describeIndexerChange, loadWalletCache, saveWalletCache, DUST_SHORT_WAIT_MS, payWhenDustCovers } from '@kuiralabs/midnight-cli-core/engine';
+import { readOpenOffers, InsufficientBalanceError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { trackElapsed } from '@kuiralabs/midnight-cli-core/ui';
 import { spentNullifiers } from './offer-reader.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { MidnightBech32m } from '@midnightntwrk/wallet-sdk-address-format';
-import type {
-  DAppConnector,
-  EngineWallet,
-  OpenedConnector,
-  PrepWallet,
-  ServedWalletSession,
-  ShieldedTransferParams,
-} from '@kuiralabs/midnight-cli-core/lib/engine';
-import { InsufficientBalanceError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { reportingEngineErrors } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
-import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
-import { bindCachesToIndexer, describeIndexerChange } from '@kuiralabs/midnight-cli-core/lib/cache-indexer';
-import { loadWalletCache, saveWalletCache } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
-import { DUST_SHORT_WAIT_MS, payWhenDustCovers } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
-import { assertLedgerSupported } from '@kuiralabs/midnight-chain/lib/ledger-guard';
-import { trackElapsed } from '@kuiralabs/midnight-cli-core/ui/spinner';
+import { assertLedgerSupported } from '@kuiralabs/midnight-chain';
 import { decodeShieldedAddress } from './addresses.ts';
 import { buildFacade, hasDustAvailable, isFacadeSynced, startAndSyncFacade, stopFacade, waitForDustAvailable } from './facade.ts';
 import { ensureDust, executeTransfer } from './transfer.ts';

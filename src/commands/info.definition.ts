@@ -1,8 +1,7 @@
 // The `info` command, described once.
 
-import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
-import { type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { LOADS_ENGINE, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import { getValidNetworkNames, type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core';
+import { LOADS_ENGINE, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 import { OPENS_WALLET } from './wallet.codes.ts';
 
 export const infoDefinition: CommandDefinition = {

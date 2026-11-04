@@ -17,21 +17,21 @@ import {
   commandEntries,
   declaredCodeProblems,
 } from '../../scripts/code-reach.mjs';
-import { importTarget, importsOf } from '../../scripts/check-layering.mjs';
-import { declaredCodes, type CommandDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { EVERY_COMMAND, READS_OFFERS } from '@kuiralabs/midnight-cli-core/commands/core.codes';
-import { CancelledError, CommandFailedError, DustRequiredError, TransactionRefusedError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { refusalCodeOf, toEngineError } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
-import { withTransportCode } from '@kuiralabs/midnight-cli-core/lib/transport-failure';
+import { importTarget, importedModules, importsOf } from '../../scripts/check-layering.mjs';
+import { declaredCodes, type CommandDefinition, CancelledError, CommandFailedError, DustRequiredError, TransactionRefusedError, withTransportCode } from '@kuiralabs/midnight-cli-core';
+import { EVERY_COMMAND, READS_OFFERS } from '@kuiralabs/midnight-cli-core/commands';
+import { refusalCodeOf, toEngineError } from '@kuiralabs/midnight-cli-core/engine';
 import { ContractScriptError, SCRIPT_ERROR_MARKER, scriptFailureOf } from '../lib/contract/runner.ts';
 import { PrepStepFailedError } from '../lib/test/prep-runner.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { WalletNotFoundError } from '../lib/wallet-config.ts';
 import { expectDeclared, expectDeclaredToolResult } from './helpers/expect-declared.ts';
 import { fixtureDefinition } from './fixtures/code-reach/fixture.definition.ts';
+import { barrelFixtureDefinition } from './fixtures/code-reach/barrel.definition.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const FIXTURE = join(import.meta.dirname, 'fixtures', 'code-reach', 'fixture.definition.ts');
+const BARREL_FIXTURE = join(import.meta.dirname, 'fixtures', 'code-reach', 'barrel.definition.ts');
 
 /** The problems the check finds with `definition` declaring what it does, its entries read from its file. */
 function problemsOf(definition: CommandDefinition, file: string): string[] {
@@ -83,6 +83,24 @@ describe('a definition whose handler can throw a code it does not declare', () =
     expect(problemsOf({ ...fixtureDefinition, errors: { codes: [READS_OFFERS] } }, FIXTURE)).toStrictEqual([]);
     expect(problemsOf({ ...fixtureDefinition, errors: { codes: [READS_OFFERS, 'WALLET_NOT_FOUND'] } }, FIXTURE)).toStrictEqual([
       'code-reach-fixture: declares WALLET_NOT_FOUND, which none of its modules can throw',
+    ]);
+  });
+});
+
+describe('a handler that imports a name through a barrel', () => {
+  it('reaches the module defining that name, and none of the others the barrel lists', () => {
+    expect(problemsOf(barrelFixtureDefinition, BARREL_FIXTURE)).toStrictEqual([
+      'code-reach-barrel-fixture: reaches NOT_AN_OFFER (src/__tests__/fixtures/code-reach/barrel-handler.ts → src/__tests__/fixtures/code-reach/refuses.ts), which it doesn\'t declare',
+      'code-reach-barrel-fixture: reaches TERMS_MISMATCH (src/__tests__/fixtures/code-reach/barrel-handler.ts → src/__tests__/fixtures/code-reach/refuses.ts → packages/cli-core/src/lib/swap-offer.ts), which it doesn\'t declare',
+    ]);
+  });
+
+  it('reaches every module the barrel lists when it imports the whole barrel', () => {
+    const handler = join(import.meta.dirname, 'fixtures', 'code-reach', 'barrel-handler.ts');
+    const whole = importsOf(handler).map((each) => ({ ...each, names: null }));
+    expect(whole.flatMap((each) => importedModules(handler, each)!.modules!.map((module) => module.file.slice(ROOT.length + 1)))).toStrictEqual([
+      'src/__tests__/fixtures/code-reach/refuses.ts',
+      'src/__tests__/fixtures/code-reach/unpaid.ts',
     ]);
   });
 });

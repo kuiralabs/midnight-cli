@@ -3,7 +3,7 @@
 // skills, each naming its section and its place there, and its tools' rows in
 // the manual's tools table.
 
-import { codeGuidancePieces, type PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import { codeGuidancePieces, type PackageGuidance } from '@kuiralabs/midnight-cli-core';
 import { walletCodes } from './wallet.codes.ts';
 
 export const walletGuidance: PackageGuidance = {

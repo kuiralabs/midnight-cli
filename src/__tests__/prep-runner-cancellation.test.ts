@@ -4,9 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { runPrepSteps } from '../lib/test/prep-runner.ts';
 import { createPrepContext, type DappTestConfig } from '../lib/test/types.ts';
-import { createSdkWarningRouter } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { createSdkWarningRouter, CancelledError, createHost } from '@kuiralabs/midnight-cli-core';
 
 // The host the tests' calls run in: nobody to ask, notices dropped.
 const host = createHost();

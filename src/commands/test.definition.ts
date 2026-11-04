@@ -1,9 +1,8 @@
 // The `test` command, described once.
 
-import { type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
-import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands/chain.codes';
-import { EXIT_GENERAL_ERROR } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { type CommandDefinition, NETWORK_PARAM, EXIT_GENERAL_ERROR } from '@kuiralabs/midnight-cli-core';
+import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
+import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
 import { OPENS_WALLET } from './wallet.codes.ts';
 
 export const testDefinition: CommandDefinition = {

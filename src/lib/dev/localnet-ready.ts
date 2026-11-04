@@ -3,8 +3,8 @@
 // running stack at the endpoints `undeployed` resolves to (saved config, or
 // the single local stack docker shows).
 
-import { resolveNetwork, type NetworkSettings } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import { assertLedger9StackReachable } from '@kuiralabs/midnight-chain/lib/ledger-guard';
+import { resolveNetwork, type NetworkSettings } from '@kuiralabs/midnight-cli-core';
+import { assertLedger9StackReachable } from '@kuiralabs/midnight-chain';
 
 export type LocalnetState = 'already-running';
 

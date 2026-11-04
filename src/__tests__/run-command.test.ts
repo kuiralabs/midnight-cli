@@ -1,12 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { captureCommand } from '../lib/run-command.ts';
-import { SecondResultError, type CommandHandler } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { CancelledError, CommandFailedError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { SecondResultError, type CommandHandler, CancelledError, CommandFailedError, classifyError, parseArgs, type ParsedArgs } from '@kuiralabs/midnight-cli-core';
+import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { installedCommands } from '../lib/installed-commands.ts';
-import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import { parseArgs, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -17,8 +14,8 @@ import addressCommand from '../commands/address.ts';
 import genesisAddressCommand from '../commands/genesis-address.ts';
 import inspectCostCommand from '../commands/inspect-cost.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { localIndexerFlags } from './helpers/local-indexer.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { localIndexerFlags } from '../../test-support/local-indexer.ts';
 import { ownCall } from './helpers/own-call.ts';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-run-cmd-test-${process.pid}`);
@@ -27,7 +24,7 @@ const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000
 const TEST_CONFIG_SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
 const TEST_CONFIG: WalletConfig = {
   seed: TEST_CONFIG_SEED,
-  addresses: deriveAllAddresses(Buffer.from(TEST_CONFIG_SEED, 'hex')),
+  addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_CONFIG_SEED, 'hex')),
   createdAt: '2026-01-15T10:30:00.000Z',
 };
 

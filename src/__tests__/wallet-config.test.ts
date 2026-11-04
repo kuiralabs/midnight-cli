@@ -5,10 +5,9 @@ import * as os from 'os';
 import { loadWalletConfig, matchWalletAddress, unlockWallet, walletAddress, writeSealedWallet, type WalletInfo } from '../lib/wallet-config.ts';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { deriveAllAddresses, deriveAllShieldedAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { DIR_MODE, FILE_MODE, createHost } from '@kuiralabs/midnight-cli-core';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { stateRootIn } from './helpers/state-root-in.ts';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
@@ -17,7 +16,7 @@ const host = createHost({ engineLoader: loadInstalledEngine });
 const TEST_DIR = path.join(os.tmpdir(), `midnight-wallet-test-${process.pid}`);
 
 const VALID_SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
-const VALID_ADDRESSES = deriveAllAddresses(Buffer.from(VALID_SEED, 'hex'));
+const VALID_ADDRESSES = rcKeys.unshieldedAddresses(Buffer.from(VALID_SEED, 'hex'));
 
 const VALID_CONFIG: WalletConfig = {
   seed: VALID_SEED,
@@ -62,7 +61,7 @@ describe('writeSealedWallet', () => {
     const filePath = path.join(TEST_DIR, 'wallet.json');
     writeSealedWallet(filePath, PUBLIC, { seed: VALID_SEED, mnemonic: 'abandon abandon abandon' }, PASSPHRASE);
     const otherSeed = '1111111111111111111111111111111111111111111111111111111111111111';
-    const otherAddresses = deriveAllAddresses(Buffer.from(otherSeed, 'hex'));
+    const otherAddresses = rcKeys.unshieldedAddresses(Buffer.from(otherSeed, 'hex'));
     writeSealedWallet(filePath, { addresses: otherAddresses, createdAt: '2026-02-26T00:00:00.000Z' }, { seed: otherSeed }, PASSPHRASE, { overwrite: true });
     const loaded = await unlockWallet(filePath, UNLOCK);
     expect(loaded.seed).toBe(otherSeed);
@@ -167,8 +166,8 @@ describe('round-trip', () => {
   it('a plain-text wallet unlocks to all it holds, mnemonic included', async () => {
     const filePath = path.join(TEST_DIR, 'roundtrip.json');
     const seed = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
-    const addresses = deriveAllAddresses(Buffer.from(seed, 'hex'));
-    const shieldedAddresses = deriveAllShieldedAddresses(Buffer.from(seed, 'hex'));
+    const addresses = rcKeys.unshieldedAddresses(Buffer.from(seed, 'hex'));
+    const shieldedAddresses = rcKeys.shieldedAddresses(Buffer.from(seed, 'hex'));
     const original: WalletConfig = {
       seed,
       mnemonic: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
@@ -182,14 +181,14 @@ describe('round-trip', () => {
 
   it('a sealed wallet unlocks to all it was written with', async () => {
     const filePath = path.join(TEST_DIR, 'roundtrip.json');
-    const shieldedAddresses = deriveAllShieldedAddresses(Buffer.from(VALID_SEED, 'hex'));
+    const shieldedAddresses = rcKeys.shieldedAddresses(Buffer.from(VALID_SEED, 'hex'));
     writeSealedWallet(filePath, { addresses: VALID_ADDRESSES, shieldedAddresses, createdAt: VALID_CONFIG.createdAt }, { seed: VALID_SEED }, PASSPHRASE);
     expect(await unlockWallet(filePath, UNLOCK)).toEqual({ ...VALID_CONFIG, shieldedAddresses, isSealed: true });
   });
 });
 
 describe('matchWalletAddress', () => {
-  const shieldedAddresses = deriveAllShieldedAddresses(Buffer.from(VALID_SEED, 'hex'));
+  const shieldedAddresses = rcKeys.shieldedAddresses(Buffer.from(VALID_SEED, 'hex'));
   const SEED_2 = '1111111111111111111111111111111111111111111111111111111111111111';
 
   const alice: WalletInfo = {
@@ -201,7 +200,7 @@ describe('matchWalletAddress', () => {
   };
   const bob: WalletInfo = {
     name: 'bob',
-    addresses: deriveAllAddresses(Buffer.from(SEED_2, 'hex')),
+    addresses: rcKeys.unshieldedAddresses(Buffer.from(SEED_2, 'hex')),
     isActive: false,
     file: '/wallets/bob.json',
   };
@@ -219,7 +218,7 @@ describe('matchWalletAddress', () => {
   });
 
   it('returns undefined for an address no wallet owns', () => {
-    const stranger = deriveAllAddresses(Buffer.from(
+    const stranger = rcKeys.unshieldedAddresses(Buffer.from(
       '0000000000000000000000000000000000000000000000000000000000000099', 'hex',
     )).undeployed;
     expect(matchWalletAddress([alice, bob], stranger)).toBeUndefined();
@@ -233,7 +232,7 @@ describe('matchWalletAddress', () => {
 describe('a wallet written before stagenet', () => {
   // The addresses an earlier mn wrote: every network but stagenet.
   const { stagenet: stagenetAddress, ...earlierAddresses } = VALID_ADDRESSES;
-  const { stagenet: stagenetShielded, ...earlierShielded } = deriveAllShieldedAddresses(Buffer.from(VALID_SEED, 'hex'));
+  const { stagenet: stagenetShielded, ...earlierShielded } = rcKeys.shieldedAddresses(Buffer.from(VALID_SEED, 'hex'));
 
   it('gets its stagenet address derived and saved when a plain-text wallet is read', async () => {
     const filePath = path.join(TEST_DIR, 'plain.json');

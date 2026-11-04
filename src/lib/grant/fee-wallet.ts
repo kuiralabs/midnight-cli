@@ -2,10 +2,8 @@
 // process, made into the account package's fee wallet.
 
 import type { FeeWallet } from '@kuiralabs/midnight-account-chain/owner';
-import { NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core/lib/constants';
-import type { Payer, PayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
-import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import { NATIVE_TOKEN_TYPE, type Payer, type PayingTarget, type CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
+import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 
 /** A fee wallet in this process, and how to stop it. */
 export interface PayingWallet {

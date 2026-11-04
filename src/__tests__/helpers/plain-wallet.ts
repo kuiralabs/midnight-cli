@@ -5,8 +5,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DIR_MODE, FILE_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import { DIR_MODE, FILE_MODE, type NetworkName } from '@kuiralabs/midnight-cli-core';
 
 export interface PlainWalletConfig {
   seed: string;

@@ -1,6 +1,6 @@
 // Test discovery — find and validate dapp.test.json and suite configs from the dApp root.
 
-import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core/lib/network';
+import { getValidNetworkNames } from '@kuiralabs/midnight-cli-core';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 

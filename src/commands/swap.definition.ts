@@ -1,8 +1,8 @@
 // The `swap` command, described once.
 
-import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
-import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands/chain.codes';
+import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget } from '@kuiralabs/midnight-cli-core';
+import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
+import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
 import { OPENS_WALLET } from './wallet.codes.ts';
 
 /** The terms a swap request states, as the maker gives and wants them. */

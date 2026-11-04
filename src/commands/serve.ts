@@ -2,23 +2,10 @@
 // Usage: midnight serve [--port 9932] [--wallet path] [--network name]
 //                       [--approve-all | --approve-fees] [--no-auto-approve-reads] [--json]
 
-import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites, resolveNetwork, applyEndpointOverrides, type DAppConnector, type DAppConnectorCallbacks, OPERATOR_REJECTED_MESSAGE, type PhaseTiming, DEFAULT_SERVE_PORT, shieldedSyncEnabled, parseFeeLimits, describeApprovalPolicy, type CallContext, UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { header, keyValue, divider, formatAddress, toDust, bold, dim, teal, green, red, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
-import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import { applyEndpointOverrides } from '@kuiralabs/midnight-cli-core/lib/network';
-import type { DAppConnector, DAppConnectorCallbacks } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core/lib/connector-api';
-import type { PhaseTiming } from '@kuiralabs/midnight-cli-core/lib/phase-tracker';
 import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
-import { DEFAULT_SERVE_PORT } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
-import { header, keyValue, divider, formatAddress, toDust } from '@kuiralabs/midnight-cli-core/ui/format';
-import { parseFeeLimits } from '@kuiralabs/midnight-cli-core/lib/fee-limits';
-import { describeApprovalPolicy } from '@kuiralabs/midnight-cli-core/lib/approval';
-import { bold, dim, teal, green, red } from '@kuiralabs/midnight-cli-core/ui/colors';
-import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export default async function serveCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);

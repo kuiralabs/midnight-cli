@@ -3,8 +3,8 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import localnetCommand from '../commands/localnet.ts';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { parseArgs, commandHelpSpecs, introBriefs } from '@kuiralabs/midnight-cli-core';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { existsSync, statSync } from 'fs';
 import {
   COMPOSE_YAML,
@@ -15,7 +15,6 @@ import {
   parseServiceStatus,
 } from '../lib/localnet.ts';
 import helpCommand from '../commands/help.ts';
-import { commandHelpSpecs, introBriefs } from '@kuiralabs/midnight-cli-core/lib/command-definition';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { cliCall } from './helpers/cli-call.ts';
 

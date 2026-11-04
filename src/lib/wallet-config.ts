@@ -1,15 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, isValidWalletName } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { getValidNetworkNames, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { loadCliConfig, saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
+import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, isValidWalletName, getValidNetworkNames, type NetworkName, loadCliConfig, saveCliConfig, type EngineKeys, type HostEngines, isSealedSecret, openSecret, sealSecret, FileExistsError, writeJsonDurably, defineHostSlot, type Host, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import { getWalletsDir } from './wallet-paths.ts';
-import type { EngineKeys, HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { isSealedSecret, openSecret, sealSecret } from '@kuiralabs/midnight-cli-core/lib/keystore';
-import { FileExistsError, writeJsonDurably } from '@kuiralabs/midnight-cli-core/lib/durable-file';
 import { type PassphraseHost, type PassphraseSource, unlockPassphrase } from './passphrase.ts';
-import { defineHostSlot, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 /** No wallet by that name, or no wallet file at that path; the message says how to list or make one. */
 export class WalletNotFoundError extends Error {

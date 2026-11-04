@@ -2,12 +2,7 @@
 // any wallet opens: the terms, the expiry, the offer file, the network.
 
 import { readFileSync } from 'node:fs';
-import { type ParsedArgs, getFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { type PayingTarget, resolvePayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { checkTerms, type SwapLeg, type SwapTerms } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
-import { assertOfferUnexpired } from '@kuiralabs/midnight-cli-core/lib/offer-envelope';
+import { type ParsedArgs, getFlag, UsageError, type PayingTarget, resolvePayingTarget, type Host, checkTerms, type SwapLeg, type SwapTerms, assertOfferUnexpired } from '@kuiralabs/midnight-cli-core';
 import { readOfferFile, type ReadOffer } from './offers.ts';
 
 /** How long an offer lasts for takers using mn unless the maker says. */

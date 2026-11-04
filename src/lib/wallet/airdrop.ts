@@ -3,17 +3,9 @@
 // from its shielded ones. Only the undeployed network has such a wallet; on
 // preprod and preview a faucet or another wallet funds one.
 
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { throwIfCancelled, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { progressSteps } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { withCallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import { nightAmountText } from '@kuiralabs/midnight-cli-core/lib/amount';
-import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core/lib/constants';
-import type { HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { type Host, throwIfCancelled, UsageError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, nightAmountText, GENESIS_SEED, type HostEngines } from '@kuiralabs/midnight-cli-core';
+import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
+import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
 import { resolveWalletPath, saveShieldedAddress, walletAddress, walletShieldedAddress, type UnlockHost } from '../wallet-config.ts';
 import { receiptOfSubmitted, saySyncPercent, submitSteps } from './submit-steps.ts';
 import { networkChoiceOf, type WalletCallOptions } from './wallet-call.ts';

@@ -3,21 +3,15 @@
 // Dispatches to command handlers via dynamic import
 // Also supports: midnight --mcp (starts MCP server for AI agent integration)
 
-import { parseArgs, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { errorMessage, usageMessage } from '@kuiralabs/midnight-cli-core/ui/format';
-import { assertKnownFlags } from '@kuiralabs/midnight-cli-core/lib/command-flags';
+import { parseArgs, hasFlag, assertKnownFlags, type CommandOutcome, classifyError, humanizeNetworkError, asReported, isUsageError, writeJsonError } from '@kuiralabs/midnight-cli-core';
+import { errorMessage, usageMessage, createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui';
 import { installedCommands } from './lib/installed-commands.ts';
 import { commandNeedsWalletSdk, dispatchCommand, processOutput } from './lib/command-dispatch.ts';
-import type { CommandOutcome } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { classifyError, humanizeNetworkError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
-import { asReported, isUsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { writeJsonError } from '@kuiralabs/midnight-cli-core/lib/json-output';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { migrateOldWallet } from './lib/wallet-paths.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
-import { createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui/terminal-prompter';
 import { createCliHost } from './lib/cli-host.ts';
 
 // --mcp: start MCP server instead of CLI (for: npx midnight-wallet-cli --mcp)

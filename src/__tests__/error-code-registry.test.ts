@@ -3,20 +3,9 @@
 // is defined twice.
 
 import { describe, expect, it } from 'vitest';
-import { CodeDefinitionError, defineCodeSet, defineCodes } from '@kuiralabs/midnight-cli-core/lib/error-codes';
-import {
-  CommandDefinitionError,
-  commandErrorCodes,
-  commandExitCodes,
-  createCommandRegistry,
-  createPackageRegistry,
-  declaredCodes,
-  type CommandDefinition,
-  type CommandPackage,
-} from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { classifyError, ERROR_CODES } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
-import { coreCodes, ENGINE_SYNC, EVERY_COMMAND } from '@kuiralabs/midnight-cli-core/commands/core.codes';
-import { chainCodes, READS_CHAIN } from '@kuiralabs/midnight-chain/commands/chain.codes';
+import { CodeDefinitionError, defineCodeSet, defineCodes, CommandDefinitionError, commandErrorCodes, commandExitCodes, createCommandRegistry, createPackageRegistry, declaredCodes, type CommandDefinition, type CommandPackage, classifyError, ERROR_CODES } from '@kuiralabs/midnight-cli-core';
+import { coreCodes, ENGINE_SYNC, EVERY_COMMAND } from '@kuiralabs/midnight-cli-core/commands';
+import { chainCodes, READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
 import { installedCommands } from '../lib/installed-commands.ts';
 
 /** A package with no commands and no guidance: only codes. */

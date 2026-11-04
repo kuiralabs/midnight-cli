@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildManual } from '../commands/manual.ts';
-import { getConfigValue } from '@kuiralabs/midnight-cli-core/lib/cli-config';
+import { getConfigValue } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
 
 function stripAnsi(s: string): string {

@@ -2,39 +2,21 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import type { NoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
+import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, type DAppConnector, type DAppConnectorCallbacks } from '@kuiralabs/midnight-cli-core/engine';
+import { type NoticeSink, LEDGER_9_FORK_VERSION, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core';
+import { dim, roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
 import type { FacadeState, WalletEntry } from '@midnightntwrk/wallet-sdk/facade';
 import type { FinalizedTx } from '@midnightntwrk/wallet-sdk';
 
 import { type FacadeBundle, hasDustAvailable } from './facade.ts';
-import { LEDGER_9_FORK_VERSION, type NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
-import type { ApprovalOptions } from '@kuiralabs/midnight-cli-core/lib/approval';
-import { promptApproval } from '@kuiralabs/midnight-cli-core/lib/approval';
-import { createApiError, type RpcHandler, type RpcHandlerContext } from '@kuiralabs/midnight-cli-core/lib/connector-api';
-import { createPhaseTracker, type PhaseTracker } from '@kuiralabs/midnight-cli-core/lib/phase-tracker';
-import { toHex, fromHex } from '@kuiralabs/midnight-cli-core/lib/tx-serde';
-import { getNetworkId } from '@kuiralabs/midnight-cli-core/lib/network-id';
-import { isDustShortage, markingEngineCodes } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
-import { ProofTimeoutError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits } from '@kuiralabs/midnight-cli-core/lib/fee-limits';
 import { inspectTxHex } from './tx-inspect.ts';
 import { readOffer, spentNullifiers } from './offer-reader.ts';
-import { assertSpendsNoOfferCoin, type OpenOffer } from '@kuiralabs/midnight-cli-core/lib/open-offers';
-import { NotAnOfferError, describeLeg } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
 import { expiredIntents, feeOnlyRefusals, readDAppTransaction, type DAppTxStage, type FeeCheckTransaction } from './fee-only-check.ts';
 import { PartlySignedTransactionError, assertSignable, signRecipe } from './sign-recipe.ts';
-import { decodeSignPayload, signedMessageBytes } from '@kuiralabs/midnight-cli-core/lib/sign-data';
-import { DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
-import { formatWait } from '@kuiralabs/midnight-cli-core/lib/duration';
-import { fetchPartialSuccessSegments, type SegmentResult } from '@kuiralabs/midnight-chain/lib/tx-segments';
-import { walletsBelowLedger9 } from '@kuiralabs/midnight-chain/lib/ledger-guard';
-import { TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
-import { roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui/format';
-import type { DAppConnector, DAppConnectorCallbacks } from '@kuiralabs/midnight-cli-core/lib/engine';
-export type { DAppConnector, DAppConnectorCallbacks } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { fetchPartialSuccessSegments, type SegmentResult, walletsBelowLedger9 } from '@kuiralabs/midnight-chain';
+export type { DAppConnector, DAppConnectorCallbacks } from '@kuiralabs/midnight-cli-core/engine';
 
 // ── Types ──
 
@@ -151,8 +133,7 @@ function extractErrorDetail(err: unknown): string {
   return deduped.join(' → ') || 'Unknown error';
 }
 
-export { OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core/lib/connector-api';
-import { OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core/lib/connector-api';
+export { OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core';
 
 /** The connector API's history entry for one wallet history entry. */
 export type HistoryEntry = {

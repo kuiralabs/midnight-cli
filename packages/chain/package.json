@@ -17,10 +17,15 @@
     "node": ">=22"
   },
   "exports": {
-    "./*": {
-      "midnight-cli-source": "./src/*.ts",
-      "types": "./dist/*.d.ts",
-      "default": "./dist/*.js"
+    ".": {
+      "midnight-cli-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./commands": {
+      "midnight-cli-source": "./src/commands.ts",
+      "types": "./dist/commands.d.ts",
+      "default": "./dist/commands.js"
     }
   },
   "files": [

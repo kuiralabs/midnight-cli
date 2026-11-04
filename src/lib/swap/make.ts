@@ -1,13 +1,7 @@
 // Making a swap offer: the maker's wallet proves its half, and the offer
 // comes back as an offer file's text for the maker to hand to a taker.
 
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { progressSteps } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { withCallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import type { SwapTerms } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
+import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, type SwapTerms } from '@kuiralabs/midnight-cli-core';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
 import type { PaidCallOptions } from '../wallet/paid-call.ts';
 import { makeOffer } from './offers.ts';

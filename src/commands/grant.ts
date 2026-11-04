@@ -9,21 +9,14 @@ import { existsSync } from 'node:fs';
 // confirmed. The others are paid by this wallet, through its DApp connector in
 // this process: no server, no port.
 
-import { type ParsedArgs, hasFlag, getFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { DustRequiredError, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { type ParsedArgs, hasFlag, getFlag, DustRequiredError, UsageError, type CallContext, payerFor, throwIfCancelled, withTransportCode } from '@kuiralabs/midnight-cli-core';
+import { dim, header, keyValue, formatNight, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { type GrantAccount, openGrantAccount, ownerDeviceOf } from '../lib/grant/account.ts';
 import { deployShortOfDustNote } from '../lib/grant/deploy-cost.ts';
 import { type OwnerCommandOutput, grantRequestOf, grantsOf, issue, issuePreview, revoke, revokeAll, statusOf } from '../lib/grant/owner-commands.ts';
 import { prepareGrant } from '../lib/grant/prepare.ts';
 import { type GrantRequest, paysAFee } from '../lib/grant/request.ts';
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
 import { type PayingWallet, openPayingWallet } from '../lib/grant/fee-wallet.ts';
-import { payerFor } from '@kuiralabs/midnight-cli-core/lib/payer';
-import { dim } from '@kuiralabs/midnight-cli-core/ui/colors';
-import { header, keyValue, formatNight } from '@kuiralabs/midnight-cli-core/ui/format';
-import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { withTransportCode } from '@kuiralabs/midnight-cli-core/lib/transport-failure';
 
 const SPINNER_LABEL: Record<GrantRequest['subcommand'], string> = {
   deploy: 'Deploying the account...',

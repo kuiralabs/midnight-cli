@@ -1,8 +1,8 @@
 // The `inspect-cost` command, described once.
 
-import type { CommandDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { LOADS_ENGINE, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
-import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands/chain.codes';
+import type { CommandDefinition } from '@kuiralabs/midnight-cli-core';
+import { LOADS_ENGINE, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
+import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
 
 export const inspectCostDefinition: CommandDefinition = {
   name: 'inspect-cost',

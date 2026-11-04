@@ -6,7 +6,8 @@
 
 import { createHash } from 'node:crypto';
 import { Transaction } from '@midnightntwrk/ledger-v9';
-import { NotAnOfferError, type OfferContents } from '@kuiralabs/midnight-cli-core/lib/swap-offer';
+import { NotAnOfferError } from '@kuiralabs/midnight-cli-core/engine';
+import type { OfferContents } from '@kuiralabs/midnight-cli-core';
 
 export function readOffer(txHex: string): OfferContents {
   if (!/^(?:[0-9a-fA-F]{2})+$/.test(txHex)) throw new NotAnOfferError('it is not hex');

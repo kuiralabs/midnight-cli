@@ -5,10 +5,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { LOCALNET_DIR_NAME, DIR_MODE } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { CancelledError, CANCELLED_MESSAGE, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { ExecRunner } from '@kuiralabs/midnight-cli-core/lib/exec-program';
-import { sleep } from '@kuiralabs/midnight-cli-core/lib/sleep';
+import { LOCALNET_DIR_NAME, DIR_MODE, CancelledError, CANCELLED_MESSAGE, throwIfCancelled, type ExecRunner, sleep } from '@kuiralabs/midnight-cli-core';
 
 // Version tag — bump when compose content changes so stale files get overwritten
 export const COMPOSE_VERSION = '3.0.6';

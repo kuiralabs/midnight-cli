@@ -18,11 +18,10 @@
 // tests against localnet — accepted scope per architecture-deepening.md.
 
 import { Buffer } from 'node:buffer';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { isColdStartRace, loadWalletCache, saveWalletCache, clearWalletCache, validateWalletCacheChainId, type WalletCacheData, bindCachesToIndexer, describeIndexerChange, type CachedReadOptions, type DustBalance, type EngineHost, type ReadOptions, type UnshieldedView } from '@kuiralabs/midnight-cli-core/engine';
+import { throwIfCancelled, type NetworkConfig, type NetworkName, isValidNetworkName, clearDustDirectCache, type VerboseLog, type NoticeSink } from '@kuiralabs/midnight-cli-core';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
-import type { NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { isValidNetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 import { type FacadeState } from '@midnightntwrk/wallet-sdk/facade';
 import {
   buildFacade,
@@ -33,30 +32,13 @@ import {
   type SyncMode,
   overlayDustDirectSnapshot,
 } from './facade.ts';
-import { isColdStartRace } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
 import { loadDustCache, saveDustCache, dustPublicKeyHexFromSeed, validateDustCacheChainId } from './dust-direct-cache.ts';
-import { clearDustDirectCache } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
-import {
-  loadWalletCache,
-  saveWalletCache,
-  clearWalletCache,
-  validateWalletCacheChainId,
-  type WalletCacheData,
-} from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
-import { getChainGenesisHash } from '@kuiralabs/midnight-chain/lib/chain-id';
-import { assertLedgerSupported, fetchProtocolVersion } from '@kuiralabs/midnight-chain/lib/ledger-guard';
-import { checkBalance, type BalanceSummary } from '@kuiralabs/midnight-chain/lib/balance-subscription';
+import { getChainGenesisHash, assertLedgerSupported, fetchProtocolVersion, checkBalance, type BalanceSummary, callNodeRpc, fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain';
 import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from './dust-direct.ts';
-import { bindCachesToIndexer, describeIndexerChange } from '@kuiralabs/midnight-cli-core/lib/cache-indexer';
 import { nativeDustSyncAvailable, runDustSyncNative } from './dust-sync-native.ts';
-import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
-import type { NoticeSink } from '@kuiralabs/midnight-cli-core/lib/notices';
-import { callNodeRpc } from '@kuiralabs/midnight-chain/lib/node-rpc';
 import { deriveDustSeed } from './derivation.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
-import { fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain/lib/event-tip';
-import type { CachedReadOptions, DustBalance, EngineHost, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/lib/engine';
-export type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/lib/engine';
+export type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/engine';
 
 // ── Public types ──────────────────────────────────────────
 

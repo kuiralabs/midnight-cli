@@ -2,11 +2,7 @@
 // mn keeps its open offers under, and the payer's session with the shielded
 // side synced, closed whatever happens.
 
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import type { ConnectOptions, PayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
-import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import type { WalletSession } from '@kuiralabs/midnight-cli-core/lib/wallet-session';
+import type { Host, NetworkName, ConnectOptions, PayingTarget, CallSdkWarnings, WalletSession } from '@kuiralabs/midnight-cli-core';
 import { resolveWalletPath, walletAddress } from '../wallet-config.ts';
 import { stepSpinner, type PaidCallOptions } from '../wallet/paid-call.ts';
 

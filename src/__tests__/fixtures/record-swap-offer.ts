@@ -13,9 +13,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { settingsFromEnvironment } from '@kuiralabs/midnight-cli-core/lib/settings';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
+import { settingsFromEnvironment, createHost, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
 import { loadInstalledEngine } from '../../lib/installed-engines.ts';
 
 const GIVE = '00'.repeat(31) + '01';

@@ -3,8 +3,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import type { TestAction, DappTestConfig } from './types.ts';
-import type { NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import type { HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
+import type { NetworkConfig, NetworkName, HostEngines } from '@kuiralabs/midnight-cli-core';
 import { runDeploy, runCall, runState, type StateResult } from '../contract/runner.ts';
 import { findContractInfo, type ContractInfo } from '../contract/inspect.ts';
 import { analyzeWitnessDependencies } from './circuit-witness-deps.ts';

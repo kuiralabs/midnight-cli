@@ -176,7 +176,9 @@ jobs:
             else
               # An engine ships the SDK set the tests ran on, for a program that installs it without mn.
               case "$name" in @kuiralabs/midnight-engine-*) node scripts/make-shrinkwrap.mjs --package "$dir" ;; esac
-              ( cd "$dir" && npm publish --access public ${{ env.PRERELEASE == 'true' && '--tag next' || '' }} )
+              # Packed with the manifest it is published with: no exports entry names a source file.
+              tarball="$(node scripts/publish-manifest.mjs "$dir" "$RUNNER_TEMP/workspace-packs")"
+              npm publish "$tarball" --access public ${{ env.PRERELEASE == 'true' && '--tag next' || '' }}
             fi
           done
       # The tree the tests ran on, shipped with mn so a user's npm installs it

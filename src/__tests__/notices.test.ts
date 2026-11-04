@@ -7,10 +7,10 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { createHost } from '@kuiralabs/midnight-cli-core';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { unlockWallet } from '../lib/wallet-config.ts';
-import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 const plainWallet = (name: string): string =>
-  saveWalletConfig({ seed: SEED, addresses: deriveAllAddresses(Buffer.from(SEED, 'hex')), createdAt: '2026-10-19T00:00:00.000Z' }, path.join(home, '.midnight', 'wallets', `${name}.json`));
+  saveWalletConfig({ seed: SEED, addresses: rcKeys.unshieldedAddresses(Buffer.from(SEED, 'hex')), createdAt: '2026-10-19T00:00:00.000Z' }, path.join(home, '.midnight', 'wallets', `${name}.json`));
 
 describe('notices', () => {
   it("carry a library's warning to its host's notices when its caller gives no warn of its own, and nowhere when the host takes none", async () => {

@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import helpCommand, { helpSpecs } from '../commands/help.ts';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { parseArgs, declaredCodes } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
-import { declaredCodes } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 
 let io: CapturedOutput;

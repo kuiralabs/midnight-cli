@@ -5,10 +5,8 @@
 // the code; this checks them against what the commands the tests run do.
 
 import { expect } from 'vitest';
-import { declaredCodes } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { EVERY_COMMAND } from '@kuiralabs/midnight-cli-core/commands/core.codes';
-import { asReported } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
+import { declaredCodes, asReported, classifyError } from '@kuiralabs/midnight-cli-core';
+import { EVERY_COMMAND } from '@kuiralabs/midnight-cli-core/commands';
 import { installedCommands } from '../../lib/installed-commands.ts';
 
 /**

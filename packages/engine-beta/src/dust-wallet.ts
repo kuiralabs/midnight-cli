@@ -12,8 +12,7 @@ import { Imbalances, InsufficientFundsError as NoCoinsCoverIt, getBalanceRecipe 
 import { CustomDustWallet, DustWallet as SdkDustWallet } from '@midnightntwrk/wallet-sdk-dust-wallet';
 import { Transacting, V1Builder, WalletError } from '@midnightntwrk/wallet-sdk-dust-wallet/v1';
 import { LedgerOps } from '@midnightntwrk/wallet-sdk-utilities';
-import { type DustInput, chooseDustCoins, planDustInputs, spreadFeeAcrossInputs } from '@kuiralabs/midnight-cli-core/lib/dust-balancing-plan';
-import { type DustShortfall, withDustShortfall } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { type DustInput, chooseDustCoins, planDustInputs, spreadFeeAcrossInputs, type DustShortfall, withDustShortfall } from '@kuiralabs/midnight-cli-core/engine';
 
 type SdkTransacting = Transacting.TransactingCapabilityImplementation<ledger.FinalizedTransaction>;
 type RecipeArguments = Parameters<SdkTransacting['computeBalancingRecipe']>;

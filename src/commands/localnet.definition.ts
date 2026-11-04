@@ -1,7 +1,7 @@
 // The `localnet` command, described once.
 
-import type { CommandDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { LOADS_ENGINE, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import type { CommandDefinition } from '@kuiralabs/midnight-cli-core';
+import { LOADS_ENGINE, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 
 export const localnetDefinition: CommandDefinition = {
   name: 'localnet',

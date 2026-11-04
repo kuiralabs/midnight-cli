@@ -4,11 +4,9 @@
 // installed tools' descriptions.
 
 import { describe, expect, it } from 'vitest';
-import { createCommandRegistry, type CommandDefinition, type ToolDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
+import { createCommandRegistry, type CommandDefinition, type ToolDefinition, type CallContext, MINIMAL_FLAG, type ParsedArgs } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from '../lib/mcp/registry-tools.ts';
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { MINIMAL_FLAG, type ParsedArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
 import { ownCall } from './helpers/own-call.ts';
 
 const received: ParsedArgs[] = [];

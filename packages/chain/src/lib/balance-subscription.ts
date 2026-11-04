@@ -1,10 +1,7 @@
 import WebSocket from 'ws';
-import { assertEndpointUsable, endpointRefusalFromWsError } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
-import { NATIVE_TOKEN_TYPE, BALANCE_CHECK_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/lib/constants';
-import { CancelledError, NetworkError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { assertEndpointUsable, endpointRefusalFromWsError, NATIVE_TOKEN_TYPE, BALANCE_CHECK_TIMEOUT_MS, CancelledError, NetworkError, type BalanceSummary } from '@kuiralabs/midnight-cli-core';
 
-export type { BalanceSummary } from '@kuiralabs/midnight-cli-core/lib/engine';
-import type { BalanceSummary } from '@kuiralabs/midnight-cli-core/lib/engine';
+export type { BalanceSummary } from '@kuiralabs/midnight-cli-core';
 
 interface Utxo {
   value: string;

@@ -1,12 +1,7 @@
 // What every wallet operation of src/lib/wallet takes besides its own inputs,
 // what it says once its wallet is open, and the wallet's address it acts on.
 
-import type { NetworkChoice } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import type { ProgressEvent } from '@kuiralabs/midnight-cli-core/lib/progress';
-import type { VerboseLog } from '@kuiralabs/midnight-cli-core/lib/verbose';
-import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import type { HostEngines } from '@kuiralabs/midnight-cli-core/lib/engine';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import type { NetworkChoice, ProgressEvent, VerboseLog, CallSdkWarnings, HostEngines, NetworkName } from '@kuiralabs/midnight-cli-core';
 import type { ResolvedSeed } from '../seed-resolver.ts';
 
 /** The network, the endpoints and what a call gives a wallet operation; `Event` is what it says beyond its steps. */

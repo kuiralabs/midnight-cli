@@ -10,15 +10,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import type { Payer, PayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
-import { InsufficientBalanceError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { createHost, type Host, type Payer, type PayingTarget, InsufficientBalanceError } from '@kuiralabs/midnight-cli-core';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { contractCallRequest, contractDeployRequest } from '../lib/contract/request.ts';
 import { deployContract } from '../lib/contract/deploy.ts';
 import { callContract } from '../lib/contract/call.ts';
 import { readContractState } from '../lib/contract/state.ts';
-import { startLocalIndexer, type LocalIndexer } from './helpers/local-indexer.ts';
+import { startLocalIndexer, type LocalIndexer } from '../../test-support/local-indexer.ts';
 
 const ADDRESS = 'cb5230e1ac98e07520d3b330016743a05fec38dd8fe894ae5b9ac3f71cac5190';
 const ENDPOINTS = { network: 'undeployed' as const, node: 'ws://127.0.0.1:29944', indexerWS: 'ws://127.0.0.1:28088/api/v4/graphql/ws', proofServer: 'http://127.0.0.1:26300' };

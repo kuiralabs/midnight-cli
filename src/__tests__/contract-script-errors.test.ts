@@ -10,14 +10,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { closedPort } from './helpers/closed-port.ts';
+import { closedPort } from '../../test-support/closed-port.ts';
 import { Effect } from 'effect';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import { ContractScriptError, SCRIPT_PRELUDE, executeScript, rpcClientCode, scriptFailureMessage, scriptFailureOf } from '../lib/contract/runner.ts';
 import { createApiError } from '../lib/ws-rpc.ts';
 import { scriptFailureAtServe } from './helpers/serve-script-failure.ts';
-import { classifyError } from '@kuiralabs/midnight-cli-core/lib/exit-codes';
-import { withEngineCode } from '@kuiralabs/midnight-cli-core/lib/sdk-errors';
+import { classifyError } from '@kuiralabs/midnight-cli-core';
+import { withEngineCode } from '@kuiralabs/midnight-cli-core/engine';
 import { installedCommands } from '../lib/installed-commands.ts';
 
 function runScript(body: string): { stderr: string; status: number | null } {

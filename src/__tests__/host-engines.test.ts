@@ -7,14 +7,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import type { SdkSet } from '@kuiralabs/midnight-cli-core/lib/engine';
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
-import type { PayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
-import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import type { BalanceSummary } from '@kuiralabs/midnight-chain/lib/balance-subscription';
+import { createHost, type Host, type SdkSet, type NetworkConfig, type PayingTarget } from '@kuiralabs/midnight-cli-core';
+import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
+import type { BalanceSummary } from '@kuiralabs/midnight-chain';
 import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
-import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
 import { listWallets } from '../lib/wallet-config.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
@@ -28,7 +25,7 @@ const NETWORK: NetworkConfig = {
   networkId: 'Undeployed',
 };
 const SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
-const ADDRESSES = deriveAllAddresses(Buffer.from(SEED, 'hex'));
+const ADDRESSES = rcKeys.unshieldedAddresses(Buffer.from(SEED, 'hex'));
 const empty = (): BalanceSummary => ({ balances: new Map(), utxoCount: 0, txCount: 0, highestTxId: 0, registeredUtxos: 0, unregisteredUtxos: 0 });
 
 let root: string;

@@ -8,24 +8,20 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { NoStateRootError } from '@kuiralabs/midnight-cli-core/lib/state-root';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
-import { testHost } from './helpers/test-host.ts';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import configCommand from '@kuiralabs/midnight-cli-core/commands/config';
+import { NoStateRootError, createHost, parseArgs, setConfigValue, MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core';
+import { bindCachesToIndexer, getCachePath, getDustCachePath, getShieldedCachePath } from '@kuiralabs/midnight-cli-core/engine';
+import { testHost } from '../../test-support/test-host.ts';
+import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
 import { cliCall } from './helpers/cli-call.ts';
-import { setConfigValue } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import { bindCachesToIndexer } from '@kuiralabs/midnight-cli-core/lib/cache-indexer';
 import { passphraseForNewSecret, PASSPHRASE_ENV } from '../lib/passphrase.ts';
 import { createWallet, walletSecretFrom } from '../lib/wallet-create.ts';
 import { accountRecordsDir } from '../lib/grant/account-records.ts';
 import { accountArtifactsDir } from '../lib/grant/account.ts';
-import { getCachePath } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
-import { getDustCachePath } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
-import { getShieldedCachePath } from '@kuiralabs/midnight-cli-core/lib/reader-cache-files';
 import { getComposePath } from '../lib/localnet.ts';
-import { MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core/lib/constants';
 import before from './fixtures/state-layout-before-1g.json';
+
+// The config handler, as the shell loads it.
+const { default: configCommand } = await configDefinition.load();
 
 const PASSPHRASE = 'fixture-passphrase-1g';
 let dir: string;

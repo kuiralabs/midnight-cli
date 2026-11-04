@@ -2,8 +2,8 @@
 // must be on.
 
 import { MidnightBech32m, ShieldedAddress, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
-import { networkIdForName } from '@kuiralabs/midnight-cli-core/lib/network-id';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
+import { networkIdForName } from '@kuiralabs/midnight-cli-core/engine';
+import type { NetworkName } from '@kuiralabs/midnight-cli-core';
 
 /** A shielded address on `network`, as the SDK reads it. Throws when it is not one. */
 export function decodeShieldedAddress(address: string, network: NetworkName): ShieldedAddress {

@@ -3,8 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import addressCommand from '../commands/address.ts';
-import { parseArgs } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';

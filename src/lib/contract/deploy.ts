@@ -1,11 +1,7 @@
 // Deploying a compiled contract: the deploy script, run against the wallet
 // the payer serves (served-wallet.ts). `mn contract deploy` and `mn dev` both deploy through here.
 
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { withCallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, withCallSdkWarnings } from '@kuiralabs/midnight-cli-core';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
 import { stepSpinner, type PaidCallOptions } from '../wallet/paid-call.ts';
 import { withServedWallet } from './served-wallet.ts';

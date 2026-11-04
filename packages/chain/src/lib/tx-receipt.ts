@@ -2,8 +2,8 @@
 // indexer lists it. mn's submits return when the node has finalized the
 // transaction; the indexer may list it a few seconds later.
 
-import { CancelledError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { toDust } from '@kuiralabs/midnight-cli-core/ui/format';
+import { CancelledError } from '@kuiralabs/midnight-cli-core';
+import { toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { IndexerQueryError } from './indexer-graphql.ts';
 import { type FinalTransaction, type TransactionStatus, parseTxReference, waitForTransactionStatus } from './tx-status.ts';
 

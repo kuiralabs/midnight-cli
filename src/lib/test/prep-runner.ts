@@ -2,19 +2,13 @@
 
 import { join } from 'node:path';
 
-import { clearWalletCache } from '@kuiralabs/midnight-cli-core/lib/wallet-cache';
+import { clearWalletCache, resolveNetwork, type NetworkConfig, type NetworkName, OWN_COMMAND_DUST_WAIT_MS, DustRequiredError, InsufficientBalanceError, throwIfCancelled, sdkSetOf, nightToMicro } from '@kuiralabs/midnight-cli-core';
 import { resolveWalletPath, unlockWallet } from '../wallet-config.ts';
-import { resolveNetwork } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import type { NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { assertLedger9StackReachable, assertLedgerSupported } from '@kuiralabs/midnight-chain/lib/ledger-guard';
+import { assertLedger9StackReachable, assertLedgerSupported } from '@kuiralabs/midnight-chain';
 
 import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallbacks } from './types.ts';
 import { startServeOrReuse } from '../serve-manager.ts';
-import { OWN_COMMAND_DUST_WAIT_MS } from '@kuiralabs/midnight-cli-core/lib/dust-wait';
 import { startBuild } from './build-manager.ts';
-import { DustRequiredError, InsufficientBalanceError, throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { sdkSetOf } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { nightToMicro } from '@kuiralabs/midnight-cli-core/lib/amount';
 
 /** A prep step failed: the step's own error is its cause, and its code (DUST_REQUIRED, …) is this one's. */
 export class PrepStepFailedError extends Error {

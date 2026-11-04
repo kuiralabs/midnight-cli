@@ -3,15 +3,8 @@
 // NIGHT and tokens, read with its secret keys, where the network has a
 // shielded faucet (or when asked).
 
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { throwIfCancelled, UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
-import { isValidNetworkName, type NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { progressSteps } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { withCallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import { shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
-import { assertLedgerSupported, fetchProtocolVersion } from '@kuiralabs/midnight-chain/lib/ledger-guard';
-import { getChainGenesisHash } from '@kuiralabs/midnight-chain/lib/chain-id';
+import { type Host, throwIfCancelled, UsageError, isValidNetworkName, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core';
+import { assertLedgerSupported, fetchProtocolVersion, getChainGenesisHash } from '@kuiralabs/midnight-chain';
 import { saveShieldedAddress } from '../wallet-config.ts';
 import { seedOf, type WalletSource } from '../seed-resolver.ts';
 import { createEtaEstimator, formatSyncStatus } from '../sync-eta.ts';

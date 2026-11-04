@@ -16,13 +16,8 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { WebSocketServer } from 'ws';
-import { createHost, type Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { saveCliConfig } from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import type { ConnectOptions, Payer, PayingTarget } from '@kuiralabs/midnight-cli-core/lib/payer';
-import { encodeOfferEnvelope } from '@kuiralabs/midnight-cli-core/lib/offer-envelope';
-import { readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core/lib/open-offers';
-import { readOffer } from '@kuiralabs/midnight-engine-rc/offer-reader';
-import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
+import { createHost, type Host, saveCliConfig, type ConnectOptions, type Payer, type PayingTarget, encodeOfferEnvelope, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
+import { rcEngine, rcKeys } from '../../test-support/rc-engine.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { makeSwapOffer } from '../lib/swap/make.ts';
 import { inspectSwapOffer } from '../lib/swap/inspect.ts';
@@ -30,13 +25,13 @@ import { takeSwapOffer } from '../lib/swap/take.ts';
 import { cancelSwapOffer } from '../lib/swap/cancel.ts';
 import { listSwapOffers } from '../lib/swap/list.ts';
 import { saveWalletConfig } from './helpers/plain-wallet.ts';
-import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from './fixtures/swap-offer.ts';
+import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from '../../test-support/fixtures/swap-offer.ts';
 
 const NOW = new Date('2026-11-02T12:00:00.000Z');
 const SEED = 'c4'.repeat(32);
-const ADDRESS = deriveAllAddresses(Buffer.from(SEED, 'hex')).undeployed;
+const ADDRESS = rcKeys.unshieldedAddresses(Buffer.from(SEED, 'hex')).undeployed;
 const TERMS = { give: { token: OFFER_GIVE, amount: 10n }, want: { token: OFFER_WANT, amount: 7n } };
-const OFFER = readOffer(SWAP_OFFER_HEX);
+const OFFER = rcEngine.ledger.readOffer(SWAP_OFFER_HEX);
 const SPENT_IN = 'cd'.repeat(32);
 
 /** The stand-in indexer: the chain's tip over HTTP, and the spends of the coins it is told are spent over WebSocket, on one port. */
@@ -109,7 +104,7 @@ const offerText = (expiresAt = new Date(NOW.getTime() + 60_000), network = 'unde
 
 /** mn's wallet `alice` under the host's state root, the active one. */
 function alice(): void {
-  saveWalletConfig({ seed: SEED, addresses: deriveAllAddresses(Buffer.from(SEED, 'hex')), createdAt: NOW.toISOString() }, path.join(root, 'wallets', 'alice.json'));
+  saveWalletConfig({ seed: SEED, addresses: rcKeys.unshieldedAddresses(Buffer.from(SEED, 'hex')), createdAt: NOW.toISOString() }, path.join(root, 'wallets', 'alice.json'));
   saveCliConfig({ network: 'undeployed', wallet: 'alice' }, root);
 }
 

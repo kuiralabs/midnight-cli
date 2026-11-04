@@ -2,14 +2,9 @@
 // before syncing, the MCP server before it issues a confirmation token, so a
 // typo in the amount or the recipient is refused up front.
 
-import { type ParsedArgs, getFlag, hasFlag } from '@kuiralabs/midnight-cli-core/lib/argv';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
+import { type ParsedArgs, getFlag, hasFlag, UsageError, resolveNetworkName, sdkSetOf, type EngineKeys, parseAmount, type NetworkName } from '@kuiralabs/midnight-cli-core';
 import { loadWalletConfig, resolveWalletPath, walletAddress, walletShieldedAddress, type UnlockHost, type WalletConfig } from './wallet-config.ts';
-import { resolveNetworkName } from '@kuiralabs/midnight-cli-core/lib/resolve-network';
-import { sdkSetOf, type EngineKeys } from '@kuiralabs/midnight-cli-core/lib/engine';
-import { parseAmount } from '@kuiralabs/midnight-cli-core/lib/amount';
 import { assertShieldedTransferAllowed } from './wallet/transfer.ts';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
 
 export interface TransferRequest {
   walletPath: string;

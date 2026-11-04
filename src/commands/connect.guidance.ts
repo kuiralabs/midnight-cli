@@ -2,7 +2,7 @@
 // its pieces of `help --agent` and of the two skills, each naming its section
 // and its place there.
 
-import type { PackageGuidance } from '@kuiralabs/midnight-cli-core/lib/agent-guidance';
+import type { PackageGuidance } from '@kuiralabs/midnight-cli-core';
 
 export const connectGuidance: PackageGuidance = {
   pieces: [

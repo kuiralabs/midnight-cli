@@ -1,18 +1,12 @@
 // balance command — check unshielded + shielded balance via full wallet sync
 // For positional address: unshielded only (GraphQL, no facade)
 
-import { type ParsedArgs, hasFlag, isMinimalMode } from '@kuiralabs/midnight-cli-core/lib/argv';
+import { type ParsedArgs, hasFlag, isMinimalMode, networkChoiceFromArgs, networkTargetOf, shieldedDisabledReason, type CallContext, UsageError } from '@kuiralabs/midnight-cli-core';
+import { header, keyValue, divider, formatNight, formatAddress, toNight, bold, dim, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { findWalletByAddress } from '../lib/wallet-config.ts';
 import { walletSourceOf } from '../lib/seed-resolver.ts';
-import { networkChoiceFromArgs, networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { shieldedDisabledReason } from '@kuiralabs/midnight-cli-core/lib/shielded-policy';
-import { isNativeToken } from '@kuiralabs/midnight-chain/lib/balance-subscription';
+import { isNativeToken } from '@kuiralabs/midnight-chain';
 import { addressNetwork, readAddressBalance, readWalletBalance } from '../lib/wallet/balance.ts';
-import { header, keyValue, divider, formatNight, formatAddress, toNight } from '@kuiralabs/midnight-cli-core/ui/format';
-import { bold, dim } from '@kuiralabs/midnight-cli-core/ui/colors';
-import { spinnerReporter } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import type { CallContext } from '@kuiralabs/midnight-cli-core/lib/call-context';
-import { UsageError } from '@kuiralabs/midnight-cli-core/lib/errors';
 
 export default async function balanceCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // Positional address → unshielded only (lightweight, no facade)

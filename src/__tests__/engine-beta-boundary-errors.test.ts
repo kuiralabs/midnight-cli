@@ -5,7 +5,7 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createBetaEngine } from '@kuiralabs/midnight-engine-beta';
-import { resolvedPackageFolder } from '@kuiralabs/midnight-cli-core/lib/sdk-layout';
+import { resolvedPackageFolder } from '@kuiralabs/midnight-cli-core/engine';
 import { engineBoundarySuite } from './helpers/engine-boundary-suite.ts';
 
 const ENGINE_DIR = new URL('../../packages/engine-beta', import.meta.url).pathname;

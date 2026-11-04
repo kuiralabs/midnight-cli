@@ -5,11 +5,8 @@
 
 import { deployContract, type DeployedContract } from '../contract/deploy.ts';
 import { contractDeployRequest } from '../contract/request.ts';
-import type { Payer } from '@kuiralabs/midnight-cli-core/lib/payer';
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import type { Spinner } from '@kuiralabs/midnight-cli-core/ui/spinner';
-import type { CallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
+import type { Payer, Host, NetworkName, CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
+import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 
 /**
  * Deploys the contract compiled in `projectRoot` on `network`, paid by

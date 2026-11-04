@@ -12,22 +12,8 @@ import {
 } from '../lib/wallet-config.ts';
 import { migrateOldWallet } from '../lib/wallet-paths.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import {
-  loadCliConfig,
-  saveCliConfig,
-  type CliConfig,
-} from '@kuiralabs/midnight-cli-core/lib/cli-config';
-import {
-  MIDNIGHT_DIR,
-  WALLETS_DIR_NAME,
-  DEFAULT_WALLET_NAME,
-  DEFAULT_WALLET_FILENAME,
-  DIR_MODE,
-  FILE_MODE,
-  isValidWalletName,
-} from '@kuiralabs/midnight-cli-core/lib/constants';
-import { deriveAllAddresses } from '@kuiralabs/midnight-engine-rc/derive-address';
-import { createHost } from '@kuiralabs/midnight-cli-core/lib/host';
+import { loadCliConfig, saveCliConfig, type CliConfig, MIDNIGHT_DIR, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DEFAULT_WALLET_FILENAME, DIR_MODE, FILE_MODE, isValidWalletName, createHost } from '@kuiralabs/midnight-cli-core';
+import { rcKeys } from '../../test-support/rc-engine.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 // The engines the wallet functions derive a wallet's missing addresses with: a host's of the engines the CLI ships.
@@ -44,13 +30,13 @@ const SEED_2 = '1111111111111111111111111111111111111111111111111111111111111111
 
 const VALID_WALLET: WalletConfig = {
   seed: SEED_1,
-  addresses: deriveAllAddresses(Buffer.from(SEED_1, 'hex')),
+  addresses: rcKeys.unshieldedAddresses(Buffer.from(SEED_1, 'hex')),
   createdAt: '2025-01-01T00:00:00.000Z',
 };
 
 const VALID_WALLET_2: WalletConfig = {
   seed: SEED_2,
-  addresses: deriveAllAddresses(Buffer.from(SEED_2, 'hex')),
+  addresses: rcKeys.unshieldedAddresses(Buffer.from(SEED_2, 'hex')),
   createdAt: '2025-02-01T00:00:00.000Z',
 };
 

@@ -1,7 +1,7 @@
 // The `status` command, described once.
 
-import type { CommandDefinition } from '@kuiralabs/midnight-cli-core/lib/command-definition';
-import { RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands/core.codes';
+import type { CommandDefinition } from '@kuiralabs/midnight-cli-core';
+import { RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 
 export const statusDefinition: CommandDefinition = {
   name: 'status',

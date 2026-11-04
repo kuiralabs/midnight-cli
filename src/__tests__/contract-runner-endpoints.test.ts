@@ -4,17 +4,16 @@
 // them in its text.
 
 import { describe, expect, it } from 'vitest';
-import { BlockfrostProjectIdRequiredError, blockfrostEndpoints } from '@kuiralabs/midnight-cli-core/lib/blockfrost';
+import { BlockfrostProjectIdRequiredError, blockfrostEndpoints, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
+import type { CallScript, DeployScript, StateScript } from '@kuiralabs/midnight-cli-core/engine';
 import { SCRIPT_PARTS, indexerEnvironment } from '../lib/contract/runner.ts';
-import * as rcScripts from '@kuiralabs/midnight-engine-rc/contract-scripts';
-import type { CallScript, DeployScript, StateScript } from '@kuiralabs/midnight-cli-core/lib/engine';
+import { rcEngine } from '../../test-support/rc-engine.ts';
 
 // The rc engine's scripts, with the parts the runner gives every engine.
-const generateDeployScript = (opts: DeployScript & { dappDir?: string }): string => rcScripts.generateDeployScript(opts, SCRIPT_PARTS);
-const generateCallScript = (opts: CallScript & { dappDir?: string }): string => rcScripts.generateCallScript(opts, SCRIPT_PARTS);
-const generateStateScript = (opts: StateScript & { dappDir?: string }): string => rcScripts.generateStateScript(opts, SCRIPT_PARTS);
+const generateDeployScript = (opts: DeployScript & { dappDir?: string }): string => rcEngine.contracts.scripts.deploy(opts, SCRIPT_PARTS);
+const generateCallScript = (opts: CallScript & { dappDir?: string }): string => rcEngine.contracts.scripts.call(opts, SCRIPT_PARTS);
+const generateStateScript = (opts: StateScript & { dappDir?: string }): string => rcEngine.contracts.scripts.state(opts, SCRIPT_PARTS);
 
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core/lib/network';
 
 const ID = 'nightpreprodAbCdEfGhIjKlMnOpQrStUv0123';
 const preprod = (projectId: string | undefined): NetworkConfig => ({

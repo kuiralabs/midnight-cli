@@ -1,13 +1,8 @@
 // Cancelling a swap offer of the wallet's: its coins are spent back to the
 // wallet, so no taker can take it any more.
 
-import type { Host } from '@kuiralabs/midnight-cli-core/lib/host';
-import { throwIfCancelled } from '@kuiralabs/midnight-cli-core/lib/errors';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core/lib/network';
-import { networkTargetOf } from '@kuiralabs/midnight-cli-core/lib/network-target';
-import { progressSteps } from '@kuiralabs/midnight-cli-core/lib/progress';
-import { withCallSdkWarnings } from '@kuiralabs/midnight-cli-core/lib/sdk-warnings';
-import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain/lib/tx-receipt';
+import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings } from '@kuiralabs/midnight-cli-core';
+import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
 import type { PaidCallOptions } from '../wallet/paid-call.ts';
 import { receiptOfSubmitted } from '../wallet/submit-steps.ts';
