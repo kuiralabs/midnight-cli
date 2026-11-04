@@ -5,9 +5,7 @@
 // server's one tool of its own, midnight_confirm_operation, redeems the tokens
 // the confirmation flow gives.
 
-import { type CommandRun, captureCommand } from '../run-command.ts';
-import { listedNames } from '../code-tables.ts';
-import { getEndpointOverridesForNetwork, loadCliConfig, resolveNetworkName, type CommandRegistry, type RegisteredTool, type ToolAnnotations, type ToolInputSchema, commandOwnCodes, confirmationText, declaredSets, toolArgv } from '@kuiralabs/midnight-cli-core';
+import { captureCommand, type CommandRun, getEndpointOverridesForNetwork, loadCliConfig, resolveNetworkName, type CommandRegistry, type ParsedArgs, type RegisteredTool, type ToolAnnotations, type ToolInputSchema, confirmationText, toolArgv, toolDescription } from '@kuiralabs/midnight-cli-core';
 
 /** A tool as tools/list sends it. */
 export interface ListedTool {
@@ -25,19 +23,6 @@ export const CONFIRM_TOOL: ListedTool = {
   annotations: { destructiveHint: true, openWorldHint: true },
 };
 
-/**
- * A command's tool's description as tools/list sends it: its definition's,
- * then the codes its command can end with: its own, and the sets it declares
- * by name, which the full skill lists.
- */
-export function toolDescription(registry: Pick<CommandRegistry, 'code'>, tool: RegisteredTool): string {
-  const own = commandOwnCodes(registry, tool.command).map((definition) => definition.code);
-  const sets = declaredSets(tool.command).map((set) => set.name);
-  if (own.length === 0 && sets.length === 0) return tool.description;
-  const named = sets.length === 0 ? '' : `the ${listedNames(sets)} codes (see the skill)`;
-  return `${tool.description} Errors: ${own.join(', ')}${own.length > 0 && named !== '' ? '; and ' : ''}${named}.`;
-}
-
 /** tools/list: every tool the installed commands define, in the registry's order, then the confirm tool. */
 export function listedTools(registry: CommandRegistry): ListedTool[] {
   return [...registry.tools.map((tool) => ({ ...tool, description: toolDescription(registry, tool) })), CONFIRM_TOOL].map((tool) => ({
@@ -53,9 +38,17 @@ export function findTool(registry: CommandRegistry, name: string): RegisteredToo
   return registry.tools.find((tool) => tool.name === name);
 }
 
+/** The server's stderr: where a call's text for the person goes, never the protocol channel on stdout. */
+const serverStderr = (text: string): void => { process.stderr.write(text); };
+
+/** Runs the tool's command with `args` (core's `captureCommand`), its text on the server's stderr, and returns its JSON result. */
+function captureTool(tool: RegisteredTool, args: ParsedArgs, call: CommandRun): Promise<Record<string, unknown>> {
+  return captureCommand(tool.command, args, { ...call, text: serverStderr });
+}
+
 /** Runs the tool's command with the argv its parameters map to, and returns its JSON result. */
 export async function runTool(tool: RegisteredTool, params: Readonly<Record<string, unknown>>, call: CommandRun): Promise<Record<string, unknown>> {
-  return captureCommand((await tool.command.load()).default, toolArgv(tool, params), call);
+  return captureTool(tool, toolArgv(tool, params), call);
 }
 
 /** The endpoint parameters, and how a confirmation names each. */
@@ -92,7 +85,7 @@ export async function confirmationFor(tool: RegisteredTool, params: Readonly<Rec
   const found = await tool.confirmation?.check?.(params, {
     host: call.host,
     argv: () => toolArgv(tool, params),
-    run: async (args) => captureCommand((await tool.command.load()).default, args, call),
+    run: async (args) => captureTool(tool, args, call),
   });
   return (found ?? confirmationText(tool, params)) + endpointOverridesNote(tool, params, call.host.paths().stateRoot);
 }

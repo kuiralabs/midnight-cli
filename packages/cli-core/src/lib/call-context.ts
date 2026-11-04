@@ -8,8 +8,8 @@
 // call that raised it (core's "./process", process/sdk-process-guard.ts).
 //
 // The CLI builds one from the process's streams, its signal and --verbose
-// (lib/command-dispatch.ts); the MCP server builds one per request
-// (lib/run-command.ts).
+// (runCommand, lib/run-command.ts); the MCP server builds one per request
+// (captureCommand, the same module).
 
 import { isVerbose, type ParsedArgs } from './argv.ts';
 import { CancelledError } from './errors.ts';

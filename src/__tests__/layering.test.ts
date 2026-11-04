@@ -26,7 +26,7 @@ describe('the layering', () => {
   });
 
   it('keeps the MCP server to core, the shell and the serve payer', () => {
-    expect(importRule('mcp-server.ts', 'lib/run-command.ts')).toBeUndefined();
+    expect(importRule('mcp-server.ts', 'lib/cli-host.ts')).toBeUndefined();
     expect(importRule('mcp-server.ts', 'lib/serve-payer.ts')).toBeUndefined();
     expect(importRule('lib/mcp/registry-tools.ts', 'lib/command-definition.ts')).toBeUndefined();
     expect(importRule('mcp-server.ts', 'lib/facade.ts')).toBe('mcp → wallet');
@@ -35,7 +35,7 @@ describe('the layering', () => {
   });
 
   it('keeps every package off the shell and the MCP server', () => {
-    expect(importRule('lib/facade.ts', 'lib/run-command.ts')).toBe('wallet → shell');
+    expect(importRule('lib/facade.ts', 'lib/cli-host.ts')).toBe('wallet → shell');
     expect(importRule('lib/argv.ts', 'lib/mcp/known-params.ts')).toBe('core → mcp');
     expect(importRule('commands/grant.ts', 'mcp-server.ts')).toBe('grant → mcp');
   });

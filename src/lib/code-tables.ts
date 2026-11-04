@@ -7,7 +7,7 @@
 // The manual's and the skills' rows come from each package's guidance
 // (codeGuidancePieces).
 
-import { declaredCodeSets, type CommandHelpSpec, type CommandRegistry, type CodeDefinition, wrapWords } from '@kuiralabs/midnight-cli-core';
+import { declaredCodeSets, type CommandHelpSpec, type CommandRegistry, type CodeDefinition, listedNames, wrapWords } from '@kuiralabs/midnight-cli-core';
 import { EVERY_COMMAND } from '@kuiralabs/midnight-cli-core/commands';
 import { withGeneratedBlock } from './readme-commands.ts';
 
@@ -51,11 +51,6 @@ export function manualCodeLines(registry: Pick<CommandRegistry, 'packages'>, sty
     const head = `${' '.repeat(MANUAL_CODE_INDENT)}${styleCode(code)}${' '.repeat(Math.max(1, CODE_COLUMN - code.length))}${exitCode}  `;
     return [head + first, ...rest.map((line) => ' '.repeat(MANUAL_MEANING_COLUMN) + line)];
   });
-}
-
-/** Names in a sentence: "network", "network and wallet", "network, wallet and engine". */
-export function listedNames(names: readonly string[]): string {
-  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
 /**

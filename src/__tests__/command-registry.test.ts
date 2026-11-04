@@ -90,8 +90,8 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => 
     signal: controller.signal,
     output,
     host: testHost(),
-    loadPayer: async () => payer,
-    loadProtectors: async () => [protector],
+    payer: async () => payer,
+    protectors: async () => [protector],
   };
   const run = async (name: string, given: ShellProvisions = provisions) => {
     received.length = 0; notices.length = 0; loaded.length = 0; results.length = 0;
@@ -100,7 +100,8 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => 
     return { args, call: received[0]!, outcome };
   };
 
-  it('gives every handler its call\'s signal and output, and the payer and protectors only when the definition asks', async () => {
+  // How a command is run from its definition (notice, refusal, cancellation, exit code) is core's runCommand, tested there.
+  it('gives every handler its call\'s signal and output, and the shell\'s payer and protectors only when the definition asks', async () => {
     const plain = await run('plain');
     expect(plain.call.args).toBe(plain.args);
     expect(plain.call.ctx.signal).toBe(controller.signal);
@@ -115,44 +116,6 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => 
     expect(protecting.call.ctx.signal).toBe(controller.signal);
     expect(protecting.call.ctx.payer).toBeUndefined();
     expect(protecting.call.ctx.protectors).toStrictEqual([protector]);
-  });
-
-  it('gives the handler the configuration the host gives when the call starts, and --verbose', async () => {
-    const { ctx } = (await run('plain')).call;
-    expect(ctx.config.paths).toStrictEqual(provisions.host.paths());
-    expect(ctx.config.settings).toStrictEqual(provisions.host.settings());
-    expect(ctx.diagnostics.isVerbose).toBe(false);
-    received.length = 0;
-    await dispatchCommand(testRegistry, 'plain', parseArgs(['plain', '--verbose']), provisions);
-    expect(received[0]!.ctx.diagnostics.isVerbose).toBe(true);
-  });
-
-  it('returns the exit code the handler gives, for the shell to set', async () => {
-    expect((await run('failing')).outcome).toStrictEqual({ exitCode: 3 });
-    expect((await run('plain')).outcome).toBeUndefined();
-  });
-
-  it('never starts a call already cancelled: CANCELLED, the handler not run', async () => {
-    const cancelled = new AbortController();
-    cancelled.abort();
-    const err = await run('plain', { ...provisions, signal: cancelled.signal }).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(CancelledError);
-    expect(classifyError(err as Error, installedCommands)).toStrictEqual({ exitCode: EXIT_CANCELLED, errorCode: 'CANCELLED' });
-    expect(received).toStrictEqual([]);
-    expect(results).toStrictEqual([]);
-  });
-
-  it('writes a notice before the handler loads', async () => {
-    await run('noticed');
-    expect(notices).toStrictEqual(['deprecated\n']);
-    expect(results).toStrictEqual([{ ran: 'noticed' }]);
-    expect(loaded).toStrictEqual(['noticed']);
-  });
-
-  it('refuses an unavailable command with its message, loading nothing', async () => {
-    loaded.length = 0;
-    await expect(dispatchCommand(testRegistry, 'refused', parseArgs(['refused']), provisions)).rejects.toThrow(new Error('not now'));
-    expect(loaded).toStrictEqual([]);
   });
 
   it('refuses status, as the switch did, without loading it', async () => {
