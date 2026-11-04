@@ -46,13 +46,13 @@ export interface Progress {
 }
 
 /** The progress of one call, whose spinners say what they say to `report` too. */
-export function createProgress(report: ProgressReport = reportNowhere): Progress {
+export function createProgress(report: ProgressReport = reportNowhere, write: TerminalWrite = writeStderr): Progress {
   let active: Spinner | null = null;
   return {
     start(message) {
       const spinner = start(message, report, (ended) => {
         if (active === ended) active = null;
-      });
+      }, write);
       active = spinner;
       return spinner;
     },
@@ -106,11 +106,16 @@ function stripAnsi(str: string): string {
   return str.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
+/** Where a spinner draws: a call's stderr, or the process's for a spinner outside any call. */
+export type TerminalWrite = (text: string) => void;
+
+const writeStderr: TerminalWrite = (text) => { process.stderr.write(text); };
+
 /**
- * Starts a spinner on the terminal (stderr) saying `message`; what it says
+ * Starts a spinner on the terminal (`write`, stderr by default) saying `message`; what it says
  * goes to `report` too. `onEnd` hears when it stops, fails or clears.
  */
-export function start(message: string, report: ProgressReport = reportNowhere, onEnd: (spinner: Spinner) => void = () => {}): Spinner {
+export function start(message: string, report: ProgressReport = reportNowhere, onEnd: (spinner: Spinner) => void = () => {}, write: TerminalWrite = writeStderr): Spinner {
   let stopped = false;
   const say = (said: string | undefined): void => {
     if (said !== undefined) report(said);
@@ -119,36 +124,36 @@ export function start(message: string, report: ProgressReport = reportNowhere, o
 
   if (!isColorEnabled()) {
     let currentMessage = message;
-    process.stderr.write(`⠋ ${currentMessage}`);
+    write(`⠋ ${currentMessage}`);
     const spinner: Spinner = {
       update(msg: string) {
         currentMessage = msg;
         say(msg);
-        process.stderr.write(`\r⠋ ${currentMessage}\x1b[K`);
+        write(`\r⠋ ${currentMessage}\x1b[K`);
       },
       stop(finalMessage?: string) {
         if (stopped) return;
         stopped = true;
         onEnd(spinner);
         say(finalMessage);
-        process.stderr.write(`\r✓ ${finalMessage ?? currentMessage}\x1b[K\n`);
+        write(`\r✓ ${finalMessage ?? currentMessage}\x1b[K\n`);
       },
       fail(finalMessage?: string) {
         if (stopped) return;
         stopped = true;
         onEnd(spinner);
-        process.stderr.write(`\r✗ ${finalMessage ?? currentMessage}\x1b[K\n`);
+        write(`\r✗ ${finalMessage ?? currentMessage}\x1b[K\n`);
       },
       log(line: string) {
         say(line);
-        process.stderr.write(`\r\x1b[K${line}\n`);
-        process.stderr.write(`⠋ ${currentMessage}`);
+        write(`\r\x1b[K${line}\n`);
+        write(`⠋ ${currentMessage}`);
       },
       clear() {
         if (stopped) return;
         stopped = true;
         onEnd(spinner);
-        process.stderr.write('\r\x1b[K');
+        write('\r\x1b[K');
       },
     };
     return spinner;
@@ -168,7 +173,7 @@ export function start(message: string, report: ProgressReport = reportNowhere, o
       const plain = stripAnsi(text);
       text = plain.slice(0, maxVisible);
     }
-    process.stderr.write(`\r${frame} ${text}\x1b[K`);
+    write(`\r${frame} ${text}\x1b[K`);
     frameIndex = (frameIndex + 1) % BRAILLE_FRAMES.length;
   };
 
@@ -187,7 +192,7 @@ export function start(message: string, report: ProgressReport = reportNowhere, o
       onEnd(spinner);
       say(finalMessage);
       const final = finalMessage ?? currentMessage;
-      process.stderr.write(`\r\x1b[32m✓\x1b[0m ${final}\x1b[K\n`);
+      write(`\r\x1b[32m✓\x1b[0m ${final}\x1b[K\n`);
     },
     fail(finalMessage?: string) {
       if (stopped) return;
@@ -195,11 +200,11 @@ export function start(message: string, report: ProgressReport = reportNowhere, o
       clearInterval(timer);
       onEnd(spinner);
       const final = finalMessage ?? currentMessage;
-      process.stderr.write(`\r\x1b[31m✗\x1b[0m ${final}\x1b[K\n`);
+      write(`\r\x1b[31m✗\x1b[0m ${final}\x1b[K\n`);
     },
     log(line: string) {
       say(line);
-      process.stderr.write(`\r\x1b[K${line}\n`);
+      write(`\r\x1b[K${line}\n`);
       render();
     },
     clear() {
@@ -207,7 +212,7 @@ export function start(message: string, report: ProgressReport = reportNowhere, o
       stopped = true;
       clearInterval(timer);
       onEnd(spinner);
-      process.stderr.write('\r\x1b[K');
+      write('\r\x1b[K');
     },
   };
 

@@ -135,7 +135,8 @@ export function createCallContext<Protector = unknown>(parts: CallParts<Protecto
   return {
     signal: parts.signal,
     output: callOutput(parts.output),
-    progress: createProgress(parts.onProgress),
+    // A command's spinners draw through the call's stderr: mn's is the process's, a program's is its own.
+    progress: createProgress(parts.onProgress, (text) => parts.output.stderr(text)),
     diagnostics: callDiagnostics(isVerbose(parts.args), parts.host.notice),
     sdkWarnings: parts.sdkWarnings ?? createSdkWarningRouter().openCall().warnings,
     config: { settings: parts.host.settings(), paths: parts.host.paths() },
