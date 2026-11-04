@@ -21,7 +21,7 @@ import { barrelExports } from './check-layering.mjs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** The public packages, by folder under packages/. */
-export const PUBLIC_PACKAGES = ['cli-core', 'chain', 'engine-rc', 'engine-beta', 'wallet', 'contract', 'connect', 'dev'];
+export const PUBLIC_PACKAGES = ['cli-core', 'chain', 'engine-rc', 'engine-beta', 'wallet', 'contract', 'connect', 'dev', 'grant'];
 
 /** The report's path for the package in `dir` (a folder under packages/). */
 export function reportPath(dir) {

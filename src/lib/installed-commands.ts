@@ -12,12 +12,10 @@ import { walletDefinition, generateDefinition, infoDefinition, balanceDefinition
 import { inspectCostDefinition, contractDefinition, contractGuidance, contractCodes } from '@kuiralabs/midnight-contract/commands';
 import { serveDefinition, connectGuidance } from '@kuiralabs/midnight-connect/commands';
 import { testDefinition, devDefinition, localnetDefinition, devGuidance, devCodes } from '@kuiralabs/midnight-dev/commands';
-import { grantDefinition } from '../commands/grant.definition.ts';
+import { grantDefinition, grantGuidance, grantCodes } from '@kuiralabs/midnight-grant/commands';
 import { statusDefinition, txDefinition, chainGuidance, chainCodes } from '@kuiralabs/midnight-chain/commands';
 import { helpDefinition } from '../commands/help.definition.ts';
 import { manualDefinition } from '../commands/manual.definition.ts';
-import { grantGuidance } from '../commands/grant.guidance.ts';
-import { grantCodes } from '../commands/grant.codes.ts';
 
 /** The shell answers these before any command runs: no tool passes them on. */
 const SHELL_ANSWERS = { notForAgents: 'the shell answers it before any command runs' };

@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { classifyError, humanizeNetworkError, ERROR_CODES, EXIT_GENERAL_ERROR, EXIT_NETWORK_ERROR, EXIT_INVALID_ARGS, WrongPassphraseError, OtherSdkSetError, UsageError } from '@kuiralabs/midnight-cli-core';
 import { MixedSdkLayoutError, toEngineError } from '@kuiralabs/midnight-cli-core/engine';
-import { NodeTooOldForAccountError, UnreachableByAccountError } from '../lib/grant/account.ts';
-import { NoAccountError } from '../lib/grant/prepare.ts';
+import { NoAccountError, NodeTooOldForAccountError, UnreachableByAccountError } from '@kuiralabs/midnight-grant';
 import { NoPassphraseError } from '@kuiralabs/midnight-wallet';
 import { installedCommands } from '../lib/installed-commands.ts';
 

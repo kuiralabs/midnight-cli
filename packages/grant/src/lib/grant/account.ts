@@ -34,14 +34,9 @@ import {
   sealedOwnerStore,
   sealedPrivateStatePassword,
 } from './sealed-account.ts';
-import { UsageError, isValidNetworkName, sdkSetOfNetwork, type NetworkConfig, type SdkSet } from '@kuiralabs/midnight-cli-core';
-
-/** Where the account package caches its proving artefacts, under ~/.midnight: each file is fetched the first time a command proves with it. */
-const ACCOUNT_ARTIFACTS_DIR_NAME = 'account-artifacts';
-
-export function accountArtifactsDir(root: string): string {
-  return join(root, ACCOUNT_ARTIFACTS_DIR_NAME);
-}
+import { isValidNetworkName, sdkSetOfNetwork, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
+import { MIN_NODE_FOR_ACCOUNT, NodeTooOldForAccountError, UnreachableByAccountError } from './account-errors.ts';
+import { accountArtifactsDir } from './account-records.ts';
 
 /** The network the account package acts on: ledger 9, which only a local network runs so far. */
 const ACCOUNT_NETWORK_ID = 'undeployed';
@@ -61,38 +56,12 @@ export function privateStateLocationOf(recordsDir: string, password: () => strin
   return { database: join(recordsDir, PRIVATE_STATE_DATABASE), store: PRIVATE_STATE_STORE, password };
 }
 
-/** A network the account package can't reach yet. */
-export class UnreachableByAccountError extends UsageError {
-  constructor(networkId: string, sdkSet: SdkSet = 'rc') {
-    super(sdkSet === 'rc'
-      ? `mn grant runs on ledger 9, which only a local network (undeployed) runs so far; ${networkId} is not one.`
-      // The account package is built on the rc set: its contracts, proving files and providers.
-      : `mn grant runs on the rc SDK set, and ${networkId} runs on the ${sdkSet} set. The account package has no ${sdkSet} build yet (its contracts need recompiling and new proving files), so grant can't act on it for now.`);
-    this.name = 'UnreachableByAccountError';
-    Object.setPrototypeOf(this, UnreachableByAccountError.prototype);
-  }
-}
-
 /** Throws when the account package can't act on `networkConfig`'s network, by the SDK set the config under the state root `root` gives it. */
 export function assertAccountNetwork(networkConfig: NetworkConfig, root: string): void {
   const id = networkConfig.networkId.toLowerCase();
   const sdkSet = isValidNetworkName(id) ? sdkSetOfNetwork(id, root) : 'rc';
   if (sdkSet !== 'rc') throw new UnreachableByAccountError(networkConfig.networkId, sdkSet);
   if (networkConfig.networkId.toLowerCase() !== ACCOUNT_NETWORK_ID) throw new UnreachableByAccountError(networkConfig.networkId);
-}
-
-/** The Node.js the account package needs: it declares 22.18 or newer. */
-export const MIN_NODE_FOR_ACCOUNT = '22.18.0';
-
-/** This Node.js is older than the account package needs. */
-export class NodeTooOldForAccountError extends Error {
-  readonly code = 'UNSUPPORTED_NODE';
-
-  constructor(version: string) {
-    super(`mn grant runs the account package, which needs Node.js ${MIN_NODE_FOR_ACCOUNT} or newer; this is Node.js ${version}. Install a current Node.js (https://nodejs.org) and run the command again.`);
-    this.name = 'NodeTooOldForAccountError';
-    Object.setPrototypeOf(this, NodeTooOldForAccountError.prototype);
-  }
 }
 
 /** Throws when this Node.js is older than the account package needs. */

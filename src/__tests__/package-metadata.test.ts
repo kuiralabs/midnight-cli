@@ -3,6 +3,8 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { PKG_REPOSITORY_URL } from '../lib/pkg.ts';
 import { buildManual } from '../commands/manual.ts';
+import { PUBLIC_PACKAGES } from '../../scripts/api-report.mjs';
+import { shipsShrinkwrap } from '../../scripts/pack-release.mjs';
 
 // The root package.json is the one place the repository's address is written.
 // Every published package must carry the same address, because npm provenance
@@ -56,7 +58,54 @@ describe('the SDK in the manifests', () => {
     }
   });
 
-  it('is no dependency of core, chain, wallet, contract, connect or dev', () => {
-    for (const dir of ['cli-core', 'chain', 'wallet', 'contract', 'connect', 'dev']) expect(Object.keys(manifest(dir).dependencies ?? {}).filter(isSdk), dir).toStrictEqual([]);
+  it('is no dependency of core, chain, wallet, contract, connect, dev or grant', () => {
+    for (const dir of ['cli-core', 'chain', 'wallet', 'contract', 'connect', 'dev', 'grant']) expect(Object.keys(manifest(dir).dependencies ?? {}).filter(isSdk), dir).toStrictEqual([]);
+  });
+});
+
+// What npm shows of each public package, and what an install of it holds:
+// the same license, author and Node.js as mn, and only its build (with the
+// shrinkwrap the release job writes, for a package that ships one).
+describe("the public packages' manifests", () => {
+  const manifest = (dir: string) => JSON.parse(readFileSync(join('packages', dir, 'package.json'), 'utf8'));
+
+  it('are every @kuiralabs workspace package mn depends on', () => {
+    const workspaceNames = (root.workspaces as string[]).map((folder) => JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8')).name as string);
+    const ours = workspaceNames.filter((name) => name.startsWith('@kuiralabs/'));
+    expect(PUBLIC_PACKAGES.map((dir) => manifest(dir).name).sort()).toStrictEqual(ours.sort());
+    for (const name of ours) expect(root.dependencies[name], name).toBeDefined();
+  });
+
+  it.each([...PUBLIC_PACKAGES])("%s: mn's license, its author's GitHub account, mn's Node.js, and only its build in files", (dir) => {
+    const { name, license, author, engines, files } = manifest(dir);
+    expect(license).toBe(root.license);
+    expect(root.author).toContain(`https://github.com/${author}`);
+    expect(engines).toStrictEqual({ node: root.engines.node });
+    expect(files).toStrictEqual(shipsShrinkwrap(name) ? ['dist', 'npm-shrinkwrap.json'] : ['dist']);
+  });
+});
+
+// The release job publishes the public packages before mn, each after the
+// workspace packages it declares, so a package's exact pins resolve when it
+// is published.
+describe("the release job's publish order", () => {
+  const workflow = readFileSync(join('.github', 'workflows', 'release-sidecar.yml'), 'utf8');
+  const step = workflow.slice(workflow.indexOf('- name: Publish the workspace packages mn depends on'));
+  const order = /for dir in ([^;]+); do/.exec(step)![1]!.trim().split(/\s+/).map((dir) => dir.replace(/^packages\//, ''));
+
+  it('publishes every public package, once', () => {
+    expect([...order].sort()).toStrictEqual([...PUBLIC_PACKAGES].sort());
+  });
+
+  it('publishes each package after the workspace packages it depends on', () => {
+    const dirOf = new Map(PUBLIC_PACKAGES.map((dir) => [JSON.parse(readFileSync(join('packages', dir, 'package.json'), 'utf8')).name as string, dir]));
+    for (const [at, dir] of order.entries()) {
+      const declared = Object.keys(JSON.parse(readFileSync(join('packages', dir, 'package.json'), 'utf8')).dependencies ?? {}).filter((name) => dirOf.has(name));
+      for (const name of declared) expect(order.indexOf(dirOf.get(name)!), `${dir} needs ${name} published first`).toBeLessThan(at);
+    }
+  });
+
+  it('publishes mn after them', () => {
+    expect(workflow.indexOf('- name: Publish main package')).toBeGreaterThan(workflow.indexOf('- name: Publish the workspace packages mn depends on'));
   });
 });

@@ -12,8 +12,8 @@ import { WrongPassphraseError, getNetworkConfig, createHost, PASSPHRASE_ENV } fr
 import { establishPassphrase } from '@kuiralabs/midnight-wallet';
 import { openGrantAccount } from '../lib/grant/account.ts';
 import { createAccountKey, isSealedAccount, sealedOwnerStore } from '../lib/grant/sealed-account.ts';
-import { stateRootIn } from '../../test-support/state-root-in.ts';
-import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { stateRootIn } from '../../../../test-support/state-root-in.ts';
+import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
 const host = createHost({ engineLoader: loadInstalledEngine });

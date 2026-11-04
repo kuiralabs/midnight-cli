@@ -20,6 +20,7 @@ const ENTRY_POINTS: Record<string, string[]> = {
   contract: ['.', './commands'],
   connect: ['.', './commands'],
   dev: ['.', './commands'],
+  grant: ['.', './commands'],
 };
 
 describe('the public entry points', () => {

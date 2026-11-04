@@ -17,8 +17,8 @@ import { getNetworkConfig, createHost, PASSPHRASE_ENV } from '@kuiralabs/midnigh
 import { LEGACY_STORE_PASSWORD, openGrantAccount, privateStateLocationOf } from '../lib/grant/account.ts';
 import { AccountMigrationInterruptedError, protectAccount } from '../lib/grant/protect-account.ts';
 import { isSealedAccount } from '../lib/grant/sealed-account.ts';
-import { stateRootIn } from '../../test-support/state-root-in.ts';
-import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { stateRootIn } from '../../../../test-support/state-root-in.ts';
+import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
 const host = createHost({ engineLoader: loadInstalledEngine });

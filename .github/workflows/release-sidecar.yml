@@ -159,8 +159,8 @@ jobs:
             fi
           done
       # mn depends on its workspace packages (core, chain, one engine per SDK
-      # set, wallet, contract, connect, dev) at exact versions: each publishes first, unless that version is
-      # on npm already, under the same dist-tag as mn.
+      # set, wallet, connect, contract, dev, grant) at exact versions: each publishes first, unless that version is
+      # on npm already, under the same dist-tag as mn, in dependency order (a package after those it declares).
       - run: npm run build
       - name: Publish the workspace packages mn depends on
         env:
@@ -168,14 +168,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for dir in packages/cli-core packages/chain packages/engine-rc packages/engine-beta packages/wallet packages/contract packages/connect packages/dev; do
+          for dir in packages/cli-core packages/chain packages/engine-rc packages/engine-beta packages/wallet packages/connect packages/contract packages/dev packages/grant; do
             name="$(node -p "require('./$dir/package.json').name")"
             version="$(node -p "require('./$dir/package.json').version")"
             if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "$name@$version is published already"
             else
-              # An engine ships the SDK set the tests ran on, for a program that installs it without mn.
-              case "$name" in @kuiralabs/midnight-engine-*) node scripts/make-shrinkwrap.mjs --package "$dir" ;; esac
+              # An engine ships the SDK set the tests ran on, for a program that installs it without mn; so does
+              # grant, whose account chain is built on the rc set.
+              case "$name" in @kuiralabs/midnight-engine-*|@kuiralabs/midnight-grant) node scripts/make-shrinkwrap.mjs --package "$dir" ;; esac
               # Packed with the manifest it is published with: no exports entry names a source file.
               tarball="$(node scripts/publish-manifest.mjs "$dir" "$RUNNER_TEMP/workspace-packs")"
               npm publish "$tarball" --access public ${{ env.PRERELEASE == 'true' && '--tag next' || '' }}

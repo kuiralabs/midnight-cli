@@ -20,8 +20,8 @@ import { exportAccount, importAccount } from '../lib/grant/account-backup.ts';
 import { createPendingDevice, openAccountKey, ownDeviceCode, sealedDeviceList } from '../lib/grant/sealed-account.ts';
 import { parseDeviceCode } from '../lib/grant/device-code.ts';
 import { createAccountKey, sealedDeviceKeys, sealedOwnerStore, sealedPrivateStatePassword } from '../lib/grant/sealed-account.ts';
-import { stateRootIn } from '../../test-support/state-root-in.ts';
-import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { stateRootIn } from '../../../../test-support/state-root-in.ts';
+import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 
 // An rc engine, for what every host's has alike: its keys, ledger and contracts.
 const rcEngine = createRcEngine(createHost());

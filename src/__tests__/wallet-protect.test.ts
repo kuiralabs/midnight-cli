@@ -15,7 +15,7 @@ import { walletDefinition } from '@kuiralabs/midnight-wallet/commands';
 import { rcKeys } from '../../test-support/rc-engine.ts';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { saveWalletConfig } from '../../test-support/plain-wallet.ts';
-import { accountProtector } from '../lib/grant/account-protector.ts';
+import { accountProtector } from '@kuiralabs/midnight-grant';
 import { stateRootIn } from '../../test-support/state-root-in.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { testHost } from '../../test-support/test-host.ts';

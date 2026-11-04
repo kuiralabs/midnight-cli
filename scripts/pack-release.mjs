@@ -1,5 +1,5 @@
 // mn as a release publishes it, packed into a folder: the workspace packages
-// mn depends on (each engine with its shrinkwrap, each with the manifest it is
+// mn depends on (each engine and grant with its shrinkwrap, each with the manifest it is
 // published with: scripts/publish-manifest.mjs), and mn with the shrinkwrap
 // the release job writes, its workspace packages' tarballs and integrity as a
 // local registry on `port` serves them (scripts/local-registry.mjs). Until those packages are on npm, a
@@ -24,6 +24,13 @@ const repo = fileURLToPath(new URL('..', import.meta.url));
 const run = (command, args, cwd) => execFileSync(command, args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
 
 /**
+ * Whether a workspace package ships a shrinkwrap of its own: each engine (its
+ * SDK set) and grant (the account chain, built on the rc set), as the release
+ * job writes them.
+ */
+export const shipsShrinkwrap = (name) => name.startsWith('@kuiralabs/midnight-engine-') || name === '@kuiralabs/midnight-grant';
+
+/**
  * Packs the release into `dir` for a registry on `port` (0: any free one),
  * leaving that registry running; resolves to it, mn's name and version, and
  * the workspace packages packed.
@@ -37,14 +44,14 @@ export async function packRelease(dir, port = 0) {
       return { folder, name, version };
     })
     .filter(({ name }) => manifest.dependencies[name] !== undefined);
-  // Each engine with the shrinkwrap the release job writes for it.
+  // Each engine and grant with the shrinkwrap the release job writes for it.
   for (const { folder, name } of workspaces) {
-    const engine = name.startsWith('@kuiralabs/midnight-engine-');
-    if (engine) makeShrinkwrap({ dir: folder });
+    const shrinkwrapped = shipsShrinkwrap(name);
+    if (shrinkwrapped) makeShrinkwrap({ dir: folder });
     try {
       packPublished(join(repo, folder), dir);
     } finally {
-      if (engine) rmSync(join(repo, folder, 'npm-shrinkwrap.json'), { force: true });
+      if (shrinkwrapped) rmSync(join(repo, folder, 'npm-shrinkwrap.json'), { force: true });
     }
   }
   const registry = await startLocalRegistryProcess(dir, port);

@@ -195,7 +195,7 @@ describe('the accepted flags', () => {
         kinds.set(m[2]!, (kinds.get(m[2]!) ?? new Set()).add(m[1] !== 'hasFlag'));
       }
     }
-    // The grant request's limits are read in a loop over their names (LIMIT_FLAGS in lib/grant/request.ts), as values.
+    // The grant request's limits are read in a loop over their names (LIMIT_FLAGS in the grant package's lib/grant/request.ts), as values.
     for (const limit of ['cap', 'per-call', 'max-coin', 'expires-in']) kinds.set(limit, new Set([true]));
     for (const command of registry.commands) {
       for (const flag of [...command.flags, ...registry.globalFlags]) {
