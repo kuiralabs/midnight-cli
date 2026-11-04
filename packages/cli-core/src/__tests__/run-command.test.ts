@@ -127,6 +127,22 @@ describe('runCommand', () => {
     expect(loaded).toStrictEqual([]);
   });
 
+  // Regression: a command's spinners drew on the process's stderr, so a program mounting the commands got them on its
+  // terminal whatever output it gave.
+  it('draws the command\'s spinners through the run\'s output, never on the process\'s stderr', async () => {
+    const drawn: string[] = [];
+    const written: string[] = [];
+    const original = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => { written.push(String(chunk)); return true; }) as typeof process.stderr.write;
+    try {
+      await runCommand(definitionOf(async (_args, ctx) => { ctx.progress.start('Syncing...').stop('Synced'); }), noArgs(), { host: testHost(), output: { ...output, stderr: (text) => { drawn.push(text); } } });
+    } finally {
+      process.stderr.write = original;
+    }
+    expect(drawn.join('')).toContain('Synced');
+    expect(written.join('')).not.toContain('Synced');
+  });
+
   it('sends what the command\'s spinners say to onProgress', async () => {
     const said: string[] = [];
     await runCommand(definitionOf(async (_args, ctx) => { ctx.progress.start('Syncing...').stop('Synced'); }), noArgs(), { host: testHost(), output, onProgress: (m) => said.push(m) });
