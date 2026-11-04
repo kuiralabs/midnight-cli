@@ -7,6 +7,7 @@ import { describeGrantTerms, paysAFee, resolveGrantRequest } from '../lib/grant/
 const request = (...argv: string[]) => resolveGrantRequest(parseArgs(['grant', ...argv]));
 const LINK = 'midnight-example:grant-request?r=AAECAw';
 const GRANT_ID = 'b1a9094fd044707d484a0193c1aa35a8e15bcf513a33b98a624a24739069fbde';
+const TOKEN = '02005c8a9e3d6e3a2b0e1c4f7d9a8b6c5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b';
 
 describe('resolveGrantRequest', () => {
   it('reads each subcommand', () => {
@@ -41,6 +42,15 @@ describe('resolveGrantRequest', () => {
     expect(request('deposit', '0.000001')).toEqual({ subcommand: 'deposit', amount: '0.000001', value: '1' });
   });
 
+  it('reads a deposit of another token with --token: its raw type lower-cased, the amount in its smallest unit, exactly', () => {
+    expect(request('deposit', '500', '--token', TOKEN)).toEqual({ subcommand: 'deposit', amount: '500', value: '500', token: TOKEN });
+    expect(request('deposit', '1', '--token', TOKEN.toUpperCase())).toEqual({ subcommand: 'deposit', amount: '1', value: '1', token: TOKEN });
+    // Past a JS number's exact range (2^53) and at a shielded coin's largest value (2^128 - 1): read digit for digit.
+    expect(request('deposit', '9007199254740993', '--token', TOKEN)).toMatchObject({ value: '9007199254740993' });
+    expect(request('deposit', '340282366920938463463374607431768211455', '--token', TOKEN)).toMatchObject({ value: '340282366920938463463374607431768211455' });
+    expect(paysAFee(request('deposit', '500', '--token', TOKEN))).toBe(true);
+  });
+
   it('reads an issue: the link, the limits given, and whether it is confirmed', () => {
     expect(request('issue', LINK)).toEqual({ subcommand: 'issue', link: LINK, limits: {}, confirmed: false });
     expect(request('issue', LINK, '--cap', '500000', '--per-call', '300000', '--max-coin', '2000000', '--expires-in', '3600', '--yes')).toEqual({
@@ -66,6 +76,18 @@ describe('resolveGrantRequest', () => {
     [['deposit', '1.0000001'], 'NIGHT has 6 decimals, this has 7'],
     [['deposit', 'all'], 'Invalid amount: "all"'],
     [['deposit', '2', '--yes'], '--yes only applies to: midnight grant issue'],
+    [['deposit', '5', '--token', TOKEN.slice(1)], `--token must be a token type, 64 hex characters, not "${TOKEN.slice(1)}"`],
+    [['deposit', '5', '--token', `${TOKEN.slice(1)}g`], '--token must be a token type, 64 hex characters'],
+    [['deposit', '5', '--token', `0x${TOKEN}`], '--token must be a token type, 64 hex characters'],
+    [['deposit', '5', '--token'], '--token needs a value'],
+    [['deposit', '5', '--token', '00'.repeat(32)], '--token names NIGHT, which a deposit takes without it'],
+    [['deposit', '--token', TOKEN], 'Missing the amount of the token to deposit, in its smallest unit.'],
+    [['deposit', '5', '6', '--token', TOKEN], 'midnight grant deposit takes one amount of the token; unexpected: 6'],
+    [['deposit', '1.5', '--token', TOKEN], 'With --token the amount is a whole number of the token\'s smallest unit, above 0, not "1.5"'],
+    [['deposit', '0', '--token', TOKEN], 'above 0, not "0"'],
+    [['deposit', '-3', '--token', TOKEN], 'above 0, not "-3"'],
+    [['deposit', '1e6', '--token', TOKEN], 'above 0, not "1e6"'],
+    [['status', '--token', TOKEN], '--token only applies to: midnight grant deposit'],
     [['revoke'], 'Missing the grant to revoke.'],
     [['revoke', 'the-first-one'], 'A grant is named by its id (64 hex characters) or its slot (a number); got "the-first-one"'],
     [['status', '--yes'], '--yes only applies to: midnight grant issue'],
