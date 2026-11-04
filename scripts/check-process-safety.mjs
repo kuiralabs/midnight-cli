@@ -2,7 +2,11 @@
 // Checks that library code leaves the host process alone: no writing to the terminal, exiting, installing process handlers,
 // patching console, changing directory, opening a prompt, reading the
 // environment, or computing a path from the home directory. Commands, ui/, the shell and the MCP server may; so may the
-// modules marked below as shell concerns. Commands may not write to the
+// modules marked below as shell concerns. Core's process directory
+// (packages/cli-core/src/process/, its "./process" entry point) is host-called:
+// it may install a process handler, patch the console, write to the terminal
+// and exit, because only a host calls it, on its own process (no package
+// imports it: scripts/check-layering.mjs). Commands may not write to the
 // terminal either: their text goes through their call's output
 // (ctx.output.stdout / stderr), which the CLI writes to the process's streams
 // and the MCP server to its stderr. String and template-literal
@@ -15,9 +19,9 @@
 //     empty object to fill); what is shared on purpose is allowlisted by name,
 //     with its reason;
 //   - only the shell sets the process's exit code; a handler returns its own;
-//   - only the shell's noise filter (lib/sdk-noise.ts) may keep ambient per-call
-//     storage (AsyncLocalStorage, async_hooks); everything else is passed the
-//     call's context explicitly;
+//   - only core's host-called process directory (the SDK process guard) may
+//     keep ambient per-call storage (AsyncLocalStorage, async_hooks);
+//     everything else is passed the call's context explicitly;
 //   - library, ui and command code exports no setter of host state: no
 //     function named set…Source, set…Sink, setPrompter or setEngineLoader, and
 //     no exported function that assigns a module-level `let` or `var`. What a
@@ -36,6 +40,12 @@ import { homeOf, relOf, sourceFiles } from './check-layering.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'src');
+
+// Core's host-called code: what a host calls on its own process, never a library.
+export const CORE_PROCESS_DIR = join(ROOT, 'packages', 'cli-core', 'src', 'process');
+const isHostCalled = (file) => file.startsWith(CORE_PROCESS_DIR + '/');
+// What host-called code may do to the process, the host having asked it to.
+const HOST_CALLED_RULES = new Set(['writes to the terminal', 'exits', 'installs a process handler', 'patches console or stdout']);
 
 const RULES = [
   ['writes to the terminal', /\bprocess\.(stdout|stderr)\.write\s*\(|\bconsole\.(log|error|warn|info|debug)\s*\(/],
@@ -62,14 +72,14 @@ const STALE_STATE = 'allowlists module state it no longer keeps';
 const SETTER = 'exports a setter of host state';
 const STALE_SETTER = 'allowlists a setter it no longer exports';
 const AMBIENT = 'keeps ambient per-call storage';
-const notNoiseFilter = (rel) => rel !== 'lib/sdk-noise.ts';
+const notHostCalled = (_rel, file) => !isHostCalled(file);
 // [rule, pattern, the files it applies to, whether it reads the raw source (an import's specifier)].
 const CALL_RULES = [
   // Only the shell turns a handler's exit code into the process's.
   ['sets the process exit code', /\bprocess\.exitCode\s*(=[^=]|\?\?=|\|\|=)/, (_rel, file) => homeOf(file) !== 'shell', false],
-  // Ambient per-call storage is module state in disguise: only the shell's noise filter may attribute the SDK's noise that way.
-  [AMBIENT, /\bAsyncLocalStorage\b/, notNoiseFilter, false],
-  [AMBIENT, /\bfrom\s+['"](node:)?async_hooks['"]|\brequire\(\s*['"](node:)?async_hooks['"]\s*\)/, notNoiseFilter, true],
+  // Ambient per-call storage is module state in disguise: only the host-called process guard may attribute the SDK's noise that way.
+  [AMBIENT, /\bAsyncLocalStorage\b/, notHostCalled, false],
+  [AMBIENT, /\bfrom\s+['"](node:)?async_hooks['"]|\brequire\(\s*['"](node:)?async_hooks['"]\s*\)/, notHostCalled, true],
 ];
 
 // Shell concerns by design: what they do to the process is their job.
@@ -343,7 +353,10 @@ export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowed
       });
     };
     if (isLibrary(rel, file)) {
-      for (const [rule, pattern] of RULES) scanRule(rule, pattern, RAW_RULES.has(rule));
+      for (const [rule, pattern] of RULES) {
+        if (isHostCalled(file) && HOST_CALLED_RULES.has(rule)) continue;
+        scanRule(rule, pattern, RAW_RULES.has(rule));
+      }
     }
     if (isCommand(rel)) {
       for (const [rule, pattern] of COMMAND_RULES) scanRule(rule, pattern, false);

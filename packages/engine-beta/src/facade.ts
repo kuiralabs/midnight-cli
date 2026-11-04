@@ -17,6 +17,7 @@ import {
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk-abstractions';
 import * as rx from 'rxjs';
+import { makeDefaultSubmissionService } from '@midnightntwrk/wallet-sdk-capabilities/submission';
 
 import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from './derivation.ts';
 import { loadDustCache, dustPublicKeyHex, type DustCacheEntry } from './dust-direct-cache.ts';
@@ -111,6 +112,7 @@ export async function buildFacade(
   // does that.
   const initFresh = () => WalletFacade.init({
     configuration,
+    submissionService: (config) => submissionOnDemand(config.relayURL),
     shielded: (cfg) => ShieldedWallet(cfg).startWithSecretKeys(secretKeys.shieldedSecretKeys),
     unshielded: (cfg) => UnshieldedWallet(cfg).startWithPublicKey(PublicKey.fromKeyStore(keystore)),
     dust: (cfg) => DustWallet(cfg).startWithSecretKey(secretKeys.dustSecretKey, ledger.LedgerParameters.initialParameters().dust),
@@ -133,6 +135,7 @@ export async function buildFacade(
     try {
       facade = await WalletFacade.init({
         configuration,
+        submissionService: (config) => submissionOnDemand(config.relayURL),
         shielded: (cfg) => ShieldedWallet(cfg).restore(effectiveCache.shielded),
         unshielded: (cfg) => UnshieldedWallet(cfg).restore(effectiveCache.unshielded),
         dust: (cfg) => DustWallet(cfg).restore(effectiveCache.dust),
@@ -150,6 +153,28 @@ export async function buildFacade(
   }
 
   return { facade, keystore, secretKeys, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS };
+}
+
+/** What the facade submits through, as WalletFacade.init takes it. */
+type FacadeSubmission = Awaited<ReturnType<NonNullable<Parameters<typeof WalletFacade.init>[0]['submissionService']>>>;
+
+/**
+ * The SDK's submission service, made on the first submit instead of when the
+ * facade is built. The SDK's own opens its node client at once, and its close()
+ * waits for that client to be ready: against a node that doesn't answer (down,
+ * or a wrong URL) close() never returns and polkadot-js reconnects every 2.5 s
+ * for good, so a program that closed its wallet never exits. Made on demand, a
+ * facade that submitted nothing holds no node connection, and closes at once.
+ */
+export function submissionOnDemand(relayURL: URL): FacadeSubmission {
+  let service: FacadeSubmission | undefined;
+  const submitting = (): FacadeSubmission => (service ??= makeDefaultSubmissionService({ relayURL }));
+  const submitTransaction = (transaction: Parameters<FacadeSubmission['submitTransaction']>[0], waitForStatus?: 'Submitted' | 'InBlock' | 'Finalized') =>
+    submitting().submitTransaction(transaction, waitForStatus);
+  return {
+    submitTransaction: submitTransaction as FacadeSubmission['submitTransaction'],
+    close: async () => { await service?.close(); },
+  };
 }
 
 /**
@@ -641,16 +666,25 @@ export async function quickSync(bundle: FacadeBundle, syncMode: SyncMode = 'full
   );
 }
 
+/** How long stopFacade waits for the SDK's wallets to stop. */
+const STOP_TIMEOUT_MS = 5_000;
+
 /**
  * Clean shutdown of the wallet facade.
  */
 export async function stopFacade(bundle: FacadeBundle): Promise<void> {
   bundle.keepAlive?.unsubscribe();
   // Timeout facade.stop() — wallets may hang if in a bad state (e.g. dust wallet stuck).
-  // Don't block the caller forever; let the old facade be GC'd.
-  await Promise.race([
-    bundle.facade.stop(),
-    new Promise<void>(resolve => setTimeout(resolve, 5_000)),
-  ]);
+  // Don't block the caller forever; let the old facade be GC'd. The wait is
+  // cleared once the facade stops, so it doesn't keep the process up 5 s more.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      bundle.facade.stop(),
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, STOP_TIMEOUT_MS); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 

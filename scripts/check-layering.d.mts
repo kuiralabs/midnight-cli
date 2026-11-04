@@ -3,6 +3,8 @@ export function sourceFiles(dir?: string): string[];
 export function homeOf(file: string): string | undefined;
 export function guidanceRule(fromRel: string, toRel: string): string | undefined;
 export function importRule(fromRel: string, toRel: string): string | undefined;
+/** The rule an import from `file` (in package `home`) of `modules` breaks by reaching core's host-called process code, or undefined. */
+export function processCodeRule(file: string, home: string | undefined, modules: { file: string; typeOnly: boolean }[]): string | undefined;
 export function accountImportRule(home: string, specifier: string, typeOnly: boolean): string | undefined;
 export function findLayeringProblems(): { unhomed: string[]; violations: { home: string; rule: string; where: string; specifier: string }[] };
 /** The imports of a test file that break a rule: a test imports its own package relatively, every other by an entry point. */

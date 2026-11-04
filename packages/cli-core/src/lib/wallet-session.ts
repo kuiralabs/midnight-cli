@@ -21,6 +21,7 @@ import { throwIfCancelled } from './errors.ts';
 import { isColdStartRace, toEngineError } from './sdk-errors.ts';
 import type { SwapLeg } from './swap-offer.ts';
 import type { OpenOffer } from './open-offers.ts';
+import type { CallSdkWarnings } from './sdk-warnings.ts';
 
 /** The calls a session makes, under one connection name for the connector's pending transactions. */
 const SESSION_CONNECTION = 'wallet-session';
@@ -247,17 +248,45 @@ export interface OpenWalletSessionOptions {
   dustWaitMs?: number;
   /** Cancels the open: what was started is stopped. */
   signal?: AbortSignal;
-  /** What the open is doing now, for a progress line. */
+  /** What the open is doing now, for a progress line; with `sdkWarnings`, also the SDK's transient warnings, as `SDK: <message>`. */
   onMessage?: (message: string) => void;
+  /**
+   * Where the SDK's transient warnings go (a call's, from the host's process
+   * guard): the session listens from the open until close(), so the guard
+   * hands them to it rather than reporting or exiting.
+   */
+  sdkWarnings?: CallSdkWarnings;
 }
 
 /**
  * Opens a seed's wallet on a network: synced, its Dust ready, with the
- * network's engine from `options.engines`.
+ * network's engine from `options.engines`. With `sdkWarnings`, the session
+ * listens for the SDK's transient warnings from the open until close().
  */
 export async function openWalletSession(options: OpenWalletSessionOptions): Promise<WalletSession> {
-  const { seed, network, root, signal } = options;
+  const { signal, onMessage } = options;
   throwIfCancelled(signal);
+  const stopListening = options.sdkWarnings?.listen(onMessage === undefined ? undefined : (_tag, message) => onMessage(`SDK: ${message}`)) ?? (() => {});
+  try {
+    const session = await openSession(options);
+    return {
+      ...session,
+      async close() {
+        try {
+          await session.close();
+        } finally {
+          stopListening();
+        }
+      },
+    };
+  } catch (err) {
+    stopListening();
+    throw err;
+  }
+}
+
+async function openSession(options: OpenWalletSessionOptions): Promise<WalletSession> {
+  const { seed, network, root, signal } = options;
   const networkConfig = options.networkConfig
     ?? resolveNetwork({ args: { command: 'wallet-session', subcommand: '', positionals: [], flags: { network } }, configDir: root }, options.settings ?? settingsFromEnvironment({})).config;
   const engine = await options.engines.load(sdkSetOf(network, root));

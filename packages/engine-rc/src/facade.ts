@@ -18,6 +18,7 @@ import { type WalletSeeds } from '@midnightntwrk/wallet-sdk/hd';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk';
 import * as rx from 'rxjs';
+import { makeDefaultSubmissionService } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 
 import { FORK_SCHEDULE } from './fork-schedule.ts';
 import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from './derivation.ts';
@@ -118,6 +119,7 @@ export async function buildFacade(
   // chain is on. It doesn't start syncing; startFacade does that.
   const initFresh = () => WalletFacade.init({
     configuration,
+    submissionService: (config) => submissionOnDemand(config.relayURL),
     shielded: async (cfg) => (shielded = await ShieldedWallet(cfg).startWithSeed(seeds.shielded)),
     unshielded: (cfg) => UnshieldedWallet(cfg).startWithPublicKey(PublicKey.fromKeyStore(keystore)),
     dust: async (cfg) => (dust = await DustWallet(cfg).startWithSeed(seeds.dust)),
@@ -140,6 +142,7 @@ export async function buildFacade(
     try {
       facade = await WalletFacade.init({
         configuration,
+        submissionService: (config) => submissionOnDemand(config.relayURL),
         shielded: (cfg) => (shielded = ShieldedWallet(cfg).restore(effectiveCache.shielded)),
         unshielded: (cfg) => UnshieldedWallet(cfg).restore(effectiveCache.unshielded),
         dust: (cfg) => (dust = DustWallet(cfg).restore(effectiveCache.dust)),
@@ -160,6 +163,28 @@ export async function buildFacade(
     throw new Error('Wallet facade was built without its shielded or dust wallet');
   }
   return { facade, keystore, seeds, seedStartable: { shielded, dust }, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS };
+}
+
+/** What the facade submits through, as WalletFacade.init takes it. */
+type FacadeSubmission = Awaited<ReturnType<NonNullable<Parameters<typeof WalletFacade.init>[0]['submissionService']>>>;
+
+/**
+ * The SDK's submission service, made on the first submit instead of when the
+ * facade is built. The SDK's own opens its node client at once, and its close()
+ * waits for that client to be ready: against a node that doesn't answer (down,
+ * or a wrong URL) close() never returns and polkadot-js reconnects every 2.5 s
+ * for good, so a program that closed its wallet never exits. Made on demand, a
+ * facade that submitted nothing holds no node connection, and closes at once.
+ */
+export function submissionOnDemand(relayURL: URL): FacadeSubmission {
+  let service: FacadeSubmission | undefined;
+  const submitting = (): FacadeSubmission => (service ??= makeDefaultSubmissionService({ relayURL }));
+  const submitTransaction = (transaction: Parameters<FacadeSubmission['submitTransaction']>[0], waitForStatus?: 'Submitted' | 'InBlock' | 'Finalized') =>
+    submitting().submitTransaction(transaction, waitForStatus);
+  return {
+    submitTransaction: submitTransaction as FacadeSubmission['submitTransaction'],
+    close: async () => { await service?.close(); },
+  };
 }
 
 /**
@@ -672,16 +697,25 @@ export async function quickSync(bundle: FacadeBundle, syncMode: SyncMode = 'full
   );
 }
 
+/** How long stopFacade waits for the SDK's wallets to stop. */
+const STOP_TIMEOUT_MS = 5_000;
+
 /**
  * Clean shutdown of the wallet facade.
  */
 export async function stopFacade(bundle: FacadeBundle): Promise<void> {
   bundle.keepAlive?.unsubscribe();
   // Timeout facade.stop() — wallets may hang if in a bad state (e.g. dust wallet stuck).
-  // Don't block the caller forever; let the old facade be GC'd.
-  await Promise.race([
-    bundle.facade.stop(),
-    new Promise<void>(resolve => setTimeout(resolve, 5_000)),
-  ]);
+  // Don't block the caller forever; let the old facade be GC'd. The wait is
+  // cleared once the facade stops, so it doesn't keep the process up 5 s more.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      bundle.facade.stop(),
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, STOP_TIMEOUT_MS); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 

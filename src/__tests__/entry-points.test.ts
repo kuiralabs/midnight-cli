@@ -12,7 +12,7 @@ const PACKAGES = join(import.meta.dirname, '..', '..', 'packages');
 
 /** The agreed entry points of each public package, by folder under packages/. */
 const ENTRY_POINTS: Record<string, string[]> = {
-  'cli-core': ['.', './engine', './ui', './commands'],
+  'cli-core': ['.', './engine', './ui', './commands', './process'],
   chain: ['.', './commands'],
   'engine-rc': ['.'],
   'engine-beta': ['.'],
