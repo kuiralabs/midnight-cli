@@ -135,7 +135,7 @@ export const CUT_IMPORTS = ENGINE_SETS.flatMap((set) => [...new Set(Object.value
 
 /** What the shell gives a command whose definition's `shell` asks for it, and the module it loads. */
 export const SHELL_PROVISIONS = {
-  payer: 'src/lib/serve-payer.ts',
+  payer: 'packages/connect/src/lib/serve-payer.ts',
   protectors: 'src/lib/grant/account-protector.ts',
 };
 

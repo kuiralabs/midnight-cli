@@ -19,7 +19,7 @@ import {
   directoryDeviceKeys,
   directoryOwnerStore,
 } from '@kuiralabs/midnight-account-chain/owner';
-import { PRIVATE_STATE_DATABASE } from '../contract/private-state.ts';
+import { PRIVATE_STATE_DATABASE } from '@kuiralabs/midnight-contract';
 import { type PassphraseSource, passphraseForNewSecret, unlockPassphrase, type UnlockHost } from '@kuiralabs/midnight-wallet';
 import {
   AccountMigrationInterruptedError,

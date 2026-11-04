@@ -9,22 +9,14 @@
 import { getValidNetworkNames, createPackageRegistry, type FlagDefinition, type GlobalFlagHelp } from '@kuiralabs/midnight-cli-core';
 import { configDefinition, coreGuidance, coreCodes } from '@kuiralabs/midnight-cli-core/commands';
 import { walletDefinition, generateDefinition, infoDefinition, balanceDefinition, addressDefinition, genesisAddressDefinition, airdropDefinition, transferDefinition, dustDefinition, cacheDefinition, swapDefinition, walletGuidance, swapGuidance, walletCodes } from '@kuiralabs/midnight-wallet/commands';
-import { inspectCostDefinition } from '../commands/inspect-cost.definition.ts';
-import { serveDefinition } from '../commands/serve.definition.ts';
-import { testDefinition } from '../commands/test.definition.ts';
-import { devDefinition } from '../commands/dev.definition.ts';
-import { contractDefinition } from '../commands/contract.definition.ts';
+import { inspectCostDefinition, contractDefinition, contractGuidance, contractCodes } from '@kuiralabs/midnight-contract/commands';
+import { serveDefinition, connectGuidance } from '@kuiralabs/midnight-connect/commands';
+import { testDefinition, devDefinition, localnetDefinition, devGuidance, devCodes } from '@kuiralabs/midnight-dev/commands';
 import { grantDefinition } from '../commands/grant.definition.ts';
-import { localnetDefinition } from '../commands/localnet.definition.ts';
 import { statusDefinition, txDefinition, chainGuidance, chainCodes } from '@kuiralabs/midnight-chain/commands';
 import { helpDefinition } from '../commands/help.definition.ts';
 import { manualDefinition } from '../commands/manual.definition.ts';
-import { contractGuidance } from '../commands/contract.guidance.ts';
-import { connectGuidance } from '../commands/connect.guidance.ts';
-import { devGuidance } from '../commands/dev.guidance.ts';
 import { grantGuidance } from '../commands/grant.guidance.ts';
-import { contractCodes } from '../commands/contract.codes.ts';
-import { devCodes } from '../commands/dev.codes.ts';
 import { grantCodes } from '../commands/grant.codes.ts';
 
 /** The shell answers these before any command runs: no tool passes them on. */

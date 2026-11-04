@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as os from 'os';
 
 // Commands that can be tested without network/Docker
-import inspectCostCommand from '../commands/inspect-cost.ts';
+import { inspectCostDefinition } from '@kuiralabs/midnight-contract/commands';
 import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
 import { generateDefinition, infoDefinition, addressDefinition, genesisAddressDefinition } from '@kuiralabs/midnight-wallet/commands';
 import helpCommand from '../commands/help.ts';
@@ -19,6 +19,7 @@ import { cliCall } from './helpers/cli-call.ts';
 import { stateRootIn } from '../../test-support/state-root-in.ts';
 
 // The handlers, as the shell loads them.
+const { default: inspectCostCommand } = await inspectCostDefinition.load();
 const { default: generateCommand } = await generateDefinition.load();
 const { default: infoCommand } = await infoDefinition.load();
 const { default: addressCommand } = await addressDefinition.load();

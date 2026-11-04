@@ -3,7 +3,8 @@
 // packages, installs mn globally from it into an empty prefix, and checks the
 // tree the install holds still works: one copy of each WASM package per SDK
 // engine (the shrinkwrap mn ships keeps each engine's set apart), each engine
-// loading, and the files the code reads at run time.
+// loading, the packages a contract run's script imports, and the files the
+// code reads at run time.
 //
 // The test suite runs on the lockfile's tree, which a consumer never sees. Two
 // features broke that way without a test noticing: a newer @scure/base refused
@@ -188,6 +189,53 @@ try {
     check(`the ${network === 'stagenet' ? 'beta' : 'rc'} engine derives a ${network} address`, derived.startsWith(prefixOf), derived.slice(0, 40));
   }
 
+  // A contract run from the install: the contract package's runner has the
+  // network's engine write the script, links the packages it imports into the
+  // dApp's folder from where the engine finds each by name (never by a path
+  // from the runner's own package), and runs it with Node. Each engine finds
+  // every package its scripts import; a state read of a compiled contract gets
+  // as far as asking the indexer (every import resolved, the dApp's contract
+  // module loaded), which refuses the connection, reported as NETWORK_ERROR
+  // from the script's marked line; and the dApp's folder is left as it was.
+  for (const [network, set] of [['undeployed', 'rc'], ['stagenet', 'beta']]) {
+    const dapp = join(work, `dapp-${set}`);
+    const ran = JSON.parse(run(process.execPath, ['--input-type=module', '-e', `
+      import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+      import { join } from 'node:path';
+      import { createHost, getNetworkConfig } from '@kuiralabs/midnight-cli-core';
+      import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
+      import { createBetaEngine } from '@kuiralabs/midnight-engine-beta';
+      import { runState } from '@kuiralabs/midnight-contract';
+      const [dapp, network, home] = process.argv.slice(1);
+      const host = createHost({
+        paths: { stateRoot: join(home, '.midnight'), home },
+        engineLoader: async (set, host) => set === 'beta' ? createBetaEngine(host) : createRcEngine(host),
+      });
+      const { scripts } = (await host.engines.for(network)).contracts;
+      const missing = scripts.packages.filter((name) => scripts.packageFolder(name) === null);
+      const managedDir = join(dapp, 'managed', 'counter');
+      mkdirSync(join(managedDir, 'compiler'), { recursive: true });
+      mkdirSync(join(managedDir, 'contract'), { recursive: true });
+      writeFileSync(join(dapp, 'package.json'), JSON.stringify({ name: 'dapp', private: true, type: 'module' }));
+      writeFileSync(join(managedDir, 'compiler', 'contract-info.json'), JSON.stringify({ 'compiler-version': '0.35.0', 'language-version': '0.27.0', 'runtime-version': scripts.compactRuntimeVersion, circuits: [], witnesses: [] }));
+      writeFileSync(join(managedDir, 'contract', 'index.js'), 'export function ledger() { return {}; }\\n');
+      const before = readdirSync(dapp).sort();
+      const said = [];
+      const networkConfig = { ...getNetworkConfig(network), indexer: 'http://127.0.0.1:9/api/v4/graphql', indexerWS: 'ws://127.0.0.1:9/api/v4/graphql/ws', node: 'ws://127.0.0.1:9', proofServer: 'http://127.0.0.1:9' };
+      let failed;
+      try {
+        await runState({ dappDir: dapp, network, root: join(home, '.midnight'), engines: host.engines, networkConfig, managedDir, contractName: 'counter', contractAddress: 'ab'.repeat(32), onMessage: (message) => said.push(message) });
+      } catch (error) {
+        failed = { name: error.name, code: error.code, message: error.message };
+      }
+      console.log(JSON.stringify({ packages: scripts.packages.length, missing, said, failed, leftAsItWas: JSON.stringify(readdirSync(dapp).sort()) === JSON.stringify(before) }));
+    `, dapp, network, home], installed));
+    check(`the ${set} engine finds the ${ran.packages} packages its contract scripts import`, ran.missing.length === 0, ran.missing.length > 0 ? `not found: ${ran.missing.join(', ')}` : '');
+    const reached = ran.said.includes('Querying contract state...') && ran.failed?.name === 'ContractScriptError' && ran.failed?.code === 'NETWORK_ERROR';
+    check(`a ${network} contract state read runs its script in a dApp, as far as the indexer`, reached, ran.failed === undefined ? 'it did not fail' : `${ran.failed.name} ${ran.failed.code ?? '(no code)'}: ${ran.failed.message.split('\n').pop()}`);
+    check(`the ${network} run leaves the dApp's folder as it was`, ran.leftAsItWas);
+  }
+
   // mn grant drives the account package it installed: its owner records load
   // from the installed tree and answer that the new wallet has no account.
   // Asking that reaches no chain and opens no proving-artefact cache (the
@@ -271,6 +319,9 @@ try {
     ['@kuiralabs/midnight-engine-rc', 'derive-address'],
     ['@kuiralabs/midnight-engine-beta', 'derive-address'],
     ['@kuiralabs/midnight-wallet', 'lib/passphrase'],
+    ['@kuiralabs/midnight-contract', 'lib/contract/runner'],
+    ['@kuiralabs/midnight-connect', 'lib/ws-rpc'],
+    ['@kuiralabs/midnight-dev', 'lib/localnet'],
   ]) {
     check(`a program outside mn finds ${name}'s ${deepPath} built`, existsSync(join(outside, 'node_modules', name, 'dist', `${deepPath}.js`)));
     const deep = run(process.execPath, ['entry.mjs', `${name}/${deepPath}`], outside).trim();

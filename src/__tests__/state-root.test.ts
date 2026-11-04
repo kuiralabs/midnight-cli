@@ -16,7 +16,7 @@ import { cliCall } from './helpers/cli-call.ts';
 import { passphraseForNewSecret, createWallet, walletSecretFrom } from '@kuiralabs/midnight-wallet';
 import { accountRecordsDir } from '../lib/grant/account-records.ts';
 import { accountArtifactsDir } from '../lib/grant/account.ts';
-import { getComposePath } from '../lib/localnet.ts';
+import { getComposePath } from '@kuiralabs/midnight-dev';
 import before from './fixtures/state-layout-before-1g.json';
 
 // The config handler, as the shell loads it.

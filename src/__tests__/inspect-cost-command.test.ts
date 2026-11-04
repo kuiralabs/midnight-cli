@@ -4,12 +4,15 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import inspectCostCommand from '../commands/inspect-cost.ts';
+import { inspectCostDefinition } from '@kuiralabs/midnight-contract/commands';
 import { parseArgs } from '@kuiralabs/midnight-cli-core';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { startLocalIndexer, type LocalIndexer } from '../../test-support/local-indexer.ts';
 import { LEDGER9_PARAMETERS_HEX } from '../../test-support/fixtures/ledger9-parameters.ts';
 import { cliCall } from './helpers/cli-call.ts';
+
+// The handler, as the shell loads it.
+const { default: inspectCostCommand } = await inspectCostDefinition.load();
 
 let io: CapturedOutput;
 let indexer: LocalIndexer | undefined;

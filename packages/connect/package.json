@@ -1,0 +1,43 @@
+{
+  "name": "@kuiralabs/midnight-connect",
+  "version": "0.1.0-rc.1",
+  "type": "module",
+  "description": "mn serve for the Midnight CLI packages: the DApp connector API over a local WebSocket JSON-RPC server, the serve manager that starts or reuses one, and the payer that pays a command through it",
+  "license": "Apache-2.0",
+  "author": "nel349",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kuiralabs/midnight-cli.git",
+    "directory": "packages/connect"
+  },
+  "bugs": {
+    "url": "https://github.com/kuiralabs/midnight-cli/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "midnight-cli-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./commands": {
+      "midnight-cli-source": "./src/commands.ts",
+      "types": "./dist/commands.d.ts",
+      "default": "./dist/commands.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@kuiralabs/midnight-chain": "0.1.0-rc.1",
+    "@kuiralabs/midnight-cli-core": "0.1.0-rc.0",
+    "@kuiralabs/midnight-wallet": "0.1.0-rc.1",
+    "ws": "^8.19.0"
+  }
+}

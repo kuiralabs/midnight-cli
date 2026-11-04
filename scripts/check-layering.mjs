@@ -154,6 +154,9 @@ export const WORKSPACE_PACKAGES = [
   { name: '@kuiralabs/midnight-cli-core', root: join(ROOT, 'packages', 'cli-core'), dir: join(ROOT, 'packages', 'cli-core', 'src'), home: 'core' },
   { name: '@kuiralabs/midnight-chain', root: join(ROOT, 'packages', 'chain'), dir: join(ROOT, 'packages', 'chain', 'src'), home: 'chain' },
   { name: '@kuiralabs/midnight-wallet', root: join(ROOT, 'packages', 'wallet'), dir: join(ROOT, 'packages', 'wallet', 'src'), home: 'wallet' },
+  { name: '@kuiralabs/midnight-contract', root: join(ROOT, 'packages', 'contract'), dir: join(ROOT, 'packages', 'contract', 'src'), home: 'contract' },
+  { name: '@kuiralabs/midnight-connect', root: join(ROOT, 'packages', 'connect'), dir: join(ROOT, 'packages', 'connect', 'src'), home: 'connect' },
+  { name: '@kuiralabs/midnight-dev', root: join(ROOT, 'packages', 'dev'), dir: join(ROOT, 'packages', 'dev', 'src'), home: 'dev' },
   // The rc engine: its files read as engine/rc/<file>, its index the package itself.
   { name: '@kuiralabs/midnight-engine-rc', root: join(ROOT, 'packages', 'engine-rc'), dir: join(ROOT, 'packages', 'engine-rc', 'src'), prefix: 'engine/rc/', home: 'engine' },
   { name: '@kuiralabs/midnight-engine-beta', root: join(ROOT, 'packages', 'engine-beta'), dir: join(ROOT, 'packages', 'engine-beta', 'src'), prefix: 'engine/beta/', home: 'engine' },
