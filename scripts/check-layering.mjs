@@ -69,8 +69,8 @@ const HOMES = [
   ['mcp', /^mcp-server\.ts$/],
   ['mcp', /^lib\/mcp\//],
 
-  // A package's agent guidance (<package>.guidance.ts) and its error codes (<package>.codes.ts) sit beside its commands.
-  ...PACKAGES.map((pkg) => [pkg, new RegExp(`^commands/${pkg}\\.(guidance|codes)\\.ts$`)]),
+  // A package's agent guidance (<package>.guidance.ts), its error codes (<package>.codes.ts) and its registry entry (<package>.package.ts) sit beside its commands.
+  ...PACKAGES.map((pkg) => [pkg, new RegExp(`^commands/${pkg}\\.(guidance|codes|package)\\.ts$`)]),
 
   // A command's definition (<name>.definition.ts) lives in its command's package.
   ['core', /^commands\/config(\.definition)?\.ts$/],
@@ -92,7 +92,7 @@ const HOMES = [
   ['wallet', /^lib\/wallet\//],
   ['wallet', /^ui\/receipt\.ts$/],
   // Swap is the wallet's: its offers are made, taken and cancelled by a wallet.
-  ['wallet', /^commands\/swap(\.definition|\.guidance)?\.ts$/],
+  ['wallet', /^commands\/swap(\.definition|\.guidance|\.package)?\.ts$/],
   ['wallet', /^lib\/swap\//],
 
   ['contract', /^commands\/(contract|inspect-cost)(\.definition)?\.ts$/],

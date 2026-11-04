@@ -10,6 +10,10 @@ export declare class LocalnetUnavailableError extends Error {
     readonly code = "LOCALNET_UNAVAILABLE";
     constructor();
 }
+export declare class NoTestConfigError extends Error {
+    readonly code = "NO_TEST_CONFIG";
+    constructor(message: string);
+}
 export declare class PrepStepFailedError extends Error {
     readonly code: string | undefined;
     constructor(step: PrepStepId, cause: unknown);
@@ -26,10 +30,18 @@ export declare const devCodes: readonly [
         readonly order: 160;
         readonly summary: "`mn localnet up` (`midnight_localnet_up()`) can't start a ledger-9 stack on this build.";
         readonly recovery: "Ask the user to start their ledger-9 stack and point mn at it (endpoint config).";
+    },
+    {
+        readonly code: "NO_TEST_CONFIG";
+        readonly exitCode: 1;
+        readonly order: 165;
+        readonly summary: "No dapp.test.json in the folder the test command ran in.";
+        readonly recovery: "Ask the user to run it from the dApp's root, or create one with `mn test create`.";
     }
 ];
 export declare const devDefinition: CommandDefinition;
 export declare const devGuidance: PackageGuidance;
+export declare const devCommands: CommandPackage;
 export declare const localnetDefinition: CommandDefinition;
 export declare const testDefinition: CommandDefinition;
 ```

@@ -366,6 +366,7 @@ export declare const genesisAddressDefinition: CommandDefinition;
 export declare const infoDefinition: CommandDefinition;
 export declare const swapDefinition: CommandDefinition;
 export declare const swapGuidance: PackageGuidance;
+export declare const swapCommands: CommandPackage;
 export declare const transferDefinition: CommandDefinition;
 export declare const OPENS_WALLET: import("@kuiralabs/midnight-cli-core").CodeSet;
 export declare const walletCodes: readonly [
@@ -379,5 +380,6 @@ export declare const walletCodes: readonly [
 ];
 export declare const walletDefinition: CommandDefinition;
 export declare const walletGuidance: PackageGuidance;
+export declare const walletCommands: CommandPackage;
 export declare function showPaidStep(reporter: SpinnerReporter, event: ProgressEvent | StepFailed): void;
 ```

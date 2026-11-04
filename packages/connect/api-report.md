@@ -67,5 +67,6 @@ export interface RpcServerOptions {
 
 ```ts
 export declare const connectGuidance: PackageGuidance;
+export declare const connectCommands: CommandPackage;
 export declare const serveDefinition: CommandDefinition;
 ```

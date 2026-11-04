@@ -15,8 +15,10 @@ export { genesisAddressDefinition } from './commands/genesis-address.definition.
 export { infoDefinition } from './commands/info.definition.ts';
 export { swapDefinition } from './commands/swap.definition.ts';
 export { swapGuidance } from './commands/swap.guidance.ts';
+export { swapCommands } from './commands/swap.package.ts';
 export { transferDefinition } from './commands/transfer.definition.ts';
 export { OPENS_WALLET, walletCodes } from './commands/wallet.codes.ts';
 export { walletDefinition } from './commands/wallet.definition.ts';
 export { walletGuidance } from './commands/wallet.guidance.ts';
+export { walletCommands } from './commands/wallet.package.ts';
 export { showPaidStep } from './lib/wallet/paid-call.ts';

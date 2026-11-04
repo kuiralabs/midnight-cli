@@ -1052,6 +1052,7 @@ export declare const PAYS: import("../index.ts").CodeSet;
 export declare const READS_OFFERS: import("../index.ts").CodeSet;
 export declare const RESOLVES_NETWORK: import("../index.ts").CodeSet;
 export declare const coreGuidance: PackageGuidance;
+export declare const coreCommands: CommandPackage;
 ```
 
 ## `@kuiralabs/midnight-cli-core/engine`

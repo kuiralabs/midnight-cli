@@ -134,10 +134,10 @@ describe('the accepted flags match the code', () => {
 
   // A command's definition (<name>.definition.ts) sits beside it and is not a
   // command, nor is a package's agent guidance (<package>.guidance.ts) or its
-  // error codes (<package>.codes.ts).
+  // error codes (<package>.codes.ts) or its registry entry (<package>.package.ts).
   // Commands sit in commands/ under src/ or a workspace package.
   const commandPaths = new Map(sourceFiles()
-    .filter((f) => /\/commands\/[^/]+\.ts$/.test(f) && !f.endsWith('.definition.ts') && !f.endsWith('.guidance.ts') && !f.endsWith('.codes.ts'))
+    .filter((f) => /\/commands\/[^/]+\.ts$/.test(f) && !f.endsWith('.definition.ts') && !f.endsWith('.guidance.ts') && !f.endsWith('.codes.ts') && !f.endsWith('.package.ts'))
     .map((f) => [basename(f), f]));
   const commandFiles = [...commandPaths.keys()];
 

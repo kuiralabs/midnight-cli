@@ -111,10 +111,12 @@ Stable identifiers used in error messages and structured error objects, with the
 | `CHAIN_CLOCK_BEHIND` | 4 | The chain's clock lags this computer's (a local chain after sleep), so Dust estimates don't hold. |
 | `UNSUPPORTED_LEDGER` | 4 | The network is on ledger 8; this build supports ledger 9 only. |
 | `LOCALNET_UNAVAILABLE` | 4 | `mn localnet up` (`midnight_localnet_up()`) can't start a ledger-9 stack on this build. |
+| `NO_TEST_CONFIG` | 1 | No dapp.test.json in the folder the test command ran in. |
 | `LOCAL_STACK_UNREACHABLE` | 4 | No ledger-9 stack answers at the configured endpoints. |
 | `AMBIGUOUS_LOCAL_STACKS` | 4 | Several local Midnight stacks are running and no endpoints are configured, so mn won't guess. |
 | `UNSUPPORTED_NODE` | 1 | Node.js is older than 22 (22.18 for mn grant). |
 | `NO_NODE_RUNTIME` | 1 | Contract scripts run under Node.js, and none was found on PATH. |
+| `CONTRACT_NOT_COMPILED` | 1 | No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json). |
 | `NO_ACCOUNT` | 1 | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. |
 | `CALLER_PIN_UNSUPPORTED` | 2 | A grant request pins the contract that calls the account, and the account on this network (stagenet) has no caller pin; nothing was submitted. |
 | `WRONG_PASSPHRASE` | 2 | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. |

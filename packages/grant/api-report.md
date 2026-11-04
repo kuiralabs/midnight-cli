@@ -46,4 +46,5 @@ export declare const grantCodes: readonly [
 ];
 export declare const grantDefinition: CommandDefinition;
 export declare const grantGuidance: PackageGuidance;
+export declare const grantCommands: CommandPackage;
 ```

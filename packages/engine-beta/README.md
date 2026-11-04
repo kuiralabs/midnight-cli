@@ -1,0 +1,47 @@
+# @kuiralabs/midnight-engine-beta
+
+The Midnight CLI's engine for the SDK's beta set that stagenet runs (wallet SDK beta split packages, ledger 9 rc.3, midnight-js 5 beta): everything the CLI packages do with that SDK set (wallets, the ledger, contracts, readers, the account package) behind core's engine interface. It runs stagenet. Only an engine imports the SDK; the other packages reach it through the engine your host loads.
+
+## Install
+
+```sh
+npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-engine-beta@next
+```
+
+Install with npm: this package ships an `npm-shrinkwrap.json` that pins its SDK set, and npm honours it, so it gets exactly the SDK it was tested with (one copy of each ledger). A layout with two copies is refused with `MIXED_SDK_LAYOUT`. A program that also uses the other networks (`@kuiralabs/midnight-engine-rc`) installs both; a process loads one of them.
+
+## Entry points
+
+| Import | What it holds |
+|---|---|
+| `@kuiralabs/midnight-engine-beta` | `createBetaEngine(host)`: the engine, for a host's `engineLoader` |
+
+Every export and its signature is in [api-report.md](https://github.com/kuiralabs/midnight-cli/blob/main/packages/engine-beta/api-report.md).
+
+## Codes
+
+This package owns no codes of its own. The SDK's errors are read once, here, and given core's codes (`PROOF_FAILURE`, `TX_REJECTED`, `STALE_UTXO` and the rest, in core's README), so a program never matches the SDK's messages.
+
+## Loading it
+
+A host loads an engine the first time a call needs one, by the SDK set of the call's network: `rc` for preprod, preview and a local network, `beta` for stagenet. A process runs one set; a call on a network of the other set fails with `OTHER_SDK_SET`, so a program that needs both runs two processes.
+
+```js
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { createHost } from '@kuiralabs/midnight-cli-core';
+
+// One process runs one SDK set: the loader imports only the engine of the set asked for.
+const host = createHost({
+  paths: { stateRoot: join(homedir(), '.my-app'), home: homedir() },
+  engineLoader: async (set, host) => set === 'rc'
+    ? (await import('@kuiralabs/midnight-engine-rc')).createRcEngine(host)
+    : (await import('@kuiralabs/midnight-engine-beta')).createBetaEngine(host),
+});
+
+const engine = await host.engines.for('stagenet');
+const seed = Buffer.from(process.env.WALLET_SEED, 'hex');
+console.log(engine.set, engine.keys.unshieldedAddress(seed, 'stagenet'));
+```
+
+With `WALLET_SEED` a seed in hex, it prints `beta` and the wallet's first address on stagenet (`mn_addr_stagenet1…`). A test in mn runs the block above as it is written.

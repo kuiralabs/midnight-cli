@@ -96,6 +96,7 @@ export declare const chainCodes: readonly [
 ];
 export declare const READS_CHAIN: import("@kuiralabs/midnight-cli-core").CodeSet;
 export declare const chainGuidance: PackageGuidance;
+export declare const chainCommands: CommandPackage;
 export declare const statusDefinition: CommandDefinition;
 export declare const txDefinition: CommandDefinition;
 ```

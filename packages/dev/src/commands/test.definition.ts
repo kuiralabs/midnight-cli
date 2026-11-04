@@ -175,7 +175,7 @@ export const testDefinition: CommandDefinition = {
   needsWalletSdk: true,
   shell: {},
   errors: {
-    codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'NO_NODE_RUNTIME'],
+    codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'CONTRACT_NOT_COMPILED', 'NO_NODE_RUNTIME', 'NO_TEST_CONFIG'],
     // `test run` returns it when a test fails, with the results as its JSON (COMMAND_FAILED under MCP).
     outcomes: [{ exitCode: EXIT_GENERAL_ERROR, when: 'A test failed' }],
   },

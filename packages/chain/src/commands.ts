@@ -4,5 +4,6 @@
 
 export { chainCodes, READS_CHAIN } from './commands/chain.codes.ts';
 export { chainGuidance } from './commands/chain.guidance.ts';
+export { chainCommands } from './commands/chain.package.ts';
 export { statusDefinition } from './commands/status.definition.ts';
 export { txDefinition } from './commands/tx.definition.ts';

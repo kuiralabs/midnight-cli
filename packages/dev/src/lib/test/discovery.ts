@@ -20,7 +20,7 @@ export function discoverDappConfig(dir?: string): { config: DappTestConfig; conf
   const configPath = join(dappDir, CONFIG_FILENAME);
 
   if (!existsSync(configPath)) {
-    throw new Error(
+    throw new NoTestConfigError(
       `No ${CONFIG_FILENAME} found in ${dappDir}\n` +
       `Run this command from the root of a dApp project, or create a ${CONFIG_FILENAME} file.`
     );
@@ -297,4 +297,14 @@ function validateActions(raw: unknown, path: string): TestActions {
   }
 
   return { actions: obj.actions as TestActions['actions'] };
+}
+
+/** No dapp.test.json in the folder a test command runs in. */
+export class NoTestConfigError extends Error {
+  readonly code = 'NO_TEST_CONFIG';
+  constructor(message: string) {
+    super(message);
+    this.name = 'NoTestConfigError';
+    Object.setPrototypeOf(this, NoTestConfigError.prototype);
+  }
 }

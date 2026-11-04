@@ -159,10 +159,12 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 | `CHAIN_CLOCK_BEHIND` | The chain's clock lags this computer's (a local chain after sleep), so Dust estimates don't hold. | Wait for it to catch up, or ask the user to restart the local chain. |
 | `UNSUPPORTED_LEDGER` | The network is on ledger 8; this build supports ledger 9 only. | Tell the user: this network needs midnight-wallet-cli 0.5.x. Don't retry. |
 | `LOCALNET_UNAVAILABLE` | `mn localnet up` (`midnight_localnet_up()`) can't start a ledger-9 stack on this build. | Ask the user to start their ledger-9 stack and point mn at it (endpoint config). |
+| `NO_TEST_CONFIG` | No dapp.test.json in the folder the test command ran in. | Ask the user to run it from the dApp's root, or create one with `mn test create`. |
 | `LOCAL_STACK_UNREACHABLE` | No ledger-9 stack answers at the configured endpoints. | Ask the user to start their stack or fix the configured node / indexer-ws / proof-server endpoints. |
 | `AMBIGUOUS_LOCAL_STACKS` | Several local Midnight stacks are running and no endpoints are configured, so mn won't guess. | Ask the user which stack to use; they set its endpoints with `midnight config set`. Don't retry blindly. |
 | `UNSUPPORTED_NODE` | Node.js is older than 22 (22.18 for mn grant). | Ask the user to install a current Node.js. |
 | `NO_NODE_RUNTIME` | Contract scripts run under Node.js, and none was found on PATH. | Ask the user to install Node.js 22 or later, or to run mn under Node. |
+| `CONTRACT_NOT_COMPILED` | No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json). | Ask the user to compile the contract (compact compile), or pass the dApp folder (path) or the managed folder (managed). |
 | `NO_ACCOUNT` | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. | Offer `midnight_grant_deploy()`, after telling the user how its owner key is kept (see the allowance flow). |
 | `CALLER_PIN_UNSUPPORTED` | A grant request pins the contract that calls the account, and the account on this network (stagenet) has no caller pin; nothing was submitted. | Tell the user; ask the agent for a grant request that names no calling contract, or issue it on undeployed. |
 | `WRONG_PASSPHRASE` | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. | Ask the user to correct `MN_PASSPHRASE` in the MCP server's environment. Nothing was changed. |

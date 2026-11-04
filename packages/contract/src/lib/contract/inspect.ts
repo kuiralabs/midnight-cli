@@ -109,7 +109,7 @@ export function findContractInfo(startDir: string, contractName?: string): { inf
     return loadContractInfo(infoPath, join(managedDir, chosen), siblings);
   }
 
-  throw new Error(
+  throw new ContractNotCompiledError(
     `No compiled contract found in ${startDir}\n` +
     `Expected: managed/<name>/compiler/${CONTRACT_INFO_FILENAME}\n` +
     `Searched: ${SCAN_CANDIDATES.map((s) => s ? `${s}/managed/` : 'managed/').join(', ')}\n` +
@@ -264,4 +264,14 @@ export function toJsonOutput(info: ContractInfo): Record<string, unknown> {
       returnType: formatCompactType(w['result type']),
     })),
   };
+}
+
+/** No compiled contract (managed/<name>/compiler/contract-info.json) where one was looked for. */
+export class ContractNotCompiledError extends Error {
+  readonly code = 'CONTRACT_NOT_COMPILED';
+  constructor(message: string) {
+    super(message);
+    this.name = 'ContractNotCompiledError';
+    Object.setPrototypeOf(this, ContractNotCompiledError.prototype);
+  }
 }
