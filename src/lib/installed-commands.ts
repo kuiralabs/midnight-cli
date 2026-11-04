@@ -7,13 +7,13 @@
 // server's classification of an error by its code.
 
 import { getValidNetworkNames, createPackageRegistry, type FlagDefinition, type GlobalFlagHelp } from '@kuiralabs/midnight-cli-core';
-import { configDefinition, coreGuidance, coreCodes } from '@kuiralabs/midnight-cli-core/commands';
-import { walletDefinition, generateDefinition, infoDefinition, balanceDefinition, addressDefinition, genesisAddressDefinition, airdropDefinition, transferDefinition, dustDefinition, cacheDefinition, swapDefinition, walletGuidance, swapGuidance, walletCodes } from '@kuiralabs/midnight-wallet/commands';
-import { inspectCostDefinition, contractDefinition, contractGuidance, contractCodes } from '@kuiralabs/midnight-contract/commands';
-import { serveDefinition, connectGuidance } from '@kuiralabs/midnight-connect/commands';
-import { testDefinition, devDefinition, localnetDefinition, devGuidance, devCodes } from '@kuiralabs/midnight-dev/commands';
-import { grantDefinition, grantGuidance, grantCodes } from '@kuiralabs/midnight-grant/commands';
-import { statusDefinition, txDefinition, chainGuidance, chainCodes } from '@kuiralabs/midnight-chain/commands';
+import { coreCommands } from '@kuiralabs/midnight-cli-core/commands';
+import { walletCommands, swapCommands } from '@kuiralabs/midnight-wallet/commands';
+import { contractCommands } from '@kuiralabs/midnight-contract/commands';
+import { connectCommands } from '@kuiralabs/midnight-connect/commands';
+import { devCommands } from '@kuiralabs/midnight-dev/commands';
+import { grantCommands } from '@kuiralabs/midnight-grant/commands';
+import { chainCommands } from '@kuiralabs/midnight-chain/commands';
 import { helpDefinition } from '../commands/help.definition.ts';
 import { manualDefinition } from '../commands/manual.definition.ts';
 
@@ -43,18 +43,13 @@ const GLOBAL_FLAGS_HELP: readonly GlobalFlagHelp[] = [
 
 /** Every package, in the layering's order; the shell's own commands last, its guidance being the skeletons. */
 export const installedCommands = createPackageRegistry([
-  { name: 'core', commands: [configDefinition], guidance: coreGuidance, codes: coreCodes },
-  { name: 'chain', commands: [statusDefinition, txDefinition], guidance: chainGuidance, codes: chainCodes },
-  {
-    name: 'wallet',
-    commands: [walletDefinition, generateDefinition, infoDefinition, balanceDefinition, addressDefinition, genesisAddressDefinition, airdropDefinition, transferDefinition, dustDefinition, cacheDefinition],
-    guidance: walletGuidance,
-    codes: walletCodes,
-  },
-  { name: 'contract', commands: [inspectCostDefinition, contractDefinition], guidance: contractGuidance, codes: contractCodes },
-  { name: 'connect', commands: [serveDefinition], guidance: connectGuidance },
-  { name: 'swap', commands: [swapDefinition], guidance: swapGuidance },
-  { name: 'dev', commands: [testDefinition, devDefinition, localnetDefinition], guidance: devGuidance, codes: devCodes },
-  { name: 'grant', commands: [grantDefinition], guidance: grantGuidance, codes: grantCodes },
+  coreCommands,
+  chainCommands,
+  walletCommands,
+  contractCommands,
+  connectCommands,
+  swapCommands,
+  devCommands,
+  grantCommands,
   { name: 'shell', commands: [helpDefinition, manualDefinition], guidance: { pieces: [] } },
 ], GLOBAL_FLAGS, GLOBAL_FLAGS_HELP);

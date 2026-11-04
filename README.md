@@ -343,6 +343,12 @@ The legacy `midnight-wallet://skill` URI still works as an alias for `/full`.
 
 Every tool error returns `{ error: true, code: <CODE>, message: <human prose> }`. Agents should index on the stable `code` (`INSUFFICIENT_BALANCE`, `DUST_REQUIRED`, `INVALID_DUST_PROOF`, `STALE_CACHE`, `PROOF_FAILURE`, `SYNC_TIMEOUT`, `NETWORK_ERROR`, `WALLET_NOT_FOUND`, `INVALID_ARGS`, `TX_REJECTED`, `STALE_UTXO`, `PROOF_TIMEOUT`, `CANCELLED`, `UNKNOWN`) — full taxonomy + recovery recipes are in `docs/SKILL.md`.
 
+## Using mn's packages in your program
+
+mn is built from packages a program can install on its own: `@kuiralabs/midnight-cli-core` (the host, typed errors and codes, running a command), `@kuiralabs/midnight-chain`, `@kuiralabs/midnight-wallet` (with swap), `@kuiralabs/midnight-contract`, `@kuiralabs/midnight-connect`, `@kuiralabs/midnight-dev`, `@kuiralabs/midnight-grant`, and the two SDK engines, `@kuiralabs/midnight-engine-rc` and `@kuiralabs/midnight-engine-beta`. A program calls their functions with plain values (bigint amounts, typed results and receipts), or mounts their commands in its own command line or MCP server, with its own state root, settings, prompter and output; errors carry a `code` it can act on without reading messages. All are release candidates on the `next` tag; install them with npm.
+
+Start with [core's README](packages/cli-core/README.md): mounting commands, and what a program does to its own process for the wallet SDK. Each package's README lists its entry points, its codes and one example, and its `api-report.md` lists every export.
+
 ## Issues & Feedback
 
 Found a bug or have a feature request? [Open an issue](https://github.com/kuiralabs/midnight-cli/issues).

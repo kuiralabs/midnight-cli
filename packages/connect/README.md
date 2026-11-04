@@ -1,0 +1,68 @@
+# @kuiralabs/midnight-connect
+
+`mn serve` for the Midnight CLI packages: the DApp connector API over a local WebSocket JSON-RPC server, the serve manager that starts one or reuses one already running, and the payer that pays a command through it. A command that pays (contract, swap, grant, dev) takes this payer.
+
+## Install
+
+```sh
+npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-wallet@next @kuiralabs/midnight-connect@next @kuiralabs/midnight-engine-rc@next
+```
+
+Every package is a release candidate on the `next` tag. Install with npm: each engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm honours it. A program that runs the SDK installs an engine: `@kuiralabs/midnight-engine-rc` for preprod, preview and a local network, `@kuiralabs/midnight-engine-beta` for stagenet. How a program sets up its process for the SDK (the rejection guard, the heap, Ctrl-C, ending) is in [core's README](https://github.com/kuiralabs/midnight-cli/blob/main/packages/cli-core/README.md#your-process-what-mns-shell-does-that-you-must-do).
+
+## Entry points
+
+| Import | What it holds |
+|---|---|
+| `@kuiralabs/midnight-connect` | The payer (`servePayer`, `servePayerAt`), the serve manager and the RPC server |
+| `@kuiralabs/midnight-connect/commands` | `serve` as a registry entry (`connectCommands`) |
+
+Every export and its signature is in [api-report.md](https://github.com/kuiralabs/midnight-cli/blob/main/packages/connect/api-report.md).
+
+## What you call
+
+- `servePayer`: the payer that pays through a running `mn serve` for the wallet and network asked, starting one when none runs; `servePayerAt` for one at a given port.
+- `startServeOrReuse`, `probeServeNetwork`: start or find a server.
+- `createRpcServer`: the JSON-RPC server itself, over handlers you give.
+
+## Codes
+
+This package owns no codes of its own: its errors carry core's, and those of the packages below it, each listed in its README. `classifyError(err, registry)` gives an error's code and exit code by that code alone.
+
+## Mounting its commands
+
+The commands are definitions your program mounts in its own command line, with your state root, settings and notices (core's README explains each part). Its commands name codes the packages it builds on own, so the registry holds their entries too, as mn's does; a registry missing one is refused when it is built. Built on core's example, this one adds `serve` beside the wallet's commands, which make the wallet it serves:
+
+```js
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { classifyError, createHost, createPackageRegistry, parseArgs, runCommand, settingsFromEnvironment, UsageError } from '@kuiralabs/midnight-cli-core';
+import { coreCommands } from '@kuiralabs/midnight-cli-core/commands';
+import { chainCommands } from '@kuiralabs/midnight-chain/commands';
+import { walletCommands } from '@kuiralabs/midnight-wallet/commands';
+import { connectCommands } from '@kuiralabs/midnight-connect/commands';
+import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
+
+const registry = createPackageRegistry([coreCommands, chainCommands, walletCommands, connectCommands], []);
+const host = createHost({
+  paths: { stateRoot: join(homedir(), '.my-app'), home: homedir() },
+  settings: () => settingsFromEnvironment(process.env),
+  notice: (line) => console.error(line),
+  engineLoader: async (_set, host) => createRcEngine(host),
+});
+const output = { result: (data) => console.log(JSON.stringify(data)), stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) };
+
+const args = parseArgs(process.argv.slice(2));
+try {
+  const definition = registry.find(args.command ?? '');
+  if (definition === undefined) throw new UsageError(`Unknown command: ${args.command}`);
+  const outcome = await runCommand(definition, args, { host, output });
+  process.exitCode = outcome?.exitCode ?? 0;
+} catch (err) {
+  const { errorCode, exitCode } = classifyError(err, registry);
+  console.error(`${errorCode}: ${err.message}`);
+  process.exitCode = exitCode;
+}
+```
+
+`node my-cli.mjs serve --wallet alice --network preview` serves alice's wallet until it is stopped; for a wallet that doesn't exist it ends with `WALLET_NOT_FOUND` and exit code 3. A test in mn runs the block above as it is written.

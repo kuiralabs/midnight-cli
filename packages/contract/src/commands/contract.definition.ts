@@ -156,7 +156,7 @@ export const contractDefinition: CommandDefinition = {
   intro: { brief: 'Inspect, deploy, call contracts', order: 10 },
   needsWalletSdk: true,
   shell: { payer: true },
-  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'NO_NODE_RUNTIME', 'NO_PAYER'] },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'CONTRACT_NOT_COMPILED', 'NO_NODE_RUNTIME', 'NO_PAYER'] },
   load: () => import('./contract.ts'),
   mcp: {
     tools: [

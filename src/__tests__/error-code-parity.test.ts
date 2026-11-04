@@ -10,7 +10,8 @@
 // unreachable indexer, node or proof server as NETWORK_ERROR, whatever their
 // messages say; and (Y54) a ZK proof that timed out as PROOF_TIMEOUT, and a
 // contract run's transaction the node refused as TX_REJECTED whatever its
-// reason's words. A test checks that every row that changed says so.
+// reason's words; and (Y64) no compiled contract as CONTRACT_NOT_COMPILED and
+// no dapp.test.json as NO_TEST_CONFIG. A test checks that every row that changed says so.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -33,6 +34,8 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { readPassphrase, assertWalletFileExists, assertWalletRemovable, setActiveWallet, walletSecretFrom, assertWalletCanPay, NoSuchOfferError } from '@kuiralabs/midnight-wallet';
 import { walletDefinition, generateDefinition, addressDefinition, airdropDefinition, balanceDefinition } from '@kuiralabs/midnight-wallet/commands';
 import { LocalnetUnavailableError, PrepStepFailedError } from '@kuiralabs/midnight-dev';
+import { testDefinition } from '@kuiralabs/midnight-dev/commands';
+import { findContractInfo } from '@kuiralabs/midnight-contract';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { saveWalletConfig } from '../../test-support/plain-wallet.ts';
@@ -214,6 +217,9 @@ const ROWS: Row[] = [
   ['no account', () => { throw new NoAccountError('alice', 'undeployed'); }, as('NO_ACCOUNT', 1), as('NO_ACCOUNT', 1)],
   ['no state root (approved: was UNKNOWN)', () => createHost().paths(), as('UNKNOWN', 1), as('NO_STATE_ROOT', 1)],
   ['no payer (approved: was UNKNOWN)', () => payerFor('transfer', undefined), as('UNKNOWN', 1), as('NO_PAYER', 1)],
+  // (Y64) Found mounting the commands in a program: both read as UNKNOWN.
+  ['no compiled contract (approved: was UNKNOWN)', () => findContractInfo(root), as('UNKNOWN', 1), as('CONTRACT_NOT_COMPILED', 1)],
+  ['no dapp.test.json where mn test runs (approved: was UNKNOWN)', async () => cliCall((await testDefinition.load()).default, parseArgs(['test', 'list', '--json'])), as('UNKNOWN', 1), as('NO_TEST_CONFIG', 1)],
   // Without the registry its code came from its result's text: here, words that read as a network error.
   ['a failed command (approved: was by its text)', () => { throw new CommandFailedError('test run', 1, { overall: 'fail', error: 'network error' }); }, as('NETWORK_ERROR', 4), as('COMMAND_FAILED', 1)],
   ['an error no rule knows', () => { throw new Error('Something unexpected happened'); }, as('UNKNOWN', 1), as('UNKNOWN', 1)],

@@ -53,6 +53,10 @@ export interface ContractInfo {
     witnesses: WitnessInfo[];
     siblings: string[];
 }
+export declare class ContractNotCompiledError extends Error {
+    readonly code = "CONTRACT_NOT_COMPILED";
+    constructor(message: string);
+}
 export declare function findContractInfo(startDir: string, contractName?: string): {
     info: ContractInfo;
     infoPath: string;
@@ -203,9 +207,17 @@ export declare const contractCodes: readonly [
         readonly order: 200;
         readonly summary: "Contract scripts run under Node.js, and none was found on PATH.";
         readonly recovery: "Ask the user to install Node.js 22 or later, or to run mn under Node.";
+    },
+    {
+        readonly code: "CONTRACT_NOT_COMPILED";
+        readonly exitCode: 1;
+        readonly order: 205;
+        readonly summary: "No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json).";
+        readonly recovery: "Ask the user to compile the contract (compact compile), or pass the dApp folder (path) or the managed folder (managed).";
     }
 ];
 export declare const contractDefinition: CommandDefinition;
 export declare const contractGuidance: PackageGuidance;
+export declare const contractCommands: CommandPackage;
 export declare const inspectCostDefinition: CommandDefinition;
 ```

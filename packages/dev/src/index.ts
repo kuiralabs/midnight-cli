@@ -6,4 +6,5 @@
 // guidance are "./commands".
 
 export { getComposePath, LocalnetUnavailableError } from './lib/localnet.ts';
+export { NoTestConfigError } from './lib/test/discovery.ts';
 export { PrepStepFailedError } from './lib/test/prep-runner.ts';

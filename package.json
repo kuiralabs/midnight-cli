@@ -67,7 +67,8 @@
     "api-report": "node scripts/api-report.mjs write",
     "typecheck": "tsc --noEmit",
     "skill-docs": "tsx --conditions=midnight-cli-source scripts/write-skill-docs.ts",
-    "readme-commands": "tsx --conditions=midnight-cli-source scripts/write-readme-commands.ts"
+    "readme-commands": "tsx --conditions=midnight-cli-source scripts/write-readme-commands.ts",
+    "package-readmes": "tsx --conditions=midnight-cli-source scripts/write-package-readmes.ts"
   },
   "dependencies": {
     "@kuiralabs/midnight-chain": "0.1.0-rc.2",

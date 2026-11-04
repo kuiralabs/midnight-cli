@@ -5,3 +5,4 @@
 export { configDefinition } from './commands/config.definition.ts';
 export { coreCodes, ENGINE_SYNC, EVERY_COMMAND, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from './commands/core.codes.ts';
 export { coreGuidance } from './commands/core.guidance.ts';
+export { coreCommands } from './commands/core.package.ts';
