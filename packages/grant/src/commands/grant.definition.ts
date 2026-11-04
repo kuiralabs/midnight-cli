@@ -74,6 +74,17 @@ export const grantDefinition: CommandDefinition = {
       agent: { type: 'string', description: 'Most one payment may be' },
     },
     {
+      name: 'token',
+      takesValue: true,
+      subcommands: ['deposit'],
+      help: [
+        '--token <type>                deposit: the shielded token to deposit, by its raw type (64 hex',
+        '                              characters, as balance lists it); the amount is then a whole number',
+        '                              of the token\'s smallest unit. Without it: NIGHT, the amount in NIGHT',
+      ],
+      agent: { type: 'string', description: 'Shielded token to deposit, raw type (64 hex, as balance lists it); amount then in its smallest unit. Omit for NIGHT' },
+    },
+    {
       name: 'wallet',
       takesValue: true,
       help: ['--wallet <name>               The wallet that owns the account and pays the fees'],
@@ -114,6 +125,7 @@ export const grantDefinition: CommandDefinition = {
     flags: [
       'deploy                        Deploy this wallet\'s account and activate its owner key',
       'deposit <amount>              Move <amount> NIGHT of this wallet\'s shielded NIGHT into its account',
+      '                              (with --token, <amount> of that shielded token, in its smallest unit)',
       'status                        The account, its owner key and what it holds',
       'list                          Every grant on the account',
       'issue <link>                  Show the grant an agent\'s request link would get; issue it with --yes',
@@ -131,6 +143,7 @@ export const grantDefinition: CommandDefinition = {
       { flag: 'per-call' },
       { flag: 'max-coin' },
       { flag: 'expires-in' },
+      { flag: 'token' },
       { flag: 'wallet' },
       { flag: 'network' },
       { flag: 'node' },
@@ -141,6 +154,7 @@ export const grantDefinition: CommandDefinition = {
     examples: [
       'midnight grant deploy',
       'midnight grant deposit 2',
+      'midnight grant deposit 500 --token <token type>',
       'midnight grant status',
       'midnight grant issue \'<grant request link>\'',
       'midnight grant issue \'<grant request link>\' --cap 500000 --yes',
@@ -161,7 +175,8 @@ export const grantDefinition: CommandDefinition = {
       request: 'Who would spend, who they can pay, and the limits the grant gets (issue)',
       grantId: 'The issued grant\'s id (issue with --yes)',
       revoked: 'The revoked grant\'s id (revoke)',
-      amount: 'The NIGHT deposited, as given (deposit)',
+      amount: 'The amount deposited, as given: NIGHT, or with --token the token\'s smallest unit (deposit)',
+      token: 'The raw type of the token deposited, when it is not NIGHT (deposit with --token)',
       value: 'The same in the token\'s smallest unit, as status and --cap count it (deposit)',
       txHash: 'The deposit\'s transaction (deposit)',
       blockHeight: 'The block it landed in (deposit)',
@@ -227,10 +242,11 @@ export const grantDefinition: CommandDefinition = {
       },
       {
         name: 'midnight_grant_deposit',
-        description: 'Move shielded NIGHT from the wallet into its account, where a grant lets an agent spend it (returns pending token). The wallet needs that much shielded NIGHT, plus Dust for the fee. mn has no command to take it back out.',
+        description: 'Move shielded NIGHT, or another shielded token with token, from the wallet into its account, where a grant lets an agent spend it (returns pending token). The wallet needs that much of it shielded, plus Dust for the fee. mn has no command to take it back out.',
         annotations: { destructiveHint: true, openWorldHint: true },
         params: [
-          { name: 'amount', schema: { type: 'string', description: 'NIGHT to deposit, e.g. "2" (up to 6 decimals)' } },
+          { name: 'amount', schema: { type: 'string', description: 'NIGHT to deposit, e.g. "2" (up to 6 decimals); with token, a whole number of its smallest unit' } },
+          { flag: 'token' },
           { flag: 'wallet' },
           { flag: 'network' },
         ],
@@ -241,7 +257,8 @@ export const grantDefinition: CommandDefinition = {
           async check(params, call) {
             const { request, walletName, target, account } = await checkGrant(params, call);
             if (request.subcommand !== 'deposit' || account === null) throw new Error('A deposit was prepared as something else');
-            return `Deposit ${request.amount} shielded NIGHT (${request.value} in the smallest unit) from wallet ${walletName} into its account ${account.address} on ${target.network}`;
+            const what = request.token === undefined ? `${request.amount} shielded NIGHT (${request.value} in the smallest unit)` : `${request.value} of shielded token ${request.token} (in its smallest unit)`;
+            return `Deposit ${what} from wallet ${walletName} into its account ${account.address} on ${target.network}`;
           },
         },
         order: 32,

@@ -101,7 +101,7 @@ describe('the accepted flags match the code', () => {
     'resolvePayingTarget(': ['network', 'node', 'indexer-ws', 'proof-server'],
     'networkChoiceFromArgs(': ['network', 'node', 'indexer-ws', 'proof-server'],
     // Reads the request's flags, and the network and endpoints.
-    'prepareGrant(': ['backup', 'cap', 'expires-in', 'max-coin', 'per-call', 'yes', 'network', 'node', 'indexer-ws', 'proof-server', 'wallet'],
+    'prepareGrant(': ['backup', 'cap', 'expires-in', 'max-coin', 'per-call', 'token', 'yes', 'network', 'node', 'indexer-ws', 'proof-server', 'wallet'],
     // The swap request's terms and expiry, and the network and endpoints.
     'prepareMake(': ['give', 'give-token', 'want', 'want-token', 'expires-in', 'out', 'network', 'node', 'indexer-ws', 'proof-server'],
     'prepareTake(': ['give', 'give-token', 'want', 'want-token', 'network', 'node', 'indexer-ws', 'proof-server'],

@@ -141,6 +141,21 @@ describe('midnight_grant_deposit', () => {
     expect(JSON.parse(fs.readFileSync(path.join(recordsDir, 'owner.json'), 'utf8'))).toEqual(OWNER_RECORD);
   }, 60_000);
 
+  it('names the token, by its raw type, and the amount in its smallest unit when one is given', async () => {
+    const token = '02005c8a9e3d6e3a2b0e1c4f7d9a8b6c5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b';
+    const pending = await call('midnight_grant_deposit', { amount: '9007199254740993', token, wallet: 'alice', network: 'undeployed', ...ENDPOINTS });
+
+    expect(pending.error, String(pending.message)).toBeUndefined();
+    expect(pending.description).toBe(`Deposit 9007199254740993 of shielded token ${token} (in its smallest unit) from wallet alice into its account ${ACCOUNT} on undeployed${VIA}`);
+    expect(fs.readdirSync(recordsDir)).toEqual(['owner.json']);
+  }, 60_000);
+
+  it('refuses a token that is not a raw token type before any token is given', async () => {
+    const refused = await call('midnight_grant_deposit', { amount: '5', token: 'night', wallet: 'alice', network: 'undeployed', ...ENDPOINTS });
+    expect(refused).toMatchObject({ error: true, code: 'INVALID_ARGS' });
+    expect(refused.token).toBeUndefined();
+  }, 60_000);
+
   it('refuses a deposit that can\'t run before any token is given', async () => {
     const refused = await call('midnight_grant_deposit', { amount: '1.0000001', wallet: 'alice', network: 'undeployed', ...ENDPOINTS });
     expect(refused).toMatchObject({ error: true, code: 'INVALID_ARGS' });

@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs';
 // confirmed. The others are paid by this wallet, through its DApp connector in
 // this process: no server, no port.
 
-import { type ParsedArgs, hasFlag, getFlag, DustRequiredError, UsageError, type CallContext, payerFor, throwIfCancelled, withTransportCode } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, hasFlag, getFlag, DustRequiredError, UsageError, type CallContext, payerFor, throwIfCancelled, withTransportCode, NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core';
 import { dim, header, keyValue, formatNight, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { accountChainFor } from '../lib/grant/account-chain.ts';
 import { type GrantAccount, openGrantAccount, ownerDeviceOf } from '../lib/grant/account.ts';
@@ -47,6 +47,14 @@ function shortOfShieldedNight(held: bigint, value: bigint): UsageError {
   );
 }
 
+/** The same refusal for a deposit of another token, by its raw type, both amounts in its smallest unit. */
+function shortOfShieldedToken(token: string, held: bigint, value: bigint): UsageError {
+  return new UsageError(
+    `Not enough of token ${token} for this deposit: the wallet holds ${held} of it shielded and the deposit takes ${value}, in the token's smallest unit. `
+    + 'midnight balance lists the wallet\'s shielded tokens by their raw type, with what it holds of each.',
+  );
+}
+
 export default async function grantCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const { request, target, walletName, recordsDir, account } = await prepareGrant(args, ctx.config.paths.stateRoot, ctx.host);
   const jsonMode = hasFlag(args, 'json');
@@ -64,7 +72,7 @@ export default async function grantCommand(args: ParsedArgs, ctx: CallContext): 
   // Reading the account or a request submits nothing: a wallet with no Dust can still do it, and none is opened.
   const payer = paysAFee(request) ? payerFor(`grant ${request.subcommand}`, ctx) : undefined;
   const funds = payer ? await payer.assertCanPay(target, walletFlag, spinnerFor('Checking wallet...'), ctx.signal) : undefined;
-  const paying = payer ? await openPayingWallet(payer, target, (await accountChainFor(ctx.host.engines, target.network)).connector, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal) : undefined;
+  const paying = payer ? await openPayingWallet(payer, target, (await accountChainFor(ctx.host.engines, target.network)).connector, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal, request.subcommand === 'deposit' ? { shielded: true } : undefined) : undefined;
   try {
     await runOwned(request, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor }, ctx);
   } finally {
@@ -183,17 +191,22 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         const { connectOver, depositShielded } = owned.chain.deposit;
         if (account === null) throw new Error('A deposit was prepared without an account');
         const wallet = await payingWallet();
+        const { token } = request;
         const value = BigInt(request.value);
-        const held = await wallet.shieldedNight();
-        if (held < value) throw shortOfShieldedNight(held, value);
+        const held = await wallet.shieldedBalance(token ?? NATIVE_TOKEN_TYPE);
+        if (held < value) throw token === undefined ? shortOfShieldedNight(held, value) : shortOfShieldedToken(token, held, value);
         const connection = await connectOver(owned.context, account.address, wallet.feeWallet, owned.location, async () => {});
-        const { result } = await depositShielded(connection, value);
-        const outcome = { address: account.address, value: request.value, txHash: result.public.txHash, blockHeight: Number(result.public.blockHeight) };
+        // NIGHT is the package's default color; another token's color is its raw type's 32 bytes.
+        const { result } = await (token === undefined ? depositShielded(connection, value) : depositShielded(connection, value, new Uint8Array(Buffer.from(token, 'hex'))));
+        const outcome = { address: account.address, value: request.value, ...(token === undefined ? {} : { token }), txHash: result.public.txHash, blockHeight: Number(result.public.blockHeight) };
         spinner.stop('Deposited');
         if (jsonMode) {
           ctx.output.result({ ...common, amount: request.amount, ...outcome });
         } else {
-          ctx.output.stderr('\n' + keyValue('Deposited', `${request.amount} NIGHT (${outcome.value} in the smallest unit, as status and --cap count)`) + '\n');
+          const deposited = token === undefined
+            ? `${request.amount} NIGHT (${outcome.value} in the smallest unit, as status and --cap count)`
+            : `${request.amount} of token ${token}, in its smallest unit`;
+          ctx.output.stderr('\n' + keyValue('Deposited', deposited) + '\n');
           ctx.output.stderr(keyValue('Block', String(outcome.blockHeight)) + '\n');
           ctx.output.stderr(keyValue('Transaction', outcome.txHash) + '\n');
           ctx.output.stderr('\n' + dim('  Next: midnight grant status') + '\n\n');

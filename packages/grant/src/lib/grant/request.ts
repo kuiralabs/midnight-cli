@@ -3,7 +3,7 @@
 // server before it issues a confirmation token.
 
 import { parseDeviceCode } from './device-code.ts';
-import { type ParsedArgs, getFlag, hasFlag, UsageError, parseAmount } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, getFlag, hasFlag, UsageError, parseAmount, NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core';
 
 export const GRANT_SUBCOMMANDS = ['deploy', 'deposit', 'status', 'list', 'issue', 'revoke', 'revoke-all', 'export', 'import', 'device'] as const;
 
@@ -14,8 +14,12 @@ export type GrantSubcommand = typeof GRANT_SUBCOMMANDS[number];
 
 export type GrantRequest =
   | { subcommand: 'deploy' }
-  /** `amount` as given, in NIGHT; `value` the same in the smallest unit, as decimal text. */
-  | { subcommand: 'deposit'; amount: string; value: string }
+  /**
+   * `amount` as given: in NIGHT, or with `token` in that token's smallest unit;
+   * `value` the same in the smallest unit, as decimal text. `token` is the raw
+   * shielded token type (64 hex, lower-cased), absent for NIGHT.
+   */
+  | { subcommand: 'deposit'; amount: string; value: string; token?: string }
   | { subcommand: 'status' }
   | { subcommand: 'list' }
   | { subcommand: 'issue'; link: string; limits: GrantLimits; confirmed: boolean }
@@ -47,7 +51,7 @@ const LIMIT_FLAGS = [['cap', 'cap'], ['per-call', 'perCall'], ['max-coin', 'maxC
 export const GRANT_USAGE =
   `Usage: midnight grant <${GRANT_SUBCOMMANDS.join('|')}>\n\n` +
   `  deploy       Deploy this wallet's account, which holds what an agent may spend\n` +
-  `  deposit      Move shielded NIGHT from this wallet into its account\n` +
+  `  deposit      Move shielded NIGHT, or another shielded token, from this wallet into its account\n` +
   `  status       The account, its owner key and what it holds\n` +
   `  list         Every grant on the account\n` +
   `  issue        Show a grant request (an agent's link); issue it with --yes\n` +
@@ -60,6 +64,19 @@ export const GRANT_USAGE =
 
 export function isGrantSubcommand(value: string | undefined): value is GrantSubcommand {
   return (GRANT_SUBCOMMANDS as readonly string[]).includes(value ?? '');
+}
+
+/** A raw shielded token type for --token: 64 hex characters, as `mn balance` lists it under shielded.tokens. NIGHT's own (all zeros) is refused: NIGHT is the default and counts in NIGHT, not its smallest unit. */
+function depositTokenOf(token: string): string {
+  if (!/^[0-9a-fA-F]{64}$/.test(token)) throw new UsageError(`--token must be a token type, 64 hex characters, not "${token}"`);
+  if (token === NATIVE_TOKEN_TYPE) throw new UsageError('--token names NIGHT, which a deposit takes without it: leave --token out and give the amount in NIGHT');
+  return token.toLowerCase();
+}
+
+/** A deposit's amount of a token other than NIGHT: a whole number of its smallest unit, read exactly. */
+function tokenValueOf(amount: string): bigint {
+  if (!/^[1-9][0-9]*$/.test(amount)) throw new UsageError(`With --token the amount is a whole number of the token's smallest unit, above 0, not "${amount}"`);
+  return BigInt(amount);
 }
 
 /** A grant's id (32 bytes of hex) or its slot number. */
@@ -85,15 +102,23 @@ export function resolveGrantRequest(args: ParsedArgs): GrantRequest {
 
   onlyFor(args, subcommand, [...LIMIT_FLAGS.map(([flag]) => flag), 'yes'], ['issue']);
   onlyFor(args, subcommand, ['backup'], ['device']);
+  onlyFor(args, subcommand, ['token'], ['deposit']);
 
   switch (subcommand) {
     case 'deploy':
       positionalsFor(args, subcommand, 0, 'no argument');
       return { subcommand };
     case 'deposit': {
-      const [amount] = positionalsFor(args, subcommand, 1, 'one amount of NIGHT');
-      if (amount === undefined) throw new UsageError('Missing the amount of NIGHT to deposit.\nUsage: midnight grant deposit <amount>');
-      return { subcommand, amount, value: parseAmount(amount).toString() };
+      const flag = getFlag(args, 'token');
+      if (flag === undefined) {
+        const [amount] = positionalsFor(args, subcommand, 1, 'one amount of NIGHT');
+        if (amount === undefined) throw new UsageError('Missing the amount of NIGHT to deposit.\nUsage: midnight grant deposit <amount>');
+        return { subcommand, amount, value: parseAmount(amount).toString() };
+      }
+      const token = depositTokenOf(flag);
+      const [amount] = positionalsFor(args, subcommand, 1, 'one amount of the token');
+      if (amount === undefined) throw new UsageError('Missing the amount of the token to deposit, in its smallest unit.\nUsage: midnight grant deposit <amount> --token <type>');
+      return { subcommand, amount, value: tokenValueOf(amount).toString(), token };
     }
     case 'status':
     case 'list':
