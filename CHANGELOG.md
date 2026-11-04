@@ -4,6 +4,42 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0-rc.13] - 2026-11-04
+
+### Added
+
+- **`mn grant` on stagenet.** Grants now work on both SDK sets. Each engine carries its own copy of `@kuiralabs/midnight-account-chain` 0.3.0-rc.2, and grant uses the loaded engine's copy: the stagenet build on stagenet (no caller pin), the full build on ledger-9 local chains. On stagenet, a request that names a caller is refused before any transaction (`CALLER_PIN_UNSUPPORTED`, exit 2).
+- **`mn grant deposit <amount> --token <type>`** deposits any shielded token into the account. Give the raw type as `mn balance` lists it, and the amount in the token's smallest unit. Without `--token` it deposits NIGHT, as before.
+- **Programs can use mn's packages directly.** mn is split into packages, each with named entry points:
+  - core: `.`, `./engine`, `./ui`, `./commands`, `./process`
+  - chain and every domain package: `.` and `./commands`
+  - each engine: `.`
+  - the domain packages: `@kuiralabs/midnight-wallet` (with swap), `-contract`, `-connect`, `-dev` and `-grant`
+
+  A program creates a host with `createHost` (its own state folder, settings, notices and engine) and passes it in. Two hosts in one process don't mix. Each command's work is a library function: `readWalletBalance`, `transferNight`, `airdropNight`, `registerDust`, `deployContract`, `makeSwapOffer`, `takeSwapOffer`, `transactionStatus` and the rest. Each takes plain values, and amounts are exact bigints. `openWalletSession` is exported again. `installSdkProcessGuard` and `syncHeapAdvice` give a program what mn's shell does for its own process; see "Your process" in core's README.
+- **Error codes are owned per package and classified by code alone**, never by message text. Each command's help, the manuals and the MCP tool descriptions list the codes it can end with. New codes: `NO_STATE_ROOT`, `NO_PAYER`, `NO_NODE_RUNTIME`, `COMMAND_FAILED`, `CALLER_PIN_UNSUPPORTED`.
+
+### Changed
+
+- **Error codes that changed:**
+  - A missing passphrase reports `PASSPHRASE_REQUIRED` on the CLI too; it used to report `INVALID_ARGS`.
+  - A wallet with no NIGHT reports `INSUFFICIENT_BALANCE`.
+  - An unreachable indexer, node or proof server reports `NETWORK_ERROR`, whatever its message says.
+  - A ZK proof that times out reports `PROOF_TIMEOUT`.
+  - A contract script's refused transaction reports `TX_REJECTED` (or the stale-UTXO or Dust-proof code).
+  - Errors that only matched a code by accident of wording now report `UNKNOWN`.
+  - Bad-argument errors print as "Usage".
+- **Exact amounts:** amounts are exact end to end, and an amount too large for a JS number is no longer refused.
+
+### Fixed
+
+- **Programs end after `close()`:** a program ends after `session.close()`. The engines open their node submission client only on the first submit, so a session that never submitted no longer keeps reconnecting to an unreachable node.
+- **Shielded deposits on stagenet:** a grant deposit syncs the wallet's shielded side, as swaps do. On stagenet it used to see no shielded coins.
+
+### Packages
+
+- Every `@kuiralabs` workspace package now shares one version, `0.1.0-rc.2`. The existing ones are core, chain, engine-rc and engine-beta. The new ones are wallet, connect, contract, dev and grant. Both engines pin `@kuiralabs/midnight-account-chain` 0.3.0-rc.2.
+
 ## [0.6.0-rc.12] - 2026-11-03
 
 ### Added

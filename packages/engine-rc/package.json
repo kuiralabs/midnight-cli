@@ -1,6 +1,6 @@
 {
   "name": "@kuiralabs/midnight-engine-rc",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "type": "module",
   "description": "The Midnight CLI's engine for the SDK's release candidates (wallet SDK 2.0 rc, ledger 9 rc, midnight-js 5 rc): everything the CLI does with that SDK set, behind the engine interface",
   "license": "Apache-2.0",
@@ -32,8 +32,8 @@
   },
   "dependencies": {
     "@kuiralabs/midnight-account-chain": "0.3.0-rc.2",
-    "@kuiralabs/midnight-chain": "0.1.0-rc.1",
-    "@kuiralabs/midnight-cli-core": "0.1.0-rc.0",
+    "@kuiralabs/midnight-chain": "0.1.0-rc.2",
+    "@kuiralabs/midnight-cli-core": "0.1.0-rc.2",
     "@midnight-ntwrk/compact-js": "3.0.0-rc.3",
     "@midnight-ntwrk/compact-runtime": "0.20.0",
     "@midnight-ntwrk/ledger-v8": "8.1.0",
