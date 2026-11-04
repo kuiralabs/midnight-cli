@@ -5,7 +5,7 @@
 
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { findLayeringProblems, importRule, importedModules, testProblems } from '../../scripts/check-layering.mjs';
+import { accountImportRule, findLayeringProblems, importRule, importedModules, testProblems } from '../../scripts/check-layering.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const FIXTURES = join(import.meta.dirname, 'fixtures', 'layering');
@@ -69,6 +69,15 @@ describe('the layering', () => {
     expect(importRule('wallet.ts', 'lib/sdk-errors.ts')).toBe("shell → the SDK's errors (only an engine reads them)");
     expect(importRule('lib/ws-rpc.ts', 'lib/sdk-errors.ts')).toBe("connect → the SDK's errors (only an engine reads them)");
     expect(importRule('lib/exit-codes.ts', 'lib/sdk-errors.ts')).toBe("core → the SDK's errors (only an engine reads them)");
+  });
+
+  it("lets an engine install the account package, and grant reach its code only through one", () => {
+    expect(accountImportRule('engine', '@kuiralabs/midnight-account-chain/owner', false)).toBeUndefined();
+    expect(accountImportRule('grant', '@kuiralabs/midnight-account-chain/owner', true)).toBeUndefined();
+    expect(accountImportRule('grant', '@kuiralabs/midnight-account-chain/owner', false)).toBe("grant → account chain's code (grant reaches it through the network's engine, and imports its types alone)");
+    expect(accountImportRule('grant', '@kuiralabs/midnight-account', false)).toBeUndefined();
+    expect(accountImportRule('wallet', '@kuiralabs/midnight-account-chain/owner', true)).toBe('wallet → account chain');
+    expect(accountImportRule('core', '@kuiralabs/midnight-account', false)).toBe('core → account chain');
   });
 
   it('lets only an engine import the SDK', () => {

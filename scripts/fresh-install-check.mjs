@@ -2,9 +2,10 @@
 // depends on, serves them from a local registry as npm serves published
 // packages, installs mn globally from it into an empty prefix, and checks the
 // tree the install holds still works: one copy of each WASM package per SDK
-// engine (the shrinkwrap mn ships keeps each engine's set apart), grant on the
-// rc engine's copies, each engine loading, the packages a contract run's
-// script imports, and the files the code reads at run time.
+// engine (the shrinkwrap mn ships keeps each engine's set apart), each
+// engine's copy of the account package on that engine's copies and grant on
+// none, each engine loading, the packages a contract run's script imports,
+// and the files the code reads at run time.
 //
 // The test suite runs on the lockfile's tree, which a consumer never sees. Two
 // features broke that way without a test noticing: a newer @scure/base refused
@@ -73,6 +74,15 @@ function copiesOf(root, name) {
   return found;
 }
 
+/** The folder of `dep` as Node resolves it from the package in `from`, or null. */
+function resolveFrom(from, dep) {
+  for (let at = from; ; at = dirname(at)) {
+    const manifest = join(at, 'node_modules', dep, 'package.json');
+    if (existsSync(manifest)) return realpathSync(dirname(manifest));
+    if (dirname(at) === at) return null;
+  }
+}
+
 /**
  * Every copy of `name` that the package in `dir` reaches through its
  * dependencies, by Node's resolution from each package's folder: the copies a
@@ -81,13 +91,6 @@ function copiesOf(root, name) {
 function resolvedCopies(dir, name) {
   const found = new Map();
   const seen = new Set();
-  const resolveFrom = (from, dep) => {
-    for (let at = from; ; at = dirname(at)) {
-      const manifest = join(at, 'node_modules', dep, 'package.json');
-      if (existsSync(manifest)) return realpathSync(dirname(manifest));
-      if (dirname(at) === at) return null;
-    }
-  };
   // By the name code imports it under: an npm alias of the same package under another name is another package to its importers.
   const walk = (pkgDir) => {
     if (seen.has(pkgDir)) return;
@@ -155,20 +158,34 @@ const check = (what, ok, detail = '') => {
   if (!ok) failures.push(what);
 };
 
+const ACCOUNT_PACKAGE = '@kuiralabs/midnight-account-chain';
+
 /**
- * grant's account chain is built on the rc set: in the install at `root`,
- * grant resolves one copy of each WASM package, at the rc engine's version.
- * With `sameCopy`, the very copy the rc engine resolves: mn's shrinkwrap lays
- * the two out on one tree. A program that installs both packages itself gets
- * each one's shrinkwrapped tree under it, so the copies match by version only.
+ * Each engine installs the account package, whose Midnight libraries are peer
+ * dependencies: in the install at `root`, the copy each engine resolves
+ * reaches that engine's own copy of each WASM package (its compact runtime
+ * picks the contract build), the two engines' copies are two, and grant,
+ * which reaches the package through an engine, reaches no WASM package.
  */
-function checkGrantOnRcSet(root, who, { sameCopy }) {
-  const at = (copies) => copies.map((c) => `${c.version} ${c.dir.slice(realpathSync(root).length)}`).join(', ');
+function checkAccountPackagePerEngine(root, who) {
+  const shown = (dir) => (dir === null ? 'none' : `${JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8')).version} ${dir.slice(realpathSync(root).length)}`);
+  const copies = [];
+  for (const set of ['rc', 'beta']) {
+    const engine = join(root, 'node_modules', '@kuiralabs', `midnight-engine-${set}`);
+    const account = resolveFrom(engine, ACCOUNT_PACKAGE);
+    check(`${who}the ${set} engine resolves ${ACCOUNT_PACKAGE}`, account !== null, shown(account));
+    if (account === null) continue;
+    copies.push(account);
+    for (const sdk of WASM_PACKAGES) {
+      const fromAccount = resolveFrom(account, sdk);
+      const fromEngine = resolveFrom(engine, sdk);
+      check(`${who}the ${set} engine's ${ACCOUNT_PACKAGE} resolves ${sdk} to the engine's copy`, fromAccount !== null && fromAccount === fromEngine, `account package: ${shown(fromAccount)}; engine: ${shown(fromEngine)}`);
+    }
+  }
+  check(`${who}each engine has a copy of ${ACCOUNT_PACKAGE} of its own`, copies.length === 2 && copies[0] !== copies[1], copies.map(shown).join('; '));
   for (const sdk of WASM_PACKAGES) {
     const grant = resolvedCopies(join(root, 'node_modules', '@kuiralabs', 'midnight-grant'), sdk);
-    const rc = resolvedCopies(join(root, 'node_modules', '@kuiralabs', 'midnight-engine-rc'), sdk);
-    const matches = grant.length === 1 && rc.length === 1 && (sameCopy ? grant[0].dir === rc[0].dir : grant[0].version === rc[0].version);
-    check(`${who}@kuiralabs/midnight-grant resolves one copy of ${sdk}, ${sameCopy ? "the rc engine's" : "at the rc engine's version"}`, matches, `grant: ${at(grant)}; rc engine: ${at(rc)}`);
+    check(`${who}@kuiralabs/midnight-grant reaches no copy of ${sdk}`, grant.length === 0, grant.map((c) => shown(c.dir)).join(', '));
   }
 }
 
@@ -208,7 +225,7 @@ try {
       check(`${name} resolves one copy of ${sdk}`, copies.length === 1, copies.map((c) => `${c.version} ${c.dir.slice(realpathSync(installed).length)}`).join(', '));
     }
   }
-  checkGrantOnRcSet(installed, '', { sameCopy: true });
+  checkAccountPackagePerEngine(installed, '');
 
   // A shielded address is longer than bech32's 90 characters; the address
   // library must still read the one the installed mn derives.
@@ -289,23 +306,26 @@ try {
     check(`the ${network} run leaves the dApp's folder as it was`, ran.leftAsItWas);
   }
 
-  // mn grant drives the account package it installed: its owner records load
-  // from the installed tree and answer that the new wallet has no account.
-  // Asking that reaches no chain and opens no proving-artefact cache (the
-  // release gate's live run checks the cache, around the first deploy).
-  let grant = '';
-  try {
-    execFileSync(mn, ['grant', 'status', '--wallet', 'check', '--network', 'undeployed', '--node', 'ws://127.0.0.1:9', '--indexer-ws', 'ws://127.0.0.1:9/api/v4/graphql/ws', '--proof-server', 'http://127.0.0.1:9'], {
-      cwd: work, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], env,
-    });
-    grant = 'answered without an error';
-  } catch (error) {
-    grant = String(error.stderr ?? error.message);
+  // mn grant drives the account package it installed, through the engine of
+  // each network's set: its owner records load from that engine's copy in the
+  // installed tree and answer that the new wallet has no account. Asking that
+  // reaches no chain and opens no proving-artefact cache (the release gate's
+  // live run checks the cache, around the first deploy).
+  for (const [network, set] of [['undeployed', 'rc'], ['stagenet', 'beta']]) {
+    let grant = '';
+    try {
+      execFileSync(mn, ['grant', 'status', '--wallet', 'check', '--network', network, '--node', 'ws://127.0.0.1:9', '--indexer-ws', 'ws://127.0.0.1:9/api/v4/graphql/ws', '--proof-server', 'http://127.0.0.1:9'], {
+        cwd: work, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], env,
+      });
+      grant = 'answered without an error';
+    } catch (error) {
+      grant = String(error.stderr ?? error.message);
+    }
+    check(`mn grant on ${network} drives the ${set} engine's installed account package`, new RegExp(`Wallet "check" has no account on ${network} yet`).test(grant), grant.includes('has no account') ? 'no account yet, as for a new wallet' : grant.trim().split('\n').slice(-2).join(' | '));
   }
-  check('mn grant drives the installed account package', /Wallet "check" has no account on undeployed yet/.test(grant), grant.includes('has no account') ? 'no account yet, as for a new wallet' : grant.trim().split('\n').slice(-2).join(' | '));
   check('it opens no proving-artefact cache', !existsSync(join(home, '.midnight', 'account-artifacts')), 'none under ~/.midnight');
-  const chains = copiesOf(installed, '@kuiralabs/midnight-account-chain');
-  check('one copy of @kuiralabs/midnight-account-chain', chains.length === 1, chains.join(', '));
+  const chains = copiesOf(installed, ACCOUNT_PACKAGE);
+  check(`two copies of ${ACCOUNT_PACKAGE}, one for each engine`, chains.length === 2, chains.join(', '));
 
   // The MCP server reads its skill documents from the installed package.
   const { tools, resources } = await askMcpServer(join(prefix, 'bin', 'midnight-wallet-mcp'), env);
@@ -320,8 +340,8 @@ try {
 
   // A program that loads an engine without mn: it installs the workspace
   // packages from the registry, each engine and grant with the shrinkwrap it
-  // ships, and gets each engine's SDK set once beside one copy of each package
-  // it shares.
+  // ships, and gets each engine's SDK set once, with its copy of the account
+  // package, beside one copy of each package it shares.
   const outside = join(work, 'outside');
   mkdirSync(outside);
   writeFileSync(join(outside, 'package.json'), JSON.stringify({ name: 'outside', private: true, type: 'module' }));
@@ -337,7 +357,7 @@ try {
       check(`a program outside mn: ${name} resolves one copy of ${sdk}`, copies.length === 1, copies.map((c) => `${c.version} ${c.dir.slice(realpathSync(outside).length)}`).join(', '));
     }
   }
-  checkGrantOnRcSet(outside, 'a program outside mn: ', { sameCopy: false });
+  checkAccountPackagePerEngine(outside, 'a program outside mn: ');
   writeFileSync(join(outside, 'load.mjs'), `
     import { createHost } from '@kuiralabs/midnight-cli-core';
     const host = createHost({

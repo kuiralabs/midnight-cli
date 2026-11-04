@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { classifyError, humanizeNetworkError, ERROR_CODES, EXIT_GENERAL_ERROR, EXIT_NETWORK_ERROR, EXIT_INVALID_ARGS, WrongPassphraseError, OtherSdkSetError, UsageError } from '@kuiralabs/midnight-cli-core';
 import { MixedSdkLayoutError, toEngineError } from '@kuiralabs/midnight-cli-core/engine';
-import { NoAccountError, NodeTooOldForAccountError, UnreachableByAccountError } from '@kuiralabs/midnight-grant';
+import { CallerPinUnavailableError, NoAccountError, NodeTooOldForAccountError, UnreachableByAccountError } from '@kuiralabs/midnight-grant';
+import { CallerPinUnsupportedError } from '@kuiralabs/midnight-account-chain/errors';
 import { NoPassphraseError } from '@kuiralabs/midnight-wallet';
 import { installedCommands } from '../lib/installed-commands.ts';
 
@@ -72,6 +73,11 @@ describe('classifyError: typed setup errors keep their own code', () => {
 describe('classifyError: mn grant', () => {
   it('gives a wallet with no account its own code, so a caller can deploy one', () => {
     expect(classifyError(new NoAccountError('alice', 'undeployed'), installedCommands)).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.NO_ACCOUNT });
+  });
+
+  it('counts a caller pin the network\'s account can\'t hold as the caller\'s to fix: grant\'s refusal, and the account package\'s own by its code', () => {
+    expect(classifyError(new CallerPinUnavailableError('stagenet', 'c4'.repeat(32)), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.CALLER_PIN_UNSUPPORTED });
+    expect(classifyError(new CallerPinUnsupportedError('this build of the account (AccountStagenet) pins no caller'), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.CALLER_PIN_UNSUPPORTED });
   });
 
   it('counts a network the account package can\'t reach as the caller\'s to fix', () => {

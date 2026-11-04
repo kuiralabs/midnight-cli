@@ -459,6 +459,16 @@ export interface EngineWallet {
   serveWallet<T>(options: { seed: Buffer; root: string; notice: NoticeSink; networkConfig: NetworkConfig; network: NetworkName; address: string; syncMode: 'full' | 'lite' } & WalletSyncHooks, serve: (session: ServedWalletSession) => Promise<T>): Promise<T>;
 }
 
+/** The entry points of the account package (@kuiralabs/midnight-account-chain) an engine loads, by their subpath. */
+export type AccountEntryPoint = 'artefacts' | 'connector' | 'context' | 'contract' | 'deposit' | 'errors' | 'owner';
+
+/**
+ * The account package's entry points as an engine loaded them, each a module
+ * namespace. Core names none of the package's types: grant, which drives the
+ * package, types the modules it takes from here.
+ */
+export type EngineAccountPackage = Readonly<Record<AccountEntryPoint, unknown>>;
+
 /** One SDK set, as mn uses it. */
 export interface Engine {
   readonly set: SdkSet;
@@ -467,6 +477,12 @@ export interface Engine {
   readonly contracts: EngineContracts;
   readonly readers: EngineReaders;
   readonly wallet: EngineWallet;
+  /**
+   * The account package as this engine installs it: the copy whose peer
+   * dependencies resolve to this engine's SDK set, so it runs the contract
+   * build for that set. Loaded on first ask; an engine loads without it.
+   */
+  account(): Promise<EngineAccountPackage>;
 }
 
 /** The SDK set a network runs on, as the network table and the config under the state root `root` name it. */

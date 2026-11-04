@@ -4,8 +4,13 @@
 
 import { describe, expect, it } from 'vitest';
 import { freshGrantee, grantRequestFor, grantRequestLink } from '@kuiralabs/midnight-account-chain/agent';
-import { UsageError } from '@kuiralabs/midnight-cli-core';
+import { UsageError, createHost } from '@kuiralabs/midnight-cli-core';
+import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
+import { accountChainOf } from '../lib/grant/account-chain.ts';
 import { DEFAULT_GRANT_LIMITS, grantRequestOf, issuePreview } from '../lib/grant/owner-commands.ts';
+
+// The account package as the rc engine installs it.
+const chain = await accountChainOf(createRcEngine(createHost()));
 
 const ACCOUNT = '5e'.repeat(32);
 const NOW = new Date('2026-10-18T12:00:00.000Z');
@@ -33,7 +38,7 @@ describe('a grant request link', () => {
 
 describe('what an issue would grant', () => {
   it("takes mn's defaults for the limits not given, and signs nothing", () => {
-    const { result, lines } = issuePreview(grantRequestOf(linkFor(2)), {}, NOW);
+    const { result, lines } = issuePreview(grantRequestOf(linkFor(2)), {}, NOW, chain);
     expect(result).toEqual({
       confirmed: false,
       request: {
@@ -54,12 +59,12 @@ describe('what an issue would grant', () => {
   });
 
   it('takes the limits given', () => {
-    const { result } = issuePreview(grantRequestOf(linkFor(0)), { cap: '900', perCall: '100', maxCoin: '50', expiresIn: '60' }, NOW);
+    const { result } = issuePreview(grantRequestOf(linkFor(0)), { cap: '900', perCall: '100', maxCoin: '50', expiresIn: '60' }, NOW, chain);
     expect(result.request).toMatchObject({ payee: 'any shielded coin key', perCallCap: '100', cap: '900', maxCoinValue: '50', expires: '2026-10-18T12:01:00.000Z' });
   });
 
   it('names the calling contract a request pins, in full, and what the pin means', () => {
-    const { result, lines } = issuePreview(grantRequestOf(linkFor(2, new Uint8Array(32).fill(0xc4))), {}, NOW);
+    const { result, lines } = issuePreview(grantRequestOf(linkFor(2, new Uint8Array(32).fill(0xc4))), {}, NOW, chain);
     const caller = `via contract ${'c4'.repeat(32)} only: the agent spends only when that contract calls the account, and that call is public on chain`;
     expect(result.request).toMatchObject({ caller });
     expect(lines).toContain(`  caller: ${caller}`);

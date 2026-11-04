@@ -1,7 +1,8 @@
 // What `mn grant` gives the account package (@kuiralabs/midnight-account-chain),
-// which it calls in its own process: the network it acts on, where the proving
-// keys are cached, its progress, and the account's records, device key and
-// private state, all in the account's records directory.
+// which it calls in its own process through the engine of the network's SDK
+// set: the network it acts on, where the proving keys are cached, its
+// progress, and the account's records, device key and private state, all in
+// the account's records directory.
 //
 // The records are where every account so far keeps them, so an account made by
 // an earlier mn opens unchanged: owner.json (the account's records and its
@@ -9,16 +10,8 @@
 // midnight-level-db under the store name and password it was first made with.
 
 import { join } from 'node:path';
-import { artefactCache } from '@kuiralabs/midnight-account-chain/artefacts';
-import { type AccountContext, type ProgressEvent, accountContext, describeProgress, networkOf } from '@kuiralabs/midnight-account-chain/context';
-import {
-  type DirectoryDeviceKeys,
-  type OwnerDevice,
-  type OwnerStore,
-  type PrivateStateLocation,
-  directoryDeviceKeys,
-  directoryOwnerStore,
-} from '@kuiralabs/midnight-account-chain/owner';
+import type { AccountContext, ProgressEvent } from '@kuiralabs/midnight-account-chain/context';
+import type { DirectoryDeviceKeys, OwnerDevice, OwnerStore, PrivateStateLocation } from '@kuiralabs/midnight-account-chain/owner';
 import { PRIVATE_STATE_DATABASE } from '@kuiralabs/midnight-contract';
 import { type PassphraseSource, passphraseForNewSecret, unlockPassphrase, type UnlockHost } from '@kuiralabs/midnight-wallet';
 import {
@@ -34,12 +27,17 @@ import {
   sealedOwnerStore,
   sealedPrivateStatePassword,
 } from './sealed-account.ts';
-import { isValidNetworkName, sdkSetOfNetwork, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
+import type { NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core';
+import { type AccountChain, accountChainOf } from './account-chain.ts';
 import { MIN_NODE_FOR_ACCOUNT, NodeTooOldForAccountError, UnreachableByAccountError } from './account-errors.ts';
 import { accountArtifactsDir } from './account-records.ts';
 
-/** The network the account package acts on: ledger 9, which only a local network runs so far. */
-const ACCOUNT_NETWORK_ID = 'undeployed';
+/**
+ * The networks the account package acts on, by the network id midnight-js
+ * keeps (mn's own, lower-cased): ledger 9's, a local network on the release
+ * candidates' set and stagenet on its beta set.
+ */
+const ACCOUNT_NETWORKS: readonly NetworkName[] = ['undeployed', 'stagenet'];
 
 /** The private state's database, store and password, as every account so far was made with them. */
 const PRIVATE_STATE_STORE = 'midnight-bench-account';
@@ -56,12 +54,11 @@ export function privateStateLocationOf(recordsDir: string, password: () => strin
   return { database: join(recordsDir, PRIVATE_STATE_DATABASE), store: PRIVATE_STATE_STORE, password };
 }
 
-/** Throws when the account package can't act on `networkConfig`'s network, by the SDK set the config under the state root `root` gives it. */
-export function assertAccountNetwork(networkConfig: NetworkConfig, root: string): void {
-  const id = networkConfig.networkId.toLowerCase();
-  const sdkSet = isValidNetworkName(id) ? sdkSetOfNetwork(id, root) : 'rc';
-  if (sdkSet !== 'rc') throw new UnreachableByAccountError(networkConfig.networkId, sdkSet);
-  if (networkConfig.networkId.toLowerCase() !== ACCOUNT_NETWORK_ID) throw new UnreachableByAccountError(networkConfig.networkId);
+/** The network the account package acts on for `networkConfig`; throws when it can't act on it. */
+export function assertAccountNetwork(networkConfig: NetworkConfig): NetworkName {
+  const network = ACCOUNT_NETWORKS.find((name) => name === networkConfig.networkId.toLowerCase());
+  if (network === undefined) throw new UnreachableByAccountError(networkConfig.networkId);
+  return network;
 }
 
 /** Throws when this Node.js is older than the account package needs. */
@@ -80,6 +77,8 @@ export type AccountProtection = 'sealed' | 'plain-text';
 
 /** Everything the account package needs to act on one wallet's account. */
 export interface GrantAccount {
+  /** The account package, as the engine of the network's SDK set installs it. */
+  chain: AccountChain;
   context: AccountContext;
   store: OwnerStore;
   keys: DirectoryDeviceKeys | SealedDeviceKeys;
@@ -95,7 +94,7 @@ export interface GrantAccount {
 export interface OpenAccountOptions {
   /** The state root holding mn's passphrase check and the proving artefacts. */
   root: string;
-  /** The host: who is asked for the passphrase, the passphrase it has unlocked, its notices, and its engines (whose policy the private-state password meets). */
+  /** The host: who is asked for the passphrase, the passphrase it has unlocked, its notices, and its engines (the network's installs the account package, and its policy is the one the private-state password meets). */
   host: UnlockHost;
   source?: PassphraseSource;
   warn?: (line: string) => void;
@@ -109,23 +108,27 @@ export interface OpenAccountOptions {
  */
 export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir: string, say: (line: string) => void, options: OpenAccountOptions): Promise<GrantAccount> {
   const { root } = options;
-  assertAccountNetwork(networkConfig, root);
-  const progress = (event: ProgressEvent): void => say(describeProgress(event).trim());
-  const network = networkOf({ networkId: ACCOUNT_NETWORK_ID, node: httpOf(networkConfig.node), indexer: networkConfig.indexer, proofServer: networkConfig.proofServer });
-  const context = accountContext({ network, artefacts: artefactCache(accountArtifactsDir(root), { progress }), progress });
+  const networkId = assertAccountNetwork(networkConfig);
+  const engine = await options.host.engines.for(networkId);
+  const chain = await accountChainOf(engine);
+  const { artefacts, context: contexts, owner } = chain;
+  const progress = (event: ProgressEvent): void => say(contexts.describeProgress(event).trim());
+  const network = contexts.networkOf({ networkId, node: httpOf(networkConfig.node), indexer: networkConfig.indexer, proofServer: networkConfig.proofServer });
+  const context = contexts.accountContext({ network, artefacts: artefacts.artefactCache(accountArtifactsDir(root), { progress }), progress });
   const database = join(recordsDir, PRIVATE_STATE_DATABASE);
   // The account's private state is midnight-js's, which the engine's policy checks a new password against.
-  const { contracts } = await options.host.engines.any();
+  const { contracts } = engine;
 
   const sealed = (key: Buffer): GrantAccount => ({
+    chain,
     context,
     store: sealedOwnerStore(recordsDir, key),
-    keys: sealedDeviceKeys(recordsDir, key),
+    keys: sealedDeviceKeys(recordsDir, key, owner),
     location: { database, store: PRIVATE_STATE_STORE, password: () => sealedPrivateStatePassword(recordsDir, key, contracts.acceptsPrivateStatePassword) },
     protection: 'sealed',
     deviceReadSecret: () => sealedDeviceReadSecret(recordsDir, key),
     ownCode: () => {
-      const device = sealedDeviceKeys(recordsDir, key).read();
+      const device = sealedDeviceKeys(recordsDir, key, owner).read();
       if (device === undefined) throw new Error('The account\'s records hold no owner key.');
       return ownDeviceCode(recordsDir, key, device);
     },
@@ -134,13 +137,13 @@ export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir:
 
   // Caught half way through being sealed: its private state may be under its new password already.
   if (isAccountMigrating(recordsDir)) throw new AccountMigrationInterruptedError(recordsDir);
-  const plainStore = directoryOwnerStore(recordsDir);
-  const plainKeys = directoryDeviceKeys(recordsDir);
+  const plainStore = owner.directoryOwnerStore(recordsDir);
+  const plainKeys = owner.directoryDeviceKeys(recordsDir);
   if (plainStore.readOwner() !== undefined || plainKeys.read() !== undefined) {
     const warning = `Warning: the account in ${recordsDir} is not protected: its owner key and records are in plain text. Encrypt them with: midnight wallet protect`;
     if (options.warn !== undefined) options.warn(warning);
     else options.host.notice(warning);
-    return { context, store: plainStore, keys: plainKeys, location: { database, store: PRIVATE_STATE_STORE, password: () => LEGACY_STORE_PASSWORD }, protection: 'plain-text' };
+    return { chain, context, store: plainStore, keys: plainKeys, location: { database, store: PRIVATE_STATE_STORE, password: () => LEGACY_STORE_PASSWORD }, protection: 'plain-text' };
   }
   return sealed(createAccountKey(recordsDir, await passphraseForNewSecret(options.host, root, options.source)));
 }

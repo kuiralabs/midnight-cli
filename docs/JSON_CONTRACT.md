@@ -116,6 +116,7 @@ Stable identifiers used in error messages and structured error objects, with the
 | `UNSUPPORTED_NODE` | 1 | Node.js is older than 22 (22.18 for mn grant). |
 | `NO_NODE_RUNTIME` | 1 | Contract scripts run under Node.js, and none was found on PATH. |
 | `NO_ACCOUNT` | 1 | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. |
+| `CALLER_PIN_UNSUPPORTED` | 2 | A grant request pins the contract that calls the account, and the account on this network (stagenet) has no caller pin; nothing was submitted. |
 | `WRONG_PASSPHRASE` | 2 | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. |
 | `PASSPHRASE_REQUIRED` | 2 | A tool needed a secret (a wallet's seed, an account's owner key) and no passphrase could be had: `MN_PASSPHRASE` is unset and there is no terminal to ask at (the MCP server has none). |
 | `BLOCKFROST_PROJECT_ID_REQUIRED` | 4 | The network (preprod) is served by Blockfrost and no project id is set. |

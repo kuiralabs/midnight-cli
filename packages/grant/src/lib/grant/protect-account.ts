@@ -13,10 +13,10 @@
 // never opened under the public password its private state has left.
 
 import * as fs from 'node:fs';
-import type { HostEngines } from '@kuiralabs/midnight-cli-core';
+import { type Engine, type HostEngines, isValidNetworkName } from '@kuiralabs/midnight-cli-core';
 import * as path from 'node:path';
 import type { Arm } from '@kuiralabs/midnight-account';
-import { changePrivateStatePassword, directoryOwnerStore, ownerDeviceFromSecret } from '@kuiralabs/midnight-account-chain/owner';
+import { accountChainOf } from './account-chain.ts';
 import { LEGACY_STORE_PASSWORD, privateStateLocationOf } from './account.ts';
 import { ACCOUNTS_DIR_NAME, accountRecordsDir } from './account-records.ts';
 import {
@@ -43,41 +43,52 @@ const PLAIN_SET_ASIDE = /^owner\.unlanded-\d+\.json$/;
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 /**
- * Seals the account in `dir` under `passphrase`, if it is in plain text. Its
- * private state is scoped to the paying wallet's shielded coin public key,
- * `coinPublicKey` (hex); its new password is one an engine of `engines`
- * accepts. `stopBeforeSealing` stops after step 4, as an interrupted run
- * would, for the tests.
+ * The engine an account on `network` (a folder's name under accounts/) is
+ * sealed with: the network's, which installs the account package over its
+ * SDK set; an engine of `engines` for a folder that names no network.
  */
-export async function protectAccount(dir: string, passphrase: string, coinPublicKey: string, engines: HostEngines, { stopBeforeSealing = false }: { stopBeforeSealing?: boolean } = {}): Promise<AccountProtectOutcome> {
+const engineForAccountsOn = (engines: HostEngines, network: string): Promise<Engine> =>
+  (isValidNetworkName(network) ? engines.for(network) : engines.any());
+
+/**
+ * Seals the account in `dir`, on `network`, under `passphrase`, if it is in
+ * plain text. Its private state is scoped to the paying wallet's shielded
+ * coin public key, `coinPublicKey` (hex); the account package and the
+ * password policy are those of the network's engine among `engines`.
+ * `stopBeforeSealing` stops after step 4, as an interrupted run would, for
+ * the tests.
+ */
+export async function protectAccount(dir: string, network: string, passphrase: string, coinPublicKey: string, engines: HostEngines, { stopBeforeSealing = false }: { stopBeforeSealing?: boolean } = {}): Promise<AccountProtectOutcome> {
   if (isSealedAccount(dir)) {
     // A run that stopped after sealing, before the plain text was removed.
     for (const file of [PLAIN_OWNER_FILE, PLAIN_ROSTER_FILE]) fs.rmSync(path.join(dir, file), { force: true });
     return 'already-sealed';
   }
-  const plain = directoryOwnerStore(dir);
+  const engine = await engineForAccountsOn(engines, network);
+  const { owner } = await accountChainOf(engine);
+  const plain = owner.directoryOwnerStore(dir);
   const record = plain.readOwner();
   // The owner key beside the records, as an earlier mn kept it in owner.json.
   const plainOwner = fs.existsSync(path.join(dir, PLAIN_OWNER_FILE))
     ? (JSON.parse(fs.readFileSync(path.join(dir, PLAIN_OWNER_FILE), 'utf8')) as { deviceArm?: Arm; deviceSk?: string })
     : {};
-  const device = plainOwner.deviceSk === undefined ? undefined : ownerDeviceFromSecret(plainOwner.deviceArm ?? 'v1', plainOwner.deviceSk);
+  const device = plainOwner.deviceSk === undefined ? undefined : owner.ownerDeviceFromSecret(plainOwner.deviceArm ?? 'v1', plainOwner.deviceSk);
   const hasRoster = fs.existsSync(path.join(dir, PLAIN_ROSTER_FILE));
   if (record === undefined && device === undefined && !hasRoster) return 'nothing';
 
   // 1, 2
   const key = migratingAccountKey(dir, passphrase);
   const store = sealedOwnerStore(dir, key);
-  const keys = sealedDeviceKeys(dir, key);
+  const keys = sealedDeviceKeys(dir, key, owner);
   if (record !== undefined) store.writeOwner(record);
   store.writeRoster(plain.readRoster());
   if (device !== undefined && keys.read() === undefined) keys.keep(device);
 
   // 3
-  const password = sealedPrivateStatePassword(dir, key, (await engines.any()).contracts.acceptsPrivateStatePassword);
+  const password = sealedPrivateStatePassword(dir, key, engine.contracts.acceptsPrivateStatePassword);
   const location = privateStateLocationOf(dir, () => LEGACY_STORE_PASSWORD);
   if (record !== undefined && fs.existsSync(location.database)) {
-    await changePrivateStatePassword({ getCoinPublicKey: () => coinPublicKey }, record.contractAddress, location, () => password);
+    await owner.changePrivateStatePassword({ getCoinPublicKey: () => coinPublicKey }, record.contractAddress, location, () => password);
   }
 
   // 4
@@ -116,8 +127,8 @@ export async function protectAllAccounts(stateRootDir: string, passphrase: strin
       if (fs.readdirSync(dir).length === 0) continue;
       try {
         const outcome = isSealedAccount(dir)
-          ? await protectAccount(dir, passphrase, '', engines)
-          : await protectAccount(dir, passphrase, await coinKeyOf(wallet), engines);
+          ? await protectAccount(dir, network, passphrase, '', engines)
+          : await protectAccount(dir, network, passphrase, await coinKeyOf(wallet), engines);
         if (outcome !== 'nothing') report.push({ network, wallet, outcome });
       } catch (error) {
         report.push({ network, wallet, error: error instanceof Error ? error.message : String(error) });

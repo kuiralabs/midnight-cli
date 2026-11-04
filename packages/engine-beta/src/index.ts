@@ -21,11 +21,17 @@ import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
 import { readShieldedBalanceCached, shieldedCoinPublicKeyHexFromSeed } from './shielded-direct-cache.ts';
 import { deriveAllAddresses, deriveAllShieldedAddresses, deriveShieldedAddressString, deriveUnshieldedAddress } from './derive-address.ts';
 
-// The engine's folder (above src/ or dist/), and the SDK packages it declares:
-// each must reach the engine's own copy of every WASM package.
+// The account package, whose Midnight libraries are peer dependencies: each
+// engine declares it, and its copy in the engine's install resolves them to
+// the engine's own SDK set.
+const ACCOUNT_PACKAGE = '@kuiralabs/midnight-account-chain';
+
+// The engine's folder (above src/ or dist/), and the SDK packages it declares
+// with the account package: each must reach the engine's own copy of every
+// WASM package.
 const ENGINE_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const SDK_DEPENDENCIES = Object.keys((JSON.parse(readFileSync(join(ENGINE_DIR, 'package.json'), 'utf-8')) as { dependencies: Record<string, string> }).dependencies)
-  .filter((name) => /^@midnight(ntwrk|-ntwrk)\//.test(name));
+  .filter((name) => /^@midnight(ntwrk|-ntwrk)\//.test(name) || name === ACCOUNT_PACKAGE);
 assertOneSdkCopy("mn's beta engine", ENGINE_DIR, SDK_DEPENDENCIES, ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4']);
 
 /** What an beta engine is made with besides its host. */
@@ -93,5 +99,18 @@ const SHARED: Omit<Engine, 'wallet'> = {
   },
   readers: {
     shieldedBalance: readShieldedBalanceCached,
+  },
+  // Imported from this engine's folder, so the copy is the one its install gives it.
+  async account() {
+    const [artefacts, connector, context, contract, deposit, errors, owner] = await Promise.all([
+      import('@kuiralabs/midnight-account-chain/artefacts'),
+      import('@kuiralabs/midnight-account-chain/connector'),
+      import('@kuiralabs/midnight-account-chain/context'),
+      import('@kuiralabs/midnight-account-chain/contract'),
+      import('@kuiralabs/midnight-account-chain/deposit'),
+      import('@kuiralabs/midnight-account-chain/errors'),
+      import('@kuiralabs/midnight-account-chain/owner'),
+    ]);
+    return { artefacts, connector, context, contract, deposit, errors, owner };
   },
 };

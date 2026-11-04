@@ -15,8 +15,8 @@ import { createAccountKey, isSealedAccount, sealedOwnerStore } from '../lib/gran
 import { stateRootIn } from '../../../../test-support/state-root-in.ts';
 import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
-const host = createHost({ engineLoader: loadInstalledEngine });
+// The host the tests' calls run in: nobody to ask, notices dropped, its state root under the test's home, and an engine of its own from the engines the CLI ships.
+const host = createHost({ engineLoader: loadInstalledEngine, paths: () => ({ stateRoot: stateRootIn(home), home }) });
 
 const PASSPHRASE = 'correct horse battery staple';
 const RECORD = { contractAddress: '5e'.repeat(32), bootSalt: '3a'.repeat(32), encryptionSecret: '2b'.repeat(32) };

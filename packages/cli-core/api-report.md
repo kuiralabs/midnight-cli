@@ -330,6 +330,7 @@ export interface Engine {
     readonly contracts: EngineContracts;
     readonly readers: EngineReaders;
     readonly wallet: EngineWallet;
+    account(): Promise<EngineAccountPackage>;
 }
 export interface EngineContractScripts {
     readonly packages: readonly string[];
@@ -510,6 +511,7 @@ export declare const ERROR_CODES: {
     readonly AMBIGUOUS_LOCAL_STACKS: "AMBIGUOUS_LOCAL_STACKS";
     readonly UNSUPPORTED_NODE: "UNSUPPORTED_NODE";
     readonly NO_ACCOUNT: "NO_ACCOUNT";
+    readonly CALLER_PIN_UNSUPPORTED: "CALLER_PIN_UNSUPPORTED";
     readonly BLOCKFROST_PROJECT_ID_REQUIRED: "BLOCKFROST_PROJECT_ID_REQUIRED";
     readonly BLOCKFROST_PROJECT_ID_REJECTED: "BLOCKFROST_PROJECT_ID_REJECTED";
     readonly BLOCKFROST_LIMIT_REACHED: "BLOCKFROST_LIMIT_REACHED";
@@ -1079,6 +1081,7 @@ export declare function payWhenDustCovers<T>(pay: () => Promise<T>, dust: DustBa
 }): Promise<T>;
 export declare function planDustWait(err: unknown, dust: DustBalanceSource, now: Date): DustWaitPlan | undefined;
 export declare function sleep(ms: number, signal?: AbortSignal): Promise<void>;
+export type AccountEntryPoint = 'artefacts' | 'connector' | 'context' | 'contract' | 'deposit' | 'errors' | 'owner';
 export type AirdropParams = Omit<TransferParams, 'seedBuffer'>;
 export interface BlockLimits {
     readTime: number;
@@ -1160,7 +1163,9 @@ export interface Engine {
     readonly contracts: EngineContracts;
     readonly readers: EngineReaders;
     readonly wallet: EngineWallet;
+    account(): Promise<EngineAccountPackage>;
 }
+export type EngineAccountPackage = Readonly<Record<AccountEntryPoint, unknown>>;
 export type EngineHost = Pick<Host, 'settings' | 'notice'>;
 export interface EngineWallet {
     unshieldedBalance(address: string, networkConfig: NetworkConfig, options?: ReadOptions): Promise<UnshieldedView>;
