@@ -10,10 +10,11 @@
 // a second device (`midnight grant device add`).
 
 import * as fs from 'node:fs';
-import { type HostEngines, UsageError, FileExistsError, writeJsonDurably, type SealedSecret, openSecret, sealSecret } from '@kuiralabs/midnight-cli-core';
+import { type HostEngines, type NetworkName, UsageError, FileExistsError, writeJsonDurably, type SealedSecret, openSecret, sealSecret } from '@kuiralabs/midnight-cli-core';
 import * as path from 'node:path';
 import type { Arm } from '@kuiralabs/midnight-account';
-import { type OwnerRecord, type Roster, ownerDeviceFromSecret } from '@kuiralabs/midnight-account-chain/owner';
+import type { OwnerRecord, Roster } from '@kuiralabs/midnight-account-chain/owner';
+import { accountChainOf } from './account-chain.ts';
 import { privateStateLocationOf } from './account.ts';
 import { type DeviceIdentity, deviceCodeOf } from './device-code.ts';
 import {
@@ -81,13 +82,15 @@ const sealedAccountIn = (dir: string, passphrase: string) => {
  * Writes the account in `dir` on `network` to `file`, sealed under
  * `passphrase`. Never over a file that exists. With `forDevice`, the backup
  * is for that device, just added to the account: it carries everything but
- * this machine's owner key. Its private-state password is read under the
- * policy of an engine of `engines`.
+ * this machine's owner key. Its owner key is read, and its private-state
+ * password under the policy of, the network's engine among `engines`.
  */
-export async function exportAccount(dir: string, network: string, passphrase: string, file: string, engines: HostEngines, { forDevice }: { forDevice?: DeviceIdentity } = {}): Promise<{ contractAddress: string; file: string }> {
+export async function exportAccount(dir: string, network: NetworkName, passphrase: string, file: string, engines: HostEngines, { forDevice }: { forDevice?: DeviceIdentity } = {}): Promise<{ contractAddress: string; file: string }> {
   const key = sealedAccountIn(dir, passphrase);
+  const engine = await engines.for(network);
+  const { owner } = await accountChainOf(engine);
   const record = sealedOwnerStore(dir, key).readOwner();
-  const device = sealedDeviceKeys(dir, key).read();
+  const device = sealedDeviceKeys(dir, key, owner).read();
   if (record === undefined || device === undefined) throw new UsageError(`The account in ${dir} has not been deployed yet: there is nothing to back up.`);
   const database = privateStateLocationOf(dir, () => '').database;
   const bundle: AccountBundle = {
@@ -95,7 +98,7 @@ export async function exportAccount(dir: string, network: string, passphrase: st
     roster: sealedOwnerStore(dir, key).readRoster(),
     ...(forDevice === undefined ? { device: { arm: device.arm, secret: device.secretText(), readSecret: Buffer.from(sealedDeviceReadSecret(dir, key)).toString('hex') } } : {}),
     devices: [...new Set([...knownDevices(dir, key, device), ...(forDevice === undefined ? [] : [deviceCodeOf(forDevice, forDevice.readKey)])])],
-    privateStatePassword: sealedPrivateStatePassword(dir, key, (await engines.any()).contracts.acceptsPrivateStatePassword),
+    privateStatePassword: sealedPrivateStatePassword(dir, key, engine.contracts.acceptsPrivateStatePassword),
     privateState: fs.existsSync(database) ? Object.fromEntries(filesUnder(database).map((f) => [f, fs.readFileSync(path.join(database, f)).toString('base64')])) : {},
   };
   const backup: AccountBackupFile = {
@@ -115,21 +118,22 @@ export async function exportAccount(dir: string, network: string, passphrase: st
   return { contractAddress: record.contractAddress, file: resolved };
 }
 
-/** Imports the backup in `file` as the account in `dir` on `network`, which must have none, sealed under `passphrase`. */
-export async function importAccount(dir: string, network: string, passphrase: string, file: string): Promise<{ contractAddress: string }> {
+/** Imports the backup in `file` as the account in `dir` on `network`, which must have none, sealed under `passphrase`; its owner key made by the network's engine among `engines`. */
+export async function importAccount(dir: string, network: NetworkName, passphrase: string, file: string, engines: HostEngines): Promise<{ contractAddress: string }> {
   const backup = JSON.parse(fs.readFileSync(path.resolve(file), 'utf8')) as Partial<AccountBackupFile>;
   if (backup.kind !== BACKUP_KIND || backup.v !== BACKUP_VERSION) throw new UsageError(`${file} is not an account backup mn can read.`);
   if (backup.network !== network) throw new UsageError(`${file} is a backup of an account on ${backup.network}, not on ${network}.`);
   // Opened before anything is written, so a wrong passphrase leaves nothing behind.
   const bundle = JSON.parse(openSecret(backup.sealed, passphrase, 'account-backup').toString('utf8')) as AccountBundle;
   const database = privateStateLocationOf(dir, () => '').database;
+  const { owner } = await accountChainOf(await engines.for(network));
 
   let key: Buffer;
   if (bundle.device === undefined) {
     // Made for another device: this machine's pending device must be the one it names.
     if (!isPendingDevice(dir)) throw new UsageError(`${file} was made for another device to join the account. Make this machine's device first, with: midnight grant device new`);
     key = openAccountKey(dir, passphrase);
-    const pending = sealedDeviceKeys(dir, key).read();
+    const pending = sealedDeviceKeys(dir, key, owner).read();
     const pendingCode = pending === undefined ? undefined : ownDeviceCode(dir, key, pending);
     if (pendingCode === undefined || !bundle.devices.includes(pendingCode)) {
       throw new UsageError(`${file} was made for another device, not this machine's (${pendingCode ?? 'none'}).`);
@@ -139,7 +143,7 @@ export async function importAccount(dir: string, network: string, passphrase: st
     const hasAccount = isSealedAccount(dir) || isAccountMigrating(dir) || fs.existsSync(path.join(dir, 'owner.json')) || fs.existsSync(database);
     if (hasAccount) throw new UsageError(`The wallet already has an account in ${dir}; a backup is never imported over one.`);
     key = createAccountKey(dir, passphrase);
-    sealedDeviceKeys(dir, key).keep(ownerDeviceFromSecret(bundle.device.arm, bundle.device.secret));
+    sealedDeviceKeys(dir, key, owner).keep(owner.ownerDeviceFromSecret(bundle.device.arm, bundle.device.secret));
     keepDeviceReadSecret(dir, key, new Uint8Array(Buffer.from(bundle.device.readSecret, 'hex')));
   }
   const store = sealedOwnerStore(dir, key);

@@ -21,15 +21,9 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { type Arm, x25519KeyPair, x25519PublicOf } from '@kuiralabs/midnight-account';
-import {
-  type LocalOwnerDevice,
-  type OwnerRecord,
-  type OwnerStore,
-  type Roster,
-  freshOwnerDevice,
-  ownerDeviceFromSecret,
-} from '@kuiralabs/midnight-account-chain/owner';
+import type { LocalOwnerDevice, OwnerRecord, OwnerStore, Roster } from '@kuiralabs/midnight-account-chain/owner';
 import { FILE_MODE, UsageError, FileExistsError, readJsonIfPresent, writeJsonDurably, type KeyedSecret, freshDataKey, openSecret, openWithKey, sealSecret, sealWithKey } from '@kuiralabs/midnight-cli-core';
+import type { AccountChain } from './account-chain.ts';
 import { deviceCodeOf, joinCodeOf } from './device-code.ts';
 
 const ACCOUNT_KEY_FILE = 'account-key.json';
@@ -165,12 +159,16 @@ export interface SealedDeviceKeys {
   keep<D extends LocalOwnerDevice>(device: D): D;
 }
 
-export function sealedDeviceKeys(dir: string, key: Uint8Array): SealedDeviceKeys {
+/** What makes an owner device in the account package: a fresh one, or one from its secret. */
+export type OwnerDevices = Pick<AccountChain['owner'], 'freshOwnerDevice' | 'ownerDeviceFromSecret'>;
+
+/** The device kept in `dir`, made from its secret by `devices` (the account package's owner entry, from the network's engine). */
+export function sealedDeviceKeys(dir: string, key: Uint8Array, devices: OwnerDevices): SealedDeviceKeys {
   const deviceFile = path.join(dir, DEVICE_FILE);
   return {
     read: () => {
       const file = readJsonIfPresent<DeviceFile>(deviceFile);
-      return file === undefined ? undefined : ownerDeviceFromSecret(file.arm, openWithKey(key, file.secret, 'owner-device').toString('utf8'));
+      return file === undefined ? undefined : devices.ownerDeviceFromSecret(file.arm, openWithKey(key, file.secret, 'owner-device').toString('utf8'));
     },
     keep: (device) => {
       try {
@@ -249,17 +247,18 @@ export function isPendingDevice(dir: string): boolean {
  * owns: a JubJub key (the arm the contract adds devices on), made here and
  * sealed under `passphrase`, before the account's records come in a backup.
  * Made once: asked again, the same device. Refused where an account is.
+ * `devices` makes it: the account package's owner entry, from the network's engine.
  */
-export function createPendingDevice(dir: string, passphrase: string): LocalOwnerDevice {
+export function createPendingDevice(dir: string, passphrase: string, devices: OwnerDevices): LocalOwnerDevice {
   if (isPendingDevice(dir)) {
-    const kept = sealedDeviceKeys(dir, openAccountKey(dir, passphrase)).read();
+    const kept = sealedDeviceKeys(dir, openAccountKey(dir, passphrase), devices).read();
     if (kept !== undefined) return kept;
   }
   if (isSealedAccount(dir) || isAccountMigrating(dir) || fs.existsSync(path.join(dir, 'owner.json'))) {
     throw new UsageError(`The wallet already has an account in ${dir}: a new device is made for a wallet with none.`);
   }
   const key = createAccountKey(dir, passphrase);
-  const device = sealedDeviceKeys(dir, key).keep(freshOwnerDevice('v1'));
+  const device = sealedDeviceKeys(dir, key, devices).keep(devices.freshOwnerDevice('v1'));
   sealedDeviceList(dir, key).write([deviceCodeOf(device, x25519PublicOf(sealedDeviceReadSecret(dir, key)))]);
   return device;
 }

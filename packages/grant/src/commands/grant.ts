@@ -4,13 +4,15 @@ import { existsSync } from 'node:fs';
 // Usage: midnight grant <deploy|deposit|status|list|issue|revoke|revoke-all> [options]
 //
 // The account's owner code is the account package mn installs
-// (@kuiralabs/midnight-account-chain), called in this process. status and list
+// (@kuiralabs/midnight-account-chain), called in this process through the
+// engine of the network's SDK set, which installs its copy. status and list
 // read the account without a wallet, and so does an issue shown but not
 // confirmed. The others are paid by this wallet, through its DApp connector in
 // this process: no server, no port.
 
 import { type ParsedArgs, hasFlag, getFlag, DustRequiredError, UsageError, type CallContext, payerFor, throwIfCancelled, withTransportCode } from '@kuiralabs/midnight-cli-core';
 import { dim, header, keyValue, formatNight, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
+import { accountChainFor } from '../lib/grant/account-chain.ts';
 import { type GrantAccount, openGrantAccount, ownerDeviceOf } from '../lib/grant/account.ts';
 import { deployShortOfDustNote } from '../lib/grant/deploy-cost.ts';
 import { type OwnerCommandOutput, grantRequestOf, grantsOf, issue, issuePreview, revoke, revokeAll, statusOf } from '../lib/grant/owner-commands.ts';
@@ -62,7 +64,7 @@ export default async function grantCommand(args: ParsedArgs, ctx: CallContext): 
   // Reading the account or a request submits nothing: a wallet with no Dust can still do it, and none is opened.
   const payer = paysAFee(request) ? payerFor(`grant ${request.subcommand}`, ctx) : undefined;
   const funds = payer ? await payer.assertCanPay(target, walletFlag, spinnerFor('Checking wallet...'), ctx.signal) : undefined;
-  const paying = payer ? await openPayingWallet(payer, target, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal) : undefined;
+  const paying = payer ? await openPayingWallet(payer, target, (await accountChainFor(ctx.host.engines, target.network)).connector, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal) : undefined;
   try {
     await runOwned(request, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor }, ctx);
   } finally {
@@ -89,7 +91,8 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
     const { createPendingDevice, openAccountKey, ownJoinCode } = await import('../lib/grant/sealed-account.ts');
     const { unlockPassphrase, passphraseForNewSecret, isPassphraseSet } = await import('@kuiralabs/midnight-wallet');
     const passphrase = isPassphraseSet(target.root) ? await unlockPassphrase(ctx.host, target.root) : await passphraseForNewSecret(ctx.host, target.root);
-    const device = createPendingDevice(recordsDir, passphrase);
+    const { owner } = await accountChainFor(ctx.host.engines, target.network);
+    const device = createPendingDevice(recordsDir, passphrase, owner);
     const code = ownJoinCode(recordsDir, openAccountKey(recordsDir, passphrase), device);
     spinner.stop('Device ready');
     if (jsonMode) {
@@ -109,7 +112,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
     const { unlockPassphrase, passphraseForNewSecret, isPassphraseSet } = await import('@kuiralabs/midnight-wallet');
     try {
       const passphrase = isPassphraseSet(target.root) ? await unlockPassphrase(ctx.host, target.root) : await passphraseForNewSecret(ctx.host, target.root);
-      const { contractAddress } = await importAccount(recordsDir, target.network, passphrase, request.file);
+      const { contractAddress } = await importAccount(recordsDir, target.network, passphrase, request.file, ctx.host.engines);
       spinner.stop('Imported');
       if (jsonMode) ctx.output.result({ subcommand: request.subcommand, network: target.network, wallet: walletName, ownerKey: 'sealed', address: contractAddress });
       else ctx.output.stderr('\n' + keyValue('Account', contractAddress) + '\n' + dim('  Use it from one machine at a time: this machine now acts as the same owner device.') + '\n\n');
@@ -137,7 +140,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   };
   // The owner's session, paid by the wallet.
   const ownerSession = async () => {
-    const { connectOver, openSessionOver } = await import('@kuiralabs/midnight-account-chain/owner');
+    const { connectOver, openSessionOver } = owned.chain.owner;
     if (account === null) throw new Error('An owner command was prepared without an account');
     const { feeWallet } = await payingWallet();
     // A sealed account's device reads the owner-device mailbox: it catches up on another device's rotation, and is listed for later ones.
@@ -157,7 +160,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
     throwIfCancelled(ctx.signal);
     switch (request.subcommand) {
       case 'deploy': {
-        const { deployOwnerAccount, freshOwnerDevice } = await import('@kuiralabs/midnight-account-chain/owner');
+        const { deployOwnerAccount, freshOwnerDevice } = owned.chain.owner;
         const { feeWallet } = await payingWallet();
         // The device the records hold, or for a new account a key made here, on the k1 arm and
         // independent of any other (MIP-0013), kept sealed before the deploy is submitted.
@@ -177,7 +180,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         return;
       }
       case 'deposit': {
-        const { connectOver, depositShielded } = await import('@kuiralabs/midnight-account-chain/deposit');
+        const { connectOver, depositShielded } = owned.chain.deposit;
         if (account === null) throw new Error('A deposit was prepared without an account');
         const wallet = await payingWallet();
         const value = BigInt(request.value);
@@ -200,27 +203,27 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
       }
       case 'status':
       case 'list': {
-        const { readOwnerView } = await import('@kuiralabs/midnight-account-chain/owner');
+        const { readOwnerView } = owned.chain.owner;
         const device = ownerDeviceOf(owned);
         const view = await readOwnerView(owned.context.network, owned.store, device);
         const code = owned.ownCode?.() ?? 'none until the account is protected (midnight wallet protect)';
-        report(request.subcommand === 'status' ? statusOf(view, device.arm, code) : grantsOf(view, owned.context.clock()));
+        report(request.subcommand === 'status' ? statusOf(view, device.arm, code) : grantsOf(view, owned.context.clock(), owned.chain));
         return;
       }
       case 'issue': {
         const grantRequest = grantRequestOf(request.link);
         if (!request.confirmed) {
-          report(issuePreview(grantRequest, request.limits, owned.context.clock()));
+          report(issuePreview(grantRequest, request.limits, owned.context.clock(), owned.chain));
           return;
         }
-        report(await issue(await ownerSession(), grantRequest, request.limits, owned.context.clock()));
+        report(await issue(await ownerSession(), grantRequest, request.limits, owned.context.clock(), owned.chain));
         return;
       }
       case 'revoke':
-        report(await revoke(await ownerSession(), request.target));
+        report(await revoke(await ownerSession(), request.target, owned.chain));
         return;
       case 'revoke-all':
-        report(await revokeAll(await ownerSession()));
+        report(await revokeAll(await ownerSession(), owned.chain));
         return;
       case 'device': {
         if (owned.protection !== 'sealed') throw new UsageError('The account is not protected: its devices are managed once it is. Encrypt it first: midnight wallet protect');
@@ -239,7 +242,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         }
         const named = parseDeviceCode(request.code);
         if (request.action === 'add') {
-          const { addOwnerDevice } = await import('@kuiralabs/midnight-account-chain/owner');
+          const { addOwnerDevice } = owned.chain.owner;
           const { exportAccount } = await import('../lib/grant/account-backup.ts');
           if (named.arm !== 'v1') throw new UsageError('The account adds JubJub devices only (a v1 device code, as midnight grant device new makes).');
           if (named.attestation === undefined) {
@@ -262,7 +265,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
           }
           return;
         }
-        const { removeOwnerDevice } = await import('@kuiralabs/midnight-account-chain/owner');
+        const { removeOwnerDevice } = owned.chain.owner;
         const removing = identityCodeOf(request.code);
         if (removing === own) throw new UsageError('A device does not remove itself: remove this one from another device on the account.');
         const { removed } = await removeOwnerDevice(await ownerSession(), deviceKeyOf(named), named.readKey);

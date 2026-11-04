@@ -37,7 +37,6 @@
   },
   "dependencies": {
     "@kuiralabs/midnight-account": "0.2.0-rc.0",
-    "@kuiralabs/midnight-account-chain": "0.3.0-rc.0",
     "@kuiralabs/midnight-chain": "0.1.0-rc.1",
     "@kuiralabs/midnight-cli-core": "0.1.0-rc.0",
     "@kuiralabs/midnight-contract": "0.1.0-rc.1",

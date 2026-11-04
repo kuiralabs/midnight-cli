@@ -13,9 +13,11 @@
 // under it, and its tarball and integrity from `dist`.
 //
 // Each SDK engine ships one too (`--package packages/engine-*`), so a program
-// that installs an engine without mn gets the set the tests ran on; and so
-// does grant (`--package packages/grant`), whose account chain is built on the
-// rc set. It leaves out the workspace packages the package depends on (core
+// that installs an engine without mn gets the set the tests ran on, with the
+// account package beside it (its Midnight libraries are peer dependencies, so
+// they resolve to that set); and so does grant (`--package packages/grant`),
+// which reaches the account package through an engine and pins only the
+// account library's own tree. It leaves out the workspace packages the package depends on (core
 // and chain; for grant also wallet and contract): those are shared with the
 // program that loads it, which installs them itself, so the process holds one
 // copy of each.

@@ -6,13 +6,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { parseArgs, UsageError, createHost } from '@kuiralabs/midnight-cli-core';
+import { parseArgs, UsageError } from '@kuiralabs/midnight-cli-core';
 import { NoAccountError, UnreachableByAccountError } from '../lib/grant/account-errors.ts';
 import { prepareGrant } from '../lib/grant/prepare.ts';
 import { createAccountKey, sealedOwnerStore } from '../lib/grant/sealed-account.ts';
+import { testHost } from '../../../../test-support/test-host.ts';
 
-// The host the tests' calls run in: nobody to ask, notices dropped.
-const host = createHost();
+// The host the tests' calls run in: nobody to ask, notices dropped, the state root under the test's home, and the engines the CLI ships.
+const host = testHost();
 
 const ENDPOINTS = ['--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
 
@@ -49,15 +50,10 @@ describe('prepareGrant', () => {
     await expect(prepare('revoke', '--wallet', 'alice')).rejects.toThrow(UsageError);
   });
 
-  it('refuses a network the account package can\'t reach, creating nothing', async () => {
-    await expect(asAlice('status', '--network', 'preprod')).rejects.toThrow(UnreachableByAccountError);
-    expect(fs.existsSync(accounts())).toBe(false);
-  });
-
-  it('refuses stagenet, which runs the beta SDK set the account package has no build for, saying so', async () => {
-    const refusal = asAlice('status', '--network', 'stagenet');
+  it('refuses a network the account package can\'t reach, saying which it reaches, creating nothing', async () => {
+    const refusal = asAlice('status', '--network', 'preprod');
     await expect(refusal).rejects.toThrow(UnreachableByAccountError);
-    await expect(refusal).rejects.toThrow('mn grant runs on the rc SDK set, and StageNet runs on the beta set');
+    await expect(refusal).rejects.toThrow('mn grant runs on ledger 9, which only a local network (undeployed) and stagenet run so far; PreProd is not one.');
     expect(fs.existsSync(accounts())).toBe(false);
   });
 

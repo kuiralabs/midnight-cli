@@ -52,6 +52,8 @@ export const ERROR_CODES = {
   UNSUPPORTED_NODE: 'UNSUPPORTED_NODE',
   /** `mn grant`: the wallet has no account on this network yet. Recovery: `mn grant deploy`. */
   NO_ACCOUNT: 'NO_ACCOUNT',
+  /** `mn grant issue`: the request pins its calling contract, and the network's account build (stagenet's) has no caller pin. Recovery: a request that names no calling contract. */
+  CALLER_PIN_UNSUPPORTED: 'CALLER_PIN_UNSUPPORTED',
   /** The network is served by Blockfrost and no project id is set. Recovery: `mn config set blockfrost-project-id <project id>`. */
   BLOCKFROST_PROJECT_ID_REQUIRED: 'BLOCKFROST_PROJECT_ID_REQUIRED',
   /** Blockfrost refused the project id. Recovery: check it at blockfrost.io and set it again. */

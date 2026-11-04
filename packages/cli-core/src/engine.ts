@@ -18,9 +18,9 @@ export { chooseDustCoins, type DustInput, planDustInputs, spreadFeeAcrossInputs 
 export { DustFeeNotGeneratedError, planRegistration } from './lib/dust-registration-plan.ts';
 export { awaitDustForFee, DUST_SHORT_WAIT_MS, type DustWaitPlan, payWhenDustCovers, planDustWait, sleep } from './lib/dust-wait.ts';
 export {
-  type AirdropParams, type BlockLimits, type CachedReadOptions, type CallScript, type DAppConnector,
+  type AccountEntryPoint, type AirdropParams, type BlockLimits, type CachedReadOptions, type CallScript, type DAppConnector,
   type DAppConnectorCallbacks, type DeployScript, type DustBalance, type DustExportResult,
-  type DustRegisterOptions, type DustRegistration, type Engine, type EngineHost, type EngineWallet,
+  type DustRegisterOptions, type DustRegistration, type Engine, type EngineAccountPackage, type EngineHost, type EngineWallet,
   type EnsureDustResult, type OpenedConnector, type PrepWallet, type RawStateValue, type ReadOptions,
   type ScriptParts, type ServedWalletSession, type ShieldedBalanceResult, type ShieldedCachedOptions,
   type ShieldedTransferParams, type StateScript, type TransactionDetail, type TransferParams,

@@ -2,6 +2,7 @@
 // process, made into the account package's fee wallet.
 
 import type { FeeWallet } from '@kuiralabs/midnight-account-chain/owner';
+import type { AccountChain } from './account-chain.ts';
 import { NATIVE_TOKEN_TYPE, type Payer, type PayingTarget, type CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 
@@ -13,9 +14,9 @@ export interface PayingWallet {
   stop: () => Promise<void>;
 }
 
-/** The payer's wallet for `target`, as the account package's fee wallet, keeping the SDK's warnings to the paying call's `sdkWarnings`. Stopping it stops the wallet. */
-export async function openPayingWallet(payer: Payer, target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<PayingWallet> {
-  const { feeWalletOver } = await import('@kuiralabs/midnight-account-chain/connector');
+/** The payer's wallet for `target`, as the fee wallet of the account package's `connector` (the network engine's), keeping the SDK's warnings to the paying call's `sdkWarnings`. Stopping it stops the wallet. */
+export async function openPayingWallet(payer: Payer, target: PayingTarget, connector: AccountChain['connector'], wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<PayingWallet> {
+  const { feeWalletOver } = connector;
   const session = await payer.connect(target, wallet, progress, sdkWarnings, signal);
   try {
     const feeWallet = await feeWalletOver({

@@ -61,9 +61,10 @@ export const grantDefinition: CommandDefinition = {
       name: 'network',
       takesValue: true,
       help: [
-        '--network <name>              Network (default: undeployed, the only one the account package reaches)',
+        '--network <name>              Network (default: undeployed; the account package reaches undeployed',
+        '                              and stagenet)',
       ],
-      agent: { type: 'string', enum: ['undeployed'], description: 'Only undeployed (a local ledger-9 stack)' },
+      agent: { type: 'string', enum: ['undeployed', 'stagenet'], description: 'undeployed (a local ledger-9 stack) or stagenet' },
     },
     {
       name: 'per-call',
@@ -170,7 +171,7 @@ export const grantDefinition: CommandDefinition = {
   intro: { brief: 'Grants that let agents spend', order: 12 },
   needsWalletSdk: true,
   shell: { payer: true },
-  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'NO_ACCOUNT', 'NO_PAYER'] },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'NO_ACCOUNT', 'CALLER_PIN_UNSUPPORTED', 'NO_PAYER'] },
   load: () => import('./grant.ts'),
   mcp: {
     tools: [

@@ -8,20 +8,11 @@
 // whose fees the wallet pays.
 
 import { randomBytes } from 'node:crypto';
-import { NIGHT } from '@kuiralabs/midnight-account-chain/contract';
-import {
-  type GrantRequest,
-  type OwnerView,
-  type Session,
-  exhaustedGrants,
-  grantRequestFromLink,
-  issueReadGrant,
-  revokeEveryGrant,
-  revokeReadGrant,
-  sealedResponseLink,
-  termsFor,
-} from '@kuiralabs/midnight-account-chain/owner';
+import { type GrantRequest, grantRequestFromLink, sealedResponseLink } from '@kuiralabs/midnight-account';
+import type { OwnerView, Session } from '@kuiralabs/midnight-account-chain/owner';
 import { UsageError } from '@kuiralabs/midnight-cli-core';
+import type { AccountChain } from './account-chain.ts';
+import { CallerPinUnavailableError } from './account-errors.ts';
 import type { GrantLimits as RequestedLimits } from './request.ts';
 
 /** What a command gives: its result, and the lines a person reads. */
@@ -70,9 +61,9 @@ export function statusOf(view: OwnerView, arm: string, code: string): OwnerComma
   };
 }
 
-export function grantsOf(view: OwnerView, now: Date): OwnerCommandOutput {
+export function grantsOf(view: OwnerView, now: Date, chain: AccountChain): OwnerCommandOutput {
   const { ledger, roster } = view;
-  const exhausted = new Set(exhaustedGrants(ledger, roster, now).map((entry) => entry.grantId));
+  const exhausted = new Set(chain.owner.exhaustedGrants(ledger, roster, now).map((entry) => entry.grantId));
   const listed = new Map(roster.entries.map((entry) => [entry.grantId, entry] as const));
   const nowSeconds = secondsOf(now);
   const rows = [...ledger.grants].map(([id, record]) => {
@@ -112,10 +103,22 @@ export function grantRequestOf(link: string): GrantRequest {
   }
 }
 
+/**
+ * Refuses the request in `link` when it pins the contract that calls the
+ * account and `chain`'s build (the network's) has no caller pin: before any
+ * wallet is opened. Where the build pins callers, the link is left to be read
+ * where it always is.
+ */
+export async function assertCallerPinnable(link: string, network: string, chain: AccountChain): Promise<void> {
+  if (chain.contract.supportsCallerPin()) return;
+  const { caller } = grantRequestOf(link);
+  if (caller !== undefined) throw new CallerPinUnavailableError(network, hexOf(caller));
+}
+
 /** The limits an issue sets: those given, mn's defaults for the rest. */
-function limitsOf(requested: RequestedLimits) {
+function limitsOf(requested: RequestedLimits, chain: AccountChain) {
   return {
-    color: NIGHT,
+    color: chain.contract.NIGHT,
     perCallCap: requested.perCall === undefined ? DEFAULT_GRANT_LIMITS.perCallCap : BigInt(requested.perCall),
     cap: requested.cap === undefined ? DEFAULT_GRANT_LIMITS.cap : BigInt(requested.cap),
     maxCoinValue: requested.maxCoin === undefined ? DEFAULT_GRANT_LIMITS.maxCoinValue : BigInt(requested.maxCoin),
@@ -133,8 +136,8 @@ function callerTerm(caller: Uint8Array | undefined): string {
 }
 
 /** What an issue would grant, before anything is signed: the terms a person confirms. */
-export function issueTerms(request: GrantRequest, requested: RequestedLimits, now: Date) {
-  const terms = termsFor(request, limitsOf(requested), now);
+export function issueTerms(request: GrantRequest, requested: RequestedLimits, now: Date, chain: AccountChain) {
+  const terms = chain.owner.termsFor(request, limitsOf(requested, chain), now);
   const asked = {
     account: request.account,
     clientId: request.clientId,
@@ -150,14 +153,14 @@ export function issueTerms(request: GrantRequest, requested: RequestedLimits, no
   return { terms, asked, askedLines: Object.entries(asked).map(([name, value]) => `  ${name}: ${value}`) };
 }
 
-export function issuePreview(request: GrantRequest, requested: RequestedLimits, now: Date): OwnerCommandOutput {
-  const { asked, askedLines } = issueTerms(request, requested, now);
+export function issuePreview(request: GrantRequest, requested: RequestedLimits, now: Date, chain: AccountChain): OwnerCommandOutput {
+  const { asked, askedLines } = issueTerms(request, requested, now, chain);
   return { result: { confirmed: false, request: asked }, lines: ['the request asks for:', ...askedLines, 're-run with --yes to issue it'] };
 }
 
-export async function issue(session: Session, request: GrantRequest, requested: RequestedLimits, now: Date): Promise<OwnerCommandOutput> {
-  const { terms, asked } = issueTerms(request, requested, now);
-  const issued = await issueReadGrant(session, request, terms, new Uint8Array(randomBytes(32)));
+export async function issue(session: Session, request: GrantRequest, requested: RequestedLimits, now: Date, chain: AccountChain): Promise<OwnerCommandOutput> {
+  const { terms, asked } = issueTerms(request, requested, now, chain);
+  const issued = await chain.owner.issueReadGrant(session, request, terms, new Uint8Array(randomBytes(32)));
   const fallbackLink = sealedResponseLink(issued);
   // A grant an interrupted run had issued keeps that run's terms: say those, not the ones asked for now.
   const granted = issued.resumed
@@ -175,8 +178,8 @@ export async function issue(session: Session, request: GrantRequest, requested: 
   };
 }
 
-export async function revoke(session: Session, target: string): Promise<OwnerCommandOutput> {
-  const { revoked, alreadyRevoked } = await revokeReadGrant(session, target);
+export async function revoke(session: Session, target: string, chain: AccountChain): Promise<OwnerCommandOutput> {
+  const { revoked, alreadyRevoked } = await chain.owner.revokeReadGrant(session, target);
   const [grantId] = revoked;
   if (grantId !== undefined) return { result: { revoked: hexOf(grantId) }, lines: [`revoked ${hexOf(grantId)}`] };
   // Already revoked, by an earlier run (one interrupted after its revocation
@@ -184,7 +187,7 @@ export async function revoke(session: Session, target: string): Promise<OwnerCom
   return { result: { alreadyRevoked }, lines: alreadyRevoked.map((id) => `already revoked: ${id}`) };
 }
 
-export async function revokeAll(session: Session): Promise<OwnerCommandOutput> {
-  await revokeEveryGrant(session);
+export async function revokeAll(session: Session, chain: AccountChain): Promise<OwnerCommandOutput> {
+  await chain.owner.revokeEveryGrant(session);
   return { result: { revokedAll: true, generation: (await session.readLedger()).grant_generation.toString() }, lines: ['revoked every grant'] };
 }

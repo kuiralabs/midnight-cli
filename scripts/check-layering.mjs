@@ -135,7 +135,24 @@ const MIDNIGHT_SDK = /^@midnight(-ntwrk|ntwrk)\//;
 // it ships, which the host installs as core's engine loader.
 const ENGINE_LOADER = 'lib/installed-engines.ts';
 
-const ACCOUNT_CHAIN = /^@kuiralabs\/midnight-account/;
+// The account package (its Midnight libraries are peer dependencies) and the
+// account library it is built on (no SDK). Grant drives the account; each
+// engine installs the package over its own SDK set, and grant reaches its
+// code through the network's engine, importing its types alone: a copy grant
+// imported would resolve the package's libraries from grant's folder.
+const ACCOUNT_CHAIN = /^@kuiralabs\/midnight-account-chain(\/|$)/;
+const ACCOUNT_LIBRARY = /^@kuiralabs\/midnight-account(\/|$)/;
+
+/** The rule an import of the account package or library from `home` breaks (`typeOnly`: an `import type`), or undefined. */
+export function accountImportRule(home, specifier, typeOnly) {
+  if (ACCOUNT_CHAIN.test(specifier)) {
+    if (home === 'engine') return undefined;
+    if (home === 'grant') return typeOnly ? undefined : "grant → account chain's code (grant reaches it through the network's engine, and imports its types alone)";
+    return `${home} → account chain`;
+  }
+  if (ACCOUNT_LIBRARY.test(specifier) && home !== 'grant') return `${home} → account chain`;
+  return undefined;
+}
 
 // The engine contract's reading of the SDK's and the node's errors: an engine
 // turns them into typed errors, so only the engines read them, and in core
@@ -479,8 +496,8 @@ function sourceProblems(file) {
       for (const rule of rules) violations.push({ home, rule, where, specifier });
     } else if (MIDNIGHT_SDK.test(specifier) && home !== 'engine') {
       violations.push({ home, rule: `${home} → Midnight SDK (only an engine imports it)`, where, specifier });
-    } else if (home !== 'grant' && ACCOUNT_CHAIN.test(specifier)) {
-      violations.push({ home, rule: `${home} → account chain`, where, specifier });
+    } else if (accountImportRule(home, specifier, imported.typeOnly) !== undefined) {
+      violations.push({ home, rule: accountImportRule(home, specifier, imported.typeOnly), where, specifier });
     }
   }
   return violations;

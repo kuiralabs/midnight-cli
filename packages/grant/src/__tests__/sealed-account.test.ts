@@ -25,9 +25,12 @@ import {
   sealedOwnerStore,
   sealedPrivateStatePassword,
 } from '../lib/grant/sealed-account.ts';
+import { accountChainOf } from '../lib/grant/account-chain.ts';
 
 // An rc engine, for what every host's has alike: its keys, ledger and contracts.
 const rcEngine = createRcEngine(createHost());
+// The account package's owner entry, as the rc engine installs it.
+const { owner } = await accountChainOf(rcEngine);
 
 const PASSPHRASE = 'correct horse battery staple';
 const RECORD = { contractAddress: 'ab'.repeat(32), bootSalt: 'ef'.repeat(32), encryptionSecret: '12'.repeat(32) };
@@ -79,7 +82,7 @@ describe('an account sealed under its data key', () => {
 describe("the account's owner key", () => {
   it('is kept sealed, once, and read back as the same device', () => {
     const key = createAccountKey(dir, PASSPHRASE);
-    const keys = sealedDeviceKeys(dir, key);
+    const keys = sealedDeviceKeys(dir, key, owner);
     expect(keys.read()).toBeUndefined();
     const device = keys.keep(freshOwnerDevice('k1'));
     expect(filesText()).not.toContain(device.secretText());
@@ -92,7 +95,7 @@ describe("the account's owner key", () => {
   it('moves aside with records of a deploy that never landed', () => {
     const key = createAccountKey(dir, PASSPHRASE);
     const store = sealedOwnerStore(dir, key);
-    const keys = sealedDeviceKeys(dir, key);
+    const keys = sealedDeviceKeys(dir, key, owner);
     keys.keep(freshOwnerDevice('k1'));
     store.writeOwner(RECORD);
     store.setAsideOwner();
