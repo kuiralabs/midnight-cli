@@ -8,10 +8,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { resolveTransferRequest } from '../lib/transfer-request.ts';
 import { parseArgs, MIDNIGHT_DIR, WALLETS_DIR_NAME, UsageError, classifyError, createHost } from '@kuiralabs/midnight-cli-core';
-import { saveWalletConfig } from './helpers/plain-wallet.ts';
-import { rcKeys } from '../../test-support/rc-engine.ts';
-import { installedCommands } from '../lib/installed-commands.ts';
-import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { saveWalletConfig } from '../../../../test-support/plain-wallet.ts';
+import { rcKeys } from '../../../../test-support/rc-engine.ts';
+import { coreCodes } from '@kuiralabs/midnight-cli-core/commands';
+import { walletCodes } from '../commands/wallet.codes.ts';
+import { codeRegistry } from '../../../../test-support/core-codes.ts';
+import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
 const host = createHost({ engineLoader: loadInstalledEngine });
@@ -90,11 +92,20 @@ describe('resolveTransferRequest', () => {
     let err: unknown;
     try { await request(...argv, '--wallet', 'sender'); } catch (e) { err = e; }
     expect(err).toBeInstanceOf(UsageError);
-    expect(classifyError(err as Error, installedCommands).errorCode).toBe('INVALID_ARGS');
+    expect(classifyError(err as Error, codeRegistry(coreCodes, walletCodes)).errorCode).toBe('INVALID_ARGS');
   });
 
   it('refuses a shielded transfer where shielded is off before reading the address', async () => {
     await expect(request('mn_shield-addr_preprod1garbage', '1', '--wallet', 'sender', '--shielded', '--network', 'preprod'))
       .rejects.toThrow(/Shielded is unavailable on preprod/);
+  });
+});
+
+// The error-code parity table's row for a transfer's arguments (src/__tests__/error-code-parity.test.ts
+// lists every typed error where mn throws it; this one is the wallet's transfer request's own).
+describe('a shielded transfer where shielded is off, in the error-code parity table', () => {
+  it('reports INVALID_ARGS, exit 2, as before codes were owned per package', async () => {
+    const err = await request(rcKeys.shieldedAddresses(SENDER_SEED).preprod, '1', '--wallet', 'sender', '--shielded', '--network', 'preprod').catch((e: Error) => e);
+    expect(classifyError(err as Error, codeRegistry(coreCodes, walletCodes))).toStrictEqual({ errorCode: 'INVALID_ARGS', exitCode: 2 });
   });
 });

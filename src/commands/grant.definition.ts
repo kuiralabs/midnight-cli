@@ -3,14 +3,14 @@
 import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, confirmationTarget } from '@kuiralabs/midnight-cli-core';
 import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
-import { OPENS_WALLET } from './wallet.codes.ts';
+import { OPENS_WALLET } from '@kuiralabs/midnight-wallet/commands';
 
 /** A grant request can run: its arguments, the network, the account and the wallet are all in order. */
 async function checkGrant(params: Readonly<Record<string, unknown>>, call: ToolCheckCall) {
   const { prepareGrant } = await import('../lib/grant/prepare.ts');
   const root = call.host.paths().stateRoot;
   const prepared = await prepareGrant(call.argv(), root, call.host);
-  const { loadWalletConfig, resolveWalletPath } = await import('../lib/wallet-config.ts');
+  const { loadWalletConfig, resolveWalletPath } = await import('@kuiralabs/midnight-wallet');
   await loadWalletConfig(resolveWalletPath(root, params.wallet as string | undefined), call.host.engines);
   return prepared;
 }

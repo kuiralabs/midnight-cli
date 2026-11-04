@@ -12,12 +12,12 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type FeeWallet, accountProviders, ownerDeviceFromSecret } from '@kuiralabs/midnight-account-chain/owner';
 import { PRIVATE_STATE_ID } from '@kuiralabs/midnight-account-chain/contract';
-import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
-import { getNetworkConfig, createHost } from '@kuiralabs/midnight-cli-core';
+import { establishPassphrase } from '@kuiralabs/midnight-wallet';
+import { getNetworkConfig, createHost, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
 import { LEGACY_STORE_PASSWORD, openGrantAccount, privateStateLocationOf } from '../lib/grant/account.ts';
 import { AccountMigrationInterruptedError, protectAccount } from '../lib/grant/protect-account.ts';
 import { isSealedAccount } from '../lib/grant/sealed-account.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.

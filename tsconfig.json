@@ -15,6 +15,6 @@
     "noEmit": true,
     "types": ["node", "vitest/globals", "ws"]
   },
-  "include": ["src/**/*.ts", "test-support/**/*.ts", "packages/cli-core/src/**/*.ts", "packages/chain/src/**/*.ts", "packages/engine-rc/src/**/*.ts", "packages/engine-beta/src/**/*.ts"],
+  "include": ["src/**/*.ts", "test-support/**/*.ts", "packages/cli-core/src/**/*.ts", "packages/chain/src/**/*.ts", "packages/engine-rc/src/**/*.ts", "packages/engine-beta/src/**/*.ts", "packages/wallet/src/**/*.ts"],
   "exclude": ["node_modules"]
 }

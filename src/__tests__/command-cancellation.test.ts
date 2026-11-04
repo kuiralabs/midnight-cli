@@ -17,25 +17,25 @@ import { Buffer } from 'node:buffer';
 import { parseArgs, type Prompter, type CommandHandler } from '@kuiralabs/midnight-cli-core';
 import { getCachePath } from '@kuiralabs/midnight-cli-core/engine';
 import { installedCommands } from '../lib/installed-commands.ts';
-import { establishPassphrase, isPassphraseSet } from '../lib/passphrase.ts';
+import { establishPassphrase, isPassphraseSet, loadWalletConfig, protectAllWallets, createWallet, walletSecretFrom, type WalletProtector } from '@kuiralabs/midnight-wallet';
 import { rcKeys } from '../../test-support/rc-engine.ts';
-import { loadWalletConfig, protectAllWallets } from '../lib/wallet-config.ts';
-import { createWallet, walletSecretFrom } from '../lib/wallet-create.ts';
-import type { WalletProtector } from '../lib/wallet-protector.ts';
-import balanceCommand from '../commands/balance.ts';
 import inspectCostCommand from '../commands/inspect-cost.ts';
 import { statusDefinition } from '@kuiralabs/midnight-chain/commands';
-import generateCommand from '../commands/generate.ts';
-import walletCommand from '../commands/wallet.ts';
-import cacheCommand from '../commands/cache.ts';
+import { balanceDefinition, generateDefinition, walletDefinition, cacheDefinition } from '@kuiralabs/midnight-wallet/commands';
 import testCommand from '../commands/test.ts';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { declaredOutcome } from './helpers/expect-declared.ts';
 import { testHost } from '../../test-support/test-host.ts';
-import { saveWalletConfig } from './helpers/plain-wallet.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { saveWalletConfig } from '../../test-support/plain-wallet.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
 import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from '../../test-support/stand-in-indexer.ts';
+
+// The handlers, as the shell loads them.
+const { default: balanceCommand } = await balanceDefinition.load();
+const { default: generateCommand } = await generateDefinition.load();
+const { default: walletCommand } = await walletDefinition.load();
+const { default: cacheCommand } = await cacheDefinition.load();
 
 // The status handler, as the shell loads it.
 const { default: statusCommand } = await statusDefinition.load();

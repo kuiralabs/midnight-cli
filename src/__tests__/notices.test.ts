@@ -9,9 +9,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createHost } from '@kuiralabs/midnight-cli-core';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
-import { unlockWallet } from '../lib/wallet-config.ts';
+import { unlockWallet } from '@kuiralabs/midnight-wallet';
 import { rcKeys } from '../../test-support/rc-engine.ts';
-import { saveWalletConfig } from './helpers/plain-wallet.ts';
+import { saveWalletConfig } from '../../test-support/plain-wallet.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';

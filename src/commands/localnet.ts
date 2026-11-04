@@ -160,7 +160,7 @@ async function handleDown(jsonMode: boolean, ctx: CallContext, docker: DockerCal
     // removed, so any wallet cache still referencing it is guaranteed stale
     // and would trigger "applied > highest" on the next command. Clearing
     // here means the next `mn <anything>` starts with a truthful cache.
-    const { clearChainCaches } = await import('../lib/chain-caches.ts');
+    const { clearChainCaches } = await import('@kuiralabs/midnight-wallet');
     clearChainCaches('undeployed', docker.root);
 
     // Also wipe the dapp-local LevelDB private-state store if the user is

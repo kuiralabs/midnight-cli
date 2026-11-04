@@ -8,10 +8,13 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs, encodeOfferEnvelope, type ConnectOptions, type Payer } from '@kuiralabs/midnight-cli-core';
-import swapCommand from '../commands/swap.ts';
+import { swapDefinition } from '@kuiralabs/midnight-wallet/commands';
 import { cliCall } from './helpers/cli-call.ts';
 import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from '../../test-support/fixtures/swap-offer.ts';
 import { rcEngine } from '../../test-support/rc-engine.ts';
+
+// The handler, as the shell loads it.
+const { default: swapCommand } = await swapDefinition.load();
 
 const ENDPOINTS = ['--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
 const TERMS = ['--give', '10', '--give-token', OFFER_GIVE, '--want', '7', '--want-token', OFFER_WANT];

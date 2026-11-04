@@ -15,12 +15,12 @@ const ROOT = join(import.meta.dirname, '..', '..');
 
 /** Each handler in scope, and the library function of each of its operations. */
 const HANDLERS: Record<string, string[]> = {
-  'src/commands/balance.ts': ['readAddressBalance', 'readWalletBalance'],
-  'src/commands/transfer.ts': ['transferNight'],
-  'src/commands/airdrop.ts': ['airdropNight'],
-  'src/commands/dust.ts': ['readDustStatus', 'registerDust', 'exportDustSnapshot'],
+  'packages/wallet/src/commands/balance.ts': ['readAddressBalance', 'readWalletBalance'],
+  'packages/wallet/src/commands/transfer.ts': ['transferNight'],
+  'packages/wallet/src/commands/airdrop.ts': ['airdropNight'],
+  'packages/wallet/src/commands/dust.ts': ['readDustStatus', 'registerDust', 'exportDustSnapshot'],
   'src/commands/contract.ts': ['deployContract', 'callContract', 'readContractState'],
-  'src/commands/swap.ts': ['makeSwapOffer', 'inspectSwapOffer', 'takeSwapOffer', 'cancelSwapOffer', 'listSwapOffers'],
+  'packages/wallet/src/commands/swap.ts': ['makeSwapOffer', 'inspectSwapOffer', 'takeSwapOffer', 'cancelSwapOffer', 'listSwapOffers'],
   'packages/chain/src/commands/tx.ts': ['transactionStatus'],
 };
 

@@ -12,10 +12,13 @@ import { captureCommand } from '../lib/run-command.ts';
 import { callDiagnostics, parseArgs, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
 import { rcKeys } from '../../test-support/rc-engine.ts';
 import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
-import balanceCommand from '../commands/balance.ts';
+import { balanceDefinition } from '@kuiralabs/midnight-wallet/commands';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { ownCall } from './helpers/own-call.ts';
 import { testHost } from '../../test-support/test-host.ts';
+
+// The handler, as the shell loads it.
+const { default: balanceCommand } = await balanceDefinition.load();
 
 // One host for every call, as the MCP server has: its notices are where verbose lines go.
 const host = testHost({ notice: (line) => notices.push(line) });

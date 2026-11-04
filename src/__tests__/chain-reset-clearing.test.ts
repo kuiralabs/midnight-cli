@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { clearChainCaches } from '../lib/chain-caches.ts';
+import { clearChainCaches } from '@kuiralabs/midnight-wallet';
 import { getCachePath, getDustCachePath, getShieldedCachePath } from '@kuiralabs/midnight-cli-core/engine';
 import { PRIVATE_STATE_DATABASE, clearDappPrivateState } from '../lib/contract/private-state.ts';
 

@@ -9,8 +9,8 @@ import * as path from 'node:path';
 import { rcKeys } from '../../test-support/rc-engine.ts';
 import { serveEndpointMismatch, serveWalletMismatch } from '../lib/serve-manager.ts';
 import { createSdkWarningRouter, createHost } from '@kuiralabs/midnight-cli-core';
-import { saveWalletConfig } from './helpers/plain-wallet.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { saveWalletConfig } from '../../test-support/plain-wallet.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.

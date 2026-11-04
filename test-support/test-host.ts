@@ -9,6 +9,9 @@ import { join } from 'node:path';
 import { createHost, type Host, type HostOptions, settingsFromEnvironment, MIDNIGHT_DIR } from '@kuiralabs/midnight-cli-core';
 import { loadInstalledEngine } from '../src/lib/installed-engines.ts';
 
+/** The engines the CLI ships, as a host's engine loader: for a test that makes a host of its own. */
+export { loadInstalledEngine };
+
 export function testHost(overrides: HostOptions = {}): Host {
   return createHost({
     settings: () => settingsFromEnvironment(process.env),

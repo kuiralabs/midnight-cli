@@ -20,7 +20,7 @@ import {
   readPassphrase,
   unlockPassphrase,
 } from '../lib/passphrase.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { stateRootIn } from '../../../../test-support/state-root-in.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped.
 const host = createHost();

@@ -3,7 +3,7 @@
 import { join } from 'node:path';
 
 import { clearWalletCache, resolveNetwork, type NetworkConfig, type NetworkName, OWN_COMMAND_DUST_WAIT_MS, DustRequiredError, InsufficientBalanceError, throwIfCancelled, sdkSetOf, nightToMicro } from '@kuiralabs/midnight-cli-core';
-import { resolveWalletPath, unlockWallet } from '../wallet-config.ts';
+import { resolveWalletPath, unlockWallet } from '@kuiralabs/midnight-wallet';
 import { assertLedger9StackReachable, assertLedgerSupported } from '@kuiralabs/midnight-chain';
 
 import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallbacks } from './types.ts';

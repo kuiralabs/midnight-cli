@@ -179,9 +179,11 @@ describe('the installed packages\' guidance', () => {
   });
 
   it('lives in one file beside its package\'s commands, which the layering check places in that package', () => {
+    // Swap's commands and guidance are a registry entry of their own (help and the manual list them apart) and live in the wallet package.
+    const packageOf = (entry: string) => (entry === 'swap' ? 'wallet' : entry);
     for (const pkg of installedCommands.packages.filter((p) => p.name !== 'shell')) {
-      expect(homeOf(join(SRC, 'commands', `${pkg.name}.guidance.ts`))).toBe(pkg.name);
-      for (const command of pkg.commands) expect([command.name, homeOf(join(SRC, 'commands', `${command.name}.definition.ts`))]).toStrictEqual([command.name, pkg.name]);
+      expect(homeOf(join(SRC, 'commands', `${pkg.name}.guidance.ts`))).toBe(packageOf(pkg.name));
+      for (const command of pkg.commands) expect([command.name, homeOf(join(SRC, 'commands', `${command.name}.definition.ts`))]).toStrictEqual([command.name, packageOf(pkg.name)]);
     }
   });
 

@@ -11,10 +11,10 @@ import {
   loadWalletConfig,
 } from '../lib/wallet-config.ts';
 import { migrateOldWallet } from '../lib/wallet-paths.ts';
-import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
+import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../../../test-support/plain-wallet.ts';
 import { loadCliConfig, saveCliConfig, type CliConfig, MIDNIGHT_DIR, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DEFAULT_WALLET_FILENAME, DIR_MODE, FILE_MODE, isValidWalletName, createHost } from '@kuiralabs/midnight-cli-core';
-import { rcKeys } from '../../test-support/rc-engine.ts';
-import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { rcKeys } from '../../../../test-support/rc-engine.ts';
+import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 
 // The engines the wallet functions derive a wallet's missing addresses with: a host's of the engines the CLI ships.
 const { engines } = createHost({ engineLoader: loadInstalledEngine });

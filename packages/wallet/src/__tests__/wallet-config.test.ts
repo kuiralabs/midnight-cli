@@ -4,11 +4,11 @@ import * as path from 'path';
 import * as os from 'os';
 import { loadWalletConfig, matchWalletAddress, unlockWallet, walletAddress, writeSealedWallet, type WalletInfo } from '../lib/wallet-config.ts';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
-import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
+import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../../../test-support/plain-wallet.ts';
 import { DIR_MODE, FILE_MODE, createHost } from '@kuiralabs/midnight-cli-core';
-import { rcKeys } from '../../test-support/rc-engine.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
-import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { rcKeys } from '../../../../test-support/rc-engine.ts';
+import { stateRootIn } from '../../../../test-support/state-root-in.ts';
+import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
 const host = createHost({ engineLoader: loadInstalledEngine });

@@ -10,7 +10,7 @@ import { contractDeployRequest } from '../lib/contract/request.ts';
 import { deployContract } from '../lib/contract/deploy.ts';
 import { servePayerAt } from '../lib/serve-payer.ts';
 import { createSdkWarningRouter, CancelledError, createHost, type Host } from '@kuiralabs/midnight-cli-core';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 const ENDPOINTS = { network: 'undeployed' as const, node: 'ws://localhost:29944', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws', proofServer: 'http://localhost:26300' };

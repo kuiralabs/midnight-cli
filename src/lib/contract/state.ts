@@ -4,7 +4,7 @@
 // untyped state tree the indexer holds for the address.
 
 import { type Host, CancelledError, throwIfCancelled, type NetworkName, networkTargetOf, type NetworkChoice, progressSteps, type ProgressEvent, untilCancelled, type RawStateValue } from '@kuiralabs/midnight-cli-core';
-import { networkChoiceOf } from '../wallet/wallet-call.ts';
+import { networkChoiceOf } from '@kuiralabs/midnight-wallet';
 import { findContractInfo } from './inspect.ts';
 import { validateContractAddress } from './validate.ts';
 

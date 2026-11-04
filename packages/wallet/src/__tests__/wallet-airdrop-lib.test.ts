@@ -11,12 +11,12 @@ import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { createHost, type Host, settingsFromEnvironment, saveCliConfig, type Prompter, type ProgressEvent } from '@kuiralabs/midnight-cli-core';
-import { rcKeys } from '../../test-support/rc-engine.ts';
-import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { rcKeys } from '../../../../test-support/rc-engine.ts';
+import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 import { PASSPHRASE_ENV } from '../lib/passphrase.ts';
 import { airdropNight, type AirdropAddressed, type AirdropNightOptions } from '../lib/wallet/airdrop.ts';
-import { saveWalletConfig } from './helpers/plain-wallet.ts';
-import { startLedger8Indexer, startRefusingEndpoint, type Ledger8Indexer } from '../../test-support/stand-in-indexer.ts';
+import { saveWalletConfig } from '../../../../test-support/plain-wallet.ts';
+import { startLedger8Indexer, startRefusingEndpoint, type Ledger8Indexer } from '../../../../test-support/stand-in-indexer.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const SEED = Buffer.from('a7'.repeat(32), 'hex');

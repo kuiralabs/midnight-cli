@@ -3,7 +3,7 @@
 import type { CommandDefinition } from '@kuiralabs/midnight-cli-core';
 import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
-import { OPENS_WALLET } from './wallet.codes.ts';
+import { OPENS_WALLET } from '@kuiralabs/midnight-wallet/commands';
 
 export const devDefinition: CommandDefinition = {
   name: 'dev',

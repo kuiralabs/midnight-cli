@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import genesisAddressCommand from '../commands/genesis-address.ts';
 import { parseArgs } from '@kuiralabs/midnight-cli-core';
+import { genesisAddressDefinition } from '@kuiralabs/midnight-wallet/commands';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
+
+// The handler, as the shell loads it.
+const { default: genesisAddressCommand } = await genesisAddressDefinition.load();
 
 let io: CapturedOutput;
 

@@ -3,7 +3,7 @@ import { classifyError, humanizeNetworkError, ERROR_CODES, EXIT_GENERAL_ERROR, E
 import { MixedSdkLayoutError, toEngineError } from '@kuiralabs/midnight-cli-core/engine';
 import { NodeTooOldForAccountError, UnreachableByAccountError } from '../lib/grant/account.ts';
 import { NoAccountError } from '../lib/grant/prepare.ts';
-import { NoPassphraseError } from '../lib/passphrase.ts';
+import { NoPassphraseError } from '@kuiralabs/midnight-wallet';
 import { installedCommands } from '../lib/installed-commands.ts';
 
 describe('humanizeNetworkError', () => {

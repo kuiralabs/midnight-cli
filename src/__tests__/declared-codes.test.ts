@@ -24,7 +24,7 @@ import { refusalCodeOf, toEngineError } from '@kuiralabs/midnight-cli-core/engin
 import { ContractScriptError, SCRIPT_ERROR_MARKER, scriptFailureOf } from '../lib/contract/runner.ts';
 import { PrepStepFailedError } from '../lib/test/prep-runner.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
-import { WalletNotFoundError } from '../lib/wallet-config.ts';
+import { WalletNotFoundError } from '@kuiralabs/midnight-wallet';
 import { expectDeclared, expectDeclaredToolResult } from './helpers/expect-declared.ts';
 import { fixtureDefinition } from './fixtures/code-reach/fixture.definition.ts';
 import { barrelFixtureDefinition } from './fixtures/code-reach/barrel.definition.ts';

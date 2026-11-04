@@ -7,15 +7,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createHost, type Host, parseArgs, MIDNIGHT_DIR, loadCliConfig, sdkSetOf, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
+import { createHost, type Host, parseArgs, MIDNIGHT_DIR, loadCliConfig, sdkSetOf, readOpenOffers, recordOpenOffer, type OpenOffer, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
 import { cacheRootDir, getCachePath, networkCacheFolder } from '@kuiralabs/midnight-cli-core/engine';
 import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
 import { captureCommand } from '../lib/run-command.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
-import { createWallet, walletSecretFrom } from '../lib/wallet-create.ts';
-import { getActiveWalletName, listWallets } from '../lib/wallet-config.ts';
-import { PASSPHRASE_ENV, passphraseForNewSecret } from '../lib/passphrase.ts';
-import { clearChainCaches } from '../lib/chain-caches.ts';
+import { createWallet, walletSecretFrom, getActiveWalletName, listWallets, clearChainCaches, passphraseForNewSecret } from '@kuiralabs/midnight-wallet';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 // The config handler, as the shell loads it.

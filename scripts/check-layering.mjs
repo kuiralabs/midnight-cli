@@ -51,7 +51,7 @@ const UNSCANNED_SCRIPTS = {
 const LAYERING_FIXTURES = join(SRC, '__tests__', 'fixtures', 'layering');
 
 // The packages of the split, in the layering's order.
-const PACKAGES = ['core', 'chain', 'wallet', 'contract', 'connect', 'swap', 'dev', 'grant'];
+const PACKAGES = ['core', 'chain', 'wallet', 'contract', 'connect', 'dev', 'grant'];
 
 // Which package a file belongs to: the first pattern that matches its path
 // under src/ wins. A file that matches nothing fails the check.
@@ -85,6 +85,9 @@ const HOMES = [
   ['wallet', /^lib\/(dust-[a-z-]+|shielded-[a-z-]+)\.ts$/],
   ['wallet', /^lib\/wallet\//],
   ['wallet', /^ui\/receipt\.ts$/],
+  // Swap is the wallet's: its offers are made, taken and cancelled by a wallet.
+  ['wallet', /^commands\/swap(\.definition|\.guidance)?\.ts$/],
+  ['wallet', /^lib\/swap\//],
 
   ['contract', /^commands\/(contract|inspect-cost)(\.definition)?\.ts$/],
   ['contract', /^lib\/contract\//],
@@ -92,9 +95,6 @@ const HOMES = [
 
   ['connect', /^commands\/serve(\.definition)?\.ts$/],
   ['connect', /^lib\/(dapp-connector|ws-rpc|sign-recipe|serve-manager|serve-payer)\.ts$/],
-
-  ['swap', /^commands\/swap(\.definition)?\.ts$/],
-  ['swap', /^lib\/swap\//],
 
   ['dev', /^commands\/(dev|test|localnet)(\.definition)?\.ts$/],
   ['dev', /^lib\/localnet\.ts$/],
@@ -106,7 +106,7 @@ const HOMES = [
 
 // The packages each package may import, its own included. Dependencies point
 // one way: core, chain, wallet, then contract and connect side by side, then
-// swap (on connect's wallet session), then dev, then grant. An engine sits beside chain: it uses core and chain, and
+// dev, then grant. An engine sits beside chain: it uses core and chain, and
 // nothing imports it but core's loader.
 const MAY_IMPORT = {
   engine: ['core', 'chain', 'engine'],
@@ -115,7 +115,6 @@ const MAY_IMPORT = {
   wallet: ['core', 'chain', 'wallet'],
   contract: ['core', 'chain', 'wallet', 'contract'],
   connect: ['core', 'chain', 'wallet', 'connect'],
-  swap: ['core', 'chain', 'wallet', 'connect', 'swap'],
   dev: ['core', 'chain', 'wallet', 'contract', 'connect', 'dev'],
   grant: ['core', 'chain', 'wallet', 'contract', 'connect', 'dev', 'grant'],
   // The shell installs every package's commands and guidance, picks the payer
@@ -154,6 +153,7 @@ const IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+)(['"])([^'"]+)\1/gm;
 export const WORKSPACE_PACKAGES = [
   { name: '@kuiralabs/midnight-cli-core', root: join(ROOT, 'packages', 'cli-core'), dir: join(ROOT, 'packages', 'cli-core', 'src'), home: 'core' },
   { name: '@kuiralabs/midnight-chain', root: join(ROOT, 'packages', 'chain'), dir: join(ROOT, 'packages', 'chain', 'src'), home: 'chain' },
+  { name: '@kuiralabs/midnight-wallet', root: join(ROOT, 'packages', 'wallet'), dir: join(ROOT, 'packages', 'wallet', 'src'), home: 'wallet' },
   // The rc engine: its files read as engine/rc/<file>, its index the package itself.
   { name: '@kuiralabs/midnight-engine-rc', root: join(ROOT, 'packages', 'engine-rc'), dir: join(ROOT, 'packages', 'engine-rc', 'src'), prefix: 'engine/rc/', home: 'engine' },
   { name: '@kuiralabs/midnight-engine-beta', root: join(ROOT, 'packages', 'engine-beta'), dir: join(ROOT, 'packages', 'engine-beta', 'src'), prefix: 'engine/beta/', home: 'engine' },

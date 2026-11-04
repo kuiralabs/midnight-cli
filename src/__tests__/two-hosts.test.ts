@@ -17,7 +17,7 @@ import { createHost, type Host, parseArgs, MIDNIGHT_DIR, settingsFromEnvironment
 import { dispatchCommand } from '../lib/command-dispatch.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
-import { checkPassphrase } from '../lib/passphrase.ts';
+import { checkPassphrase } from '@kuiralabs/midnight-wallet';
 
 const PASSPHRASE_A = 'host A passphrase, twelve or more';
 const PASSPHRASE_B = 'host B passphrase, twelve or more';

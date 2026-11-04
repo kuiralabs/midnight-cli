@@ -9,18 +9,19 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import walletCommand from '../commands/wallet.ts';
-import { parseArgs } from '@kuiralabs/midnight-cli-core';
-import { PASSPHRASE_ENV, isPassphraseSet } from '../lib/passphrase.ts';
-import { loadWalletConfig } from '../lib/wallet-config.ts';
+import { parseArgs, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
+import { isPassphraseSet, loadWalletConfig, type WalletProtector } from '@kuiralabs/midnight-wallet';
+import { walletDefinition } from '@kuiralabs/midnight-wallet/commands';
 import { rcKeys } from '../../test-support/rc-engine.ts';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
-import { saveWalletConfig } from './helpers/plain-wallet.ts';
+import { saveWalletConfig } from '../../test-support/plain-wallet.ts';
 import { accountProtector } from '../lib/grant/account-protector.ts';
-import type { WalletProtector } from '../lib/wallet-protector.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { testHost } from '../../test-support/test-host.ts';
+
+// The handler, as the shell loads it.
+const { default: walletCommand } = await walletDefinition.load();
 
 const PASSPHRASE = 'correct horse battery staple';
 const SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';

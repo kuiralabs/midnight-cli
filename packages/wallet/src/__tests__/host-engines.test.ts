@@ -11,10 +11,10 @@ import { createHost, type Host, type SdkSet, type NetworkConfig, type PayingTarg
 import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
 import type { BalanceSummary } from '@kuiralabs/midnight-chain';
 import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
-import { rcKeys } from '../../test-support/rc-engine.ts';
+import { rcKeys } from '../../../../test-support/rc-engine.ts';
 import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
 import { listWallets } from '../lib/wallet-config.ts';
-import { saveWalletConfig } from './helpers/plain-wallet.ts';
+import { saveWalletConfig } from '../../../../test-support/plain-wallet.ts';
 
 // The chain and the indexer stand in at the repository's seams; the rest is each engine's own.
 const NETWORK: NetworkConfig = {

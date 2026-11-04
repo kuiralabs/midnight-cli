@@ -7,7 +7,7 @@
 
 import { DEFAULT_SERVE_PORT, OWN_COMMAND_DUST_WAIT_MS, type ConnectOptions, type Payer, type PayingTarget, type ServedWallet, sdkSetOf, sessionOver, type WalletSession, type CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
-import { assertWalletCanPay } from './wallet-can-pay.ts';
+import { assertWalletCanPay } from '@kuiralabs/midnight-wallet';
 
 /**
  * An mn serve on `port` for the command's network and wallet: one already

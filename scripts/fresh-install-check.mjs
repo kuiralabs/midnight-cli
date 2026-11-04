@@ -270,6 +270,7 @@ try {
     ['@kuiralabs/midnight-chain', 'lib/chain-id'],
     ['@kuiralabs/midnight-engine-rc', 'derive-address'],
     ['@kuiralabs/midnight-engine-beta', 'derive-address'],
+    ['@kuiralabs/midnight-wallet', 'lib/passphrase'],
   ]) {
     check(`a program outside mn finds ${name}'s ${deepPath} built`, existsSync(join(outside, 'node_modules', name, 'dist', `${deepPath}.js`)));
     const deep = run(process.execPath, ['entry.mjs', `${name}/${deepPath}`], outside).trim();

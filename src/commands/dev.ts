@@ -5,7 +5,7 @@
 import { resolve, relative } from 'node:path';
 import { type ParsedArgs, payerFor, type CallContext, type CallOutput } from '@kuiralabs/midnight-cli-core';
 import { header, divider, keyValue, bold, dim, red, teal, yellow } from '@kuiralabs/midnight-cli-core/ui';
-import { isPassphraseSet, unlockPassphrase } from '../lib/passphrase.ts';
+import { isPassphraseSet, unlockPassphrase } from '@kuiralabs/midnight-wallet';
 import { detectProject, type ProjectInfo } from '../lib/dev/detect-project.ts';
 import { runCompile, type CompileResult } from '../lib/dev/compile.ts';
 import { runTests } from '../lib/dev/test.ts';

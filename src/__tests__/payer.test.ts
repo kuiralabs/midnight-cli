@@ -12,11 +12,11 @@ import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
 import { NoAccountError } from '../lib/grant/prepare.ts';
 import { servePayerAt } from '../lib/serve-payer.ts';
 import { probeServeNetwork } from '../lib/serve-manager.ts';
-import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
+import { assertWalletCanPay } from '@kuiralabs/midnight-wallet';
 import contractCommand from '../commands/contract.ts';
 import grantCommand from '../commands/grant.ts';
 import { cliCall } from './helpers/cli-call.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped.
 const host = createHost();

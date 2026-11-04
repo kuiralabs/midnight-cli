@@ -4,7 +4,7 @@
 // Always runs in approve-all mode.
 
 import { Socket } from 'node:net';
-import { resolveWalletPath, unlockWallet, walletAddress, type UnlockHost } from './wallet-config.ts';
+import { resolveWalletPath, unlockWallet, walletAddress, type UnlockHost } from '@kuiralabs/midnight-wallet';
 import { resolveNetwork, applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName, sdkSetOf, type DAppConnectorCallbacks, type OpenedConnector, DEFAULT_SERVE_PORT, type CallSdkWarnings, shieldedSyncEnabled, CancelledError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import { createRpcServer, type RpcServer } from './ws-rpc.ts';
 

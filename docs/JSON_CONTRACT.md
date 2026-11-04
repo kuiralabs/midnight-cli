@@ -158,7 +158,7 @@ backward-compatibility mirrors of another field in the same object.
 ### `mn balance --wallet <name> --json`
 
 Wallet-based balance also includes shielded fields. Shape per current
-code in `src/commands/balance.ts`. (Subject to the same additive-only
+code in `packages/wallet/src/commands/balance.ts`. (Subject to the same additive-only
 rule once formally documented here.)
 
 ### `mn info --wallet <name> --json`
@@ -275,7 +275,7 @@ rule once formally documented here.)
 
 ### `mn wallet list --json`
 
-Per `src/commands/wallet.ts`, list of wallet names, addresses,
+Per `packages/wallet/src/commands/wallet.ts`, list of wallet names, addresses,
 networks, with the active wallet marked. Shape stable.
 
 ### `mn config get <key>`
