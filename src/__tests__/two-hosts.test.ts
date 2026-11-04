@@ -94,7 +94,7 @@ async function run(host: Host, argv: string[]): Promise<Record<string, unknown>>
     signal: new AbortController().signal,
     output,
     host,
-    loadPayer: async () => (await import('../lib/serve-payer.ts')).servePayer,
+    loadPayer: async () => (await import('@kuiralabs/midnight-connect')).servePayer,
     loadProtectors: async () => [(await import('../lib/grant/account-protector.ts')).accountProtector],
   });
   if (result === undefined) throw new Error(`${argv.join(' ')} wrote no result`);

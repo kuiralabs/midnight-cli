@@ -55,7 +55,7 @@ describe('classifyError: typed setup errors keep their own code', () => {
   it.each([
     ['UNSUPPORTED_LEDGER', async () => new (await import('@kuiralabs/midnight-chain')).UnsupportedLedgerError('preview', 1000300n)],
     ['LOCAL_STACK_UNREACHABLE', async () => new (await import('@kuiralabs/midnight-chain')).LocalStackUnreachableError('indexer', 'http://localhost:8088/api/v4/graphql')],
-    ['LOCALNET_UNAVAILABLE', async () => new (await import('../lib/localnet.ts')).LocalnetUnavailableError()],
+    ['LOCALNET_UNAVAILABLE', async () => new (await import('@kuiralabs/midnight-dev')).LocalnetUnavailableError()],
     ['AMBIGUOUS_LOCAL_STACKS', async () => new (await import('@kuiralabs/midnight-cli-core')).AmbiguousLocalStacksError({ node: [9944, 29944], indexer: [8088, 28088], proofServer: [6300] })],
   ])('%s', async (code, make) => {
     const result = classifyError(await make(), installedCommands);

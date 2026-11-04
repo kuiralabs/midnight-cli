@@ -92,7 +92,7 @@ async function run(): Promise<CommandOutcome | void> {
     signal,
     output: processOutput,
     host,
-    loadPayer: async () => (await import('./lib/serve-payer.ts')).servePayer,
+    loadPayer: async () => (await import('@kuiralabs/midnight-connect')).servePayer,
     // wallet protect also seals grant's accounts, through the protector grant provides.
     loadProtectors: async () => [(await import('./lib/grant/account-protector.ts')).accountProtector],
   });

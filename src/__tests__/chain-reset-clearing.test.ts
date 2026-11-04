@@ -8,7 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { clearChainCaches } from '@kuiralabs/midnight-wallet';
 import { getCachePath, getDustCachePath, getShieldedCachePath } from '@kuiralabs/midnight-cli-core/engine';
-import { PRIVATE_STATE_DATABASE, clearDappPrivateState } from '../lib/contract/private-state.ts';
+import { PRIVATE_STATE_DATABASE, clearDappPrivateState } from '@kuiralabs/midnight-contract';
 
 let dir: string;
 

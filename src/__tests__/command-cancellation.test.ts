@@ -19,10 +19,10 @@ import { getCachePath } from '@kuiralabs/midnight-cli-core/engine';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { establishPassphrase, isPassphraseSet, loadWalletConfig, protectAllWallets, createWallet, walletSecretFrom, type WalletProtector } from '@kuiralabs/midnight-wallet';
 import { rcKeys } from '../../test-support/rc-engine.ts';
-import inspectCostCommand from '../commands/inspect-cost.ts';
+import { inspectCostDefinition } from '@kuiralabs/midnight-contract/commands';
 import { statusDefinition } from '@kuiralabs/midnight-chain/commands';
 import { balanceDefinition, generateDefinition, walletDefinition, cacheDefinition } from '@kuiralabs/midnight-wallet/commands';
-import testCommand from '../commands/test.ts';
+import { testDefinition } from '@kuiralabs/midnight-dev/commands';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { declaredOutcome } from './helpers/expect-declared.ts';
@@ -32,6 +32,8 @@ import { stateRootIn } from '../../test-support/state-root-in.ts';
 import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from '../../test-support/stand-in-indexer.ts';
 
 // The handlers, as the shell loads them.
+const { default: inspectCostCommand } = await inspectCostDefinition.load();
+const { default: testCommand } = await testDefinition.load();
 const { default: balanceCommand } = await balanceDefinition.load();
 const { default: generateCommand } = await generateDefinition.load();
 const { default: walletCommand } = await walletDefinition.load();

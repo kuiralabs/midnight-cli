@@ -16,19 +16,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { classifyError, CancelledError, CommandFailedError, DustRequiredError, InsufficientBalanceError, SyncTimeoutError, TransactionRefusedError, UsageError, createApiError, OPERATOR_REJECTED_MESSAGE, withTransportCode, parseArgs, requireFlag, dustShortError, ProgramTimedOutError, NATIVE_TOKEN_TYPE, type NetworkConfig, type CommandHandler, createHost, payerFor, openSecret, sealSecret, checkTerms, assertOfferUnexpired, OfferCoinsInUseError, AmbiguousLocalStacksError, BlockfrostLimitError, BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, EndpointShutDownError, OtherSdkSetError, createSdkWarningRouter } from '@kuiralabs/midnight-cli-core';
+import { classifyError, CancelledError, CommandFailedError, DustRequiredError, InsufficientBalanceError, SyncTimeoutError, TransactionRefusedError, UsageError, withTransportCode, parseArgs, requireFlag, dustShortError, ProgramTimedOutError, NATIVE_TOKEN_TYPE, type NetworkConfig, type CommandHandler, createHost, payerFor, openSecret, sealSecret, checkTerms, assertOfferUnexpired, OfferCoinsInUseError, AmbiguousLocalStacksError, BlockfrostLimitError, BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, EndpointShutDownError, OtherSdkSetError } from '@kuiralabs/midnight-cli-core';
 import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
-import { ProofTimeoutError, withEngineCode, NotAnOfferError, MixedSdkLayoutError, DustFeeNotGeneratedError, planRegistration } from '@kuiralabs/midnight-cli-core/engine';
+import { ProofTimeoutError, NotAnOfferError, MixedSdkLayoutError, DustFeeNotGeneratedError, planRegistration } from '@kuiralabs/midnight-cli-core/engine';
 import { Effect } from 'effect';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import { ProvingError } from '@midnightntwrk/wallet-sdk/capabilities/proving';
 import { InsufficientFundsError as NoCoinsCoverIt } from '@midnightntwrk/wallet-sdk/capabilities';
 import { WalletError } from '@midnightntwrk/wallet-sdk/dust/v2';
-import { scriptFailureAtServe } from './helpers/serve-script-failure.ts';
 import { closedPort } from '../../test-support/closed-port.ts';
-import { SCRIPT_PRELUDE, executeScript, rpcClientCode } from '../lib/contract/runner.ts';
-import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import { WebSocket } from 'ws';
 import { LocalStackUnreachableError, UnsupportedLedgerError, ChainClockBehindError, waitForFirstBlock, waitForAddressFunded, waitForProofServerReady, callNodeRpc, subscribeGraphqlWs, checkBalance, queryIndexer } from '@kuiralabs/midnight-chain';
 import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
@@ -36,14 +32,11 @@ import { rcKeys } from '../../test-support/rc-engine.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { readPassphrase, assertWalletFileExists, assertWalletRemovable, setActiveWallet, walletSecretFrom, assertWalletCanPay, NoSuchOfferError } from '@kuiralabs/midnight-wallet';
 import { walletDefinition, generateDefinition, addressDefinition, airdropDefinition, balanceDefinition } from '@kuiralabs/midnight-wallet/commands';
-import { PrepStepFailedError, runPrepSteps } from '../lib/test/prep-runner.ts';
-import { createPrepContext, type DappTestConfig } from '../lib/test/types.ts';
+import { LocalnetUnavailableError, PrepStepFailedError } from '@kuiralabs/midnight-dev';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { saveWalletConfig } from '../../test-support/plain-wallet.ts';
 import { UnsupportedNodeError } from '../lib/node-version.ts';
-import { LocalnetUnavailableError } from '../lib/localnet.ts';
-import { scriptRuntime } from '../lib/contract/runner.ts';
 import { NoAccountError } from '../lib/grant/prepare.ts';
 import { NodeTooOldForAccountError, UnreachableByAccountError } from '../lib/grant/account.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
@@ -102,30 +95,12 @@ const nodeRefusal = (reason: string) => () => sdkRejection(new SubmissionError({
 const throughRcEngine = (failure: () => Promise<never>) => () => createRcEngine(createHost({ paths: { stateRoot: root, home: root } }), {
   repository: { fetchUnshielded: failure, fetchTip: async () => 'tip-1' },
 }).wallet.unshieldedBalance(ADDRESSES.undeployed, STAND_IN, { forceFresh: true });
-/** The connector's answer to a submission the node refused with `reason`: its own words over the SDK's error, marked with mn's code. */
-const connectorRefusal = async (reason: string) => {
-  const thrown = await nodeRefusal(reason)().catch((e: Error) => e);
-  return withEngineCode(new Error(`Transaction submission failed: [SubmissionError] Transaction submission error → ${reason}`, { cause: thrown }));
-};
 
 /** A socket's refusal: what a WebSocket to a closed port fails with (ECONNREFUSED its code). */
 async function refusedSocket(): Promise<Error> {
   const port = await closedPort();
   return new Promise((resolve) => { new WebSocket(`ws://127.0.0.1:${port}`).on('error', resolve); });
 }
-/** What the runner rejects with when a generated script, its prelude first, runs `body` and fails. */
-async function scriptFailing(body: (port: number) => string): Promise<never> {
-  const dir = mkdtempSync(join(tmpdir(), 'mn-code-parity-script-'));
-  try {
-    const wsModule = pathToFileURL(createRequire(import.meta.url).resolve('ws')).href;
-    const port = await closedPort();
-    await executeScript({ dir, script: SCRIPT_PRELUDE + rpcClientCode(port, wsModule) + body(port), overlaySdk: false, packages: { packages: [], packageFolder: () => null, set: 'rc' } });
-    throw new Error('expected the script to fail');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-
 /** What the function throws; fails the test when it throws nothing. */
 async function thrownBy(run: () => unknown): Promise<Error> {
   try {
@@ -194,11 +169,9 @@ const ROWS: Row[] = [
   ['an indexer subscription refused', () => subscribeGraphqlWs(CLOSED_WS, { query: 'subscription { x }', variables: {}, timeoutMs: 5_000, idleMs: 1_000, onNext: () => true, buildResult: () => undefined }), as('NETWORK_ERROR', 4), as('NETWORK_ERROR', 4)],
   ['a balance read refused', () => checkBalance(ADDRESSES.undeployed, CLOSED_WS), as('NETWORK_ERROR', 4), as('NETWORK_ERROR', 4)],
   ['an indexer query refused (approved: was UNKNOWN)', () => queryIndexer(`${CLOSED_HTTP}/`, '{ x }', undefined, 5_000), as('UNKNOWN', 1), as('NETWORK_ERROR', 4)],
-  // Connections the SDK, a contract script or the account package could not make, named where they are met.
+  // Connections the SDK or the account package could not make, named where they are met.
   ["a socket's refusal, through the engine", throughRcEngine(async () => { throw await refusedSocket(); }), as('NETWORK_ERROR', 4), as('NETWORK_ERROR', 4)],
   ['fetch failing, through the engine (approved Y53: was UNKNOWN)', throughRcEngine(async () => { await fetch(`http://127.0.0.1:${await closedPort()}/`); throw new Error('expected fetch to fail'); }), as('UNKNOWN', 1), as('NETWORK_ERROR', 4)],
-  ['a contract script that cannot reach mn serve', () => scriptFailing(() => 'await rpcConnect();\n'), as('NETWORK_ERROR', 4), as('NETWORK_ERROR', 4)],
-  ["a contract script's fetch failing (approved Y53: was UNKNOWN)", () => scriptFailing((port) => `await fetch('http://127.0.0.1:${port}/');\n`), as('UNKNOWN', 1), as('NETWORK_ERROR', 4)],
   ["the account package's refused connection, at grant's boundary", async () => { throw withTransportCode(await refusedSocket()); }, as('NETWORK_ERROR', 4), as('NETWORK_ERROR', 4)],
   // Approved: a program that ran past its limit keeps NETWORK_ERROR, which its message (ETIMEDOUT) gave it.
   ['a program past its time limit', () => { throw new ProgramTimedOutError('docker compose ps', 10_000); }, as('NETWORK_ERROR', 4), as('NETWORK_ERROR', 4)],
@@ -211,7 +184,6 @@ const ROWS: Row[] = [
   // A test run's Dust step, and an engine's shielded transfer, need a chain: their errors as those sites throw them.
   ['the SDK short of Dust, through the engine', throughRcEngine(() => sdkRejection(new WalletError.InsufficientFundsError({ message: new NoCoinsCoverIt('dust').message, tokenType: 'dust' }))), as('DUST_REQUIRED', 5), as('DUST_REQUIRED', 5)],
   ['the SDK short of NIGHT, through the engine', throughRcEngine(() => sdkRejection(new WalletError.InsufficientFundsError({ message: new NoCoinsCoverIt(NATIVE_TOKEN_TYPE).message, tokenType: NATIVE_TOKEN_TYPE }))), as('INSUFFICIENT_BALANCE', 5), as('INSUFFICIENT_BALANCE', 5)],
-  ['a contract run short of Dust at mn serve', () => scriptFailureAtServe(() => createApiError('InternalError', "Not enough Dust available for this transaction's fee: the wallet has 0.35 DUST and the fee takes 2.00.", 'DUST_REQUIRED')).then((err) => { throw err; }), as('DUST_REQUIRED', 5), as('DUST_REQUIRED', 5)],
   ["a test run's Dust not available", () => { throw new DustRequiredError('Dust not available after 90s. The chain may be slow — try again.'); }, as('DUST_REQUIRED', 5), as('DUST_REQUIRED', 5)],
   ["a test run's wallet with no NIGHT (approved: was UNKNOWN)", () => { throw new InsufficientBalanceError('Wallet has 0 NIGHT on preprod. Fund your wallet before running tests:\n  mn airdrop 100   (if faucet available)\n  Or transfer NIGHT from another wallet.'); }, as('UNKNOWN', 1), as('INSUFFICIENT_BALANCE', 5)],
   // A failed prep step reports its step's code.
@@ -230,11 +202,7 @@ const ROWS: Row[] = [
   ['a wallet sync past its deadline, in the engine', () => { throw new SyncTimeoutError('Wallet sync timed out'); }, as('SYNC_TIMEOUT', 4), as('SYNC_TIMEOUT', 4)],
   ['a ZK proof that timed out, in the engine (approved Y54: was UNKNOWN)', () => { throw new ProofTimeoutError(); }, as('UNKNOWN', 1), as('PROOF_TIMEOUT', 6)],
   // A program's wallet session (the connector in this process) and an escaped stale cache are the engines' own errors: their rows are in each engine's tests (wallet-session.test.ts, stale-cache.test.ts).
-  // A contract run: the connector at mn serve, the wire, and the script's process.
-  ['a contract run the node refused at mn serve (approved Y54: was UNKNOWN)', async () => { const refusal = await connectorRefusal('1010: Invalid Transaction: Custom error: 199'); return scriptFailureAtServe(() => refusal).then((err) => { throw err; }); }, as('UNKNOWN', 1), as('TX_REJECTED', 6)],
-  ['a contract run refused a spent coin at mn serve', async () => { const refusal = await connectorRefusal('1010: Invalid Transaction: Custom error: 115'); return scriptFailureAtServe(() => refusal).then((err) => { throw err; }); }, as('STALE_UTXO', 6), as('STALE_UTXO', 6)],
-  ['a contract run whose proof timed out at mn serve (approved Y54: was UNKNOWN)', () => scriptFailureAtServe(() => new ProofTimeoutError()).then((err) => { throw err; }), as('UNKNOWN', 1), as('PROOF_TIMEOUT', 6)],
-  ['a contract run the operator refused at mn serve', () => scriptFailureAtServe(() => createApiError('Rejected', OPERATOR_REJECTED_MESSAGE, 'TX_REJECTED')).then((err) => { throw err; }), as('TX_REJECTED', 6), as('TX_REJECTED', 6)],
+  // A contract script's failures (a connection it could not make, no Node.js to run it) and a contract run's at mn serve (the connector, the wire, the script's process) are the contract runner's: their rows are in the contract package's tests (contract-script-errors.test.ts).
 
   // Cancelled: exit 7.
   ['a cancelled call', () => { throw new CancelledError(); }, as('CANCELLED', 7), as('CANCELLED', 7)],
@@ -247,11 +215,10 @@ const ROWS: Row[] = [
   ['no account', () => { throw new NoAccountError('alice', 'undeployed'); }, as('NO_ACCOUNT', 1), as('NO_ACCOUNT', 1)],
   ['no state root (approved: was UNKNOWN)', () => createHost().paths(), as('UNKNOWN', 1), as('NO_STATE_ROOT', 1)],
   ['no payer (approved: was UNKNOWN)', () => payerFor('transfer', undefined), as('UNKNOWN', 1), as('NO_PAYER', 1)],
-  ['no Node.js for a contract script (approved: was UNKNOWN)', () => scriptRuntime({ execPath: '/opt/bun/bin/bun', isNode: false }, ''), as('UNKNOWN', 1), as('NO_NODE_RUNTIME', 1)],
   // Without the registry its code came from its result's text: here, words that read as a network error.
   ['a failed command (approved: was by its text)', () => { throw new CommandFailedError('test run', 1, { overall: 'fail', error: 'network error' }); }, as('NETWORK_ERROR', 4), as('COMMAND_FAILED', 1)],
   ['an error no rule knows', () => { throw new Error('Something unexpected happened'); }, as('UNKNOWN', 1), as('UNKNOWN', 1)],
-  ['a prep step that failed with no code', () => runPrepSteps({ network: 'undeployed', prep: ['no-such-step'] } as unknown as DappTestConfig, root, createPrepContext(root, hostOnRoot(), createSdkWarningRouter().openCall().warnings, new AbortController().signal), { onStepStart: () => {}, onStepComplete: () => {}, onMessage: () => {} }), as('UNKNOWN', 1), as('UNKNOWN', 1)],
+  // A prep step that failed with no code is the test runner's: its row is in the dev package's tests (prep-runner-cancellation.test.ts).
 ];
 
 describe('the code and exit code of each typed error', () => {

@@ -10,13 +10,15 @@ import * as path from 'node:path';
 import { parseArgs, saveCliConfig, NoPayerError, resolvePayingTarget, networkTargetOf, type NetworkName, createSdkWarningRouter, CancelledError, createHost } from '@kuiralabs/midnight-cli-core';
 import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
 import { NoAccountError } from '../lib/grant/prepare.ts';
-import { servePayerAt } from '../lib/serve-payer.ts';
-import { probeServeNetwork } from '../lib/serve-manager.ts';
+import { probeServeNetwork, servePayerAt } from '@kuiralabs/midnight-connect';
 import { assertWalletCanPay } from '@kuiralabs/midnight-wallet';
-import contractCommand from '../commands/contract.ts';
+import { contractDefinition } from '@kuiralabs/midnight-contract/commands';
 import grantCommand from '../commands/grant.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { stateRootIn } from '../../test-support/state-root-in.ts';
+
+// The handler, as the shell loads it.
+const { default: contractCommand } = await contractDefinition.load();
 
 // The host the tests' calls run in: nobody to ask, notices dropped.
 const host = createHost();

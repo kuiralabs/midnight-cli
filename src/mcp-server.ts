@@ -15,7 +15,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { CommandRun } from './lib/run-command.ts';
-import { servePayer } from './lib/serve-payer.ts';
+import { servePayer } from '@kuiralabs/midnight-connect';
 import { classifyError, asReported, trimAgentMessage, needsConfirmation, type Host } from '@kuiralabs/midnight-cli-core';
 import { withServerAdvice } from './lib/mcp/server-advice.ts';
 import { PKG_VERSION } from './lib/pkg.ts';

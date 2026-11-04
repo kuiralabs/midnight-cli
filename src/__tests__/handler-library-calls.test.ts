@@ -19,7 +19,7 @@ const HANDLERS: Record<string, string[]> = {
   'packages/wallet/src/commands/transfer.ts': ['transferNight'],
   'packages/wallet/src/commands/airdrop.ts': ['airdropNight'],
   'packages/wallet/src/commands/dust.ts': ['readDustStatus', 'registerDust', 'exportDustSnapshot'],
-  'src/commands/contract.ts': ['deployContract', 'callContract', 'readContractState'],
+  'packages/contract/src/commands/contract.ts': ['deployContract', 'callContract', 'readContractState'],
   'packages/wallet/src/commands/swap.ts': ['makeSwapOffer', 'inspectSwapOffer', 'takeSwapOffer', 'cancelSwapOffer', 'listSwapOffers'],
   'packages/chain/src/commands/tx.ts': ['transactionStatus'],
 };

@@ -56,7 +56,7 @@ describe('the SDK in the manifests', () => {
     }
   });
 
-  it('is no dependency of core, chain or wallet', () => {
-    for (const dir of ['cli-core', 'chain', 'wallet']) expect(Object.keys(manifest(dir).dependencies ?? {}).filter(isSdk), dir).toStrictEqual([]);
+  it('is no dependency of core, chain, wallet, contract, connect or dev', () => {
+    for (const dir of ['cli-core', 'chain', 'wallet', 'contract', 'connect', 'dev']) expect(Object.keys(manifest(dir).dependencies ?? {}).filter(isSdk), dir).toStrictEqual([]);
   });
 });

@@ -14,7 +14,7 @@ import * as path from 'node:path';
 import { parseArgs, type CommandHandler } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { establishPassphrase, createWallet, walletSecretFrom } from '@kuiralabs/midnight-wallet';
-import { servePayerAt } from '../lib/serve-payer.ts';
+import { servePayerAt } from '@kuiralabs/midnight-connect';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { declaredOutcome } from './helpers/expect-declared.ts';

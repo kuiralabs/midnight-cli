@@ -13,7 +13,7 @@ import { createHost, type Host, type Prompter, PASSPHRASE_ENV } from '@kuiralabs
 import { promptApproval } from '@kuiralabs/midnight-cli-core/engine';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 import { NoPassphraseError, establishPassphrase, unlockPassphrase, unlockWallet } from '@kuiralabs/midnight-wallet';
-import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
+import { createRpcServer, type RpcServer } from '@kuiralabs/midnight-connect';
 import { rcKeys } from '../../test-support/rc-engine.ts';
 import { saveWalletConfig } from '../../test-support/plain-wallet.ts';
 import { stateRootIn } from '../../test-support/state-root-in.ts';

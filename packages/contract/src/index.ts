@@ -1,0 +1,28 @@
+// @kuiralabs/midnight-contract: mn's contracts for a program and the packages
+// above. Deploying a contract, calling a circuit and reading a contract's
+// state, each called with plain values and paid through a payer; the requests
+// they are built from (a dApp folder, the contract in it, its arguments); a
+// compiled contract's circuits and witnesses; and the runner the packages
+// above run a deploy, a call or a state read with in a dApp's folder, with
+// the dApp's private state they share. Each name is listed, so the API is what
+// this file says. The contract and inspect-cost commands, contract's codes and
+// guidance are "./commands".
+
+export { type CallContractOptions, type CalledCircuit, callContract } from './lib/contract/call.ts';
+export { type DeployContractOptions, type DeployedContract, deployContract } from './lib/contract/deploy.ts';
+export { contractExists } from './lib/contract/exists.ts';
+export { type CircuitInfo, type CompactType, type ContractInfo, findContractInfo, type WitnessInfo } from './lib/contract/inspect.ts';
+export { clearDappPrivateState, PRIVATE_STATE_DATABASE } from './lib/contract/private-state.ts';
+export {
+  type ContractCallRequest, contractCallRequest, type ContractDeployRequest, contractDeployRequest, type ContractLocation
+} from './lib/contract/request.ts';
+export {
+  type CallOptions, type CallResult, ContractScriptError, type DeployOptions, type DeployResult, runCall, runDeploy,
+  type RunnerOptions, runState, type StateOptions, type StateResult
+} from './lib/contract/runner.ts';
+export { type ContractChecked } from './lib/contract/runtime-check.ts';
+export {
+  type ContractState, type ParsedContractState, type RawContractState, readContractState, type ReadContractStateOptions,
+  type StateFallback, type StateReading
+} from './lib/contract/state.ts';
+export { buildMissingWitnessError, findWitnessFile } from './lib/contract/witness-discovery.ts';

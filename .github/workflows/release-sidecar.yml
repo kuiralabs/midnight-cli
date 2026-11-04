@@ -159,7 +159,7 @@ jobs:
             fi
           done
       # mn depends on its workspace packages (core, chain, one engine per SDK
-      # set, wallet) at exact versions: each publishes first, unless that version is
+      # set, wallet, contract, connect, dev) at exact versions: each publishes first, unless that version is
       # on npm already, under the same dist-tag as mn.
       - run: npm run build
       - name: Publish the workspace packages mn depends on
@@ -168,7 +168,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for dir in packages/cli-core packages/chain packages/engine-rc packages/engine-beta packages/wallet; do
+          for dir in packages/cli-core packages/chain packages/engine-rc packages/engine-beta packages/wallet packages/contract packages/connect packages/dev; do
             name="$(node -p "require('./$dir/package.json').name")"
             version="$(node -p "require('./$dir/package.json').version")"
             if npm view "$name@$version" version >/dev/null 2>&1; then

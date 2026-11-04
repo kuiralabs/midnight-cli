@@ -9,13 +9,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-import inspectCostCommand from '../commands/inspect-cost.ts';
+import { inspectCostDefinition } from '@kuiralabs/midnight-contract/commands';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../test-support/plain-wallet.ts';
 import { rcKeys } from '../../test-support/rc-engine.ts';
 import { localIndexerFlags } from '../../test-support/local-indexer.ts';
 import { ownCall } from './helpers/own-call.ts';
 
 // The handlers, as the shell loads them.
+const { default: inspectCostCommand } = await inspectCostDefinition.load();
 const { default: generateCommand } = await generateDefinition.load();
 const { default: infoCommand } = await infoDefinition.load();
 const { default: addressCommand } = await addressDefinition.load();

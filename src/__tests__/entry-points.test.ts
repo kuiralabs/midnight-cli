@@ -17,6 +17,9 @@ const ENTRY_POINTS: Record<string, string[]> = {
   'engine-rc': ['.'],
   'engine-beta': ['.'],
   wallet: ['.', './commands'],
+  contract: ['.', './commands'],
+  connect: ['.', './commands'],
+  dev: ['.', './commands'],
 };
 
 describe('the public entry points', () => {

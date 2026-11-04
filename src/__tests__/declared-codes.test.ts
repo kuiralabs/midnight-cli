@@ -21,8 +21,8 @@ import { importTarget, importedModules, importsOf } from '../../scripts/check-la
 import { declaredCodes, type CommandDefinition, CancelledError, CommandFailedError, DustRequiredError, TransactionRefusedError, withTransportCode } from '@kuiralabs/midnight-cli-core';
 import { EVERY_COMMAND, READS_OFFERS } from '@kuiralabs/midnight-cli-core/commands';
 import { refusalCodeOf, toEngineError } from '@kuiralabs/midnight-cli-core/engine';
-import { ContractScriptError, SCRIPT_ERROR_MARKER, scriptFailureOf } from '../lib/contract/runner.ts';
-import { PrepStepFailedError } from '../lib/test/prep-runner.ts';
+import { ContractScriptError } from '@kuiralabs/midnight-contract';
+import { PrepStepFailedError } from '@kuiralabs/midnight-dev';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { WalletNotFoundError } from '@kuiralabs/midnight-wallet';
 import { expectDeclared, expectDeclaredToolResult } from './helpers/expect-declared.ts';
@@ -120,7 +120,8 @@ describe("the scan's tables", () => {
     expect(DYNAMIC_CLASSES.EngineError!.codes).toStrictEqual(sdkErrors.codes);
     // A script reports the code its failure carried: mn serve's (withEngineCode marks it with the same codes), or NETWORK_ERROR.
     expect(DYNAMIC_CLASSES.ContractScriptError!.codes).toStrictEqual(sdkErrors.codes);
-    expect(new ContractScriptError(scriptFailureOf(`${SCRIPT_ERROR_MARKER} {"message":"refused","code":"PROOF_FAILURE"}\n`, 1)).code).toBe('PROOF_FAILURE');
+    // The code a script's marked line carries becomes the error's (the contract package's contract-script-errors.test.ts reads one).
+    expect(new ContractScriptError({ message: 'refused', code: 'PROOF_FAILURE' }).code).toBe('PROOF_FAILURE');
   });
 
   it("give a node's refusal its three codes, a transport failure NETWORK_ERROR, and a prep step its cause's code", () => {
