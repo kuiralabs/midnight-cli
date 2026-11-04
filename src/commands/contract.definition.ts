@@ -3,14 +3,14 @@
 import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget, type HostEngines } from '@kuiralabs/midnight-cli-core';
 import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
-import { OPENS_WALLET } from './wallet.codes.ts';
+import { OPENS_WALLET } from '@kuiralabs/midnight-wallet/commands';
 
 /** The subcommands that reach a chain: inspect reads only the compiled contract (--path, --managed, --name). */
 const ON_CHAIN: readonly string[] = ['deploy', 'call', 'state'];
 
 /** The wallet a deploy or call pays from, under the state root `root`, exists and can be read (with the host's `engines`). */
 async function checkSendingWallet(params: Readonly<Record<string, unknown>>, root: string, engines: HostEngines): Promise<void> {
-  const { loadWalletConfig, resolveWalletPath } = await import('../lib/wallet-config.ts');
+  const { loadWalletConfig, resolveWalletPath } = await import('@kuiralabs/midnight-wallet');
   await loadWalletConfig(resolveWalletPath(root, params.wallet as string | undefined), engines);
 }
 

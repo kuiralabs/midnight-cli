@@ -3,7 +3,7 @@
 // wallets. The caller passes it to the wallet command. The sealing code (and
 // the account chain it loads) is loaded only when the protector runs.
 
-import type { WalletProtector } from '../wallet-protector.ts';
+import type { WalletProtector } from '@kuiralabs/midnight-wallet';
 
 export const accountProtector: WalletProtector = {
   name: 'accounts',

@@ -1,4 +1,4 @@
-// What every wallet operation of src/lib/wallet takes besides its own inputs,
+// What every wallet operation of lib/wallet takes besides its own inputs,
 // what it says once its wallet is open, and the wallet's address it acts on.
 
 import type { NetworkChoice, ProgressEvent, VerboseLog, CallSdkWarnings, HostEngines, NetworkName } from '@kuiralabs/midnight-cli-core';

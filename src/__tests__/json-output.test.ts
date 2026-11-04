@@ -8,18 +8,21 @@ import * as path from 'path';
 import * as os from 'os';
 
 // Commands that can be tested without network/Docker
-import generateCommand from '../commands/generate.ts';
-import infoCommand from '../commands/info.ts';
-import addressCommand from '../commands/address.ts';
-import genesisAddressCommand from '../commands/genesis-address.ts';
 import inspectCostCommand from '../commands/inspect-cost.ts';
 import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
+import { generateDefinition, infoDefinition, addressDefinition, genesisAddressDefinition } from '@kuiralabs/midnight-wallet/commands';
 import helpCommand from '../commands/help.ts';
-import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
+import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../test-support/plain-wallet.ts';
 import { rcKeys } from '../../test-support/rc-engine.ts';
 import { localIndexerFlags } from '../../test-support/local-indexer.ts';
 import { cliCall } from './helpers/cli-call.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
+
+// The handlers, as the shell loads them.
+const { default: generateCommand } = await generateDefinition.load();
+const { default: infoCommand } = await infoDefinition.load();
+const { default: addressCommand } = await addressDefinition.load();
+const { default: genesisAddressCommand } = await genesisAddressDefinition.load();
 
 // The config handler, as the shell loads it.
 const { default: configCommand } = await configDefinition.load();

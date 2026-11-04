@@ -87,7 +87,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   // This machine's device, made where no account is yet: it opens no account first.
   if (request.subcommand === 'device' && request.action === 'new') {
     const { createPendingDevice, openAccountKey, ownJoinCode } = await import('../lib/grant/sealed-account.ts');
-    const { unlockPassphrase, passphraseForNewSecret, isPassphraseSet } = await import('../lib/passphrase.ts');
+    const { unlockPassphrase, passphraseForNewSecret, isPassphraseSet } = await import('@kuiralabs/midnight-wallet');
     const passphrase = isPassphraseSet(target.root) ? await unlockPassphrase(ctx.host, target.root) : await passphraseForNewSecret(ctx.host, target.root);
     const device = createPendingDevice(recordsDir, passphrase);
     const code = ownJoinCode(recordsDir, openAccountKey(recordsDir, passphrase), device);
@@ -106,7 +106,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   // An import brings an account in where there is none: it opens no account first.
   if (request.subcommand === 'import') {
     const { importAccount } = await import('../lib/grant/account-backup.ts');
-    const { unlockPassphrase, passphraseForNewSecret, isPassphraseSet } = await import('../lib/passphrase.ts');
+    const { unlockPassphrase, passphraseForNewSecret, isPassphraseSet } = await import('@kuiralabs/midnight-wallet');
     try {
       const passphrase = isPassphraseSet(target.root) ? await unlockPassphrase(ctx.host, target.root) : await passphraseForNewSecret(ctx.host, target.root);
       const { contractAddress } = await importAccount(recordsDir, target.network, passphrase, request.file);
@@ -225,7 +225,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
       case 'device': {
         if (owned.protection !== 'sealed') throw new UsageError('The account is not protected: its devices are managed once it is. Encrypt it first: midnight wallet protect');
         const { openAccountKey, sealedDeviceList } = await import('../lib/grant/sealed-account.ts');
-        const { unlockPassphrase } = await import('../lib/passphrase.ts');
+        const { unlockPassphrase } = await import('@kuiralabs/midnight-wallet');
         const passphrase = await unlockPassphrase(ctx.host, target.root);
         const devices = sealedDeviceList(recordsDir, openAccountKey(recordsDir, passphrase));
         if (owned.ownCode === undefined) throw new Error('A sealed account names its own device code');
@@ -274,7 +274,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
       }
       case 'export': {
         const { exportAccount } = await import('../lib/grant/account-backup.ts');
-        const { unlockPassphrase } = await import('../lib/passphrase.ts');
+        const { unlockPassphrase } = await import('@kuiralabs/midnight-wallet');
         const outcome = await exportAccount(recordsDir, target.network, await unlockPassphrase(ctx.host, target.root), request.file, ctx.host.engines);
         spinner.stop('Written');
         if (jsonMode) {

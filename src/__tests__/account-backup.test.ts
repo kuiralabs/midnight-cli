@@ -13,14 +13,14 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type FeeWallet, accountProviders, freshOwnerDevice } from '@kuiralabs/midnight-account-chain/owner';
 import { PRIVATE_STATE_ID } from '@kuiralabs/midnight-account-chain/contract';
-import { WrongPassphraseError, getNetworkConfig, createHost } from '@kuiralabs/midnight-cli-core';
-import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
+import { WrongPassphraseError, getNetworkConfig, createHost, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
+import { establishPassphrase } from '@kuiralabs/midnight-wallet';
 import { openGrantAccount, privateStateLocationOf } from '../lib/grant/account.ts';
 import { exportAccount, importAccount } from '../lib/grant/account-backup.ts';
 import { createPendingDevice, openAccountKey, ownDeviceCode, sealedDeviceList } from '../lib/grant/sealed-account.ts';
 import { parseDeviceCode } from '../lib/grant/device-code.ts';
 import { createAccountKey, sealedDeviceKeys, sealedOwnerStore, sealedPrivateStatePassword } from '../lib/grant/sealed-account.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
 // An rc engine, for what every host's has alike: its keys, ledger and contracts.

@@ -9,9 +9,9 @@ import { join } from 'node:path';
 import { parseArgs, UsageError, encodeOfferEnvelope, OfferExpiredError, TermsMismatchError } from '@kuiralabs/midnight-cli-core';
 import { NotAnOfferError } from '@kuiralabs/midnight-cli-core/engine';
 import { DEFAULT_OFFER_LIFETIME_S, prepareMake, prepareTake, termsOf } from '../lib/swap/request.ts';
-import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from '../../test-support/fixtures/swap-offer.ts';
-import { testHost } from '../../test-support/test-host.ts';
-import { rcEngine } from '../../test-support/rc-engine.ts';
+import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from '../../../../test-support/fixtures/swap-offer.ts';
+import { testHost } from '../../../../test-support/test-host.ts';
+import { rcEngine } from '../../../../test-support/rc-engine.ts';
 
 // The host the tests' calls run in (test-host.ts): settings from the test's environment, nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
 const host = testHost();

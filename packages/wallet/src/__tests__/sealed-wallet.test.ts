@@ -11,9 +11,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WrongPassphraseError, FILE_MODE, createHost } from '@kuiralabs/midnight-cli-core';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
 import { loadWalletConfig, protectAllWallets, sealWalletInPlace, unlockWallet, writeSealedWallet } from '../lib/wallet-config.ts';
-import { rcKeys } from '../../test-support/rc-engine.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
-import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { rcKeys } from '../../../../test-support/rc-engine.ts';
+import { stateRootIn } from '../../../../test-support/state-root-in.ts';
+import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 
 // The host the tests' calls run in: nobody to ask, notices dropped, and an engine of its own from the engines the CLI ships.
 const host = createHost({ engineLoader: loadInstalledEngine });

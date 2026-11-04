@@ -4,7 +4,7 @@
 // given and where a notice goes, and decides the heap and the exit.
 
 import { type ParsedArgs, createCallContext, runHandler, type CallContext, type CommandOutcome, type CallOutput, type CommandDefinition, type CommandRegistry, UsageError, writeJsonResult, type Payer, type CallSdkWarnings, type Host } from '@kuiralabs/midnight-cli-core';
-import type { WalletProtector } from './wallet-protector.ts';
+import type { WalletProtector } from '@kuiralabs/midnight-wallet';
 
 /** What the shell can give a handler: its call's signal and output, and, as its definition's `shell` field asks, the payer or protectors, loaded only then. */
 export interface ShellProvisions {

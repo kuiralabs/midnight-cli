@@ -39,7 +39,7 @@ export const dustDefinition: CommandDefinition = {
       agent: { type: 'string' },
     },
     {
-      // Help says register only, but every subcommand resolves its network with it (src/commands/dust.ts).
+      // Help says register only, but every subcommand resolves its network with it (commands/dust.ts).
       name: 'node',
       takesValue: true,
       help: ['--node <url>          Override substrate node RPC URL (register only)'],
@@ -52,7 +52,7 @@ export const dustDefinition: CommandDefinition = {
       agent: ENDPOINT_PARAMS['indexer-ws'],
     },
     {
-      // Help says register only, but every subcommand resolves its network with it (src/commands/dust.ts).
+      // Help says register only, but every subcommand resolves its network with it (commands/dust.ts).
       name: 'proof-server',
       takesValue: true,
       help: ['--proof-server <url>  Override proof server URL (register only)'],

@@ -8,7 +8,7 @@ import { errorMessage, usageMessage, createTerminalPrompter } from '@kuiralabs/m
 import { installedCommands } from './lib/installed-commands.ts';
 import { commandNeedsWalletSdk, dispatchCommand, processOutput } from './lib/command-dispatch.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
-import { migrateOldWallet } from './lib/wallet-paths.ts';
+import { migrateOldWallet } from '@kuiralabs/midnight-wallet';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';

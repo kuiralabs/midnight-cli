@@ -4,9 +4,7 @@
 // left untouched (the user can `mn wallet remove <name>` to force re-setup).
 
 import { existsSync } from 'node:fs';
-import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet, type UnlockHost } from '../wallet-config.ts';
-import { createWallet, walletFilePath, walletSecretFrom } from '../wallet-create.ts';
-import { passphraseForNewSecret } from '../passphrase.ts';
+import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet, type UnlockHost, createWallet, walletFilePath, walletSecretFrom, passphraseForNewSecret } from '@kuiralabs/midnight-wallet';
 import { sdkSetOf, resolveNetwork, type NetworkSettings, type NetworkConfig, type CallSdkWarnings, throwIfCancelled, nightToMicro } from '@kuiralabs/midnight-cli-core';
 import { checkBalance } from '@kuiralabs/midnight-chain';
 

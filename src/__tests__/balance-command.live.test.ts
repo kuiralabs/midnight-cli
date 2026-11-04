@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
-import balanceCommand from '../commands/balance.ts';
 import { parseArgs, GENESIS_SEED } from '@kuiralabs/midnight-cli-core';
-import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
+import { balanceDefinition } from '@kuiralabs/midnight-wallet/commands';
+import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../test-support/plain-wallet.ts';
 import { rcKeys } from '../../test-support/rc-engine.ts';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { testHost } from '../../test-support/test-host.ts';
@@ -9,6 +9,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { cliCall } from './helpers/cli-call.ts';
+
+// The handler, as the shell loads it.
+const { default: balanceCommand } = await balanceDefinition.load();
 
 // Live tests against a running ledger-9 indexer: run by `npm run test:live`,
 // never by `npm test`. They read balances only, from undeployed's saved

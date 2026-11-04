@@ -20,8 +20,7 @@ import {
   directoryOwnerStore,
 } from '@kuiralabs/midnight-account-chain/owner';
 import { PRIVATE_STATE_DATABASE } from '../contract/private-state.ts';
-import { type PassphraseSource, passphraseForNewSecret, unlockPassphrase } from '../passphrase.ts';
-import type { UnlockHost } from '../wallet-config.ts';
+import { type PassphraseSource, passphraseForNewSecret, unlockPassphrase, type UnlockHost } from '@kuiralabs/midnight-wallet';
 import {
   AccountMigrationInterruptedError,
   type SealedDeviceKeys,

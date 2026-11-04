@@ -1,16 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mnemonicToSeedSync } from '@scure/bip39';
-import generateCommand from '../commands/generate.ts';
-import { unlockWallet } from '../lib/wallet-config.ts';
-import { PASSPHRASE_ENV } from '../lib/passphrase.ts';
-import { parseArgs } from '@kuiralabs/midnight-cli-core';
+import { unlockWallet } from '@kuiralabs/midnight-wallet';
+import { parseArgs, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
+import { generateDefinition } from '@kuiralabs/midnight-wallet/commands';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { cliCall } from './helpers/cli-call.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
 import { testHost } from '../../test-support/test-host.ts';
+
+// The handler, as the shell loads it.
+const { default: generateCommand } = await generateDefinition.load();
 
 // The host the tests' calls run in (test-host.ts): settings from the test's environment, nobody to ask, notices dropped.
 const host = testHost();

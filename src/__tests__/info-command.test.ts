@@ -1,13 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import infoCommand from '../commands/info.ts';
 import { parseArgs } from '@kuiralabs/midnight-cli-core';
-import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
+import { infoDefinition } from '@kuiralabs/midnight-wallet/commands';
+import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../test-support/plain-wallet.ts';
 import { rcKeys } from '../../test-support/rc-engine.ts';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { cliCall } from './helpers/cli-call.ts';
+
+// The handler, as the shell loads it.
+const { default: infoCommand } = await infoDefinition.load();
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-info-cmd-test-${process.pid}`);
 

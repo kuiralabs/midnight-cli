@@ -2,6 +2,7 @@
 // Subcommands: generate, list, use, info, remove
 
 import * as fs from 'fs';
+import * as readline from 'readline';
 import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, UsageError, throwIfCancelled, resolveNetworkName, type CallContext } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, divider, formatAddress, bold, yellow, dim, green, teal } from '@kuiralabs/midnight-cli-core/ui';
 import { mnemonicToEntropy } from '@scure/bip39';
@@ -416,7 +417,6 @@ async function walletProtect(args: ParsedArgs, ctx: WalletCommandContext): Promi
 
 function confirm(prompt: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const readline = require('readline');
     const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
     rl.question(prompt, (answer: string) => {
       rl.close();

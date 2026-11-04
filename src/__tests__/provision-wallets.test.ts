@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { provisionDevWallets, type ProvisionSteps } from '../lib/dev/provision-wallets.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
 
 let home: string;
 let originalHome: string | undefined;

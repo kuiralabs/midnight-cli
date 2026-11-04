@@ -4,7 +4,7 @@
 // confirmation token.
 
 import { type ParsedArgs, getFlag, UsageError, type PayingTarget, resolvePayingTarget, type Host } from '@kuiralabs/midnight-cli-core';
-import { assertWalletFileExists, getActiveWalletName, resolveWalletPath } from '../wallet-config.ts';
+import { assertWalletFileExists, getActiveWalletName, resolveWalletPath } from '@kuiralabs/midnight-wallet';
 import { assertAccountNetwork, assertNodeRunsAccount } from './account.ts';
 import { accountRecordsDir, accountWalletName, ensureAccountRecordsDir } from './account-records.ts';
 import { type GrantRequest, resolveGrantRequest } from './request.ts';

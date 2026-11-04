@@ -1,7 +1,7 @@
 // Test framework types — schemas for dapp.test.json, suite configs, assertions, and results.
 
 import type { ServeHandle } from '../serve-manager.ts';
-import type { UnlockHost } from '../wallet-config.ts';
+import type { UnlockHost } from '@kuiralabs/midnight-wallet';
 import type { CallSdkWarnings, NetworkName } from '@kuiralabs/midnight-cli-core';
 
 // ── DApp Test Config (dapp.test.json in dApp root) ──

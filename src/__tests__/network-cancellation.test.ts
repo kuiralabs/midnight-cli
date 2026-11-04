@@ -13,13 +13,12 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { parseArgs, type CommandHandler } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
-import { establishPassphrase } from '../lib/passphrase.ts';
-import { createWallet, walletSecretFrom } from '../lib/wallet-create.ts';
+import { establishPassphrase, createWallet, walletSecretFrom } from '@kuiralabs/midnight-wallet';
 import { servePayerAt } from '../lib/serve-payer.ts';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { declaredOutcome } from './helpers/expect-declared.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
 import { testHost } from '../../test-support/test-host.ts';
 
 const PASSPHRASE = 'correct horse battery staple';

@@ -6,7 +6,7 @@ import { header, keyValue, bold, dim, teal, yellow, green, spinnerReporter } fro
 import { deployContract } from '../lib/contract/deploy.ts';
 import { callContract } from '../lib/contract/call.ts';
 import { readContractState } from '../lib/contract/state.ts';
-import { showPaidStep } from '../lib/wallet/paid-call.ts';
+import { showPaidStep } from '@kuiralabs/midnight-wallet/commands';
 import { resolveContractCallRequest, resolveContractDeployRequest, resolveDappDir, resolveScanDir } from '../lib/contract/request.ts';
 import {
   findContractInfo,

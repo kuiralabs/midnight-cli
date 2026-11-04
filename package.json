@@ -29,7 +29,8 @@
     "packages/cli-core",
     "packages/chain",
     "packages/engine-rc",
-    "packages/engine-beta"
+    "packages/engine-beta",
+    "packages/wallet"
   ],
   "bin": {
     "midnight": "dist/wallet.js",
@@ -50,7 +51,7 @@
   },
   "scripts": {
     "wallet": "tsx --conditions=midnight-cli-source src/wallet.ts",
-    "build": "npm run build -w @kuiralabs/midnight-cli-core && npm run build -w @kuiralabs/midnight-chain && npm run build -w @kuiralabs/midnight-engine-rc && npm run build -w @kuiralabs/midnight-engine-beta && node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && bun build src/wallet.ts src/mcp-server.ts --outdir dist --splitting --target node --format esm --packages external --minify --banner \"#!/usr/bin/env node\"",
+    "build": "npm run build -w @kuiralabs/midnight-cli-core && npm run build -w @kuiralabs/midnight-chain && npm run build -w @kuiralabs/midnight-engine-rc && npm run build -w @kuiralabs/midnight-engine-beta && npm run build -w @kuiralabs/midnight-wallet && node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && bun build src/wallet.ts src/mcp-server.ts --outdir dist --splitting --target node --format esm --packages external --minify --banner \"#!/usr/bin/env node\"",
     "mcp": "tsx --conditions=midnight-cli-source src/mcp-server.ts",
     "link": "bun link",
     "prepublishOnly": "npm run build && npm run test",
@@ -71,8 +72,8 @@
     "@kuiralabs/midnight-cli-core": "0.1.0-rc.0",
     "@kuiralabs/midnight-engine-beta": "0.1.0-rc.1",
     "@kuiralabs/midnight-engine-rc": "0.1.0-rc.1",
+    "@kuiralabs/midnight-wallet": "0.1.0-rc.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "@scure/bip39": "^2.0.1",
     "ws": "^8.19.0"
   },
   "devDependencies": {

@@ -6,7 +6,7 @@ import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
 import { parseArgs, loadCliConfig } from '@kuiralabs/midnight-cli-core';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
-import { stateRootIn } from './helpers/state-root-in.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
 
 // The config handler, as the shell loads it.
 const { default: configCommand } = await configDefinition.load();

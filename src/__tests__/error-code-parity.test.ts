@@ -34,28 +34,26 @@ import { LocalStackUnreachableError, UnsupportedLedgerError, ChainClockBehindErr
 import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
 import { rcKeys } from '../../test-support/rc-engine.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { readPassphrase } from '../lib/passphrase.ts';
-import { assertWalletFileExists, assertWalletRemovable, setActiveWallet } from '../lib/wallet-config.ts';
-import { walletSecretFrom } from '../lib/wallet-create.ts';
-import { resolveTransferRequest } from '../lib/transfer-request.ts';
-import { assertWalletCanPay } from '../lib/wallet-can-pay.ts';
+import { readPassphrase, assertWalletFileExists, assertWalletRemovable, setActiveWallet, walletSecretFrom, assertWalletCanPay, NoSuchOfferError } from '@kuiralabs/midnight-wallet';
+import { walletDefinition, generateDefinition, addressDefinition, airdropDefinition, balanceDefinition } from '@kuiralabs/midnight-wallet/commands';
 import { PrepStepFailedError, runPrepSteps } from '../lib/test/prep-runner.ts';
 import { createPrepContext, type DappTestConfig } from '../lib/test/types.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
-import walletCommand from '../commands/wallet.ts';
-import generateCommand from '../commands/generate.ts';
-import addressCommand from '../commands/address.ts';
-import airdropCommand from '../commands/airdrop.ts';
-import balanceCommand from '../commands/balance.ts';
 import { cliCall } from './helpers/cli-call.ts';
-import { saveWalletConfig } from './helpers/plain-wallet.ts';
+import { saveWalletConfig } from '../../test-support/plain-wallet.ts';
 import { UnsupportedNodeError } from '../lib/node-version.ts';
 import { LocalnetUnavailableError } from '../lib/localnet.ts';
 import { scriptRuntime } from '../lib/contract/runner.ts';
-import { NoSuchOfferError } from '../lib/swap/offers.ts';
 import { NoAccountError } from '../lib/grant/prepare.ts';
 import { NodeTooOldForAccountError, UnreachableByAccountError } from '../lib/grant/account.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
+
+// The handlers, as the shell loads them.
+const { default: walletCommand } = await walletDefinition.load();
+const { default: generateCommand } = await generateDefinition.load();
+const { default: addressCommand } = await addressDefinition.load();
+const { default: airdropCommand } = await airdropDefinition.load();
+const { default: balanceCommand } = await balanceDefinition.load();
 
 let root: string;
 beforeAll(() => {
@@ -172,7 +170,7 @@ const ROWS: Row[] = [
   ['airdrop with no amount', run(airdropCommand, 'airdrop'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
   ["balance of an address on another network than --network", run(balanceCommand, 'balance', OTHER_ADDRESSES.undeployed, '--network', 'preprod'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
   ["the shielded balance of someone else's address", run(balanceCommand, 'balance', OTHER_ADDRESSES.preview, '--shielded', '--network', 'preview'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
-  ['a shielded transfer where shielded is off', () => resolveTransferRequest(parseArgs(['transfer', rcKeys.shieldedAddresses(SEED).preprod, '1', '--wallet', 'alice', '--shielded', '--network', 'preprod']), root, hostOnRoot()), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
+  // A shielded transfer where shielded is off is refused by the wallet's transfer request: its row is in the wallet's tests (transfer-request.test.ts).
 
   // No such wallet: exit 3, by its message.
   ['no wallet of that name', () => setActiveWallet(root, 'nobody'), as('WALLET_NOT_FOUND', 3), as('WALLET_NOT_FOUND', 3)],

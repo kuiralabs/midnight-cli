@@ -14,7 +14,7 @@ import { confirmationText, createCommandRegistry, commandHelpSpecs, introBriefs,
 import { CONFIRM_TOOL, listedTools } from '../lib/mcp/registry-tools.ts';
 import { commandNeedsWalletSdk, dispatchCommand, type ShellProvisions } from '../lib/command-dispatch.ts';
 import { testHost } from '../../test-support/test-host.ts';
-import type { WalletProtector } from '../lib/wallet-protector.ts';
+import type { WalletProtector } from '@kuiralabs/midnight-wallet';
 
 const SRC = join(import.meta.dirname, '..');
 const registry = installedCommands;

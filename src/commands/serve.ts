@@ -4,7 +4,7 @@
 
 import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites, resolveNetwork, applyEndpointOverrides, type DAppConnector, type DAppConnectorCallbacks, OPERATOR_REJECTED_MESSAGE, type PhaseTiming, DEFAULT_SERVE_PORT, shieldedSyncEnabled, parseFeeLimits, describeApprovalPolicy, type CallContext, UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, divider, formatAddress, toDust, bold, dim, teal, green, red, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
-import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
+import { resolveWalletPath, unlockWallet } from '@kuiralabs/midnight-wallet';
 import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
 
 export default async function serveCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {

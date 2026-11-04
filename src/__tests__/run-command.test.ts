@@ -2,21 +2,24 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { captureCommand } from '../lib/run-command.ts';
 import { SecondResultError, type CommandHandler, CancelledError, CommandFailedError, classifyError, parseArgs, type ParsedArgs } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
+import { generateDefinition, infoDefinition, addressDefinition, genesisAddressDefinition } from '@kuiralabs/midnight-wallet/commands';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-import generateCommand from '../commands/generate.ts';
-import infoCommand from '../commands/info.ts';
-import addressCommand from '../commands/address.ts';
-import genesisAddressCommand from '../commands/genesis-address.ts';
 import inspectCostCommand from '../commands/inspect-cost.ts';
-import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
+import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../test-support/plain-wallet.ts';
 import { rcKeys } from '../../test-support/rc-engine.ts';
 import { localIndexerFlags } from '../../test-support/local-indexer.ts';
 import { ownCall } from './helpers/own-call.ts';
+
+// The handlers, as the shell loads them.
+const { default: generateCommand } = await generateDefinition.load();
+const { default: infoCommand } = await infoDefinition.load();
+const { default: addressCommand } = await addressDefinition.load();
+const { default: genesisAddressCommand } = await genesisAddressDefinition.load();
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-run-cmd-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';

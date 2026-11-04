@@ -2,8 +2,7 @@
 // the payer serves (served-wallet.ts). `mn contract deploy` and `mn dev` both deploy through here.
 
 import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, withCallSdkWarnings } from '@kuiralabs/midnight-cli-core';
-import { networkChoiceOf } from '../wallet/wallet-call.ts';
-import { stepSpinner, type PaidCallOptions } from '../wallet/paid-call.ts';
+import { networkChoiceOf, stepSpinner, type PaidCallOptions } from '@kuiralabs/midnight-wallet';
 import { withServedWallet } from './served-wallet.ts';
 import { assertContractRunsOn, type ContractChecked } from './runtime-check.ts';
 import type { ContractDeployRequest } from './request.ts';
