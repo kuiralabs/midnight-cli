@@ -9,7 +9,7 @@
 
 export {
   assembleGuidance, codeGuidancePieces, GuidanceError, type GuidancePiece, type GuidanceText,
-  manualCodeRow, type PackageGuidance, sectionsWithAdded, skillCodeRow, type ToolsTableRow, wrapWords
+  listedNames, manualCodeRow, type PackageGuidance, sectionsWithAdded, skillCodeRow, type ToolsTableRow, wrapWords
 } from './lib/agent-guidance.ts';
 export { nightAmountJson, nightAmountText, nightToMicro, parseAmount } from './lib/amount.ts';
 export { describeApprovalPolicy } from './lib/approval.ts';
@@ -101,6 +101,9 @@ export { type ProgressEvent, type ProgressListener, type ProgressSteps, progress
 export { type Prompter } from './lib/prompter.ts';
 export { clearDustDirectCache, clearNativeDustCheckpoint, clearShieldedDirectCache } from './lib/reader-cache-files.ts';
 export { type NetworkSettings, resolveBlockfrostProjectId, resolveNetwork, resolveNetworkName } from './lib/resolve-network.ts';
+export {
+  captureCommand, type CommandRun, type Provided, runCommand, type RunnableDefinition, toolDescription
+} from './lib/run-command.ts';
 export {
   type CallSdkWarnings, createSdkWarningRouter, sdkTransientWarning, type SdkWarningCalls,
   withCallSdkWarnings

@@ -7,9 +7,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { parseArgs, type CommandHandler } from '@kuiralabs/midnight-cli-core';
+import { captureCommand, parseArgs } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
-import { captureCommand } from '../lib/run-command.ts';
 import { ownCall } from './helpers/own-call.ts';
 import { declaredOutcome } from './helpers/expect-declared.ts';
 
@@ -35,8 +34,7 @@ afterAll(() => {
 async function run(...argv: string[]): Promise<Record<string, unknown>> {
   const args = parseArgs([...argv, '--json']);
   args.flags._full = true;
-  const { default: handler } = await installedCommands.find(args.command!)!.load();
-  return declaredOutcome(args.command!, captureCommand(handler as CommandHandler, args, ownCall()));
+  return declaredOutcome(args.command!, captureCommand(installedCommands.find(args.command!)!, args, ownCall()));
 }
 
 // In order: a later run reads what an earlier one wrote.

@@ -181,3 +181,8 @@ export function codeGuidancePieces(codes: readonly CodeDefinition[]): GuidancePi
     ] satisfies GuidancePiece[];
   });
 }
+
+/** Names in a sentence: "network", "network and wallet", "network, wallet and engine". */
+export function listedNames(names: readonly string[]): string {
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}

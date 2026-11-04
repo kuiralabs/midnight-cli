@@ -7,16 +7,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createHost, type Host, parseArgs, MIDNIGHT_DIR, loadCliConfig, sdkSetOf, readOpenOffers, recordOpenOffer, type OpenOffer, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
+import { captureCommand, createHost, type Host, parseArgs, MIDNIGHT_DIR, loadCliConfig, sdkSetOf, readOpenOffers, recordOpenOffer, type OpenOffer, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
 import { cacheRootDir, getCachePath, networkCacheFolder } from '@kuiralabs/midnight-cli-core/engine';
 import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
-import { captureCommand } from '../lib/run-command.ts';
+import { ownCall } from './helpers/own-call.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { createWallet, walletSecretFrom, getActiveWalletName, listWallets, clearChainCaches, passphraseForNewSecret } from '@kuiralabs/midnight-wallet';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
 
-// The config handler, as the shell loads it.
-const { default: configCommand } = await configDefinition.load();
 
 const PASSPHRASE = 'correct horse battery staple';
 const MAKER = 'mn_addr_undeployed1maker';
@@ -66,11 +64,11 @@ afterEach(() => {
 
 describe('two hosts with different state roots', () => {
   it('each read and write their own config through the config command', async () => {
-    await captureCommand(configCommand, parseArgs(['config', 'set', 'network', 'preview']), { host: hostA });
-    await captureCommand(configCommand, parseArgs(['config', 'set', 'network', 'preprod']), { host: hostB });
+    await captureCommand(configDefinition, parseArgs(['config', 'set', 'network', 'preview']), ownCall({ host: hostA }));
+    await captureCommand(configDefinition, parseArgs(['config', 'set', 'network', 'preprod']), ownCall({ host: hostB }));
 
-    expect(await captureCommand(configCommand, parseArgs(['config', 'get', 'network']), { host: hostA })).toMatchObject({ value: 'preview' });
-    expect(await captureCommand(configCommand, parseArgs(['config', 'get', 'network']), { host: hostB })).toMatchObject({ value: 'preprod' });
+    expect(await captureCommand(configDefinition, parseArgs(['config', 'get', 'network']), ownCall({ host: hostA }))).toMatchObject({ value: 'preview' });
+    expect(await captureCommand(configDefinition, parseArgs(['config', 'get', 'network']), ownCall({ host: hostB }))).toMatchObject({ value: 'preprod' });
     expect(loadCliConfig(rootA).network).toBe('preview');
     expect(loadCliConfig(rootB).network).toBe('preprod');
     expect(fs.readdirSync(process.env.HOME!)).toEqual([]);
@@ -85,9 +83,8 @@ describe('two hosts with different state roots', () => {
     expect(getActiveWalletName(rootA)).toBe('alice');
     expect(getActiveWalletName(rootB)).toBe('bob');
     // As the MCP server runs it.
-    const { default: walletCommand } = await installedCommands.find('wallet')!.load();
-    const listedA = await captureCommand(walletCommand, parseArgs(['wallet', 'list']), { host: hostA });
-    const listedB = await captureCommand(walletCommand, parseArgs(['wallet', 'list']), { host: hostB });
+    const listedA = await captureCommand(installedCommands.find('wallet')!, parseArgs(['wallet', 'list']), ownCall({ host: hostA }));
+    const listedB = await captureCommand(installedCommands.find('wallet')!, parseArgs(['wallet', 'list']), ownCall({ host: hostB }));
     expect((listedA.wallets as { name: string }[]).map((w) => w.name)).toEqual(['alice']);
     expect((listedB.wallets as { name: string }[]).map((w) => w.name)).toEqual(['bob']);
     expect(fs.existsSync(path.join(rootA, 'wallets', 'alice.json'))).toBe(true);
@@ -106,7 +103,7 @@ describe('two hosts with different state roots', () => {
 
   it('each keep their wallet caches in their own folder, named by their own config\'s SDK set', async () => {
     const address = 'mn_addr_undeployed1abcdefghijklmnopqrst';
-    await captureCommand(configCommand, parseArgs(['config', 'set', 'sdk-set', 'beta', '--network', 'undeployed']), { host: hostA });
+    await captureCommand(configDefinition, parseArgs(['config', 'set', 'sdk-set', 'beta', '--network', 'undeployed']), ownCall({ host: hostA }));
 
     expect(cacheRootDir(rootA)).toBe(path.join(rootA, 'cache'));
     expect(cacheRootDir(rootB)).toBe(path.join(rootB, 'cache'));

@@ -17,6 +17,7 @@ export interface GuidancePiece {
     readonly body: string;
 }
 export type GuidanceText = 'agent-manual' | 'skill-core' | 'skill-full';
+export declare function listedNames(names: readonly string[]): string;
 export declare function manualCodeRow(definition: CodeDefinition): string;
 export interface PackageGuidance {
     readonly pieces: readonly GuidancePiece[];
@@ -711,6 +712,22 @@ export declare function resolveNetwork(ctx: NetworkResolutionContext, settings: 
     config: NetworkConfig;
 };
 export declare function resolveNetworkName(ctx: NetworkResolutionContext): NetworkName;
+export declare function captureCommand<Protector = unknown>(definition: RunnableDefinition, args: ParsedArgs, run: CommandRun<Protector> & {
+    readonly text: (text: string) => void;
+}): Promise<Record<string, unknown>>;
+export interface CommandRun<Protector = unknown> {
+    readonly host: Host;
+    readonly signal?: AbortSignal;
+    readonly onProgress?: (message: string) => void;
+    readonly payer?: Provided<Payer>;
+    readonly protectors?: Provided<readonly Protector[]>;
+}
+export type Provided<T> = T | (() => Promise<T>);
+export declare function runCommand<Protector = unknown>(definition: RunnableDefinition, args: ParsedArgs, run: CommandRun<Protector> & {
+    readonly output: CallOutput;
+}): Promise<CommandOutcome | void>;
+export type RunnableDefinition = Pick<CommandDefinition, 'shell' | 'load'>;
+export declare function toolDescription(registry: Pick<CommandRegistry, 'code'>, tool: RegisteredTool): string;
 export interface CallSdkWarnings {
     listen(listener: SdkWarningListener | undefined): () => void;
 }
