@@ -409,6 +409,27 @@ try {
     const deep = run(process.execPath, ['entry.mjs', `${name}/${deepPath}`], outside).trim();
     check(`a program outside mn is refused ${name}/${deepPath}`, deep === 'ERR_PACKAGE_PATH_NOT_EXPORTED', deep);
   }
+
+  // The same packages installed with bun (Y65): its installer ignores each
+  // engine's shrinkwrap and resolves the ranges again, so each engine must
+  // refuse to load, before any SDK module does, with MIXED_SDK_LAYOUT and the
+  // npm command, under Node and under bun. Skipped where bun isn't installed.
+  const bunInstalled = (() => { try { run('bun', ['--version'], work); return true; } catch { return false; } })();
+  if (bunInstalled) {
+    const bunOutside = join(work, 'bun-outside');
+    mkdirSync(bunOutside);
+    writeFileSync(join(bunOutside, 'package.json'), JSON.stringify({ name: 'bun-outside', private: true, type: 'module' }));
+    execFileSync('bun', ['add', ...workspaces.map(({ name, version }) => `${name}@${version}`)], { cwd: bunOutside, env: { ...process.env, BUN_CONFIG_REGISTRY: registry.url, BUN_INSTALL_CACHE_DIR: join(work, 'bun-cache') }, stdio: 'pipe' });
+    writeFileSync(join(bunOutside, 'load.mjs'), readFileSync(join(outside, 'load.mjs'), 'utf-8').replace(`console.log(error.code ?? error.message)`, `console.log(error.code, /Install with npm/.test(error.message) ? 'names npm' : '')`).replaceAll(JSON.stringify(join(outside, 'state')), JSON.stringify(join(bunOutside, 'state'))));
+    for (const runtime of [process.execPath, 'bun']) {
+      for (const [network, set] of [['undeployed', 'rc'], ['stagenet', 'beta']]) {
+        const refused = run(runtime, ['load.mjs', network], bunOutside).trim();
+        check(`installed with bun, the ${set} engine refuses to load under ${runtime === 'bun' ? 'bun' : 'Node'}, naming npm`, refused === 'MIXED_SDK_LAYOUT names npm', refused);
+      }
+    }
+  } else {
+    console.log('  (bun is not installed: the bun install is not checked)');
+  }
 } catch (error) {
   check('the fresh install and its checks ran', false, String(error.stderr || error.message).trim().split('\n').slice(-3).join(' | '));
 } finally {
