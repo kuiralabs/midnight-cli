@@ -902,7 +902,7 @@ export declare const coreCodes: readonly [
         readonly code: "MIXED_SDK_LAYOUT";
         readonly exitCode: 1;
         readonly order: 290;
-        readonly summary: "mn was installed without its shrinkwrap (bun's installer): an engine's SDK packages reach more than one copy of its ledger.";
+        readonly summary: "mn's packages were installed without each engine's shrinkwrap (bun's installer): an engine's SDK tree isn't the one it was tested with.";
         readonly recovery: "Ask the user to install mn with npm.";
     },
     {
@@ -1409,12 +1409,25 @@ export declare function reportingEngineErrors<T extends object>(operations: T): 
 export declare function toEngineError(err: unknown): unknown;
 export declare function withDustShortfall<E extends object>(error: E, shortfall: DustShortfall): E;
 export declare function withEngineCode(err: unknown): unknown;
+export declare function assertInstalledAsShipped(engine: string, engineDir: string): void;
 export declare function assertOneSdkCopy(engine: string, engineDir: string, packages: readonly string[], wasmPackages: readonly string[]): void;
 export declare class MixedSdkLayoutError extends Error {
     readonly code = "MIXED_SDK_LAYOUT";
     constructor(engine: string, wasmPackage: string, copies: string[]);
 }
+export declare class NotInstalledAsShippedError extends Error {
+    readonly code = "MIXED_SDK_LAYOUT";
+    readonly drift: readonly TreeDrift[];
+    constructor(engine: string, drift: readonly TreeDrift[]);
+}
 export declare function resolvedPackageFolder(from: string, name: string): string | null;
+export declare function shippedTreeDrift(engineDir: string): TreeDrift[] | null;
+export interface TreeDrift {
+    readonly from: string;
+    readonly name: string;
+    readonly found: string | null;
+    readonly shipped: string;
+}
 export declare function decodeSignPayload(data: string, encoding: string): Uint8Array;
 export declare function signedMessageBytes(payload: Uint8Array): Uint8Array;
 export declare function describeLeg(leg: SwapLeg): string;

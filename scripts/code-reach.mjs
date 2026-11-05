@@ -96,7 +96,7 @@ const ENGINE_SETS = ['rc', 'beta'];
 
 /**
  * The parts of an Engine and the modules of an engine's package each is made
- * of (its index assembles them); a test holds this to both engines' indexes.
+ * of (its assembler, <set>-engine.ts, puts them together); a test holds this to both engines.
  */
 export const ENGINE_PARTS = {
   keys: ['derive-address.ts', 'addresses.ts', 'dust-direct-cache.ts', 'shielded-direct-cache.ts'],
@@ -130,8 +130,8 @@ export const ENGINE_SITES = [
   },
 ];
 
-/** Imports the walk doesn't follow: an engine's index imports its parts' modules, which only a use of that part reaches (ENGINE_SITES). */
-export const CUT_IMPORTS = ENGINE_SETS.flatMap((set) => [...new Set(Object.values(ENGINE_PARTS).flat())].map((file) => [`packages/engine-${set}/src/index.ts`, `packages/engine-${set}/src/${file}`]));
+/** Imports the walk doesn't follow: an engine's assembler (<set>-engine.ts, which its index loads) imports its parts' modules, which only a use of that part reaches (ENGINE_SITES). */
+export const CUT_IMPORTS = ENGINE_SETS.flatMap((set) => [...new Set(Object.values(ENGINE_PARTS).flat())].map((file) => [`packages/engine-${set}/src/${set}-engine.ts`, `packages/engine-${set}/src/${file}`]));
 
 /** What the shell gives a command whose definition's `shell` asks for it, and the module it loads. */
 export const SHELL_PROVISIONS = {

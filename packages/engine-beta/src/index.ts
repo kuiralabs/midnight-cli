@@ -1,116 +1,24 @@
-// The engine for the SDK's beta set, which stagenet runs: the wallet SDK's
-// 5.0 beta split packages, ledger 9 rc.3 and midnight-js 5 beta, as mn pins
-// them.
+// @kuiralabs/midnight-engine-beta: the engine, loaded once the install is known to
+// be the tree it was tested with. That is checked before any SDK module loads,
+// against the npm-shrinkwrap.json the package ships: an installer that ignores
+// it (bun's) resolves the ranges again, and the SDK can then fail as it loads,
+// before any check inside the engine could say why.
 
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { type Engine, type EngineHost, assertOneSdkCopy } from '@kuiralabs/midnight-cli-core/engine';
-import * as ledger from '@midnightntwrk/ledger-v9';
-import { checkRuntimeVersion, versionString as compactRuntimeVersion } from '@midnight-ntwrk/compact-runtime';
-import { validatePassword } from '@midnight-ntwrk/midnight-js-utils';
-import { blockLimitsOf } from './ledger-parameters.ts';
-import { rawContractState } from './contract-providers.ts';
-import { assertAddress } from './addresses.ts';
-import { inspectTxHex } from './tx-inspect.ts';
-import { readOffer, spentNullifiers } from './offer-reader.ts';
-import { createBetaWallet } from './wallet.ts';
-import { WalletDataRepository, type RepoDeps } from './wallet-data-repository.ts';
-import { SCRIPT_PACKAGES, generateCallScript, generateDeployScript, generateStateScript, packageFolder } from './contract-scripts.ts';
-import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
-import { readShieldedBalanceCached, shieldedCoinPublicKeyHexFromSeed } from './shielded-direct-cache.ts';
-import { deriveAllAddresses, deriveAllShieldedAddresses, deriveShieldedAddressString, deriveUnshieldedAddress } from './derive-address.ts';
+import { assertInstalledAsShipped, type Engine, type EngineHost } from '@kuiralabs/midnight-cli-core/engine';
+import type { RepoDeps } from './wallet-data-repository.ts';
 
-// The account package, whose Midnight libraries are peer dependencies: each
-// engine declares it, and its copy in the engine's install resolves them to
-// the engine's own SDK set.
-const ACCOUNT_PACKAGE = '@kuiralabs/midnight-account-chain';
+assertInstalledAsShipped("mn's beta engine", dirname(dirname(fileURLToPath(import.meta.url))));
+const engine = await import('./beta-engine.ts');
 
-// The engine's folder (above src/ or dist/), and the SDK packages it declares
-// with the account package: each must reach the engine's own copy of every
-// WASM package.
-const ENGINE_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
-const SDK_DEPENDENCIES = Object.keys((JSON.parse(readFileSync(join(ENGINE_DIR, 'package.json'), 'utf-8')) as { dependencies: Record<string, string> }).dependencies)
-  .filter((name) => /^@midnight(ntwrk|-ntwrk)\//.test(name) || name === ACCOUNT_PACKAGE);
-assertOneSdkCopy("mn's beta engine", ENGINE_DIR, SDK_DEPENDENCIES, ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4']);
-
-/** What an beta engine is made with besides its host. */
+/** What a beta engine is made with besides its host. */
 export interface BetaEngineOptions {
   /** Its wallet repository's seams (the clock, the chain's and the indexer's reads), for a test standing in for the network. */
   readonly repository?: RepoDeps;
 }
 
-/**
- * The beta engine for a host: its own wallet repository (the in-memory caches),
- * reading the host's settings and telling the host's notices. Each host gets
- * one of its own; the work every engine does alike is shared.
- */
+/** The beta engine, for a host's engine loader. */
 export function createBetaEngine(host: EngineHost, options: BetaEngineOptions = {}): Engine {
-  return { ...SHARED, wallet: createBetaWallet(new WalletDataRepository(host, options.repository)) };
+  return engine.createBetaEngine(host, options);
 }
-
-// The parts that keep no state: the same for every host's engine.
-const SHARED: Omit<Engine, 'wallet'> = {
-  set: 'beta',
-  keys: {
-    unshieldedAddress: deriveUnshieldedAddress,
-    unshieldedAddresses: deriveAllAddresses,
-    shieldedAddress: deriveShieldedAddressString,
-    shieldedAddresses: deriveAllShieldedAddresses,
-    dustPublicKeyHex: dustPublicKeyHexFromSeed,
-    shieldedCoinPublicKeyHex: shieldedCoinPublicKeyHexFromSeed,
-    assertAddress,
-  },
-  ledger: {
-    blockLimits: blockLimitsOf,
-    nightTokenId: () => ledger.unshieldedToken().raw,
-    readTransaction: inspectTxHex,
-    readOffer,
-    spentNullifiers,
-  },
-  contracts: {
-    rawState: rawContractState,
-    acceptsPrivateStatePassword(password) {
-      try {
-        validatePassword(password);
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    scripts: {
-      packages: SCRIPT_PACKAGES,
-      packageFolder,
-      compactRuntimeVersion,
-      // The compiler release whose contracts compact-runtime 0.18 runs (compactc 0.33, built with --feature-zkir-v3).
-      compiler: 'compactc 0.33',
-      acceptsRuntime(runtimeVersion) {
-        try {
-          checkRuntimeVersion(runtimeVersion);
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      deploy: generateDeployScript,
-      call: generateCallScript,
-      state: generateStateScript,
-    },
-  },
-  readers: {
-    shieldedBalance: readShieldedBalanceCached,
-  },
-  // Imported from this engine's folder, so the copy is the one its install gives it.
-  async account() {
-    const [artefacts, connector, context, contract, deposit, errors, owner] = await Promise.all([
-      import('@kuiralabs/midnight-account-chain/artefacts'),
-      import('@kuiralabs/midnight-account-chain/connector'),
-      import('@kuiralabs/midnight-account-chain/context'),
-      import('@kuiralabs/midnight-account-chain/contract'),
-      import('@kuiralabs/midnight-account-chain/deposit'),
-      import('@kuiralabs/midnight-account-chain/errors'),
-      import('@kuiralabs/midnight-account-chain/owner'),
-    ]);
-    return { artefacts, connector, context, contract, deposit, errors, owner };
-  },
-};
