@@ -412,6 +412,8 @@ export interface DAppConnector {
   takeOffer(connectionId: string, txHex: string): Promise<string>;
   /** Cancels open swap offers of this wallet's by spending their coins back to itself; the cancel, sealed, hex, pending until submitted. Refused when it wouldn't spend every coin of every offer. */
   cancelOffers(connectionId: string, offers: readonly OpenOffer[]): Promise<string>;
+  /** Whether the wallet holds, unspent and in none of its open swap offers, a shielded coin of `token` worth exactly `amount`. */
+  holdsFreeCoin(token: string, amount: bigint): boolean;
   /** True if any connection has a balanced-but-not-submitted transaction. */
   hasPendingTxs(): boolean;
   dispose(): void;

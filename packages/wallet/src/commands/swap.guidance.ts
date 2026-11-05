@@ -28,7 +28,7 @@ named by their raw type (64 hex) and amounts are in the smallest unit.
 
   midnight swap make --give <n> --give-token <type> --want <n> --want-token <type>
                      [--expires-in <seconds>] [--out <file>] [--json]
-    → { id, file, terms, expiresAt, network }
+    → { id, file, terms, expiresAt, network, split? }
   midnight swap inspect <file> [--json]
     → { id, terms, expiresAt, live, expired, network }
   midnight swap take <file> --give <n> --give-token <type> --want <n> --want-token <type> [--json]
@@ -43,8 +43,11 @@ wants). Before the taker's wallet builds anything, take refuses an offer
 whose terms differ (TERMS_MISMATCH), one past its expiry (OFFER_EXPIRED),
 one already taken, and a file that is not an offer or says other than its
 transaction (NOT_AN_OFFER). An offer's coins stay committed until it is
-taken: the maker's own spends that would use them are refused
-(OFFER_COINS_IN_USE). The expiry is mn's own: the chain lets an expired
+taken. make spends one coin worth exactly what it gives: when the wallet
+holds none outside its open offers, it first splits one (a transfer to
+itself, a fee in Dust; split gives its txHash and receipt). The wallet's
+other spends leave open offers' coins alone, and are refused
+(OFFER_COINS_IN_USE) only when nothing else could pay. The expiry is mn's own: the chain lets an expired
 offer be taken until its maker cancels it, which spends its coins back to
 the maker (a fee in Dust).
 

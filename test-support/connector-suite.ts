@@ -19,7 +19,7 @@ import { startLocalIndexer, type LocalIndexer } from './local-indexer.ts';
 import { ledgerTx, type Ledger } from './ledger-tx.ts';
 import { SWAP_OFFER_HEX, OFFER_GIVE } from './fixtures/swap-offer.ts';
 import { OfferCoinsInUseError, type OpenOffer, type RpcHandlerContext, classifyError, type NetworkName } from '@kuiralabs/midnight-cli-core';
-import { NotAnOfferError, signedMessageBytes, PROOF_TIMEOUT_MS, toEngineError, withDustShortfall, type FeeLimits, type ApprovalOptions } from '@kuiralabs/midnight-cli-core/engine';
+import { createCoinPicking, NotAnOfferError, signedMessageBytes, PROOF_TIMEOUT_MS, toEngineError, withDustShortfall, type FeeLimits, type ApprovalOptions } from '@kuiralabs/midnight-cli-core/engine';
 import type { SignatureVerifyingKey } from '@midnightntwrk/ledger-v9';
 import { CORE_CODES } from './core-codes.ts';
 
@@ -1669,29 +1669,59 @@ export function connectorSuite(engine: ConnectorEngine): void {
         expect(connector.hasPendingTxs()).toBe(false);
       });
 
-      it('cancels an offer by sending its whole balance of the token back to itself, which spends the offer\'s coins', async () => {
-        const transfer = vi.fn().mockResolvedValue({ type: 'UNPROVEN_TRANSACTION' });
+      it("cancels an offer by sending the value of its coins back to itself, building with only those coins spendable", async () => {
+        const offer = openOffer();
+        const offerCoin = { type: OFFER_GIVE, value: 12n, nonce: offerNullifier() };
+        const otherOffersCoin = { type: OFFER_GIVE, value: 5n, nonce: 'other-offer-coin' };
+        const freeCoin = { type: OFFER_GIVE, value: 83n, nonce: 'free-coin' };
+        const coinPicking = createCoinPicking<typeof offerCoin>(() => [offer, { ...offer, id: 'e7'.repeat(32), nullifiers: ['other-offer-coin'] }], (coin) => coin.nonce);
+        const picked: (string | undefined)[] = [];
+        const transfer = vi.fn().mockImplementation(async () => {
+          // What the SDK's balancer would pick while the cancel is built: the offer's coin and none other.
+          const coins = [freeCoin, otherOffersCoin, offerCoin];
+          picked.push(coinPicking.pick(coins, OFFER_GIVE, 12n)?.nonce);
+          picked.push(coinPicking.pick([freeCoin, otherOffersCoin], OFFER_GIVE, 1n)?.nonce);
+          return { type: 'UNPROVEN_TRANSACTION' };
+        });
         const bundle = createBundleStub({
-          stateFn: () => rx.of(mockState({ shieldedBalances: { [OFFER_GIVE]: 100n } })),
+          stateFn: () => rx.of(mockState({
+            shieldedBalances: { [OFFER_GIVE]: 100n },
+            shieldedCoins: [freeCoin, otherOffersCoin, offerCoin].map((coin) => ({ coin, nullifier: coin.nonce })),
+          })),
+          coinPicking,
           transferTransaction: transfer,
           finalizeRecipe: () => Promise.resolve(offerTx()),
         });
-        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, openOffers: () => [openOffer()], notice: NO_TERMINAL.notice });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, openOffers: () => [offer], notice: NO_TERMINAL.notice });
 
-        expect(await connector.cancelOffers('maker', [openOffer()])).toBe(SWAP_OFFER_HEX);
+        expect(await connector.cancelOffers('maker', [offer])).toBe(SWAP_OFFER_HEX);
         const [[outputs]] = transfer.mock.calls;
         expect(outputs).toHaveLength(1);
         expect(outputs[0].type).toBe('shielded');
         expect(outputs[0].outputs).toHaveLength(1);
-        expect(outputs[0].outputs[0]).toMatchObject({ type: OFFER_GIVE, amount: 100n });
+        expect(outputs[0].outputs[0]).toMatchObject({ type: OFFER_GIVE, amount: 12n });
         expect(outputs[0].outputs[0].receiverAddress.coinPublicKeyString()).toBe(WALLET_SHIELDED.coinPublicKeyString());
+        expect(picked).toEqual([offerNullifier(), undefined]);
+        // After the cancel is built, spends skip the offers' coins again.
+        expect(coinPicking.pick([freeCoin, otherOffersCoin, offerCoin], OFFER_GIVE, 12n)?.nonce).toBe('free-coin');
         expect(connector.hasPendingTxs()).toBe(true);
       });
 
-      it('refuses a cancel that would not spend the offer\'s coins, keeping nothing', async () => {
+      it("refuses a cancel when the wallet no longer holds the offer's coins, building nothing", async () => {
+        const transfer = vi.fn();
+        const bundle = createBundleStub({ stateFn: () => rx.of(mockState({ shieldedBalances: { [OFFER_GIVE]: 100n } })), transferTransaction: transfer });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        await expect(connector.cancelOffers('maker', [openOffer()])).rejects.toMatchObject({ code: 'InvalidRequest' });
+        expect(transfer).not.toHaveBeenCalled();
+        expect(connector.hasPendingTxs()).toBe(false);
+      });
+
+      it("refuses a cancel that would not spend the offer's coins, keeping nothing", async () => {
         const revertFn = vi.fn().mockResolvedValue(undefined);
+        const offerCoin = { type: OFFER_GIVE, value: 12n, nonce: offerNullifier() };
         const bundle = createBundleStub({
-          stateFn: () => rx.of(mockState({ shieldedBalances: { [OFFER_GIVE]: 100n } })),
+          stateFn: () => rx.of(mockState({ shieldedBalances: { [OFFER_GIVE]: 12n }, shieldedCoins: [{ coin: offerCoin, nullifier: offerCoin.nonce }] })),
           finalizeRecipe: () => Promise.resolve(sealedTx(5)),
         });
         (bundle.facade as any).revert = revertFn;
@@ -1700,6 +1730,21 @@ export function connectorSuite(engine: ConnectorEngine): void {
         await expect(connector.cancelOffers('maker', [openOffer()])).rejects.toMatchObject({ code: 'InvalidRequest' });
         expect(revertFn).toHaveBeenCalled();
         expect(connector.hasPendingTxs()).toBe(false);
+      });
+
+      it('says whether the wallet holds a free coin of exactly an amount: not one of its open offers\' coins', () => {
+        const offer = openOffer();
+        const coins = [
+          { coin: { type: OFFER_GIVE, value: 10n, nonce: 'a' }, nullifier: offerNullifier() },
+          { coin: { type: OFFER_GIVE, value: 7n, nonce: 'b' }, nullifier: 'free-7' },
+        ];
+        const bundle = createBundleStub({ stateFn: () => rx.of(mockState({ shieldedBalances: { [OFFER_GIVE]: 17n }, shieldedCoins: coins })) });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, openOffers: () => [offer], notice: NO_TERMINAL.notice });
+
+        expect(connector.holdsFreeCoin(OFFER_GIVE, 7n)).toBe(true);
+        expect(connector.holdsFreeCoin(OFFER_GIVE, 10n)).toBe(false);
+        expect(connector.holdsFreeCoin(OFFER_GIVE, 3n)).toBe(false);
+        expect(connector.holdsFreeCoin('00'.repeat(31) + '02', 7n)).toBe(false);
       });
     });
 

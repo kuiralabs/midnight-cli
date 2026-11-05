@@ -5,7 +5,7 @@
 // what the file says, that the terms are the agreed ones, that the maker's
 // expiry hasn't passed, and that none of its coins is spent.
 
-import { sdkSetOf, type Engine, type HostEngines, type NetworkConfig, type NetworkName, type WalletSession, UsageError, checkTerms, type OfferContents, type SwapTerms, assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope, type OfferEnvelope, closeOpenOffers, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
+import { sdkSetOf, sleep, SyncTimeoutError, type SwapLeg, type Engine, type HostEngines, type NetworkConfig, type NetworkName, type WalletSession, UsageError, checkTerms, type OfferContents, type SwapTerms, assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope, type OfferEnvelope, closeOpenOffers, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
 import { spendsOf, type CoinSpend } from '@kuiralabs/midnight-chain';
 
 /** An offer made: its file's text and what it is. */
@@ -27,6 +27,26 @@ export async function makeOffer(session: WalletSession, engine: Engine, root: st
   const envelope: OfferEnvelope = { network: session.network, id: read.id, terms: read.terms, expiresAt, tx };
   recordOpenOffer(root, session.network, walletAddress, { id: read.id, terms: read.terms, nullifiers: read.nullifiers, madeAt: now, expiresAt });
   return { envelope, file: encodeOfferEnvelope(envelope) };
+}
+
+/** How often the wallet is asked whether it holds the coin a split made, in milliseconds. */
+export const SPLIT_COIN_POLL_MS = 1_000;
+/** How long the wallet has to sync the coin a finalized split made, in milliseconds. */
+export const SPLIT_COIN_WAIT_MS = 120_000;
+
+/**
+ * Waits until the session's wallet holds a free coin worth exactly `leg`, as
+ * it does once it has synced the split that made it. Throws SyncTimeoutError
+ * after `waitMs`.
+ */
+export async function awaitFreeCoin(session: WalletSession, leg: SwapLeg, signal?: AbortSignal, waitMs: number = SPLIT_COIN_WAIT_MS): Promise<void> {
+  const deadline = Date.now() + waitMs;
+  while (!(await session.holdsFreeCoin(leg))) {
+    if (Date.now() >= deadline) {
+      throw new SyncTimeoutError(`The wallet has not synced the coin the split made within ${Math.round(waitMs / 1000)} s: the split is final, so run the same \`swap make\` again; it makes the offer from that coin.`);
+    }
+    await sleep(SPLIT_COIN_POLL_MS, signal);
+  }
 }
 
 /** An offer file read and checked against its own bytes, for this network. */

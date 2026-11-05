@@ -84,6 +84,8 @@ function payerHolding(shielded: Record<string, bigint>): Payer {
     makeOffer: unused,
     takeOffer: unused,
     cancelOffers: unused,
+    holdsFreeCoin: unused,
+    splitCoin: unused,
     sign: unused,
     submit: unused,
     readTransaction: unused,

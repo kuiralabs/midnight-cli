@@ -16,7 +16,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { WebSocketServer } from 'ws';
-import { createHost, type Host, saveCliConfig, type ConnectOptions, type Payer, type PayingTarget, encodeOfferEnvelope, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
+import { createHost, type Host, saveCliConfig, type ConnectOptions, type Payer, type PayingTarget, encodeOfferEnvelope, readOpenOffers, recordOpenOffer, type OpenOffer, type WalletSession } from '@kuiralabs/midnight-cli-core';
 import { rcEngine, rcKeys } from '../../../../test-support/rc-engine.ts';
 import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 import { makeSwapOffer } from '../lib/swap/make.ts';
@@ -217,6 +217,53 @@ describe('makeSwapOffer', () => {
     await expect(makeSwapOffer(host, { ...on(), terms: TERMS, expiresAt: NOW, payer, signal: AbortSignal.abort(), onProgress: (event) => said.push(event) })).rejects.toMatchObject({ code: 'CANCELLED' });
     expect(asked).toEqual([]);
     expect(said).toEqual([]);
+  });
+});
+
+describe('makeSwapOffer with a wallet that opens', () => {
+  /** A program's payer whose session is its own: it records each call, holds a free coin of exactly the amount from the start when `holdsAtFirst`, otherwise once it has submitted (the split), and makes the real offer. */
+  function sessionPayer(holdsAtFirst: boolean) {
+    const calls: string[] = [];
+    let holds = holdsAtFirst;
+    const unused = async (): Promise<never> => { throw new Error('not used by swap make'); };
+    const session: WalletSession = {
+      network: 'undeployed',
+      addresses: unused,
+      balances: unused,
+      balanceTransaction: unused,
+      swap: unused,
+      makeOffer: async (give, want) => { calls.push(`makeOffer ${give.amount} ${want.amount}`); return SWAP_OFFER_HEX; },
+      takeOffer: unused,
+      cancelOffers: unused,
+      holdsFreeCoin: async (leg) => { calls.push(`holdsFreeCoin ${leg.amount}`); return holds; },
+      splitCoin: async (leg) => { calls.push(`splitCoin ${leg.amount}`); return 'split-tx'; },
+      sign: unused,
+      submit: async (tx) => { calls.push(`submit ${tx}`); holds = true; return 'ab'.repeat(32); },
+      readTransaction: unused,
+      close: async () => { calls.push('close'); },
+    };
+    const payer: Payer = { assertCanPay: unused, serve: unused, connect: async () => session };
+    return { payer, calls };
+  }
+
+  it('with no free coin of exactly the amount, splits one first, waits for it, then makes the offer from it', async () => {
+    alice();
+    const { payer, calls } = sessionPayer(false);
+    const said: unknown[] = [];
+    const made = await makeSwapOffer(host, { ...on(), terms: TERMS, expiresAt: new Date(NOW.getTime() + 60_000), now: NOW, payer, receiptWaitMs: 0, onProgress: (event) => said.push(event) });
+    expect(calls).toEqual(['holdsFreeCoin 10', 'splitCoin 10', 'submit split-tx', 'holdsFreeCoin 10', 'makeOffer 10 7', 'close']);
+    expect(made.split).toEqual({ txHash: 'ab'.repeat(32) });
+    expect(made.id).toBe(OFFER.id);
+    expect(said).toContainEqual({ kind: 'done', message: 'Coin split' });
+    expect(readOpenOffers(root, 'undeployed', ADDRESS).map((o) => o.id)).toEqual([OFFER.id]);
+  });
+
+  it('with a free coin of exactly the amount, makes the offer with no split', async () => {
+    alice();
+    const { payer, calls } = sessionPayer(true);
+    const made = await makeSwapOffer(host, { ...on(), terms: TERMS, expiresAt: new Date(NOW.getTime() + 60_000), now: NOW, payer, receiptWaitMs: 0 });
+    expect(calls).toEqual(['holdsFreeCoin 10', 'makeOffer 10 7', 'close']);
+    expect(made.split).toBeUndefined();
   });
 });
 

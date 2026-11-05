@@ -1,4 +1,3 @@
-import { ShieldedWallet } from '@midnightntwrk/wallet-sdk-shielded';
 import { getNetworkId, type WalletCacheData, DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN, SYNC_TIMEOUT_MS, PRE_SEND_SYNC_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/engine';
 import { type NoticeSink, type NetworkConfig, type VerboseLog, CancelledError, SyncTimeoutError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import {
@@ -22,6 +21,10 @@ import { makeDefaultSubmissionService } from '@midnightntwrk/wallet-sdk-capabili
 import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from './derivation.ts';
 import { loadDustCache, dustPublicKeyHex, type DustCacheEntry } from './dust-direct-cache.ts';
 import { assertNetworkAnswers, isStreamEmpty } from '@kuiralabs/midnight-chain';
+import { readOpenOffers, type NetworkName } from '@kuiralabs/midnight-cli-core';
+import type { CoinPicking } from '@kuiralabs/midnight-cli-core/engine';
+import { PickingShieldedWallet, shieldedCoinPicking, type ShieldedCoin } from './shielded-wallet.ts';
+import { deriveUnshieldedAddress } from './derive-address.ts';
 
 export type SyncMode = 'full' | 'lite' | 'no-dust';
 // full    = shielded + unshielded + dust
@@ -46,6 +49,8 @@ export interface FacadeBundle {
   secretKeys: WalletSecretKeys;
   /** Active subscription that keeps shareReplay buffers alive. Cleaned up by stopFacade. */
   keepAlive?: rx.Subscription;
+  /** How the shielded wallet picks the coins a spend uses: never an open offer's, except in its cancel. */
+  coinPicking: CoinPicking<ShieldedCoin>;
   /** Whether the facade was restored from cached state (vs built from scratch). */
   restoredFromCache?: boolean;
   /** The network's indexer (HTTP), for reads the facade doesn't offer, like the chain's clock. */
@@ -90,6 +95,10 @@ export async function buildFacade(
     dustSecretKey: ledger.DustSecretKey.fromSeed(deriveDustSeed(seedBuffer)),
   };
   const keystore = createKeystore({ kind: 'schnorr', secret: deriveUnshieldedSeed(seedBuffer) }, networkId);
+  // The wallet's open swap offers, as mn's record under the root keeps them (the network id is the network's name).
+  const network = networkId as NetworkName;
+  const walletAddress = deriveUnshieldedAddress(seedBuffer, network);
+  const coinPicking = shieldedCoinPicking(deriveShieldedSeed(seedBuffer), () => readOpenOffers(root, network, walletAddress));
 
   // Merged configuration for WalletFacade.init() — all wallet types
   // and services draw from this single config object.
@@ -113,7 +122,7 @@ export async function buildFacade(
   const initFresh = () => WalletFacade.init({
     configuration,
     submissionService: (config) => submissionOnDemand(config.relayURL),
-    shielded: (cfg) => ShieldedWallet(cfg).startWithSecretKeys(secretKeys.shieldedSecretKeys),
+    shielded: (cfg) => PickingShieldedWallet(cfg, coinPicking).startWithSecretKeys(secretKeys.shieldedSecretKeys),
     unshielded: (cfg) => UnshieldedWallet(cfg).startWithPublicKey(PublicKey.fromKeyStore(keystore)),
     dust: (cfg) => DustWallet(cfg).startWithSecretKey(secretKeys.dustSecretKey, ledger.LedgerParameters.initialParameters().dust),
   });
@@ -136,7 +145,7 @@ export async function buildFacade(
       facade = await WalletFacade.init({
         configuration,
         submissionService: (config) => submissionOnDemand(config.relayURL),
-        shielded: (cfg) => ShieldedWallet(cfg).restore(effectiveCache.shielded),
+        shielded: (cfg) => PickingShieldedWallet(cfg, coinPicking).restore(effectiveCache.shielded),
         unshielded: (cfg) => UnshieldedWallet(cfg).restore(effectiveCache.unshielded),
         dust: (cfg) => DustWallet(cfg).restore(effectiveCache.dust),
       });
@@ -152,7 +161,7 @@ export async function buildFacade(
     facade = await initFresh();
   }
 
-  return { facade, keystore, secretKeys, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS };
+  return { facade, keystore, secretKeys, coinPicking, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS };
 }
 
 /** What the facade submits through, as WalletFacade.init takes it. */

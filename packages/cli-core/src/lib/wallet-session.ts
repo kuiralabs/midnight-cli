@@ -87,6 +87,14 @@ export interface WalletSession {
    * hex), to submit. Check the terms and that the offer is live first.
    */
   takeOffer(tx: string): Promise<string>;
+  /** Whether the wallet holds a shielded coin worth exactly `leg`, unspent and in none of its open swap offers. */
+  holdsFreeCoin(leg: SwapLeg): Promise<boolean>;
+  /**
+   * Splits a coin: sends `leg` to the wallet's own shielded address, from its
+   * coins in no open offer, which leaves it a coin worth exactly that and the
+   * change (a fee in Dust). The transaction (sealed, hex), to submit.
+   */
+  splitCoin(leg: SwapLeg): Promise<string>;
   /** Cancels open swap offers of this wallet's by spending their coins back to itself (a fee in Dust); the cancel (sealed, hex), to submit. */
   cancelOffers(offers: readonly OpenOffer[]): Promise<string>;
   /** Signs `data` (hex, base64 or text, as `encoding` says) with the wallet's unshielded key. */
@@ -194,6 +202,17 @@ export function sessionOver(
       })) as { tx: string }).tx);
       current.connector.handOffPendingTx(SESSION_CONNECTION, offer);
       return offer;
+    },
+    async holdsFreeCoin(leg) {
+      if (closed) throw new Error('The wallet session is closed');
+      return current.connector.holdsFreeCoin(leg.token, leg.amount);
+    },
+    async splitCoin(leg) {
+      const { shieldedAddress } = (await call('getShieldedAddresses', {})) as { shieldedAddress: string };
+      return build(async () => ((await call('makeTransfer', {
+        desiredOutputs: [{ kind: 'shielded', type: leg.token, value: leg.amount, recipient: shieldedAddress }],
+        options: { payFees: true },
+      })) as { tx: string }).tx);
     },
     async takeOffer(tx) {
       if (closed) throw new Error('The wallet session is closed');

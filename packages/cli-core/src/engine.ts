@@ -14,6 +14,7 @@ export {
   PRE_SEND_SYNC_TIMEOUT_MS, PROOF_TIMEOUT_MS, STALE_UTXO_ERROR_CODE, SYNC_ATTEMPT_TIMEOUT_MS,
   SYNC_TIMEOUT_MS, TOKEN_MULTIPLIER, TX_TTL_MINUTES
 } from './lib/constants.ts';
+export { type CoinPicking, type CoinRule, createCoinPicking, type PickableCoin, pickCoin } from './lib/coin-picker.ts';
 export { chooseDustCoins, type DustInput, planDustInputs, spreadFeeAcrossInputs } from './lib/dust-balancing-plan.ts';
 export { DustFeeNotGeneratedError, planRegistration } from './lib/dust-registration-plan.ts';
 export { awaitDustForFee, DUST_SHORT_WAIT_MS, type DustWaitPlan, payWhenDustCovers, planDustWait, sleep } from './lib/dust-wait.ts';
@@ -33,7 +34,7 @@ export { assertSpendsNoOfferCoin } from './lib/open-offers.ts';
 export { createPhaseTracker, type PhaseTracker } from './lib/phase-tracker.ts';
 export { dustCacheDir, getDustCachePath, getShieldedCachePath, nativeCheckpointName } from './lib/reader-cache-files.ts';
 export {
-  type DustShortfall, dustShortfallOf, isColdStartRace, isDustRelatedError, isDustShortage,
+  type DustShortfall, dustShortfallOf, heldCoinRefusalOf, isColdStartRace, isDustRelatedError, isDustShortage,
   isSdkInsufficientFundsError, markingEngineCodes, refusalCodeOf, reportingEngineErrors, toEngineError,
   withDustShortfall, withEngineCode
 } from './lib/sdk-errors.ts';

@@ -6,7 +6,7 @@
 import { vi } from 'vitest';
 import * as rx from 'rxjs';
 import type { NetworkConfig, RpcHandlerContext } from '@kuiralabs/midnight-cli-core';
-import type { ApprovalOptions } from '@kuiralabs/midnight-cli-core/engine';
+import { type ApprovalOptions, type CoinPicking, createCoinPicking } from '@kuiralabs/midnight-cli-core/engine';
 
 /** A connector test's host: nobody at a terminal to ask, and the connector's lines dropped. */
 export const NO_TERMINAL = { prompter: null, notice: (_line: string): void => {} } as const;
@@ -19,6 +19,7 @@ export interface StubConnector {
   handOffPendingTx(connectionId: string, txHex: string): boolean;
   takeOffer(connectionId: string, txHex: string): Promise<string>;
   cancelOffers(connectionId: string, offers: readonly unknown[]): Promise<string>;
+  holdsFreeCoin(token: string, amount: bigint): boolean;
   hasPendingTxs(): boolean;
 }
 
@@ -56,6 +57,8 @@ export const HISTORY = [
 
 export interface BundleOverrides {
   stateFn?: () => rx.Observable<any>;
+  /** How the wallet picks coins; mn's own over no open offers when not given. */
+  coinPicking?: CoinPicking<{ type: string; value: bigint; nonce: string }>;
   transferTransaction?: (...args: any[]) => Promise<any>;
   signRecipe?: (...args: any[]) => Promise<any>;
   finalizeRecipe?: (...args: any[]) => Promise<any>;
@@ -79,6 +82,8 @@ export function connectorStub(engine: StubEngine) {
   function mockState(overrides?: {
     unshieldedBalances?: Record<string, bigint>;
     shieldedBalances?: Record<string, bigint>;
+    /** The shielded coins the wallet holds unspent, each with its nullifier, as the SDK's state lists them. */
+    shieldedCoins?: { coin: { type: string; value: bigint; nonce: string }; nullifier: string }[];
     dustBalance?: bigint;
     protocolVersion?: { shielded: bigint; unshielded: bigint; dust: bigint };
     isSynced?: boolean;
@@ -95,6 +100,7 @@ export function connectorStub(engine: StubEngine) {
       },
       shielded: {
         balances: overrides?.shieldedBalances ?? {},
+        availableCoins: overrides?.shieldedCoins ?? [],
         address: WALLET_SHIELDED,
       },
       dust: {
@@ -134,6 +140,8 @@ export function connectorStub(engine: StubEngine) {
         getPublicKey: vi.fn().mockReturnValue({ tag: 'schnorr', value: '5678efghpubkey' }),
       },
       ...(engine.secretKeys !== undefined ? { secretKeys: engine.secretKeys } : {}),
+      // mn's own coin picking, over no open offers; a coin's nullifier here is its nonce.
+      coinPicking: overrides?.coinPicking ?? createCoinPicking<{ type: string; value: bigint; nonce: string }>(() => [], (coin) => coin.nonce),
     };
   }
 

@@ -20,7 +20,7 @@ export {
 } from './lib/swap/inspect.ts';
 export { type ListSwapOffersOptions, listSwapOffers, type SwapOffersListed } from './lib/swap/list.ts';
 export {
-  type MadeSwapOffer, makeSwapOffer, type MakeSwapOfferOptions, type SwapNetworkChosen
+  type CoinSplit, type MadeSwapOffer, makeSwapOffer, type MakeSwapOfferOptions, type SwapNetworkChosen
 } from './lib/swap/make.ts';
 export {
   cancelOffer, type CancelOutcome, type MadeOffer, makeOffer, NoSuchOfferError, type ReadOffer,

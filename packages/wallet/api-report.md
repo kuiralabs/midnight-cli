@@ -73,18 +73,24 @@ export interface SwapOffersListed {
     readonly network: NetworkName;
     readonly offers: readonly ListedOffer[];
 }
+export interface CoinSplit {
+    readonly txHash: string;
+    readonly receipt?: Receipt;
+}
 export interface MadeSwapOffer {
     readonly network: NetworkName;
     readonly id: string;
     readonly terms: SwapTerms;
     readonly expiresAt: Date;
     readonly file: string;
+    readonly split?: CoinSplit;
 }
 export declare function makeSwapOffer(host: Host, options: MakeSwapOfferOptions): Promise<MadeSwapOffer>;
 export interface MakeSwapOfferOptions extends PaidCallOptions<SwapNetworkChosen> {
     terms: SwapTerms;
     expiresAt: Date;
     now?: Date;
+    receiptWaitMs?: number;
 }
 export interface SwapNetworkChosen {
     readonly kind: 'swap-network';
