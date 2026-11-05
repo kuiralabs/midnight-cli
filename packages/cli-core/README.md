@@ -8,7 +8,7 @@ The base of the Midnight CLI packages: the host a program passes to them, typed 
 npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-engine-rc@next
 ```
 
-Every package is a release candidate on the `next` tag. Install with npm: each engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm honours it. A program that runs the SDK installs an engine too: `@kuiralabs/midnight-engine-rc` for preprod, preview and a local network, `@kuiralabs/midnight-engine-beta` for stagenet.
+Every package is a release candidate on the `next` tag. Install with npm: each engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm honours it. bun's installer ignores it and resolves the packages again, so an engine bun installed refuses to load, before any SDK module does, with `MIXED_SDK_LAYOUT` and the npm command; bun runs what npm installed. A program that runs the SDK installs an engine too: `@kuiralabs/midnight-engine-rc` for preprod, preview and a local network, `@kuiralabs/midnight-engine-beta` for stagenet.
 
 ## Entry points
 
@@ -50,7 +50,7 @@ Each error a package throws carries a `code`; `classifyError(err, registry)` giv
 | `BLOCKFROST_LIMIT_REACHED` | 4 | Blockfrost's plan limit or rate limit. | Wait and retry once; if it persists, tell the user it is their Blockfrost plan. |
 | `ENDPOINT_SHUT_DOWN` | 4 | An endpoint set by flag or config was shut down by its operator (the old preprod indexer). | `midnight_config_unset({ key: "indexer-ws" })` (and `node` if set), then retry. |
 | `OTHER_SDK_SET` | 1 | The process runs one SDK set's engine and the network runs on the other (an MCP server that served rc asked for stagenet). | Make the call in a process of its own: ask the user to start an MCP server for that network. |
-| `MIXED_SDK_LAYOUT` | 1 | mn was installed without its shrinkwrap (bun's installer): an engine's SDK packages reach more than one copy of its ledger. | Ask the user to install mn with npm. |
+| `MIXED_SDK_LAYOUT` | 1 | mn's packages were installed without each engine's shrinkwrap (bun's installer): an engine's SDK tree isn't the one it was tested with. | Ask the user to install mn with npm. |
 | `NO_STATE_ROOT` | 1 | The host gave mn no place to keep its state (a program's `createHost` without paths). | Give the host its paths (`createHost({ paths })`). |
 | `NO_PAYER` | 1 | A command that submits a transaction was called without a payer. | Give the call a payer. |
 | `COMMAND_FAILED` | 1 | A command ended with a non-zero exit code without throwing (an MCP test run whose tests failed); the message carries its result. | Read the command's result in the message. |

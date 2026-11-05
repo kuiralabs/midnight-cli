@@ -26,7 +26,7 @@ npm install -g midnight-wallet-cli@next   # this ledger-9 prerelease
 
 This installs two commands: `midnight` (or `mn` for short) and `midnight-wallet-mcp`.
 
-Install the prerelease with npm (or run it with `npx`). It ships an `npm-shrinkwrap.json` that keeps each SDK set's packages apart; bun's installer ignores it, and a command whose SDK set it then mixes up is refused, saying so (`MIXED_SDK_LAYOUT`; under bun today, every stagenet command).
+Install the prerelease with npm (or run it with `npx`). Each engine ships an `npm-shrinkwrap.json` that pins the SDK set it was tested with; bun's installer ignores it and resolves the packages again, so an engine bun installed is refused before any SDK loads, saying so (`MIXED_SDK_LAYOUT`). bun can run what npm installed.
 
 ## Commands
 

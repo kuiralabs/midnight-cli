@@ -126,7 +126,7 @@ Stable identifiers used in error messages and structured error objects, with the
 | `BLOCKFROST_LIMIT_REACHED` | 4 | Blockfrost's plan limit or rate limit. |
 | `ENDPOINT_SHUT_DOWN` | 4 | An endpoint set by flag or config was shut down by its operator (the old preprod indexer). |
 | `OTHER_SDK_SET` | 1 | The process runs one SDK set's engine and the network runs on the other (an MCP server that served rc asked for stagenet). |
-| `MIXED_SDK_LAYOUT` | 1 | mn was installed without its shrinkwrap (bun's installer): an engine's SDK packages reach more than one copy of its ledger. |
+| `MIXED_SDK_LAYOUT` | 1 | mn's packages were installed without each engine's shrinkwrap (bun's installer): an engine's SDK tree isn't the one it was tested with. |
 | `NO_STATE_ROOT` | 1 | The host gave mn no place to keep its state (a program's `createHost` without paths). |
 | `NO_PAYER` | 1 | A command that submits a transaction was called without a payer. |
 | `COMMAND_FAILED` | 1 | A command ended with a non-zero exit code without throwing (an MCP test run whose tests failed); the message carries its result. |

@@ -174,7 +174,7 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 | `BLOCKFROST_LIMIT_REACHED` | Blockfrost's plan limit or rate limit. | Wait and retry once; if it persists, tell the user it is their Blockfrost plan. |
 | `ENDPOINT_SHUT_DOWN` | An endpoint set by flag or config was shut down by its operator (the old preprod indexer). | `midnight_config_unset({ key: "indexer-ws" })` (and `node` if set), then retry. |
 | `OTHER_SDK_SET` | The process runs one SDK set's engine and the network runs on the other (an MCP server that served rc asked for stagenet). | Make the call in a process of its own: ask the user to start an MCP server for that network. |
-| `MIXED_SDK_LAYOUT` | mn was installed without its shrinkwrap (bun's installer): an engine's SDK packages reach more than one copy of its ledger. | Ask the user to install mn with npm. |
+| `MIXED_SDK_LAYOUT` | mn's packages were installed without each engine's shrinkwrap (bun's installer): an engine's SDK tree isn't the one it was tested with. | Ask the user to install mn with npm. |
 | `NO_STATE_ROOT` | The host gave mn no place to keep its state (a program's `createHost` without paths). | Give the host its paths (`createHost({ paths })`). |
 | `NO_PAYER` | A command that submits a transaction was called without a payer. | Give the call a payer. |
 | `COMMAND_FAILED` | A command ended with a non-zero exit code without throwing (an MCP test run whose tests failed); the message carries its result. | Read the command's result in the message. |

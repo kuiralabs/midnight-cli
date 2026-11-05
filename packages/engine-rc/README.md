@@ -8,7 +8,7 @@ The Midnight CLI's engine for the SDK's release candidates (wallet SDK 2.0 rc, l
 npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-engine-rc@next
 ```
 
-Install with npm: this package ships an `npm-shrinkwrap.json` that pins its SDK set, and npm honours it, so it gets exactly the SDK it was tested with (one copy of each ledger). A layout with two copies is refused with `MIXED_SDK_LAYOUT`. A program that also uses stagenet (`@kuiralabs/midnight-engine-beta`) installs both; a process loads one of them.
+Install with npm: this package ships an `npm-shrinkwrap.json` that pins its SDK set, and npm honours it, so it gets exactly the SDK it was tested with (one copy of each ledger). An install that isn't that tree (bun's installer ignores the shrinkwrap and resolves the packages again) is refused before any SDK module loads, with `MIXED_SDK_LAYOUT` and the npm command; bun can run what npm installed. A program that also uses stagenet (`@kuiralabs/midnight-engine-beta`) installs both; a process loads one of them.
 
 ## Entry points
 
