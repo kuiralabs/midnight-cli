@@ -51,10 +51,15 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
       const file = out ?? `offer-${made.id.slice(0, 16)}.json`;
       writeFileSync(file, made.file, { flag: 'wx' });
       if (jsonMode) {
-        ctx.output.result({ subcommand: 'make', network: made.network, id: made.id, file, terms: termsJson(made.terms), expiresAt: made.expiresAt.toISOString() });
+        const split = made.split === undefined ? {} : { split: { txHash: made.split.txHash, ...(made.split.receipt === undefined ? {} : receiptJson(made.split.receipt)) } };
+        ctx.output.result({ subcommand: 'make', network: made.network, id: made.id, file, terms: termsJson(made.terms), expiresAt: made.expiresAt.toISOString(), ...split });
         return;
       }
       ctx.output.stdout(file + '\n');
+      if (made.split !== undefined) {
+        ctx.output.stderr('\n' + keyValue('Split', `${made.split.txHash} (a coin of exactly ${made.terms.give.amount}, for the offer)`) + '\n');
+        if (made.split.receipt !== undefined) ctx.output.stderr(receiptText(made.split.receipt, made.split.txHash));
+      }
       ctx.output.stderr('\n' + keyValue('Offer', made.id) + '\n');
       ctx.output.stderr(keyValue('File', file) + '\n');
       ctx.output.stderr(keyValue('Expires', made.expiresAt.toISOString()) + '\n');

@@ -99,7 +99,8 @@ export const swapDefinition: CommandDefinition = {
     usage: 'midnight swap <make|inspect|take|cancel|list> [options]',
     flags: [
       'make                          Make an offer: give --give of --give-token for --want of --want-token;',
-      '                              writes the offer file to hand the taker',
+      '                              writes the offer file to hand the taker. The offer holds one coin worth',
+      '                              exactly --give: with none free, this wallet splits one first (a fee in Dust)',
       'inspect <file>                What an offer file offers, whether it is still live, and its expiry',
       'take <file>                   Take an offer at the terms agreed (--give, --give-token, --want,',
       '                              --want-token, as the maker states them); this wallet pays the fee',
@@ -138,6 +139,7 @@ export const swapDefinition: CommandDefinition = {
       receipt: 'The transaction once the indexer lists it: blockHeight, blockHash, blockTime, fee (DUST, exact), feeSpecks, result; null when it has not within 60 s (take, and cancel when submitted)',
       receiptMissing: 'Why receipt is null; check later with midnight tx status <txHash>',
       cancelled: 'Whether a cancel was submitted; false when the offer was taken already (cancel)',
+      split: 'The split made first when no free coin was worth exactly the amount given: txHash, and receipt or receiptMissing as above; absent when none was needed (make)',
       offers: 'The wallet\'s open offers, each with whether it is expired or taken (list)',
     },
   },
@@ -150,7 +152,7 @@ export const swapDefinition: CommandDefinition = {
     tools: [
       {
         name: 'midnight_swap_make',
-        description: 'Make a swap offer: the wallet gives one shielded token for another, and the offer file it writes is what to hand the taker (returns pending token). The taker pays the fee.',
+        description: 'Make a swap offer: the wallet gives one shielded token for another, and the offer file it writes is what to hand the taker (returns pending token). The taker pays the swap\'s fee; with no free coin worth exactly the amount given, the wallet first splits one, for a fee in Dust.',
         annotations: { destructiveHint: true, openWorldHint: true },
         params: [
           { flag: 'give' },
@@ -167,7 +169,7 @@ export const swapDefinition: CommandDefinition = {
         confirmation: {
           describe: (params) => {
             const { network, wallet } = confirmationTarget(params);
-            return `Offer ${describeTerms(params)} from wallet ${wallet} on ${network}; its coins stay committed until the offer is taken`;
+            return `Offer ${describeTerms(params)} from wallet ${wallet} on ${network}, splitting a coin first (a fee in Dust) when none is worth exactly the amount given; that coin stays committed until the offer is taken`;
           },
           async check(_params, call) {
             const { prepareMake } = await import('../lib/swap/request.ts');

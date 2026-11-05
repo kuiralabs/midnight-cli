@@ -307,6 +307,7 @@ export interface DAppConnector {
     handOffPendingTx(connectionId: string, txHex: string): boolean;
     takeOffer(connectionId: string, txHex: string): Promise<string>;
     cancelOffers(connectionId: string, offers: readonly OpenOffer[]): Promise<string>;
+    holdsFreeCoin(token: string, amount: bigint): boolean;
     hasPendingTxs(): boolean;
     dispose(): void;
 }
@@ -808,6 +809,8 @@ export interface WalletSession {
     swap(give: TokenAmount[], take: TokenPayment[]): Promise<string>;
     makeOffer(give: SwapLeg, want: SwapLeg): Promise<string>;
     takeOffer(tx: string): Promise<string>;
+    holdsFreeCoin(leg: SwapLeg): Promise<boolean>;
+    splitCoin(leg: SwapLeg): Promise<string>;
     cancelOffers(offers: readonly OpenOffer[]): Promise<string>;
     sign(data: string, encoding: 'hex' | 'base64' | 'text'): Promise<SignedData>;
     submit(tx: string): Promise<string>;
@@ -1088,6 +1091,23 @@ export declare const SYNC_ATTEMPT_TIMEOUT_MS = 30000;
 export declare const SYNC_TIMEOUT_MS = 300000;
 export declare const TOKEN_MULTIPLIER = 1000000;
 export declare const TX_TTL_MINUTES = 10;
+export interface CoinPicking<C extends PickableCoin> {
+    pick(coins: readonly C[], tokenType: string, amountNeeded: bigint): C | undefined;
+    cancelling<T>(offers: readonly OpenOffer[], work: () => Promise<T>): Promise<T>;
+}
+export type CoinRule = {
+    readonly kind: 'avoid';
+    readonly held: ReadonlyMap<string, string>;
+} | {
+    readonly kind: 'only';
+    readonly allowed: ReadonlySet<string>;
+};
+export declare function createCoinPicking<C extends PickableCoin>(openOffers: () => readonly OpenOffer[], nullifierOf: (coin: C) => string): CoinPicking<C>;
+export interface PickableCoin {
+    readonly type: string;
+    readonly value: bigint;
+}
+export declare function pickCoin<C extends PickableCoin>(coins: readonly C[], tokenType: string, amountNeeded: bigint, nullifierOf: (coin: C) => string, rule: CoinRule): C | undefined;
 export declare function chooseDustCoins<TToken>(coins: readonly DustInput<TToken>[], owed: bigint, combine: (owed: bigint) => DustInput<TToken>[] | undefined): DustInput<TToken>[] | undefined;
 export interface DustInput<TToken> {
     token: TToken;
@@ -1140,6 +1160,7 @@ export interface DAppConnector {
     handOffPendingTx(connectionId: string, txHex: string): boolean;
     takeOffer(connectionId: string, txHex: string): Promise<string>;
     cancelOffers(connectionId: string, offers: readonly OpenOffer[]): Promise<string>;
+    holdsFreeCoin(token: string, amount: bigint): boolean;
     hasPendingTxs(): boolean;
     dispose(): void;
 }
@@ -1399,6 +1420,7 @@ export interface DustShortfall {
     available: bigint;
 }
 export declare function dustShortfallOf(err: unknown): DustShortfall | undefined;
+export declare function heldCoinRefusalOf(err: unknown): OfferCoinsInUseError | undefined;
 export declare function isColdStartRace(err: unknown): boolean;
 export declare function isDustRelatedError(err: any): boolean;
 export declare function isDustShortage(err: unknown): boolean;

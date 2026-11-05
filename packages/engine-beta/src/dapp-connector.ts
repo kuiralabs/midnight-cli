@@ -579,28 +579,31 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
   }
 
   /**
-   * Cancels open swap offers of this wallet's: sends its whole balance of
-   * each token they give back to its own shielded address, which spends the
-   * offers' coins (it costs a fee in Dust). Refused, and nothing kept, when
-   * the transaction doesn't spend every coin of every offer (one already
-   * taken, or coins this wallet no longer sees). Held pending for the
-   * connection until it is submitted.
+   * Cancels open swap offers of this wallet's: sends the value of the offers'
+   * coins back to its own shielded address, spending exactly those coins (the
+   * coin picker allows no other while the cancel is built), for a fee in Dust.
+   * Its other open offers stay live. Refused, and nothing kept, when the
+   * wallet no longer holds every coin of every offer (one already taken), or
+   * the transaction doesn't spend them all. Held pending for the connection
+   * until it is submitted.
    */
   async function cancelOffers(connectionId: string, offers: readonly OpenOffer[]): Promise<string> {
     assertWalletStarted();
     const state = getState();
-    const tokens = [...new Set(offers.map((offer) => offer.terms.give.token))];
-    const outputs = tokens.map((type) => {
-      const amount = state.shielded.balances[type] ?? 0n;
-      if (amount === 0n) throw createApiError('InvalidRequest', `This wallet holds none of token ${type}: the offer's coins are gone (it was taken)`);
-      return { type, amount, receiverAddress: state.shielded.address };
-    });
+    const held = new Map(state.shielded.availableCoins.map((available) => [available.nullifier.toLowerCase(), available.coin]));
+    const amounts = new Map<string, bigint>();
+    for (const nullifier of offers.flatMap((offer) => offer.nullifiers)) {
+      const coin = held.get(nullifier.toLowerCase());
+      if (coin === undefined) throw createApiError('InvalidRequest', "This wallet no longer holds the offer's coins: it was taken");
+      amounts.set(coin.type, (amounts.get(coin.type) ?? 0n) + coin.value);
+    }
+    const outputs = [...amounts].map(([type, amount]) => ({ type, amount, receiverAddress: state.shielded.address }));
     const context: RpcHandlerContext = { notify: () => {}, connectionId, requestId: 0, metadata: {} };
     const tracker = makeTracker('cancelOffers', context);
     tracker.start('approve');
     await requireApproval('cancelOffers', offers.map((offer) => ({ label: 'Cancel', value: `${offer.id.slice(0, 16)}… (${describeLeg(offer.terms.give)})` })), context);
     tracker.start('building');
-    const recipe = await withDustRetry(() => facade.transferTransaction([{ type: 'shielded' as const, outputs }], secretKeys, { ttl: createTtl() }));
+    const recipe = await bundle.coinPicking.cancelling(offers, () => withDustRetry(() => facade.transferTransaction([{ type: 'shielded' as const, outputs }], secretKeys, { ttl: createTtl() })));
     const { hex, finalized } = await processRecipe(recipe, tracker, offers.map((offer) => offer.id));
     const spent = new Set(spentNullifiers(hex).map((n) => n.toLowerCase()));
     if (!offers.every((offer) => offer.nullifiers.every((n) => spent.has(n.toLowerCase())))) {
@@ -609,6 +612,12 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     }
     trackPendingTx(connectionId, hex, finalized);
     return hex;
+  }
+
+  /** Whether the wallet holds a shielded coin of `token` worth exactly `amount`, unspent and in none of its open swap offers. */
+  function holdsFreeCoin(token: string, amount: bigint): boolean {
+    const held = new Set((options.openOffers?.() ?? []).flatMap((offer) => offer.nullifiers.map((n) => n.toLowerCase())));
+    return getState().shielded.availableCoins.some((available) => available.coin.type === token && available.coin.value === amount && !held.has(available.nullifier.toLowerCase()));
   }
 
   /** Encode an SDK address object to bech32m string. */
@@ -1108,5 +1117,5 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
   }
 
   // Each handler answers with its failure marked by mn's code, its message and causes as they were.
-  return { handlers: markingEngineCodes(handlers), revertPendingTxs, handOffPendingTx, takeOffer, cancelOffers, hasPendingTxs, dispose };
+  return { handlers: markingEngineCodes(handlers), revertPendingTxs, handOffPendingTx, takeOffer, cancelOffers, holdsFreeCoin, hasPendingTxs, dispose };
 }

@@ -21,6 +21,7 @@ import {
   TransactionRefusedError,
   type RefusalCode,
 } from './errors.ts';
+import { OfferCoinsInUseError } from './open-offers.ts';
 import { carriesOwnCode, isTransportFailure } from './transport-failure.ts';
 
 /**
@@ -73,6 +74,26 @@ export function isDustShortage(err: unknown): boolean {
     pending.push(e.cause, e[FIBER_FAILURE_CAUSE], e.error, e.defect, e.left, e.right);
   }
   return false;
+}
+
+/**
+ * mn's coin picker refused inside the SDK's balancing: the only coins left
+ * that could pay are held by open swap offers. The SDK wraps what its picker
+ * throws (an `OtherWalletError` with it as the cause, inside a FiberFailure),
+ * so the refusal is found among the causes; undefined when there is none.
+ */
+export function heldCoinRefusalOf(err: unknown): OfferCoinsInUseError | undefined {
+  const seen = new Set<unknown>();
+  const pending: unknown[] = [err];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || typeof current !== 'object' || seen.has(current)) continue;
+    seen.add(current);
+    if (current instanceof OfferCoinsInUseError) return current;
+    const e = current as Record<PropertyKey, unknown>;
+    pending.push(e.cause, e[FIBER_FAILURE_CAUSE], e.error, e.defect, e.left, e.right);
+  }
+  return undefined;
 }
 
 /** What a Dust shortage carries when the wallet worked out what the fee would take. */
@@ -145,7 +166,7 @@ export function isSdkInsufficientFundsError(err: any): boolean {
  * facade restarts for it crashed the ledger WASM ("unreachable").
  */
 export function isColdStartRace(err: unknown): boolean {
-  return isSdkInsufficientFundsError(err) && !isDustShortage(err);
+  return isSdkInsufficientFundsError(err) && !isDustShortage(err) && heldCoinRefusalOf(err) === undefined;
 }
 
 /** The wallet SDK's message on the error it wraps a node's refusal in, at each level. */
@@ -277,6 +298,8 @@ const carriesCode = (err: unknown): boolean => !isConnectorApiError(err) && carr
  */
 export function toEngineError(err: unknown): unknown {
   if (err instanceof TransactionRefusedError) return err;
+  const held = heldCoinRefusalOf(err);
+  if (held !== undefined) return held;
   const reason = nodeRefusalOf(err);
   if (reason !== undefined) return new TransactionRefusedError(reason, { cause: err, code: refusalCodeOf(reason) });
   const marked = mnCodeOf(err);
@@ -293,7 +316,7 @@ export function toEngineError(err: unknown): unknown {
  */
 export function withEngineCode(err: unknown): unknown {
   if (err === null || typeof err !== 'object' || isConnectorApiError(err) || carriesCode(err) || mnCodeOf(err) !== undefined) return err;
-  const code = engineCodeOf(err);
+  const code = heldCoinRefusalOf(err)?.code ?? engineCodeOf(err);
   if (code !== undefined) Object.defineProperty(err, MN_CODE, { value: code, enumerable: false, configurable: true, writable: true });
   return err;
 }
