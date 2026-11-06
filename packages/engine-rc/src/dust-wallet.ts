@@ -4,8 +4,9 @@
 // freezing the process until the ledger's WASM runs out of memory. Everything
 // else is the SDK's.
 //
-// When the SDK's computeBalancingRecipe ends on its own, this file goes and
-// facade.ts imports DustWallet from the SDK again.
+// The SDK's computeBalancingRecipe ends on its own since dust-wallet 5.0.0-rc.1;
+// this file goes, and facade.ts imports DustWallet from the SDK again, once
+// that has run on a live chain.
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { Imbalances, InsufficientFundsError as NoCoinsCoverIt, getBalanceRecipe, makeIndexerChainVersionProbe } from '@midnightntwrk/wallet-sdk/capabilities';

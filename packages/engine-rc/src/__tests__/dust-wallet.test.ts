@@ -62,12 +62,13 @@ describe('the range the fixture puts its smallest coin in', () => {
 });
 
 describe('the SDK\'s own choice of fee coins', () => {
-  // The reason dust-wallet.ts exists. When this fails, the SDK's loop ends on
-  // its own: drop ConvergingDustTransacting and build the SDK's DustWallet.
-  it('never returns when the wallet\'s only coin is in that range', async () => {
+  // The reason dust-wallet.ts exists: up to wallet SDK 2.0.0-rc.0 this choice
+  // never returned (fixed in dust-wallet 5.0.0-rc.1). mn keeps its own choice
+  // until the SDK's has run on a live chain; this records that the SDK's now ends.
+  it('returns when the wallet\'s only coin is in that range', async () => {
     const canary = fileURLToPath(new URL('./helpers/sdk-dust-loop-canary.ts', import.meta.url));
     // Node itself, loading tsx, not the tsx command: that one runs the script
-    // in a child of its own, which a kill of the command leaves looping.
+    // in a child of its own, which a kill of the command would leave running.
     const child = spawn(process.execPath, ['--import', 'tsx', canary], {
       cwd: fileURLToPath(new URL('../../../..', import.meta.url)),
       stdio: ['ignore', 'pipe', 'inherit'],
@@ -76,13 +77,9 @@ describe('the SDK\'s own choice of fee coins', () => {
     let output = '';
     child.stdout.on('data', (chunk: Buffer) => { output += chunk.toString(); });
     try {
-      // The call is made right after "started"; three seconds is thousands of its passes.
-      await vi.waitFor(() => expect(output).toContain('started\n'), { timeout: 60_000, interval: 50 });
-      await new Promise((resolve) => setTimeout(resolve, 3_000));
-      expect(output).toBe('started\n');
-      expect(child.exitCode).toBeNull();
+      await vi.waitFor(() => expect(output).toBe('started\nreturned\n'), { timeout: 60_000, interval: 50 });
     } finally {
-      // The loop never yields, so only SIGKILL ends it; the test waits to see it gone.
+      // Were the loop back, it would never yield: only SIGKILL ends it.
       child.kill('SIGKILL');
       await exited;
     }

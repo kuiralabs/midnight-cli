@@ -1,6 +1,7 @@
-// Runs the wallet SDK's own choice of fee coins on the case it never returns
-// from: a wallet whose only coin covers the payment's own fee but not the fee
-// with its spend added. Prints "returned" if it ever does. Run as its own
+// Runs the wallet SDK's own choice of fee coins on the case it never returned
+// from up to wallet SDK 2.0.0-rc.0: a wallet whose only coin covers the
+// payment's own fee but not the fee with its spend added. Prints "returned"
+// when it does. Run as its own
 // process by dust-wallet.test.ts, which stops it: the loop is synchronous.
 
 import { Transacting } from '@midnightntwrk/wallet-sdk/dust/v2';
