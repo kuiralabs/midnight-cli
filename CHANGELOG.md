@@ -4,6 +4,30 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0-rc.14] - 2026-11-05
+
+### Added
+
+- **Several open swap offers of one token.** `mn swap make` needs a free coin worth exactly what the offer gives. When the wallet has none, it first sends that amount to itself, paying a fee in Dust. It then waits for the receipt and for the new coin, and makes the offer from it. The JSON gains `split` (`txHash` and the receipt).
+- **Mounting mn's commands in a program.** Core exports `runCommand` (what mn's shell does around a handler), `captureCommand` (the MCP form) and `toolDescription` (a tool's description with its codes). Each package's `./commands` exports its registry entry: `coreCommands`, `chainCommands`, `walletCommands`, `swapCommands`, `contractCommands`, `connectCommands`, `devCommands` and `grantCommands`.
+- **A README for each package:** how to install it, its entry points, what you call, its codes, and an example that mounts its commands. Every example is run as written in the test suite.
+- **New codes:** `CONTRACT_NOT_COMPILED` ("No compiled contract found") and `NO_TEST_CONFIG` ("No dapp.test.json found"). Both used to report `UNKNOWN`.
+
+### Changed
+
+- **Spends leave open offers' coins alone.** Both engines pick shielded coins with mn's own picker. A spend never takes an open offer's coins, except to cancel that offer, and it prefers a coin of the exact amount. `OFFER_COINS_IN_USE` now comes only when nothing else could pay, before any proof is made. `mn swap cancel` spends only the cancelled offer's coins, so the wallet's other offers stay live.
+- **Install with npm, run with Node or bun.** An engine installed by bun's installer is refused before any SDK loads, with `MIXED_SDK_LAYOUT` naming the npm command. bun's installer resolves the dependency ranges again and ignores the engine's shrinkwrap. A tree that npm installed, nested or hoisted, runs under both Node and bun.
+- **Grant on account-chain 0.3.0-rc.3:** both engines pin `@kuiralabs/midnight-account-chain` 0.3.0-rc.3, which batches inbox appends (one transaction for up to four entries), and grant pins `@kuiralabs/midnight-account` 0.2.0-rc.1. An account deployed with rc.2 has the older contract, so deploy a new one.
+
+### Fixed
+
+- **A program's mounted command drew its spinners on the process's stderr** whatever output the program gave it. Progress now draws through the call's output.
+- **Under bun, a program's contract deploy failed** because the script couldn't import `ws`. The engines now find the script's packages under bun as Node does.
+
+### Packages
+
+- Every `@kuiralabs` workspace package moves to `0.1.0-rc.3`.
+
 ## [0.6.0-rc.13] - 2026-11-04
 
 ### Added
