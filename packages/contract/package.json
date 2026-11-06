@@ -1,6 +1,6 @@
 {
   "name": "@kuiralabs/midnight-contract",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "type": "module",
   "description": "Contracts for the Midnight CLI packages: deploying, calling and reading a Compact contract from its dApp folder through mn serve, the requests a deploy or call is built from, a compiled contract's circuits and witnesses, and the chain's block limits",
   "license": "Apache-2.0",
@@ -35,8 +35,8 @@
     "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@kuiralabs/midnight-chain": "0.1.0-rc.2",
-    "@kuiralabs/midnight-cli-core": "0.1.0-rc.2",
-    "@kuiralabs/midnight-wallet": "0.1.0-rc.2"
+    "@kuiralabs/midnight-chain": "0.1.0-rc.3",
+    "@kuiralabs/midnight-cli-core": "0.1.0-rc.3",
+    "@kuiralabs/midnight-wallet": "0.1.0-rc.3"
   }
 }

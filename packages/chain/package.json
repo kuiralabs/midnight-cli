@@ -1,6 +1,6 @@
 {
   "name": "@kuiralabs/midnight-chain",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "type": "module",
   "description": "Read-only network access for the Midnight CLI packages: node, indexer and proof-server readiness, chain id, tip, events and the ledger-version guard",
   "license": "Apache-2.0",
@@ -35,7 +35,7 @@
     "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@kuiralabs/midnight-cli-core": "0.1.0-rc.2",
+    "@kuiralabs/midnight-cli-core": "0.1.0-rc.3",
     "ws": "^8.19.0"
   }
 }
