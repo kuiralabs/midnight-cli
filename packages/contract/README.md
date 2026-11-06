@@ -8,7 +8,7 @@ Contracts for the Midnight CLI packages: deploying, calling and reading a Compac
 npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-contract@next @kuiralabs/midnight-connect@next @kuiralabs/midnight-engine-rc@next
 ```
 
-Every package is a release candidate on the `next` tag. Install with npm: each engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm honours it. A program that runs the SDK installs an engine: `@kuiralabs/midnight-engine-rc` for preprod, preview and a local network, `@kuiralabs/midnight-engine-beta` for stagenet. How a program sets up its process for the SDK (the rejection guard, the heap, Ctrl-C, ending) is in [core's README](https://github.com/kuiralabs/midnight-cli/blob/main/packages/cli-core/README.md#your-process-what-mns-shell-does-that-you-must-do).
+Every package is a release candidate on the `next` tag. Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): each engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it. A program that runs the SDK installs an engine: `@kuiralabs/midnight-engine-rc` for preprod, preview and a local network, `@kuiralabs/midnight-engine-beta` for stagenet. How a program sets up its process for the SDK (the rejection guard, the heap, Ctrl-C, ending) is in [core's README](https://github.com/kuiralabs/midnight-cli/blob/main/packages/cli-core/README.md#your-process-what-mns-shell-does-that-you-must-do).
 
 ## Entry points
 

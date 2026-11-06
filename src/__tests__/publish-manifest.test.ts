@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PUBLIC_PACKAGES } from '../../scripts/api-report.mjs';
-import { SOURCE_CONDITION, packPublished, publishedManifest } from '../../scripts/publish-manifest.mjs';
+import { SOURCE_CONDITION, packPublished, packedFilename, publishedManifest } from '../../scripts/publish-manifest.mjs';
 
 const PACKAGES = join(import.meta.dirname, '..', '..', 'packages');
 const manifestOf = (dir: string) => readFileSync(join(PACKAGES, dir, 'package.json'), 'utf8');
@@ -45,4 +45,21 @@ describe('the published manifest', () => {
       rmSync(work, { recursive: true, force: true });
     }
   }, 60_000);
+});
+
+describe("the tarball's name in npm pack's output", () => {
+  // As npm prints `npm pack --json` for one package: npm 11 an array of one
+  // entry, npm 12 an object keyed by the package's name (the release job
+  // installs the latest npm; npm 12 broke rc.14's first release run).
+  const entry = { id: '@kuiralabs/midnight-cli-core@0.1.0-rc.3', name: '@kuiralabs/midnight-cli-core', version: '0.1.0-rc.3', filename: 'kuiralabs-midnight-cli-core-0.1.0-rc.3.tgz', files: [] };
+
+  it('is read from npm 11 and from npm 12', () => {
+    expect(packedFilename(JSON.stringify([entry]))).toBe(entry.filename);
+    expect(packedFilename(JSON.stringify({ [entry.name]: entry }))).toBe(entry.filename);
+  });
+
+  it('is refused when the output names no single tarball', () => {
+    expect(() => packedFilename('[]')).toThrow('no single tarball');
+    expect(() => packedFilename(JSON.stringify({ a: entry, b: entry }))).toThrow('no single tarball');
+  });
 });

@@ -5,3 +5,5 @@ export const SOURCE_CONDITION: string;
 export function publishedManifest<T extends { exports?: unknown }>(manifest: T): T;
 /** Packs the package in `dir` into `destination` with its published manifest, its own package.json put back; returns the tarball's path. */
 export function packPublished(dir: string, destination: string): string;
+/** The tarball's file name in what `npm pack --json` printed for one package (npm 11's array or npm 12's object). */
+export function packedFilename(output: string): string;

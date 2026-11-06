@@ -30,6 +30,18 @@ export function publishedManifest(manifest) {
 }
 
 /**
+ * The tarball's file name in what `npm pack --json` printed for one package:
+ * an array of one entry up to npm 11, an object keyed by the package's name
+ * from npm 12 (the release job installs the latest npm).
+ */
+export function packedFilename(output) {
+  const parsed = JSON.parse(output);
+  const entries = Array.isArray(parsed) ? parsed : Object.values(parsed ?? {});
+  if (entries.length !== 1 || typeof entries[0]?.filename !== 'string') throw new Error(`npm pack --json printed no single tarball: ${output.slice(0, 200)}`);
+  return entries[0].filename;
+}
+
+/**
  * Packs the package in `dir` into `destination` with its published manifest,
  * putting its own package.json back afterwards, byte for byte, whatever
  * happens; returns the tarball's path.
@@ -40,8 +52,7 @@ export function packPublished(dir, destination) {
   const original = readFileSync(path, 'utf-8');
   writeFileSync(path, JSON.stringify(publishedManifest(JSON.parse(original)), null, 2) + '\n');
   try {
-    const [packed] = JSON.parse(execFileSync('npm', ['pack', '--json', '--pack-destination', destination], { cwd: dir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }));
-    return join(destination, packed.filename);
+    return join(destination, packedFilename(execFileSync('npm', ['pack', '--json', '--pack-destination', destination], { cwd: dir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] })));
   } finally {
     writeFileSync(path, original);
   }
