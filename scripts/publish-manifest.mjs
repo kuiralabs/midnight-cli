@@ -29,6 +29,39 @@ export function publishedManifest(manifest) {
   return manifest.exports === undefined ? manifest : { ...manifest, exports: withoutSourceCondition(manifest.exports) };
 }
 
+/** The dependency fields of a manifest, each a map of name to spec. */
+const DEPENDENCY_FIELDS = ['dependencies', 'optionalDependencies', 'peerDependencies'];
+
+/** Whether `spec` installs a package from a tarball on disk (`file:<path>.tgz`). */
+export const isLocalTarball = (spec) => typeof spec === 'string' && spec.startsWith('file:') && spec.endsWith('.tgz');
+
+/** The name and version of the package a tarball on disk holds. */
+export function tarballPackage(path) {
+  const { name, version } = JSON.parse(execFileSync('tar', ['-xzOf', path, 'package/package.json'], { encoding: 'utf-8' }));
+  return { name, version };
+}
+
+/**
+ * `manifest` with each dependency installed from a tarball on disk named by
+ * the version that tarball holds (`version(path)`, the path resolved from
+ * `dir`): published, the package takes it from the registry, as it will once
+ * that version is published.
+ */
+export function withLocalTarballsAsVersions(manifest, dir, version = (path) => tarballPackage(path).version) {
+  const out = { ...manifest };
+  for (const field of DEPENDENCY_FIELDS) {
+    if (manifest[field] === undefined) continue;
+    out[field] = Object.fromEntries(Object.entries(manifest[field]).map(([name, spec]) => [name, isLocalTarball(spec) ? version(resolve(dir, spec.slice('file:'.length))) : spec]));
+  }
+  return out;
+}
+
+/** The tarballs on disk the manifest in `dir` installs dependencies from, as absolute paths. */
+export function localTarballsOf(dir) {
+  const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8'));
+  return DEPENDENCY_FIELDS.flatMap((field) => Object.values(manifest[field] ?? {}).filter(isLocalTarball).map((spec) => resolve(dir, spec.slice('file:'.length))));
+}
+
 /**
  * The tarball's file name in what `npm pack --json` printed for one package:
  * an array of one entry up to npm 11, an object keyed by the package's name
@@ -50,7 +83,7 @@ export function packPublished(dir, destination) {
   mkdirSync(destination, { recursive: true });
   const path = join(dir, 'package.json');
   const original = readFileSync(path, 'utf-8');
-  writeFileSync(path, JSON.stringify(publishedManifest(JSON.parse(original)), null, 2) + '\n');
+  writeFileSync(path, JSON.stringify(withLocalTarballsAsVersions(publishedManifest(JSON.parse(original)), dir), null, 2) + '\n');
   try {
     return join(destination, packedFilename(execFileSync('npm', ['pack', '--json', '--pack-destination', destination], { cwd: dir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] })));
   } finally {

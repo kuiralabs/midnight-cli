@@ -33,6 +33,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isLocalTarball, withLocalTarballsAsVersions } from './publish-manifest.mjs';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 
@@ -76,8 +77,10 @@ function parentOf(path) {
  * The shrinkwrap of the package at `at` in the workspace (mn, at the root, by
  * default) from `lock` (package-lock.json) and `manifest` (its package.json);
  * `dist(name, version)` gives a workspace package's published tarball and
- * integrity. The dependencies in `leaveOut` are not in it: a consumer resolves
- * them itself, so one copy serves the consumer and the package alike.
+ * integrity, and so a package installed from a tarball on disk's: published,
+ * it comes from the registry too. The dependencies in `leaveOut` are not in
+ * it: a consumer resolves them itself, so one copy serves the consumer and the
+ * package alike. `dir` resolves the manifest's tarball paths.
  *
  * mn's tree is laid out as the lockfile lays it out: the lockfile is already
  * an install of mn. A workspace package's tree spans its own folder and the
@@ -87,7 +90,7 @@ function parentOf(path) {
  * engine's own SDK set then sits at its top while the shared packages it also
  * reaches keep their versions.
  */
-export function shrinkwrapFrom(lock, manifest, dist, { at = '', leaveOut = [] } = {}) {
+export function shrinkwrapFrom(lock, manifest, dist, { at = '', leaveOut = [], dir = join(repo, at) } = {}) {
   const packages = lock.packages;
   // The workspace packages, by their folder: what mn's links point at.
   const workspaces = new Map(
@@ -148,7 +151,7 @@ export function shrinkwrapFrom(lock, manifest, dist, { at = '', leaveOut = [] } 
     }
   }
 
-  const { name, version, license, bin, engines, dependencies, optionalDependencies } = manifest;
+  const { name, version, license, bin, engines, dependencies, optionalDependencies } = withLocalTarballsAsVersions(manifest, dir);
   const out = { '': { name, version, license, dependencies, optionalDependencies, bin, engines } };
   for (const [place, path] of [...layout].filter(([place]) => place !== '').sort(([a], [b]) => a.localeCompare(b))) {
     const entry = { ...packages[path] };
@@ -157,6 +160,8 @@ export function shrinkwrapFrom(lock, manifest, dist, { at = '', leaveOut = [] } 
     if (workspaces.has(path)) {
       Object.assign(entry, dist(workspaces.get(path), entry.version));
       delete entry.name;
+    } else if (isLocalTarball(entry.resolved)) {
+      Object.assign(entry, dist(path.slice(path.lastIndexOf('node_modules/') + 'node_modules/'.length), entry.version));
     }
     out[place] = entry;
   }
@@ -175,7 +180,7 @@ export function makeShrinkwrap({ dir = '', dist = registryDist('https://registry
   const workspaceNames = (JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8')).workspaces ?? [])
     .map((folder) => JSON.parse(readFileSync(join(repo, folder, 'package.json'), 'utf-8')).name);
   const leaveOut = dir === '' ? [] : Object.keys(manifest.dependencies ?? {}).filter((name) => workspaceNames.includes(name));
-  const shrinkwrap = shrinkwrapFrom(lock, manifest, dist, { at: dir, leaveOut });
+  const shrinkwrap = shrinkwrapFrom(lock, manifest, dist, { at: dir, leaveOut, dir: join(repo, dir) });
   writeFileSync(out, JSON.stringify(shrinkwrap, null, 2) + '\n');
   return shrinkwrap.packages;
 }
