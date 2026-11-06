@@ -258,7 +258,7 @@ export type APIError = Error & {
     reason: string;
 };
 export declare function createApiError(code: ErrorCode, reason: string, mnCode?: string): APIError;
-export type ErrorCode = 'InternalError' | 'Rejected' | 'InvalidRequest' | 'PermissionRejected' | 'Disconnected';
+export type ErrorCode = 'InternalError' | 'Rejected' | 'InvalidRequest' | 'PermissionRejected' | 'Disconnected' | 'InsufficientFunds';
 export declare const OPERATOR_REJECTED_MESSAGE = "User rejected the request";
 export type RpcHandler = (params: Record<string, unknown>, context: RpcHandlerContext) => Promise<unknown>;
 export interface RpcHandlerContext {

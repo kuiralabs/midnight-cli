@@ -7,7 +7,7 @@
  * (dapp-connector-api's ErrorCodes; a test keeps the two equal). The wire
  * protocol is the same whatever SDK set serves it, so the transport owns it.
  */
-export type ErrorCode = 'InternalError' | 'Rejected' | 'InvalidRequest' | 'PermissionRejected' | 'Disconnected';
+export type ErrorCode = 'InternalError' | 'Rejected' | 'InvalidRequest' | 'PermissionRejected' | 'Disconnected' | 'InsufficientFunds';
 
 /** The DApp Connector API's error: an Error with its code and reason, told apart by `type` (the specification's APIError). */
 export type APIError = Error & {

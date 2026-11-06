@@ -10,7 +10,7 @@ import { createApiError } from '../lib/ws-rpc.ts';
 describe("the connector's API types", () => {
   it('name exactly the error codes the specification names', () => {
     expectTypeOf<ErrorCode>().toEqualTypeOf<SpecErrorCode>();
-    const codes: ErrorCode[] = ['InternalError', 'Rejected', 'InvalidRequest', 'PermissionRejected', 'Disconnected'];
+    const codes: ErrorCode[] = ['InternalError', 'Rejected', 'InvalidRequest', 'PermissionRejected', 'Disconnected', 'InsufficientFunds'];
     expect([...codes].sort()).toStrictEqual(Object.values(ErrorCodes).sort());
   });
 
