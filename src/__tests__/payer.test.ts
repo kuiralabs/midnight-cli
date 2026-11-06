@@ -7,17 +7,22 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { parseArgs } from '../lib/argv.ts';
-import { saveCliConfig } from '../lib/cli-config.ts';
-import { NoPayerError, resolvePayingTarget } from '../lib/payer.ts';
-import { NoAccountError } from '../lib/grant/prepare.ts';
-import { servePayerAt } from '../lib/serve-payer.ts';
-import { probeServeNetwork } from '../lib/serve-manager.ts';
-import { silentSpinner } from '../ui/spinner.ts';
-import { createSdkWarningRouter } from '../lib/sdk-warnings.ts';
-import contractCommand from '../commands/contract.ts';
-import grantCommand from '../commands/grant.ts';
+import { parseArgs, saveCliConfig, NoPayerError, resolvePayingTarget, networkTargetOf, type NetworkName, createSdkWarningRouter, CancelledError, createHost } from '@kuiralabs/midnight-cli-core';
+import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
+import { NoAccountError } from '@kuiralabs/midnight-grant';
+import { probeServeNetwork, servePayerAt } from '@kuiralabs/midnight-connect';
+import { assertWalletCanPay } from '@kuiralabs/midnight-wallet';
+import { contractDefinition } from '@kuiralabs/midnight-contract/commands';
+import { grantDefinition } from '@kuiralabs/midnight-grant/commands';
 import { cliCall } from './helpers/cli-call.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
+
+// The handlers, as the shell loads them.
+const { default: contractCommand } = await contractDefinition.load();
+const { default: grantCommand } = await grantDefinition.load();
+
+// The host the tests' calls run in: nobody to ask, notices dropped.
+const host = createHost();
 
 const ENDPOINTS = ['--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
 
@@ -37,7 +42,7 @@ afterEach(() => {
 
 describe('resolvePayingTarget', () => {
   it('acts on undeployed when no network is given, with the endpoints given as flags', () => {
-    const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy');
+    const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy', stateRootIn(home), host);
     expect(target.network).toBe('undeployed');
     expect(target.endpoints).toEqual({ node: 'ws://localhost:29944', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws', proofServer: 'http://localhost:26300' });
     expect(target.networkConfig.node).toBe('ws://localhost:29944');
@@ -46,9 +51,44 @@ describe('resolvePayingTarget', () => {
   });
 
   it('acts on the network set with config set network when none is given, as every other command does', () => {
-    saveCliConfig({ network: 'preprod' });
-    expect(resolvePayingTarget(parseArgs(['contract', 'deploy']), 'contract', 'deploy').network).toBe('preprod');
-    expect(resolvePayingTarget(parseArgs(['contract', 'deploy', '--network', 'preview']), 'contract', 'deploy').network).toBe('preview');
+    saveCliConfig({ network: 'preprod' }, stateRootIn(home));
+    expect(resolvePayingTarget(parseArgs(['contract', 'deploy']), 'contract', 'deploy', stateRootIn(home), host).network).toBe('preprod');
+    expect(resolvePayingTarget(parseArgs(['contract', 'deploy', '--network', 'preview']), 'contract', 'deploy', stateRootIn(home), host).network).toBe('preview');
+  });
+});
+
+describe('networkTargetOf', () => {
+  const GIVEN = { node: 'ws://localhost:29944', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws', proofServer: 'http://localhost:26300' };
+  const hostAt = (root: string) => createHost({ paths: { stateRoot: root, home } });
+
+  it('acts on undeployed when no network is given, with the endpoints given, under the host\'s state root', () => {
+    const target = networkTargetOf(hostAt(stateRootIn(home)), GIVEN);
+    expect(target.network).toBe('undeployed');
+    expect(target.root).toBe(stateRootIn(home));
+    expect(target.endpoints).toEqual(GIVEN);
+    expect(target.networkConfig.indexer).toBe('http://localhost:28088/api/v4/graphql');
+    expect(target.networkConfig.proofServer).toBe('http://localhost:26300');
+  });
+
+  it('acts on the network saved under each host\'s own state root, and on the one given over it', () => {
+    const rootA = path.join(home, 'a');
+    const rootB = path.join(home, 'b');
+    saveCliConfig({ network: 'preprod' }, rootA);
+    saveCliConfig({ network: 'preview' }, rootB);
+    expect(networkTargetOf(hostAt(rootA), GIVEN).network).toBe('preprod');
+    expect(networkTargetOf(hostAt(rootB), GIVEN).network).toBe('preview');
+    expect(networkTargetOf(hostAt(rootA), { ...GIVEN, network: 'undeployed' }).network).toBe('undeployed');
+  });
+
+  it('refuses a name that is no network\'s', () => {
+    expect(() => networkTargetOf(hostAt(stateRootIn(home)), { ...GIVEN, network: 'mainnet' as NetworkName })).toThrow('Invalid network: "mainnet"');
+  });
+
+  it('gives what resolvePayingTarget gives for the same flags', () => {
+    const args = parseArgs(['contract', 'deploy', '--network', 'undeployed', ...ENDPOINTS]);
+    const { host: _a, ...fromArgs } = resolvePayingTarget(args, 'contract', 'deploy', stateRootIn(home), host);
+    const { host: _b, ...fromChoice } = networkTargetOf(hostAt(stateRootIn(home)), { network: 'undeployed', ...GIVEN });
+    expect(fromChoice).toEqual(fromArgs);
   });
 });
 
@@ -97,8 +137,8 @@ describe('the serve payer', () => {
     const serve = await runningServe();
     const said: string[] = [];
     try {
-      const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy');
-      const served = await servePayerAt(serve.port).serve(target, undefined, silentSpinner((message) => said.push(message)), createSdkWarningRouter().openCall().warnings);
+      const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy', stateRootIn(home), host);
+      const served = await servePayerAt(serve.port).serve(target, undefined, silentSpinner((message) => said.push(message)), createSdkWarningRouter().openCall().warnings, undefined);
       expect(served.port).toBe(serve.port);
       expect(said).toEqual([`Reusing existing mn serve on port ${serve.port}`, `mn serve ready (port ${serve.port})`]);
       await served.stop();
@@ -106,5 +146,27 @@ describe('the serve payer', () => {
     } finally {
       await serve.close();
     }
+  });
+
+  it('serves nothing for a call already cancelled, not even probing the running serve', async () => {
+    const serve = await runningServe();
+    const said: string[] = [];
+    try {
+      const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy', stateRootIn(home), host);
+      const controller = new AbortController();
+      controller.abort();
+      await expect(servePayerAt(serve.port).serve(target, undefined, silentSpinner((message) => said.push(message)), createSdkWarningRouter().openCall().warnings, controller.signal)).rejects.toBeInstanceOf(CancelledError);
+      expect(said).toEqual([]);
+    } finally {
+      await serve.close();
+    }
+  });
+
+  it('checks no wallet for a call already cancelled', async () => {
+    const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy', stateRootIn(home), host);
+    const controller = new AbortController();
+    controller.abort();
+    // Not cancelled, this would fail on the missing wallet file.
+    await expect(assertWalletCanPay(target, 'nobody', silentSpinner(), controller.signal)).rejects.toBeInstanceOf(CancelledError);
   });
 });

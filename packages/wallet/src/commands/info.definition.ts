@@ -1,0 +1,54 @@
+// The `info` command, described once.
+
+import { getValidNetworkNames, type CommandDefinition, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core';
+import { LOADS_ENGINE, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
+import { OPENS_WALLET } from './wallet.codes.ts';
+
+export const infoDefinition: CommandDefinition = {
+  name: 'info',
+  order: 30,
+  flags: [
+    {
+      name: 'network',
+      takesValue: true,
+      agent: { ...NETWORK_PARAM, description: 'Network whose address is shown as active (default: the selected one)' },
+    },
+    {
+      name: 'wallet',
+      takesValue: true,
+      help: ['--wallet <name|file> Wallet name or path'],
+      agent: { type: 'string' },
+    },
+  ],
+  help: {
+    description: 'Display wallet address, network, creation date (no secrets shown)',
+    usage: 'midnight info [--wallet <name|file>]',
+    flags: [{ flag: 'wallet' }],
+    examples: ['midnight info', 'midnight info --wallet my-wallet.json'],
+    jsonFields: {
+      addresses: `Per-network unshielded addresses { ${getValidNetworkNames().join(', ')} }`,
+      shieldedAddresses: `Per-network shielded addresses { ${getValidNetworkNames().join(', ')} }`,
+      activeNetwork: 'Currently active network',
+      activeAddress: 'Unshielded address for active network (also written to stdout)',
+      createdAt: 'ISO 8601 creation timestamp',
+      file: 'Wallet file path',
+    },
+  },
+  intro: { brief: 'Display wallet metadata', order: 2 },
+  needsWalletSdk: false,
+  shell: {},
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, 'NETWORK_ERROR'] },
+  load: () => import('./info.ts'),
+  mcp: {
+    tools: [
+      {
+        name: 'midnight_info',
+        description: 'Wallet metadata.',
+        annotations: { readOnlyHint: true, idempotentHint: true },
+        params: [{ flag: 'wallet' }],
+        argv: { flags: 'rest' },
+        order: 6,
+      },
+    ],
+  },
+};

@@ -1,18 +1,30 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import configCommand from '../commands/config.ts';
-import { parseArgs } from '../lib/argv.ts';
-import { loadCliConfig } from '../lib/cli-config.ts';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
+import { parseArgs, loadCliConfig } from '@kuiralabs/midnight-cli-core';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
+
+// The config handler, as the shell loads it.
+const { default: configCommand } = await configDefinition.load();
 
 let io: CapturedOutput;
+
+// A home of the test's own: the config the commands write is never the user's.
+let home: string;
+const originalHome = process.env.HOME;
 
 // Save the original config value before tests, restore after
 let originalNetwork: string;
 
 beforeEach(() => {
   process.env.NO_COLOR = '';
-  originalNetwork = loadCliConfig().network;
+  home = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-config-command-'));
+  process.env.HOME = home;
+  originalNetwork = loadCliConfig(stateRootIn(home)).network;
   io = captureOutput();
 });
 
@@ -20,11 +32,13 @@ afterEach(async () => {
   delete process.env.NO_COLOR;
   io.restore();
   // Restore original config to avoid side effects
-  if (loadCliConfig().network !== originalNetwork) {
+  if (loadCliConfig(stateRootIn(home)).network !== originalNetwork) {
     const restoreIo = captureOutput();
     await cliCall(configCommand, parseArgs(['config', 'set', 'network', originalNetwork]));
     restoreIo.restore();
   }
+  process.env.HOME = originalHome;
+  fs.rmSync(home, { recursive: true, force: true });
 });
 
 describe('config command — error handling', () => {

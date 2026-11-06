@@ -1,0 +1,52 @@
+{
+  "name": "@kuiralabs/midnight-cli-core",
+  "version": "0.1.0-rc.3",
+  "type": "module",
+  "description": "The base of the Midnight CLI packages: arguments, typed errors and exit codes, JSON output, config, the state root, network endpoints, terminal formatting, the command registry contract, the payer and the SDK engine interface",
+  "license": "Apache-2.0",
+  "author": "nel349",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kuiralabs/midnight-cli.git",
+    "directory": "packages/cli-core"
+  },
+  "bugs": {
+    "url": "https://github.com/kuiralabs/midnight-cli/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "midnight-cli-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./engine": {
+      "midnight-cli-source": "./src/engine.ts",
+      "types": "./dist/engine.d.ts",
+      "default": "./dist/engine.js"
+    },
+    "./ui": {
+      "midnight-cli-source": "./src/ui.ts",
+      "types": "./dist/ui.d.ts",
+      "default": "./dist/ui.js"
+    },
+    "./commands": {
+      "midnight-cli-source": "./src/commands.ts",
+      "types": "./dist/commands.d.ts",
+      "default": "./dist/commands.js"
+    },
+    "./process": {
+      "midnight-cli-source": "./src/process.ts",
+      "types": "./dist/process.d.ts",
+      "default": "./dist/process.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json"
+  }
+}

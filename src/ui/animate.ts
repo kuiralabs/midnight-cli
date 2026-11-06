@@ -2,7 +2,7 @@
 // Each animation is a standalone async function writing to stderr
 // All respect NO_COLOR and accept AbortSignal for cancellation
 
-import { teal, white, purple, green, red, bold, dim, isColorEnabled } from './colors.ts';
+import { teal, white, purple, green, red, bold, dim, isColorEnabled } from '@kuiralabs/midnight-cli-core/ui';
 import { getMaterializeFrame, getWordmarkTypingFrame, getWordmarkMaterializeFrame, WORDMARK_BIG, MIDNIGHT_LOGO } from './art.ts';
 
 const FRAME_MS = 80;

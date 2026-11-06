@@ -1,9 +1,11 @@
-// The `manual` command, described once (plan 2B, spec §4.1).
+// The `manual` command, described once.
 
-import type { CommandDefinition } from '../lib/command-definition.ts';
+import type { CommandDefinition } from '@kuiralabs/midnight-cli-core';
+import { RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 
 export const manualDefinition: CommandDefinition = {
   name: 'manual',
+  order: 210,
   flags: [
     {
       name: 'no-pager',
@@ -38,5 +40,6 @@ export const manualDefinition: CommandDefinition = {
   intro: { brief: 'Full reference manual', order: 19 },
   needsWalletSdk: false,
   shell: {},
+  errors: { codes: [RESOLVES_NETWORK] },
   load: () => import('./manual.ts'),
 };

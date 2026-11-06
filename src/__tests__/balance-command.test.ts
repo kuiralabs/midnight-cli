@@ -1,14 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import balanceCommand from '../commands/balance.ts';
-import { parseArgs } from '../lib/argv.ts';
-import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveUnshieldedAddress, deriveAllAddresses } from '../lib/derive-address.ts';
-import { GENESIS_SEED } from '../lib/constants.ts';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { parseArgs, GENESIS_SEED } from '@kuiralabs/midnight-cli-core';
+import { balanceDefinition } from '@kuiralabs/midnight-wallet/commands';
+import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../test-support/plain-wallet.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { cliCall } from './helpers/cli-call.ts';
+
+// The handler, as the shell loads it.
+const { default: balanceCommand } = await balanceDefinition.load();
 
 // The balance command's checks that need no chain. Those that read a live
 // indexer are in balance-command.live.test.ts (npm run test:live).
@@ -17,11 +19,11 @@ const TEST_DIR = path.join(os.tmpdir(), `midnight-balance-cmd-test-${process.pid
 
 // Derive real valid addresses for testing against the local undeployed indexer
 const genesisSeedBuffer = Buffer.from(GENESIS_SEED, 'hex');
-const GENESIS_UNDEPLOYED_ADDRESS = deriveUnshieldedAddress(genesisSeedBuffer, 'undeployed');
+const GENESIS_UNDEPLOYED_ADDRESS = rcKeys.unshieldedAddress(genesisSeedBuffer, 'undeployed');
 
 // A different seed with no balance — used to test "No balance found" path
 const EMPTY_SEED = '0000000000000000000000000000000000000000000000000000000000000099';
-const EMPTY_ADDRESS = deriveUnshieldedAddress(Buffer.from(EMPTY_SEED, 'hex'), 'undeployed');
+const EMPTY_ADDRESS = rcKeys.unshieldedAddress(Buffer.from(EMPTY_SEED, 'hex'), 'undeployed');
 
 let io: CapturedOutput;
 

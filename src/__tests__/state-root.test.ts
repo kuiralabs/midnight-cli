@@ -1,26 +1,25 @@
-// Each owner builds its paths under the state root the host gives (spec §7),
-// and the files land where they did before 1G, with the same contents: the
+// Each owner builds its paths under the state root it is given, and the files
+// land where they did before the state root, with the same contents: the
 // fixture was recorded from the code before the change. A root outside the
-// home gets the same layout and nothing is written to the home; with no root
-// given, a library refuses instead of guessing.
+// home gets the same layout and nothing is written to the home; a host that
+// gave no root refuses instead of guessing.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { setHostPathsSource, stateRoot, NoStateRootError } from '../lib/state-root.ts';
-import { setConfigValue } from '../lib/cli-config.ts';
-import { bindCachesToIndexer } from '../lib/cache-indexer.ts';
-import { passphraseForNewSecret, PASSPHRASE_ENV } from '../lib/passphrase.ts';
-import { createWallet, walletSecretFrom } from '../lib/wallet-create.ts';
-import { accountRecordsDir } from '../lib/grant/account-records.ts';
-import { accountArtifactsDir } from '../lib/grant/account.ts';
-import { getCachePath } from '../lib/wallet-cache.ts';
-import { getDustCachePath } from '../lib/dust-direct-cache.ts';
-import { getShieldedCachePath } from '../lib/shielded-direct-cache.ts';
-import { getComposePath } from '../lib/localnet.ts';
-import { MIDNIGHT_DIR } from '../lib/constants.ts';
+import { NoStateRootError, createHost, parseArgs, setConfigValue, MIDNIGHT_DIR, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
+import { bindCachesToIndexer, getCachePath, getDustCachePath, getShieldedCachePath } from '@kuiralabs/midnight-cli-core/engine';
+import { testHost } from '../../test-support/test-host.ts';
+import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
+import { cliCall } from './helpers/cli-call.ts';
+import { passphraseForNewSecret, createWallet, walletSecretFrom } from '@kuiralabs/midnight-wallet';
+import { accountArtifactsDir, accountRecordsDir } from '@kuiralabs/midnight-grant';
+import { getComposePath } from '@kuiralabs/midnight-dev';
 import before from './fixtures/state-layout-before-1g.json';
+
+// The config handler, as the shell loads it.
+const { default: configCommand } = await configDefinition.load();
 
 const PASSPHRASE = 'fixture-passphrase-1g';
 let dir: string;
@@ -31,18 +30,17 @@ beforeEach(() => {
 });
 afterEach(() => {
   delete process.env[PASSPHRASE_ENV];
-  // Back to what the test harness gives, as the shell does.
-  setHostPathsSource(() => ({ stateRoot: path.join(os.homedir(), MIDNIGHT_DIR), home: os.homedir() }));
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-/** The same steps the fixture was recorded with, through each owner. */
-async function writeEveryOwnersFiles(): Promise<void> {
-  setConfigValue('network', 'preview');
-  setConfigValue('node', 'ws://localhost:29944', undefined, 'undeployed');
-  bindCachesToIndexer('undeployed', 'ws://localhost:28088/api/v4/graphql/ws');
-  createWallet('alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), await passphraseForNewSecret());
-  fs.mkdirSync(accountRecordsDir('undeployed', 'alice'), { recursive: true });
+/** The same steps the fixture was recorded with, through each owner, under the state root `root`. */
+async function writeEveryOwnersFiles(root: string): Promise<void> {
+  setConfigValue('network', 'preview', root);
+  setConfigValue('node', 'ws://localhost:29944', root, 'undeployed');
+  bindCachesToIndexer('undeployed', 'ws://localhost:28088/api/v4/graphql/ws', root);
+  const host = testHost();
+  await createWallet(root, 'alice', walletSecretFrom({ seed: Buffer.alloc(32, 2) }), await passphraseForNewSecret(host, root), await host.engines.any());
+  fs.mkdirSync(accountRecordsDir('undeployed', 'alice', root), { recursive: true });
 }
 
 /** Every file and folder under `root`, relative to `base`, folders ending in /. */
@@ -53,11 +51,10 @@ function layout(root: string, base: string): string[] {
 }
 
 describe('the state root the host gives', () => {
-  it('lays out every owner\'s files as before 1G, with the same contents', async () => {
+  it('lays out every owner\'s files as before the state root, with the same contents', async () => {
     const home = path.join(dir, 'home');
-    setHostPathsSource(() => ({ stateRoot: path.join(home, MIDNIGHT_DIR), home }));
-    await writeEveryOwnersFiles();
-    const root = stateRoot();
+    const root = path.join(home, MIDNIGHT_DIR);
+    await writeEveryOwnersFiles(root);
     const rel = (p: string) => path.relative(home, p);
     const wallet = JSON.parse(fs.readFileSync(path.join(root, 'wallets/alice.json'), 'utf8'));
 
@@ -65,14 +62,17 @@ describe('the state root the host gives', () => {
     expect(fs.readFileSync(path.join(root, 'config.json'), 'utf8')).toBe(before.config);
     expect(fs.readFileSync(path.join(root, 'cache/undeployed/indexer.host'), 'utf8')).toBe(before.marker);
     expect(Object.keys(wallet)).toEqual(before.walletKeys);
-    expect(wallet.addresses).toEqual(before.walletAddresses);
+    // Every address the layout had, and stagenet's, which a new wallet has had since mn added stagenet.
+    const { stagenet, ...recorded } = wallet.addresses;
+    expect(recorded).toEqual(before.walletAddresses);
+    expect(stagenet).toMatch(/^mn_addr_stagenet1/);
     expect(Object.keys(JSON.parse(fs.readFileSync(path.join(root, 'keystore.json'), 'utf8')))).toEqual(before.keystoreKeys);
     expect({
-      walletCache: rel(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed')),
-      dustCache: rel(getDustCachePath('undeployed', 'ab'.repeat(32))),
-      shieldedCache: rel(getShieldedCachePath('undeployed', 'cd'.repeat(32))),
-      compose: rel(getComposePath()),
-      accountArtifacts: rel(accountArtifactsDir()),
+      walletCache: rel(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)),
+      dustCache: rel(getDustCachePath('undeployed', 'ab'.repeat(32), root)),
+      shieldedCache: rel(getShieldedCachePath('undeployed', 'cd'.repeat(32), root)),
+      compose: rel(getComposePath(root)),
+      accountArtifacts: rel(accountArtifactsDir(root)),
     }).toEqual(before.paths);
   });
 
@@ -80,20 +80,16 @@ describe('the state root the host gives', () => {
     const home = path.join(dir, 'home');
     const root = path.join(dir, 'elsewhere', 'state');
     fs.mkdirSync(home, { recursive: true });
-    setHostPathsSource(() => ({ stateRoot: root, home }));
-    await writeEveryOwnersFiles();
+    await writeEveryOwnersFiles(root);
 
     expect(layout(root, root)).toEqual(before.files.filter((f) => f !== `${MIDNIGHT_DIR}/`).map((f) => f.slice(MIDNIGHT_DIR.length + 1)));
     expect(fs.readdirSync(home)).toEqual([]);
-    expect(getComposePath()).toBe(path.join(root, 'localnet', 'compose.yml'));
+    expect(getComposePath(root)).toBe(path.join(root, 'localnet', 'compose.yml'));
   });
 
-  it('refuses when the host gave no root, for each owner', () => {
-    setHostPathsSource(null);
-    expect(() => stateRoot()).toThrow(NoStateRootError);
-    expect(() => setConfigValue('network', 'preview')).toThrow(NoStateRootError);
-    expect(() => getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed')).toThrow(NoStateRootError);
-    expect(() => getComposePath()).toThrow(NoStateRootError);
-    expect(() => accountRecordsDir('undeployed', 'alice')).toThrow(NoStateRootError);
+  it('refuses when the host gave no root, before a command runs', async () => {
+    const host = createHost();
+    expect(() => host.paths()).toThrow(NoStateRootError);
+    await expect((async () => cliCall(configCommand, parseArgs(['config', 'set', 'network', 'preview']), { host }))()).rejects.toThrow(NoStateRootError);
   });
 });

@@ -1,9 +1,11 @@
-// The `help` command, described once (plan 2B, spec §4.1).
+// The `help` command, described once.
 
-import type { CommandDefinition } from '../lib/command-definition.ts';
+import type { CommandDefinition } from '@kuiralabs/midnight-cli-core';
+import { RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 
 export const helpDefinition: CommandDefinition = {
   name: 'help',
+  order: 200,
   flags: [
     { name: 'agent', takesValue: false },
     { name: 'intro', takesValue: false },
@@ -22,5 +24,6 @@ export const helpDefinition: CommandDefinition = {
   intro: { brief: 'Show command usage', order: 18 },
   needsWalletSdk: false,
   shell: {},
+  errors: { codes: [RESOLVES_NETWORK] },
   load: () => import('./help.ts'),
 };

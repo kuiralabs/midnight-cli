@@ -3,23 +3,16 @@
 // Dispatches to command handlers via dynamic import
 // Also supports: midnight --mcp (starts MCP server for AI agent integration)
 
-import { parseArgs, hasFlag } from './lib/argv.ts';
-import { errorMessage, usageMessage } from './ui/format.ts';
-import { assertKnownFlags } from './lib/command-flags.ts';
+import { parseArgs, hasFlag, assertKnownFlags, type CommandOutcome, classifyError, humanizeNetworkError, asReported, isUsageError, writeJsonError } from '@kuiralabs/midnight-cli-core';
+import { errorMessage, usageMessage, createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui';
 import { installedCommands } from './lib/installed-commands.ts';
 import { commandNeedsWalletSdk, dispatchCommand, processOutput } from './lib/command-dispatch.ts';
-import type { CommandOutcome } from './lib/call-context.ts';
-import { classifyError, humanizeNetworkError, EXIT_INVALID_ARGS } from './lib/exit-codes.ts';
-import { isUsageError } from './lib/errors.ts';
-import { writeJsonError } from './lib/json-output.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
-import { migrateOldWallet } from './lib/wallet-paths.ts';
+import { migrateOldWallet } from '@kuiralabs/midnight-wallet';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
-import { setPrompter } from './lib/prompter.ts';
-import { createTerminalPrompter } from './ui/terminal-prompter.ts';
-import { installCliHost } from './lib/cli-host.ts';
+import { createCliHost } from './lib/cli-host.ts';
 
 // --mcp: start MCP server instead of CLI (for: npx midnight-wallet-cli --mcp)
 if (process.argv.includes('--mcp')) {
@@ -36,11 +29,20 @@ if (hasFlag(args, 'version') || hasFlag(args, 'v')) {
   process.exit(0);
 }
 
-// Global --help / -h handling. `mn <cmd> --help` shows help whatever other
-// flags are present, so flag checking is skipped for it.
+// Global --help / -h handling. `mn <cmd> --help` shows that command's help,
+// as `mn help <cmd>` does, whatever other flags are present, so flag checking
+// is skipped for it; with no command help lists, the general help.
 const helpRequested = hasFlag(args, 'help') || hasFlag(args, 'h');
 if (helpRequested) {
+  const target = args.command !== undefined && installedCommands.find(args.command)?.help !== undefined ? args.command : undefined;
   args.command = 'help';
+  args.positionals = [];
+  if (target !== undefined && target !== 'help') {
+    args.subcommand = target;
+    args.flags = {};
+  } else {
+    args.subcommand = undefined;
+  }
 }
 
 // Default to help when no command given
@@ -55,18 +57,16 @@ const command = args.command ?? 'help';
 const needsWalletSdk = commandNeedsWalletSdk(installedCommands, command);
 if (needsWalletSdk) await ensureHeapForSync();
 
-// Auto-migrate old ~/.midnight/wallet.json → wallets/default.json (silent, one-time)
 // Endpoint URLs can carry a Blockfrost project id: nothing mn or its libraries print shows it.
 hideProjectIdsInOutput();
 
 // What the libraries get from their host: the SDK noise filters, notices on
-// stderr, settings from the environment, and the state root ~/.midnight.
-const host = installCliHost();
+// stderr, settings from the environment, the state root ~/.midnight, and the
+// terminal to ask their questions (passphrase, approvals) at.
+const host = createCliHost({ prompter: createTerminalPrompter() });
 
-// Libraries ask their questions (passphrase, approvals) at the terminal.
-setPrompter(createTerminalPrompter());
-
-migrateOldWallet();
+// Auto-migrate old ~/.midnight/wallet.json → wallets/default.json (silent, one-time)
+migrateOldWallet(host.paths().stateRoot);
 
 // Global AbortController for clean shutdown on SIGINT/SIGTERM
 const abortController = new AbortController();
@@ -91,10 +91,10 @@ async function run(): Promise<CommandOutcome | void> {
   return dispatchCommand(installedCommands, command, args, {
     signal,
     output: processOutput,
-    sdkWarnings: host.sdkWarnings,
-    loadPayer: async () => (await import('./lib/serve-payer.ts')).servePayer,
-    // wallet protect also seals grant's accounts, through the protector grant provides (D24).
-    loadProtectors: async () => [(await import('./lib/grant/account-protector.ts')).accountProtector],
+    host,
+    payer: async () => (await import('@kuiralabs/midnight-connect')).servePayer,
+    // wallet protect also seals grant's accounts, through the protector grant provides.
+    protectors: async () => [(await import('@kuiralabs/midnight-grant')).accountProtector],
   });
 }
 
@@ -107,27 +107,24 @@ run().then((outcome) => {
   if (needsWalletSdk) {
     process.exit(process.exitCode ?? 0);
   }
-}).catch((err: Error) => {
-  // Usage errors (missing/unknown subcommand, bad args) render in yellow
-  // with a softer "Usage" framing. They are the user's prompt to fix and
-  // retry, not a system failure. Exit code 2 (INVALID_ARGS).
+}).catch((thrown: Error) => {
+  // A node's refusal is reported in the node's words, also when a command wrapped it.
+  const err = asReported(thrown);
+  // The code and exit code come from the error's code, as the MCP server's do:
+  // a usage error carries INVALID_ARGS unless its class names another
+  // (PASSPHRASE_REQUIRED). Usage errors (missing/unknown subcommand, bad args)
+  // render in yellow with a softer "Usage" framing: the user's prompt to fix
+  // and retry, not a system failure.
+  const { exitCode, errorCode } = classifyError(err, installedCommands);
   const message = humanizeNetworkError(err.message);
-  if (isUsageError(err)) {
-    if (jsonMode) {
-      writeJsonError(err, 'INVALID_ARGS', EXIT_INVALID_ARGS);
-    } else {
-      process.stderr.write('\n' + usageMessage(message, 'Run "midnight manual" for the full reference, or "midnight help <command>" for one command.') + '\n\n');
-    }
-    process.exit(EXIT_INVALID_ARGS);
-  } else if (jsonMode) {
-    const { exitCode, errorCode } = classifyError(err);
+  if (jsonMode) {
     writeJsonError(err, errorCode, exitCode);
-    process.exit(exitCode);
+  } else if (isUsageError(err)) {
+    process.stderr.write('\n' + usageMessage(message, 'Run "midnight manual" for the full reference, or "midnight help <command>" for one command.') + '\n\n');
   } else {
     process.stderr.write('\n' + errorMessage(message, 'Run "midnight help" for usage information.') + '\n\n');
-    const { exitCode } = classifyError(err);
-    process.exit(exitCode);
   }
+  process.exit(exitCode);
 });
 
 }

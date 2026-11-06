@@ -1,6 +1,6 @@
 {
   "name": "midnight-wallet-cli",
-  "version": "0.6.0-rc.10",
+  "version": "0.6.0-rc.14",
   "type": "module",
   "description": "Git-style CLI wallet for the Midnight blockchain",
   "license": "Apache-2.0",
@@ -25,7 +25,16 @@
     "ai-agent"
   ],
   "workspaces": [
-    "packages/connector"
+    "packages/connector",
+    "packages/cli-core",
+    "packages/chain",
+    "packages/engine-rc",
+    "packages/engine-beta",
+    "packages/wallet",
+    "packages/contract",
+    "packages/connect",
+    "packages/dev",
+    "packages/grant"
   ],
   "bin": {
     "midnight": "dist/wallet.js",
@@ -37,53 +46,51 @@
     "dist",
     "docs/SKILL.md",
     "docs/SKILL-CORE.md",
-    "NOTICE"
+    "NOTICE",
+    "npm-shrinkwrap.json"
   ],
   "engines": {
     "node": ">=22",
     "bun": ">=1.3.0"
   },
   "scripts": {
-    "wallet": "tsx src/wallet.ts",
-    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && bun build src/wallet.ts src/mcp-server.ts --outdir dist --splitting --target node --format esm --packages external --minify --banner \"#!/usr/bin/env node\"",
-    "mcp": "tsx src/mcp-server.ts",
+    "wallet": "tsx --conditions=midnight-cli-source src/wallet.ts",
+    "build": "npm run build -w @kuiralabs/midnight-cli-core && npm run build -w @kuiralabs/midnight-chain && npm run build -w @kuiralabs/midnight-engine-rc && npm run build -w @kuiralabs/midnight-engine-beta && npm run build -w @kuiralabs/midnight-wallet && npm run build -w @kuiralabs/midnight-contract && npm run build -w @kuiralabs/midnight-connect && npm run build -w @kuiralabs/midnight-dev && npm run build -w @kuiralabs/midnight-grant && node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && bun build src/wallet.ts src/mcp-server.ts --outdir dist --splitting --target node --format esm --packages external --minify --banner \"#!/usr/bin/env node\"",
+    "mcp": "tsx --conditions=midnight-cli-source src/mcp-server.ts",
     "link": "bun link",
     "prepublishOnly": "npm run build && npm run test",
     "test": "vitest run",
+    "test:rc": "vitest run --exclude '**/src/__tests__/engine-beta*.test.ts' --exclude 'packages/engine-beta/**'",
+    "test:beta": "vitest run src/__tests__/engine-beta packages/engine-beta",
     "test:live": "vitest run --config vitest.live.config.ts",
     "test:watch": "vitest",
+    "api-report": "node scripts/api-report.mjs write",
     "typecheck": "tsc --noEmit",
-    "skill-docs": "tsx scripts/write-skill-docs.ts"
+    "skill-docs": "tsx --conditions=midnight-cli-source scripts/write-skill-docs.ts",
+    "readme-commands": "tsx --conditions=midnight-cli-source scripts/write-readme-commands.ts",
+    "package-readmes": "tsx --conditions=midnight-cli-source scripts/write-package-readmes.ts"
   },
   "dependencies": {
-    "@kuiralabs/midnight-account": "0.2.0-rc.0",
-    "@kuiralabs/midnight-account-chain": "0.3.0-rc.0",
-    "@midnight-ntwrk/compact-runtime": "0.20.0",
-    "@midnight-ntwrk/ledger-v8": "8.1.0",
-    "@midnight-ntwrk/midnight-js-contracts": "5.0.0-rc.1",
-    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0-rc.1",
-    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "5.0.0-rc.1",
-    "@midnight-ntwrk/midnight-js-level-private-state-provider": "5.0.0-rc.1",
-    "@midnight-ntwrk/midnight-js-network-id": "5.0.0-rc.1",
-    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0-rc.1",
-    "@midnight-ntwrk/midnight-js-protocol": "5.0.0-rc.1",
-    "@midnight-ntwrk/midnight-js-types": "5.0.0-rc.1",
-    "@midnight-ntwrk/midnight-js-utils": "5.0.0-rc.1",
-    "@midnightntwrk/dapp-connector-api": "4.1.0-beta.1",
-    "@midnightntwrk/ledger-v9": "1.0.0-rc.5",
-    "@midnightntwrk/onchain-runtime-v4": "4.0.0-rc.3",
-    "@midnightntwrk/wallet-sdk": "2.0.0-rc.0",
-    "@modelcontextprotocol/sdk": "^1.27.1",
-    "@scure/base": "2.0.0",
-    "@scure/bip39": "^2.0.1",
-    "rxjs": "7.8.2",
-    "ws": "^8.19.0"
+    "@kuiralabs/midnight-chain": "0.1.0-rc.3",
+    "@kuiralabs/midnight-cli-core": "0.1.0-rc.3",
+    "@kuiralabs/midnight-connect": "0.1.0-rc.3",
+    "@kuiralabs/midnight-contract": "0.1.0-rc.3",
+    "@kuiralabs/midnight-dev": "0.1.0-rc.3",
+    "@kuiralabs/midnight-engine-beta": "0.1.0-rc.3",
+    "@kuiralabs/midnight-engine-rc": "0.1.0-rc.3",
+    "@kuiralabs/midnight-grant": "0.1.0-rc.3",
+    "@kuiralabs/midnight-wallet": "0.1.0-rc.3",
+    "@modelcontextprotocol/sdk": "^1.27.1"
   },
   "devDependencies": {
+    "@midnightntwrk/dapp-connector-api": "4.1.0-beta.1",
     "@types/node": "^22.19.13",
     "@types/ws": "^8.18.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "@midnightntwrk/wallet-sdk-node-client@2.0.0-beta.2": "2.0.0-beta.4"
   }
 }

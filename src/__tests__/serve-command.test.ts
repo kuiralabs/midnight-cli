@@ -1,12 +1,13 @@
 // Tests for the serve command's approval flags (argv only; nothing is loaded or synced).
 
 import { describe, it, expect } from 'vitest';
-import serveCommand from '../commands/serve.ts';
-import { parseArgs } from '../lib/argv.ts';
-import { UsageError } from '../lib/errors.ts';
-import { findUnknownFlags } from '../lib/command-flags.ts';
+import { parseArgs, UsageError, findUnknownFlags } from '@kuiralabs/midnight-cli-core';
+import { serveDefinition } from '@kuiralabs/midnight-connect/commands';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { cliCall } from './helpers/cli-call.ts';
+
+// The handler, as the shell loads it.
+const { default: serveCommand } = await serveDefinition.load();
 
 describe('serve --approve-fees', () => {
   it('is a flag serve accepts', () => {

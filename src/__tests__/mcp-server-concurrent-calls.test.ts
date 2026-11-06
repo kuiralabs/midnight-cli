@@ -1,4 +1,4 @@
-// The gate test of 2F (S9): two calls at once in one real MCP server, one of
+// Two calls at once in one real MCP server, one of
 // them cancelled. Run through this checkout's MCP server as a process of its
 // own, over stdio, with a temporary home. Each call reads an address's balance
 // from its own stand-in indexer (a WebSocket run by this test, answering
@@ -21,14 +21,15 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { JSONRPCMessage, Progress } from '@modelcontextprotocol/sdk/types.js';
-import { deriveUnshieldedAddress } from '../lib/derive-address.ts';
-import { toNight } from '../ui/format.ts';
-import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from './helpers/stand-in-indexer.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { toNight } from '@kuiralabs/midnight-cli-core/ui';
+import { startRefusingEndpoint, startStandInIndexer, type StandInIndexer } from '../../test-support/stand-in-indexer.ts';
+import { expectDeclaredToolResult } from './helpers/expect-declared.ts';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const TSX = path.join(REPO, 'node_modules', '.bin', 'tsx');
 
-const addressOf = (byte: string): string => deriveUnshieldedAddress(Buffer.from(byte.repeat(32), 'hex'), 'undeployed');
+const addressOf = (byte: string): string => rcKeys.unshieldedAddress(Buffer.from(byte.repeat(32), 'hex'), 'undeployed');
 const ADDRESS_A = addressOf('aa');
 const ADDRESS_B = addressOf('bb');
 const ADDRESS_C = addressOf('cc');
@@ -86,8 +87,12 @@ const balanceOf = (address: string, indexer: StandInIndexer) => ({
   },
 });
 
-const resultOf = (answer: unknown): Record<string, unknown> =>
-  JSON.parse(((answer as { content: Array<{ text: string }> }).content)[0]!.text) as Record<string, unknown>;
+/** A balance call's result, its error (if it is one) held to the codes balance declares. */
+const resultOf = (answer: unknown): Record<string, unknown> => {
+  const result = JSON.parse(((answer as { content: Array<{ text: string }> }).content)[0]!.text) as Record<string, unknown>;
+  expectDeclaredToolResult('midnight_balance', result);
+  return result;
+};
 
 /** The id of the tools/call request the client sent for `address`. */
 function requestIdFor(address: string): unknown {

@@ -1,7 +1,6 @@
 #!/bin/bash
 # measure-mcp-tokens.sh — measure the byte size of MCP responses so we can
-# track token consumption over time. See docs/tasks/archived/token-budget-plan.md
-# for the policy this script supports.
+# track token consumption over time.
 #
 # Usage:  ./scripts/measure-mcp-tokens.sh
 # Output: per-call bytes + estimated tokens to stdout, one CSV-ish line each.

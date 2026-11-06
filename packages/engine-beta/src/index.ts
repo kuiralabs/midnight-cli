@@ -1,0 +1,24 @@
+// @kuiralabs/midnight-engine-beta: the engine, loaded once the install is known to
+// be the tree it was tested with. That is checked before any SDK module loads,
+// against the npm-shrinkwrap.json the package ships: an installer that ignores
+// it (bun's) resolves the ranges again, and the SDK can then fail as it loads,
+// before any check inside the engine could say why.
+
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { assertInstalledAsShipped, type Engine, type EngineHost } from '@kuiralabs/midnight-cli-core/engine';
+import type { RepoDeps } from './wallet-data-repository.ts';
+
+assertInstalledAsShipped("mn's beta engine", dirname(dirname(fileURLToPath(import.meta.url))));
+const engine = await import('./beta-engine.ts');
+
+/** What a beta engine is made with besides its host. */
+export interface BetaEngineOptions {
+  /** Its wallet repository's seams (the clock, the chain's and the indexer's reads), for a test standing in for the network. */
+  readonly repository?: RepoDeps;
+}
+
+/** The beta engine, for a host's engine loader. */
+export function createBetaEngine(host: EngineHost, options: BetaEngineOptions = {}): Engine {
+  return engine.createBetaEngine(host, options);
+}

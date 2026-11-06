@@ -1,20 +1,23 @@
-// The MCP server's tools from a registry (src/lib/mcp/registry-tools.ts, plan
-// 2E), with test commands whose handlers record the argv they get and write
-// their JSON result through their call's context, as a command does.
+// The MCP server's tools from a registry (src/lib/mcp/registry-tools.ts),
+// with test commands whose handlers record the argv they get and write
+// their JSON result through their call's context, as a command does; and the
+// installed tools' descriptions.
 
 import { describe, expect, it } from 'vitest';
-import { createCommandRegistry, type CommandDefinition, type ToolDefinition } from '../lib/command-definition.ts';
+import { createCommandRegistry, type CommandDefinition, type ToolDefinition, type CallContext, MINIMAL_FLAG, type ParsedArgs } from '@kuiralabs/midnight-cli-core';
+import { installedCommands } from '../lib/installed-commands.ts';
 import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from '../lib/mcp/registry-tools.ts';
-import type { CallContext } from '../lib/call-context.ts';
-import { MINIMAL_FLAG, type ParsedArgs } from '../lib/argv.ts';
+import { ownCall } from './helpers/own-call.ts';
 
 const received: ParsedArgs[] = [];
 const command = (tools: ToolDefinition[]): CommandDefinition => ({
   name: 'thing',
+  order: 1,
   subcommands: ['make', 'show'],
   flags: [{ name: 'size', takesValue: true, agent: { type: 'string', description: 'How big' } }, { name: 'go', takesValue: false, subcommands: ['make'], agent: { notForAgents: 'a person\'s' } }],
   needsWalletSdk: false,
   shell: {},
+  errors: { codes: [] },
   load: async () => ({
     default: async (args: ParsedArgs, ctx: CallContext) => {
       received.push(structuredClone(args));
@@ -58,20 +61,36 @@ describe('the MCP server\'s tools from a registry', () => {
 
   it('runs a tool\'s command with the argv its parameters map to, in agent mode, and returns its result', async () => {
     received.length = 0;
-    const result = await runTool(findTool(registry, 'thing_make')!, { label: 'cup', size: '3' }, {});
+    const result = await runTool(findTool(registry, 'thing_make')!, { label: 'cup', size: '3' }, ownCall());
     expect(result).toStrictEqual({ subcommand: 'make', size: '3', go: true });
     expect(received).toStrictEqual([{ command: 'thing', subcommand: 'make', positionals: ['cup'], flags: { json: true, size: '3', go: true, [MINIMAL_FLAG]: true } }]);
   });
 
   it('confirms the text a check finds, after running what the check asks, and lets a check refuse', async () => {
     received.length = 0;
-    expect(await confirmationFor(findTool(registry, 'thing_make')!, { label: 'cup', size: '3' }, {})).toBe('Make cup at size 3');
+    expect(await confirmationFor(findTool(registry, 'thing_make')!, { label: 'cup', size: '3' }, ownCall())).toBe('Make cup at size 3');
     // The check ran the command once, without the flag the tool fixes.
     expect(received.map((args) => [args.subcommand, args.flags.go])).toStrictEqual([['show', undefined]]);
-    await expect(confirmationFor(findTool(registry, 'thing_make')!, { label: 'bad' }, {})).rejects.toThrow('not that one');
+    await expect(confirmationFor(findTool(registry, 'thing_make')!, { label: 'bad' }, ownCall())).rejects.toThrow('not that one');
   });
 
   it('confirms the definition\'s text when there is no check', async () => {
-    expect(await confirmationFor(findTool(registry, 'thing_plain')!, {}, {})).toBe('Plain thing');
+    expect(await confirmationFor(findTool(registry, 'thing_plain')!, {}, ownCall())).toBe('Plain thing');
+  });
+});
+
+describe("the installed tools' descriptions", () => {
+  it("end with their command's own codes, then its sets of codes by name", () => {
+    const description = (name: string): string => listedTools(installedCommands).find((tool) => tool.name === name)!.description;
+    const own = (name: string): string => findTool(installedCommands, name)!.description;
+    expect(description('midnight_tx_status')).toBe(`${own('midnight_tx_status')} Errors: NETWORK_ERROR; and the network codes (see the skill).`);
+    expect(description('midnight_config_get')).toBe(`${own('midnight_config_get')} Errors: the network codes (see the skill).`);
+    expect(description('midnight_transfer')).toBe(`${own('midnight_transfer')} Errors: CHAIN_CLOCK_BEHIND; and the network, wallet, engine, sync, paying, offers and chain codes (see the skill).`);
+    // Every installed tool says what it can fail with in at most 20 words.
+    for (const tool of listedTools(installedCommands).slice(0, -1)) {
+      expect(tool.description.split(' Errors: ')[1]!.split(/\s+/).length + 1, tool.name).toBeLessThanOrEqual(20);
+    }
+    // The server's own confirm tool runs no command: its description stays as it is.
+    expect(listedTools(installedCommands).at(-1)).toStrictEqual(CONFIRM_TOOL);
   });
 });

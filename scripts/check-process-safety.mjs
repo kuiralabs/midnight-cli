@@ -1,37 +1,51 @@
 #!/usr/bin/env node
-// Checks that library code leaves the host process alone (spec §3.1, decision
-// 20): no writing to the terminal, exiting, installing process handlers,
+// Checks that library code leaves the host process alone: no writing to the terminal, exiting, installing process handlers,
 // patching console, changing directory, opening a prompt, reading the
-// environment, or computing a path from the home directory (spec §7). Commands, ui/, the shell and the MCP server may; so may the
-// modules marked below as shell concerns. Commands may not write to the
-// terminal either (2F, S8): their text goes through their call's output
+// environment, or computing a path from the home directory. Commands, ui/, the shell and the MCP server may; so may the
+// modules marked below as shell concerns. Core's process directory
+// (packages/cli-core/src/process/, its "./process" entry point) is host-called:
+// it may install a process handler, patch the console, write to the terminal
+// and exit, because only a host calls it, on its own process (no package
+// imports it: scripts/check-layering.mjs). Commands may not write to the
+// terminal either: their text goes through their call's output
 // (ctx.output.stdout / stderr), which the CLI writes to the process's streams
 // and the MCP server to its stderr. String and template-literal
 // contents and comments are skipped, so the contract runner's generated
 // scripts (which run as their own process) don't count.
 //
-// And that nothing about a call lives in module globals (spec §4.4, D21, 2F):
+// And that nothing about a call lives in module globals:
 //   - library, ui and command code keeps no mutable state at module level (a
 //     `let` or `var`, or a Map, Set or array that isn't typed readonly, or an
 //     empty object to fill); what is shared on purpose is allowlisted by name,
 //     with its reason;
 //   - only the shell sets the process's exit code; a handler returns its own;
-//   - only the shell's noise filter (lib/sdk-noise.ts) may keep ambient per-call
-//     storage (AsyncLocalStorage, async_hooks); everything else is passed the
-//     call's context explicitly.
+//   - only core's host-called process directory (the SDK process guard) may
+//     keep ambient per-call storage (AsyncLocalStorage, async_hooks);
+//     everything else is passed the call's context explicitly;
+//   - library, ui and command code exports no setter of host state: no
+//     function named set…Source, set…Sink, setPrompter or setEngineLoader, and
+//     no exported function that assigns a module-level `let` or `var`. What a
+//     library needs from its host comes in through the host it is passed; the
+//     one process guard allowed is named below, with its reason.
 //
 // Usage: node scripts/check-process-safety.mjs
-// Exits 1 when a library does something §3.1 forbids, or any code breaks the
-// 2F rules, and the allowlist doesn't name it. Imported, it exports
-// findViolations.
+// Exits 1 when a library does something the rules above forbid, or any code
+// breaks the module-state rules, and the allowlist doesn't name it. Imported, it exports
+// findViolations, and codeOnly, which blanks strings and comments.
 
 import { readFileSync } from 'node:fs';
 import { relative, resolve, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { homeOf, sourceFiles } from './check-layering.mjs';
+import { homeOf, relOf, sourceFiles } from './check-layering.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'src');
+
+// Core's host-called code: what a host calls on its own process, never a library.
+export const CORE_PROCESS_DIR = join(ROOT, 'packages', 'cli-core', 'src', 'process');
+const isHostCalled = (file) => file.startsWith(CORE_PROCESS_DIR + '/');
+// What host-called code may do to the process, the host having asked it to.
+const HOST_CALLED_RULES = new Set(['writes to the terminal', 'exits', 'installs a process handler', 'patches console or stdout']);
 
 const RULES = [
   ['writes to the terminal', /\bprocess\.(stdout|stderr)\.write\s*\(|\bconsole\.(log|error|warn|info|debug)\s*\(/],
@@ -43,7 +57,7 @@ const RULES = [
   ['reads the environment', /\bprocess\.env\b/],
   ['reads the terminal', /\bprocess\.stdin\b|\bsetRawMode\s*\(/],
   ['hands a child the terminal', /\bstdio\s*:\s*['"]inherit['"]|['"]inherit['"]/],
-  // Spec §7: the host gives the state root; a library never builds a path from the home directory.
+  // The host gives the state root; a library never builds a path from the home directory.
   ['computes a path from the home directory', /\bhomedir\s*\(|\bos\.homedir\b/],
 ];
 
@@ -52,21 +66,23 @@ const RAW_RULES = new Set(['opens a prompt', 'hands a child the terminal']);
 // What a command may not do: its text for the person goes through its call's output.
 const COMMAND_RULES = RULES.filter(([rule]) => rule === 'writes to the terminal');
 
-// The 2F rules, each with the code it applies to.
+// The module-state rules, each with the code it applies to.
 const MODULE_STATE = 'keeps module state';
 const STALE_STATE = 'allowlists module state it no longer keeps';
+const SETTER = 'exports a setter of host state';
+const STALE_SETTER = 'allowlists a setter it no longer exports';
 const AMBIENT = 'keeps ambient per-call storage';
-const notNoiseFilter = (rel) => rel !== 'lib/sdk-noise.ts';
+const notHostCalled = (_rel, file) => !isHostCalled(file);
 // [rule, pattern, the files it applies to, whether it reads the raw source (an import's specifier)].
 const CALL_RULES = [
   // Only the shell turns a handler's exit code into the process's.
   ['sets the process exit code', /\bprocess\.exitCode\s*(=[^=]|\?\?=|\|\|=)/, (_rel, file) => homeOf(file) !== 'shell', false],
-  // Ambient per-call storage is module state in disguise: only the shell's noise filter may attribute the SDK's noise that way.
-  [AMBIENT, /\bAsyncLocalStorage\b/, notNoiseFilter, false],
-  [AMBIENT, /\bfrom\s+['"](node:)?async_hooks['"]|\brequire\(\s*['"](node:)?async_hooks['"]\s*\)/, notNoiseFilter, true],
+  // Ambient per-call storage is module state in disguise: only the host-called process guard may attribute the SDK's noise that way.
+  [AMBIENT, /\bAsyncLocalStorage\b/, notHostCalled, false],
+  [AMBIENT, /\bfrom\s+['"](node:)?async_hooks['"]|\brequire\(\s*['"](node:)?async_hooks['"]\s*\)/, notHostCalled, true],
 ];
 
-// Shell concerns by design (1F): what they do to the process is their job.
+// Shell concerns by design: what they do to the process is their job.
 const SHELL_CONCERNS = new Set([
   'lib/json-output.ts', // the --json output channel
 ]);
@@ -80,29 +96,33 @@ export const ALLOWED = {
   'lib/contract/runner.ts': ['reads the environment'],
 };
 
-// Module-level state that the 2F rule allows, by file and name, and why. A
-// call's state is allowed only until the step of 2F that moves it into the
-// call's context; what is shared on purpose holds no call's state.
+// Module-level state that the module-state rule allows, by file and name, and
+// why. A call's state is allowed only until it moves into the call's context; what is shared on purpose holds no call's state.
 export const ALLOWED_STATE = {
   // Shared on purpose: none holds a call's state.
-  'lib/passphrase.ts': { unlocked: 'shared on purpose: the passphrase this process has unlocked, by state root (one prompt per run)' },
-  'lib/wallet-data-repository.ts': { defaultRepo: 'shared on purpose: the wallet repository, whose cache long-lived MCP sessions share across calls' },
   'lib/chain-id.ts': { CHAIN_ID_MEMO: 'shared on purpose: the chain-id memo, by endpoint' },
-  'lib/ws-rpc.ts': { connectionCounter: 'shared on purpose: the RPC connection id counter, unique across servers in the process' },
-  'lib/wallet-config.ts': { warnedPlain: 'shared on purpose: each plain-text wallet is warned about once per run' },
-  // The host sources, set once by the host at start (decision 1: host-set until phase 3; handlers see them through the context).
-  'lib/settings.ts': { source: 'shared on purpose: the host sets the settings source once' },
-  'lib/state-root.ts': { source: 'shared on purpose: the host sets the paths source once' },
-  'lib/notices.ts': { sink: 'shared on purpose: the host sets the notice sink once' },
-  'lib/prompter.ts': { current: 'shared on purpose: the host sets the prompter once' },
+  'lib/engine.ts': {
+    loadedSet: 'shared on purpose: the SDK set this process loads, whichever host loads it (two WASM ledgers cannot share a process)',
+  },
 };
+
+// Exported functions that set module state, which the setter rule allows, by
+// file and name, and why. Host state is never one: a host passes it in.
+export const ALLOWED_SETTERS = {
+  'lib/engine.ts': {
+    claimSdkSet: 'the process guard, approved by the owner: records the one SDK set this process loads, whichever host loads it, and refuses the other (two WASM ledgers cannot share a process)',
+  },
+};
+
+// The names a setter of host state goes by, whatever it assigns.
+const SETTER_NAME = /^(set\w*Source|set\w*Sink|setPrompter|setEngineLoader)$/;
 
 /**
  * Replaces string, template-literal text, regex-literal and comment contents
  * with spaces, keeping line breaks. The code inside a template's `${…}` is
  * kept and scanned like any other code.
  */
-function codeOnly(source) {
+export function codeOnly(source) {
   let out = '';
   let i = 0;
   const blank = (s) => s.replace(/[^\n]/g, ' ');
@@ -173,7 +193,7 @@ function codeOnly(source) {
 
 /**
  * The module-level declarations in `code` (as codeOnly leaves it) that hold
- * mutable state: { line, name }. A `let` or `var`; a `const` made with
+ * mutable state: { line, name, kind }. A `let` or `var`; a `const` made with
  * `new Map/Set/WeakMap/WeakSet/Array` unless typed ReadonlyMap/ReadonlySet;
  * an array literal unless typed readonly or `as const`; an empty object
  * literal unless typed Readonly. A non-empty object literal is a table of
@@ -198,7 +218,7 @@ export function moduleStateDeclarations(code) {
     if (head === null) continue;
     const statement = topLevelStatement(code, i);
     const [, kind, name] = head;
-    if (kind !== 'const' || isMutableInitializer(statement.slice(head[0].length))) found.push({ line: lineNumber, name });
+    if (kind !== 'const' || isMutableInitializer(statement.slice(head[0].length))) found.push({ line: lineNumber, name, kind });
   }
   return found;
 }
@@ -213,6 +233,64 @@ function topLevelStatement(code, start) {
     else if (c === ';' && depth === 0) return code.slice(start, j);
   }
   return code.slice(start);
+}
+
+/**
+ * The module-level statements in `code` (as codeOnly leaves it): { line, text },
+ * each from a line that starts outside any bracket to the next such line.
+ */
+function topLevelStatements(code) {
+  const statements = [];
+  let depth = 0;
+  code.split('\n').forEach((text, at) => {
+    if (depth === 0 && text.trim() !== '') statements.push({ line: at + 1, text });
+    else if (statements.length > 0) statements[statements.length - 1].text += '\n' + text;
+    for (const c of text) {
+      if (c === '{' || c === '[' || c === '(') depth += 1;
+      else if (c === '}' || c === ']' || c === ')') depth -= 1;
+    }
+  });
+  return statements;
+}
+
+/**
+ * The functions `code` exports that set host state: { line, name }. One named
+ * as a setter of host state, or one whose body assigns a module-level `let` or
+ * `var` (a local of the same name declared in it aside). Exported by
+ * declaration, as a const holding a function, or through an `export { … }` list.
+ */
+export function exportedSetters(code) {
+  const lets = moduleStateDeclarations(code).filter((d) => d.kind !== 'const').map((d) => d.name);
+  const functions = new Map();
+  const exported = new Set();
+  for (const { line, text } of topLevelStatements(code)) {
+    const declared = /^\s*(export\s+(?:default\s+)?)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/.exec(text)
+      ?? /^\s*(export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]*)?=\s*(?:async\s+)?(?:function\b|\([^)]*\)\s*(?::[^=]*)?=>|[A-Za-z_$][\w$]*\s*=>)/.exec(text);
+    if (declared !== null) {
+      functions.set(declared[2], { line, text });
+      if (declared[1] !== undefined) exported.add(declared[2]);
+      continue;
+    }
+    const list = /^\s*export\s*\{([^}]*)\}/.exec(text);
+    if (list !== null) for (const item of list[1].split(',')) {
+      const local = item.trim().split(/\s+as\s+/)[0];
+      if (local) exported.add(local);
+    }
+  }
+  const assigns = (text, bare) => {
+    const name = bare.replace(/\$/g, '\\$');
+    if (new RegExp(`\\b(let|var|const)\\s+${name}\\b`).test(text)) return false;
+    return new RegExp(`(?<![\\w$.])${name}\\s*(?:[-+*/%&|^]|\\*\\*|<<|>>>?|\\?\\?|\\|\\||&&)?=(?![=>])|(?:\\+\\+|--)\\s*${name}\\b|(?<![\\w$.])${name}\\s*(?:\\+\\+|--)`).test(text);
+  };
+  const found = [];
+  for (const name of exported) {
+    const fn = functions.get(name);
+    if (fn === undefined) continue;
+    // The text after the function's name: its parameters and body.
+    const body = fn.text.slice(fn.text.indexOf(name) + name.length);
+    if (SETTER_NAME.test(name) || lets.some((n) => assigns(body, n))) found.push({ line: fn.line, name });
+  }
+  return found.sort((a, b) => a.line - b.line);
 }
 
 /** After a const's name: its type annotation and initializer hold mutable state. */
@@ -252,15 +330,15 @@ function isLibrary(rel, file) {
 const isCommand = (rel) => rel.startsWith('commands/');
 
 /**
- * Every §3.1 break in library code, every terminal write in a command, and
- * every 2F break, that the allowlists don't name: { file, line, rule }, and
+ * Every break of the library rules, every terminal write in a command, and
+ * every module-state break, that the allowlists don't name: { file, line, rule }, and
  * the name for module state. `src` is the folder the files' kinds are read
  * from (commands/, ui/, …): src/, unless a test plants files elsewhere.
  */
-export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowedState = ALLOWED_STATE, src = SRC) {
+export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowedState = ALLOWED_STATE, src = SRC, allowedSetters = ALLOWED_SETTERS) {
   const found = [];
   for (const file of files) {
-    const rel = relative(src, file);
+    const rel = src === SRC ? relOf(file) : relative(src, file);
     const source = readFileSync(file, 'utf8');
     const code = codeOnly(source);
     const lines = code.split('\n');
@@ -275,7 +353,10 @@ export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowed
       });
     };
     if (isLibrary(rel, file)) {
-      for (const [rule, pattern] of RULES) scanRule(rule, pattern, RAW_RULES.has(rule));
+      for (const [rule, pattern] of RULES) {
+        if (isHostCalled(file) && HOST_CALLED_RULES.has(rule)) continue;
+        scanRule(rule, pattern, RAW_RULES.has(rule));
+      }
     }
     if (isCommand(rel)) {
       for (const [rule, pattern] of COMMAND_RULES) scanRule(rule, pattern, false);
@@ -288,6 +369,13 @@ export function findViolations(files = sourceFiles(), allowed = ALLOWED, allowed
       // An entry whose state is gone goes too, so the allowlist never outlives what it allows.
       for (const name of Object.keys(allowedState[rel] ?? {})) {
         if (!declared.some((d) => d.name === name)) found.push({ file: rel, line: 0, rule: STALE_STATE, name });
+      }
+      const setters = exportedSetters(code);
+      for (const { line, name } of setters) {
+        if (!Object.hasOwn(allowedSetters[rel] ?? {}, name)) found.push({ file: rel, line, rule: SETTER, name });
+      }
+      for (const name of Object.keys(allowedSetters[rel] ?? {})) {
+        if (!setters.some((s) => s.name === name)) found.push({ file: rel, line: 0, rule: STALE_SETTER, name });
       }
     }
     for (const [rule, pattern, appliesTo, isRaw] of CALL_RULES) {
@@ -303,6 +391,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   for (const v of found) process.stdout.write(`src/${v.file}:${v.line}  ${v.rule}${v.name === undefined ? '' : ` (${v.name})`}\n`);
   const allowedCount = Object.keys(ALLOWED).length;
   const stateCount = Object.values(ALLOWED_STATE).reduce((n, names) => n + Object.keys(names).length, 0);
-  process.stdout.write(`\n${found.length === 0 ? 'Libraries leave the process alone, commands write through their call, and no call keeps its state in a module' : `${found.length} place(s) where code touches the process or keeps a call's state`} (${allowedCount} file(s) and ${stateCount} module state(s) allowed, with their reasons).\n`);
+  const setterCount = Object.values(ALLOWED_SETTERS).reduce((n, names) => n + Object.keys(names).length, 0);
+  process.stdout.write(`\n${found.length === 0 ? 'Libraries leave the process alone, commands write through their call, no call keeps its state in a module, and no library exports a setter of host state' : `${found.length} place(s) where code touches the process, keeps a call's state or exports a setter of host state`} (${allowedCount} file(s), ${stateCount} module state(s) and ${setterCount} setter(s) allowed, with their reasons).\n`);
   process.exit(found.length === 0 ? 0 : 1);
 }

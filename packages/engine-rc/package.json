@@ -1,0 +1,56 @@
+{
+  "name": "@kuiralabs/midnight-engine-rc",
+  "version": "0.1.0-rc.3",
+  "type": "module",
+  "description": "The Midnight CLI's engine for the SDK's release candidates (wallet SDK 2.0 rc, ledger 9 rc, midnight-js 5 rc): everything the CLI does with that SDK set, behind the engine interface",
+  "license": "Apache-2.0",
+  "author": "nel349",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kuiralabs/midnight-cli.git",
+    "directory": "packages/engine-rc"
+  },
+  "bugs": {
+    "url": "https://github.com/kuiralabs/midnight-cli/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "midnight-cli-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "npm-shrinkwrap.json"
+  ],
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@kuiralabs/midnight-account-chain": "0.3.0-rc.3",
+    "@kuiralabs/midnight-chain": "0.1.0-rc.3",
+    "@kuiralabs/midnight-cli-core": "0.1.0-rc.3",
+    "@midnight-ntwrk/compact-js": "3.0.0-rc.3",
+    "@midnight-ntwrk/compact-runtime": "0.20.0",
+    "@midnight-ntwrk/ledger-v8": "8.1.0",
+    "@midnight-ntwrk/midnight-js-contracts": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-network-id": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-protocol": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-types": "5.0.0-rc.1",
+    "@midnight-ntwrk/midnight-js-utils": "5.0.0-rc.1",
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.5",
+    "@midnightntwrk/onchain-runtime-v4": "4.0.0-rc.3",
+    "@midnightntwrk/wallet-sdk": "2.0.0-rc.0",
+    "@scure/base": "2.0.0",
+    "rxjs": "7.8.2",
+    "ws": "^8.19.0"
+  }
+}

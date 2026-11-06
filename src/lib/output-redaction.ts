@@ -8,7 +8,7 @@
 // holds a project id. (A wrapper that dropped writes or their callbacks once
 // made libraries waiting on a write hang; this one drops nothing.)
 
-import { mayHoldProjectId, redactProjectId } from './blockfrost.ts';
+import { mayHoldProjectId, redactProjectId } from '@kuiralabs/midnight-cli-core';
 
 type Write = typeof process.stdout.write;
 

@@ -1,4 +1,4 @@
-// The two skills the MCP server serves (plan 2G, D19): skill/core (intent
+// The two skills the MCP server serves: skill/core (intent
 // routing and the safety rules) and skill/full (flows, error recovery, concept
 // primers). Each is the server's skeleton of sections and its own text (the
 // concepts, networks, safety rules and its own setup), with each installed
@@ -6,8 +6,7 @@
 // at each resources/read; scripts/write-skill-docs.ts writes the same text to
 // docs/SKILL-CORE.md and docs/SKILL.md, the copies the README links to.
 
-import { assembleGuidance, type GuidancePiece } from '../agent-guidance.ts';
-import type { CommandRegistry } from '../command-definition.ts';
+import { assembleGuidance, sectionsWithAdded, type GuidancePiece, declaredCodeSets, type CommandRegistry } from '@kuiralabs/midnight-cli-core';
 
 /** skill/core's sections, in order. */
 export const SKILL_CORE_SECTIONS = ['title', 'intent-routing', 'safety-rules', 'when-to-fetch'] as const;
@@ -38,7 +37,7 @@ const SERVER_PIECES: readonly GuidancePiece[] = [
 
 You have access to the \`midnight-wallet-cli\` MCP server. This is the **core** skill — intent routing and non-negotiable safety rules. Fetch \`midnight-wallet://skill/full\` on demand for canonical multi-step flows, error-recovery recipes, concept primers (NIGHT, DUST, shielded vs unshielded), network selection, and deeper context.
 
-**Ledger 9 only.** This build refuses a chain still on ledger 8 (preview and preprod today; those stay on \`midnight-wallet-cli\` 0.5.x) and refuses \`midnight_localnet_up\` (no published ledger-9 indexer image yet). The user runs a ledger-9 stack and points mn at it; details in \`/full\`.
+**Ledger 9 only.** This build refuses a chain still on ledger 8 (preview and preprod today; those stay on \`midnight-wallet-cli\` 0.5.x). The user runs a ledger-9 stack and points mn at it; details in \`/full\`.
 
 `,
     },
@@ -65,13 +64,11 @@ You have access to the \`midnight-wallet-cli\` MCP server. This is the **core** 
       order: 0,
       body: `## Safety rules (non-negotiable)
 
-- **Read tools** (\`readOnlyHint: true\`) — safe to call without user consent. Examples: balance, info, list, status, address derivation.
-- **Destructive tools** (\`destructiveHint: true\`) — require explicit user consent before calling. Examples: transfer, airdrop, dust register, wallet generate, wallet remove, cache clear, localnet down.
+- **Read tools** (\`readOnlyHint: true\`) — safe to call without user consent.
+- **Destructive tools** (\`destructiveHint: true\`) — require explicit user consent before calling.
 - **Open-world tools** (\`openWorldHint: true\`) — touch the network/chain/Docker. Can fail non-deterministically; retry is usually safe for reads, risky for writes.
 - **Never** auto-execute a fund-moving operation. Always describe amount + recipient + network first.
 - **Never** invent a mnemonic, seed, or private key. If the user needs one, call \`midnight_wallet_generate\`.
-- **Transfers use a two-step confirmation token.** \`midnight_transfer\` returns a pending token + description; you must show the description verbatim and then call \`midnight_confirm_operation({ token })\` only after the user explicitly says yes. Full flow in \`midnight-wallet://skill/full\`.
-
 `,
     },
     {
@@ -95,7 +92,7 @@ You have access to the \`midnight-wallet-cli\` MCP server. This is the **core** 
 
 You have access to the \`midnight-wallet-cli\` MCP server. This document teaches you how to use it well. Read it once at the start of a session; use it as reference throughout.
 
-> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 (preview and preprod today) is refused up front with an error saying so: tell the user to use \`midnight-wallet-cli\` 0.5.x for it, don't retry. \`midnight_localnet_up\` is refused too, because no published indexer image runs ledger 9 yet. The user runs a ledger-9 stack themselves; on the default ports (node 9944, indexer 8088, proof server 6300) \`undeployed\` reaches it with no configuration, otherwise set its URLs with \`midnight_config_set\` (keys \`node\`, \`indexer-ws\`, \`proof-server\`) or pass \`--node\` / \`--indexer-ws\` / \`--proof-server\` on the CLI.
+> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 (preview and preprod today) is refused up front with an error saying so: tell the user to use \`midnight-wallet-cli\` 0.5.x for it, don't retry. The user runs a ledger-9 stack themselves; on the default ports (node 9944, indexer 8088, proof server 6300) \`undeployed\` reaches it with no configuration, otherwise set its URLs with \`midnight_config_set\` (keys \`node\`, \`indexer-ws\`, \`proof-server\`) or pass \`--node\` / \`--indexer-ws\` / \`--proof-server\` on the CLI.
 
 `,
     },
@@ -105,7 +102,7 @@ You have access to the \`midnight-wallet-cli\` MCP server. This document teaches
       order: 0,
       body: `## What you can do with this CLI
 
-Manage wallets, check balances, transfer NIGHT tokens, register dust (fee token), manage a local Midnight network, act as a fee wallet for an agent's dApp transactions (\`mn serve --approve-fees\`), and deploy/call/inspect Compact smart contracts — all on behalf of the user. Every CLI command is also an MCP tool.
+Act on the user's behalf on Midnight, through what the installed packages bring:
 
 `,
     },
@@ -124,6 +121,7 @@ Manage wallets, check balances, transfer NIGHT tokens, register dust (fee token)
   - \`undeployed\` — local network. Use this for dev iteration. On this build it must be a ledger-9 stack the user runs (\`mn localnet up\` is refused, see the note at the top).
   - \`preprod\` — public testnet (ledger 8 today, so refused by this build). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod needs a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware.
   - \`preview\` — public preview testnet (ledger 8 today, so refused by this build). Same first-sync trade-off as preprod.
+  - \`stagenet\` — Sig Network's testnet, on the beta SDK set (mn loads its beta engine for it). No shielded faucet, so shielded sync is off by default; NIGHT from https://faucet.stagenet.shielded.tools. Its proof server must match its node (\`midnightntwrk/proof-server:9.0.0-rc.5_experimental\`). Grant is refused there for now.
 - **Proof server** — local HTTP service that generates ZK proofs for transactions. Default port 6300. Version must match the network's ledger version or writes fail with "Custom error 170".
 
 `,
@@ -193,12 +191,11 @@ Midnight shut its own preprod indexer down on 2026-10-09. Blockfrost serves prep
       order: 0,
       body: `## Safety rules (non-negotiable)
 
-- **Read tools** (\`readOnlyHint: true\`) — safe to call without user consent. Examples: balance, info, list, status, address derivation.
-- **Destructive tools** (\`destructiveHint: true\`) — require explicit user consent before calling. Examples: transfer, airdrop, dust register, wallet generate, wallet remove, cache clear, localnet down.
+- **Read tools** (\`readOnlyHint: true\`) — safe to call without user consent.
+- **Destructive tools** (\`destructiveHint: true\`) — require explicit user consent before calling.
 - **Open-world tools** (\`openWorldHint: true\`) — touch the network/chain/Docker. Can fail non-deterministically; retry is usually safe for reads, risky for writes.
 - **Never** auto-execute a fund-moving operation. Always describe amount + recipient + network first.
 - **Never** invent a mnemonic, seed, or private key. If the user needs one, call \`midnight_wallet_generate\`.
-
 `,
     },
     {
@@ -240,7 +237,7 @@ Every MCP tool error returns \`{ error: true, code: <ERROR_CODE>, message: <huma
       body: `## What this CLI is NOT
 
 - Not a custody service. Keys are on the user's disk (\`~/.midnight/wallets/<name>.json\`).
-- Not an instant-sync tool for a first-time wallet on a hosted network. First run replays the chain's event history; the CLI caches state after that so repeat runs are fast. On this ledger-9 build dust priming always runs in WASM (the native accelerator is built for ledger 8 and is not used), so a cold prime takes minutes, not seconds.
+- Not an instant-sync tool for a first-time wallet on a hosted network. First run replays the chain's event history; the CLI caches state after that so repeat runs are fast.
 `,
     },
     {
@@ -258,23 +255,55 @@ Every MCP tool error returns \`{ error: true, code: <ERROR_CODE>, message: <huma
 
 - \`mn help <command>\` — per-command usage and flags.
 - \`mn help --agent\` — structured reference manual for AI clients.
-- \`mn status\` — live network health (indexer, node, proof server).
+- \`mn help --json\` — every command's usage, flags and JSON fields, as JSON.
 `,
     },
 ];
 
-function piecesOf(registry: CommandRegistry): GuidancePiece[] {
-  return [...SERVER_PIECES, ...registry.packages.flatMap((pkg) => pkg.guidance.pieces)];
+/** The tools behind the two-step confirmation, as a list of names in the registry's order. */
+const confirmedTools = (registry: CommandRegistry): string =>
+  registry.tools.filter((tool) => tool.confirmation !== undefined).map((tool) => `\`${tool.name}\``).join(', ');
+
+/**
+ * What the skills say from the registry: the safety rule on the confirmed
+ * tools, in both, and in skill/full the sets of codes the tools' descriptions
+ * name and the commands no tool runs, which the user runs in a terminal.
+ */
+function registryPieces(registry: CommandRegistry): GuidancePiece[] {
+  const confirmation = `- **Some tools use a two-step confirmation token**: ${confirmedTools(registry)}. The first call returns a pending token + description and does nothing else; show the description verbatim, and call \`midnight_confirm_operation({ token })\` only after the user explicitly says yes. (\`midnight_wallet_generate\` asks only with \`force: true\`, which replaces a wallet.)`;
+  const terminalOnly = registry.commands.filter((command) => command.help !== undefined && (command.mcp?.tools.length ?? 0) === 0).map((command) => `\`mn ${command.name}\``);
+  return [
+    { text: 'skill-core', section: 'safety-rules', order: 500, body: `${confirmation} Full flow in \`midnight-wallet://skill/full\`.\n\n` },
+    { text: 'skill-full', section: 'safety-rules', order: 500, body: `${confirmation}\n\n` },
+    {
+      text: 'skill-full',
+      section: 'error-recovery',
+      order: 999,
+      body: `\nA tool's description ends with the codes it can fail with: its own, and sets of them by name. The sets:\n\n| Set | Codes |\n|---|---|\n${declaredCodeSets(registry).map((set) => `| ${set.name} | ${set.codes.map((code) => `\`${code}\``).join(', ')} |\n`).join('')}`,
+    },
+    {
+      text: 'skill-full',
+      section: 'what-you-can-do',
+      order: 1000,
+      body: `\nMost commands are MCP tools (\`tools/list\` shows each, and what it takes). ${terminalOnly.length === 0 ? '' : `These have none, and the user runs them in their own terminal: ${terminalOnly.join(', ')}; some subcommands have none either.`}\n\n`,
+    },
+  ];
 }
+
+function piecesOf(registry: CommandRegistry): GuidancePiece[] {
+  return [...SERVER_PIECES, ...registryPieces(registry), ...registry.packages.flatMap((pkg) => pkg.guidance.pieces)];
+}
+
+const addedSections = (registry: CommandRegistry) => registry.packages.flatMap((pkg) => pkg.guidance.sections ?? []);
 
 /** skill/core for the installed packages. */
 export function skillCore(registry: CommandRegistry): string {
-  return assembleGuidance('skill-core', SKILL_CORE_SECTIONS, piecesOf(registry));
+  return assembleGuidance('skill-core', sectionsWithAdded('skill-core', SKILL_CORE_SECTIONS, addedSections(registry)), piecesOf(registry));
 }
 
 /** skill/full (and the legacy skill URI) for the installed packages. */
 export function skillFull(registry: CommandRegistry): string {
-  return assembleGuidance('skill-full', SKILL_FULL_SECTIONS, piecesOf(registry));
+  return assembleGuidance('skill-full', sectionsWithAdded('skill-full', SKILL_FULL_SECTIONS, addedSections(registry)), piecesOf(registry));
 }
 
 /** The repository's copies of the skills, by path from its root, and what writes each. */

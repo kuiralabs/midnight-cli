@@ -1,0 +1,44 @@
+{
+  "name": "@kuiralabs/midnight-dev",
+  "version": "0.1.0-rc.3",
+  "type": "module",
+  "description": "Development for the Midnight CLI packages: mn dev (compile, deploy and test a dApp as its files change, on dev wallets), mn test (prepare, run and scaffold a dApp's test suites) and mn localnet (a local network in Docker)",
+  "license": "Apache-2.0",
+  "author": "nel349",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kuiralabs/midnight-cli.git",
+    "directory": "packages/dev"
+  },
+  "bugs": {
+    "url": "https://github.com/kuiralabs/midnight-cli/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "midnight-cli-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./commands": {
+      "midnight-cli-source": "./src/commands.ts",
+      "types": "./dist/commands.d.ts",
+      "default": "./dist/commands.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@kuiralabs/midnight-chain": "0.1.0-rc.3",
+    "@kuiralabs/midnight-cli-core": "0.1.0-rc.3",
+    "@kuiralabs/midnight-connect": "0.1.0-rc.3",
+    "@kuiralabs/midnight-contract": "0.1.0-rc.3",
+    "@kuiralabs/midnight-wallet": "0.1.0-rc.3"
+  }
+}

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { statusDefinition } from '@kuiralabs/midnight-chain/commands';
 import { cliCall } from './helpers/cli-call.ts';
 
 // ── Test helpers ──
@@ -114,8 +115,8 @@ describe('status command', () => {
 
   /** Runs status as the CLI would; the exit code it gives, which the shell sets. */
   async function runStatus(flags: Record<string, string | true> = {}) {
-    // Dynamic import to get fresh module
-    const mod = await import('../commands/status.ts');
+    // The status handler, as the shell loads it.
+    const mod = await statusDefinition.load();
     return cliCall(mod.default, {
       command: 'status',
       subcommand: undefined,

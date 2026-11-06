@@ -1,0 +1,18 @@
+// The caches the wallet keeps for a chain, cleared together: when that chain
+// is reset (`localnet down` removes the local chain's volumes) every cache
+// still referring to it is stale and would fail the next command, and
+// `cache clear` clears the same set.
+
+import { clearWalletCache, clearDustDirectCache, clearShieldedDirectCache, clearNativeDustCheckpoint } from '@kuiralabs/midnight-cli-core';
+
+/**
+ * Clears every wallet cache kept for `network` (all networks when undefined)
+ * under the state root `root`: the wallet sync caches, the direct Dust and
+ * shielded caches, and the native sidecar's Dust checkpoints.
+ */
+export function clearChainCaches(network: string | undefined, root: string): void {
+  clearWalletCache(undefined, network, root);
+  clearDustDirectCache(network, undefined, root);
+  clearShieldedDirectCache(network, undefined, root);
+  clearNativeDustCheckpoint(network, undefined, root);
+}

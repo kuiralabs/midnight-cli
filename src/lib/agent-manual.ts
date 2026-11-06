@@ -1,12 +1,12 @@
-// The `help --agent` manual (plan 2G, D19): the shell's skeleton of sections
+// The `help --agent` manual: the shell's skeleton of sections
 // and its own text (the overview, networks, JSON conventions, the MCP server's
 // setup, its tools table and resources), with each installed package's pieces
 // placed in the sections they name. The tools table is generated from the
 // registry's tools, each in the topic group its package's row names.
 
 import { PKG_VERSION } from './pkg.ts';
-import { GuidanceError, assembleGuidance, type GuidancePiece, type ToolsTableRow } from './agent-guidance.ts';
-import { commandHelpSpecs, type CommandRegistry, type RegisteredTool } from './command-definition.ts';
+import { codeSetLines } from './code-tables.ts';
+import { GuidanceError, assembleGuidance, sectionsWithAdded, type GuidancePiece, type ToolsTableRow, commandHelpSpecs, type CommandRegistry, type RegisteredTool } from '@kuiralabs/midnight-cli-core';
 
 /** The manual's sections, in order. */
 export const AGENT_MANUAL_SECTIONS = [
@@ -30,7 +30,7 @@ export const AGENT_MANUAL_SECTIONS = [
 
 /**
  * The tools table's topic groups, in order. `width` is the description
- * column's, as the hand-written table aligned each group before 2G.
+ * column's, as the old hand-written table aligned each group.
  */
 export const TOOL_GROUPS: readonly { readonly id: string; readonly title: string; readonly width: number }[] = [
   { id: 'wallet-management', title: 'Wallet Management', width: 53 },
@@ -42,6 +42,7 @@ export const TOOL_GROUPS: readonly { readonly id: string; readonly title: string
   { id: 'contracts', title: 'Contracts (Compact smart contracts)', width: 52 },
   { id: 'test-framework', title: 'Test Framework', width: 52 },
   { id: 'grants', title: 'Grants (experimental)', width: 53 },
+  { id: 'swaps', title: 'Swaps (experimental)', width: 53 },
 ];
 
 /** Where a tool no package gives a row for is listed, with its own description. */
@@ -77,8 +78,10 @@ blockchain. It manages wallets, balances, transfers (unshielded and
 shielded), dust fees, a DApp connector server, contract inspection,
 E2E testing, and a local devnet — all from the terminal.
 
-Wallets are network-agnostic: one seed derives addresses for all three
-networks (undeployed, preprod, preview). Network is chosen at runtime.
+Wallets are network-agnostic: one seed derives addresses for all four
+networks (undeployed, preprod, preview, stagenet). Network is chosen at
+runtime. Stagenet is Sig Network's chain on the beta SDK set; mn runs it
+through its own engine, picked by the network.
 
 Preprod's indexer and node are served by Blockfrost (Midnight shut its own
 preprod indexer down on 2026-10-09). Every request needs the user's own
@@ -118,7 +121,7 @@ examples, and JSON field schemas.
   };
 }
 
-/** Each command's usage and the fields of its --json output, from the registry. */
+/** Each command's usage, its own error codes and the sets of codes it declares, and the fields of its --json output, from the registry. */
 function jsonSchemas(registry: CommandRegistry): GuidancePiece {
   const schemas = commandHelpSpecs(registry).filter((spec) => spec.jsonFields).map((spec) => {
     const fields = Object.entries(spec.jsonFields!)
@@ -127,6 +130,7 @@ function jsonSchemas(registry: CommandRegistry): GuidancePiece {
     return `
   ${spec.name}
   ${spec.usage}
+  Error codes: ${spec.ownCodes.map((definition) => definition.code).join(', ') || 'none'}; sets: ${spec.errorSets.join(', ') || 'none'}
   JSON fields:
 ${fields}`;
   }).join('\n');
@@ -182,14 +186,6 @@ const SHELL_PIECES: readonly GuidancePiece[] = [
 ───────────
 
   Code                    Exit  Meaning
-`,
-    },
-    {
-      text: 'agent-manual',
-      section: 'error-codes',
-      order: 90,
-      body: `  UNSUPPORTED_NODE        1     Node.js is older than 22 (22.18 for mn grant);
-                                install a current one
 `,
     },
     {
@@ -251,8 +247,8 @@ without hardcoding per-tool rules:
       text: 'agent-manual',
       section: 'two-step-confirmation',
       order: 0,
-      body: `TWO-STEP CONFIRMATION FLOW (midnight_transfer)
-──────────────────────────────────────────────
+      body: `TWO-STEP CONFIRMATION FLOW
+──────────────────────────
 
 midnight_transfer does NOT execute on the first call. It returns a pending
 token that the agent must show to the user for consent, then redeem via
@@ -265,6 +261,15 @@ midnight_confirm_operation to actually execute.
            → actual transfer result (txHash, etc)
 
 Tokens are single-use and expire after 5 minutes.
+
+`,
+    },
+    {
+      text: 'agent-manual',
+      section: 'two-step-confirmation',
+      order: 20,
+      body: `Every tool that moves funds, changes an account or deletes a seed works
+the same way (midnight_wallet_generate only with force: true):
 
 `,
     },
@@ -316,8 +321,20 @@ resources/list. Ground responses in these instead of training-data guesses.
     },
 ];
 
+/** After the code table, each set of codes the commands declare, by the name the commands and the tools' descriptions give it. */
+function codeSets(registry: CommandRegistry): GuidancePiece {
+  return { text: 'agent-manual', section: 'error-codes', order: 999, body: `\n  Sets of codes (a command's "sets", a tool's "Errors" name them):\n${codeSetLines(registry, 4).map((line) => `${line}\n`).join('')}` };
+}
+
+/** The tools behind the two-step confirmation, one per line, from the registry. */
+function confirmedTools(registry: CommandRegistry): GuidancePiece {
+  const names = registry.tools.filter((tool) => tool.confirmation !== undefined).map((tool) => `  ${tool.name}\n`);
+  return { text: 'agent-manual', section: 'two-step-confirmation', order: 30, body: `${names.join('')}\n` };
+}
+
 /** The `help --agent` manual for the installed packages. */
 export function agentManual(registry: CommandRegistry): string {
-  const pieces = [overview(), jsonSchemas(registry), mcpTools(registry), ...SHELL_PIECES, ...registry.packages.flatMap((pkg) => pkg.guidance.pieces)];
-  return assembleGuidance('agent-manual', AGENT_MANUAL_SECTIONS, pieces);
+  const pieces = [overview(), jsonSchemas(registry), mcpTools(registry), codeSets(registry), confirmedTools(registry), ...SHELL_PIECES, ...registry.packages.flatMap((pkg) => pkg.guidance.pieces)];
+  const added = registry.packages.flatMap((pkg) => pkg.guidance.sections ?? []);
+  return assembleGuidance('agent-manual', sectionsWithAdded('agent-manual', AGENT_MANUAL_SECTIONS, added), pieces);
 }

@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { classifyError, humanizeNetworkError, ERROR_CODES, EXIT_GENERAL_ERROR, EXIT_NETWORK_ERROR, EXIT_INVALID_ARGS } from '../lib/exit-codes.ts';
-import { NodeTooOldForAccountError, UnreachableByAccountError } from '../lib/grant/account.ts';
-import { NoAccountError } from '../lib/grant/prepare.ts';
-import { WrongPassphraseError } from '../lib/keystore.ts';
-import { NoPassphraseError } from '../lib/passphrase.ts';
+import { classifyError, humanizeNetworkError, ERROR_CODES, EXIT_GENERAL_ERROR, EXIT_NETWORK_ERROR, EXIT_INVALID_ARGS, WrongPassphraseError, OtherSdkSetError, UsageError } from '@kuiralabs/midnight-cli-core';
+import { MixedSdkLayoutError, toEngineError } from '@kuiralabs/midnight-cli-core/engine';
+import { CallerPinUnavailableError, NoAccountError, NodeTooOldForAccountError, UnreachableByAccountError } from '@kuiralabs/midnight-grant';
+import { CallerPinUnsupportedError } from '@kuiralabs/midnight-account-chain/errors';
+import { NoPassphraseError } from '@kuiralabs/midnight-wallet';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 describe('humanizeNetworkError', () => {
   it('rewrites the empty-reason node-fetch tail with URL + cause hint', () => {
@@ -27,43 +28,37 @@ describe('humanizeNetworkError', () => {
 });
 
 describe('classifyError network coverage', () => {
-  it('classifies the empty-reason node-fetch error as NETWORK_ERROR', () => {
-    const err = new Error('request to http://localhost:8088/api/v4/graphql failed, reason:');
-    const { exitCode, errorCode } = classifyError(err);
+  it('classifies the empty-reason node-fetch error, read at the engine boundary, as NETWORK_ERROR', () => {
+    const err = toEngineError(new Error('request to http://localhost:8088/api/v4/graphql failed, reason:')) as Error;
+    const { exitCode, errorCode } = classifyError(err, installedCommands);
     expect(exitCode).toBe(EXIT_NETWORK_ERROR);
     expect(errorCode).toBe(ERROR_CODES.NETWORK_ERROR);
   });
 });
 
 describe('classifyError usage errors (positional-address balance)', () => {
-  it('classifies the "shielded balances are private" error as INVALID_ARGS', () => {
-    const err = new Error(
-      'Shielded balances are private — they can only be read with the wallet\'s secret key, not from an address alone.\n' +
-      'This address isn\'t one of your wallets. Check its shielded balance from the wallet that owns it:\n' +
-      '  midnight balance --wallet <name> --shielded --network undeployed',
-    );
-    const { exitCode, errorCode } = classifyError(err);
-    expect(exitCode).toBe(EXIT_INVALID_ARGS);
-    expect(errorCode).toBe(ERROR_CODES.INVALID_ARGS);
-  });
+  // The balance command throws these as UsageErrors (error-code-parity.test.ts
+  // runs it); approved (Y52), their words alone no longer give INVALID_ARGS.
+  const PRIVATE = 'Shielded balances are private — they can only be read with the wallet\'s secret key, not from an address alone.\n' +
+    'This address isn\'t one of your wallets. Check its shielded balance from the wallet that owns it:\n' +
+    '  midnight balance --wallet <name> --shielded --network undeployed';
+  const MISMATCH = 'Address belongs to undeployed but --network is preprod.\nDrop --network or pass an address for preprod.';
 
-  it('classifies the address-HRP / --network mismatch as INVALID_ARGS', () => {
-    const err = new Error('Address belongs to undeployed but --network is preprod.\nDrop --network or pass an address for preprod.');
-    const { exitCode, errorCode } = classifyError(err);
-    expect(exitCode).toBe(EXIT_INVALID_ARGS);
-    expect(errorCode).toBe(ERROR_CODES.INVALID_ARGS);
+  it.each([['the "shielded balances are private" error', PRIVATE], ['the address-HRP / --network mismatch', MISMATCH]])('classifies %s by its class: INVALID_ARGS as a UsageError, UNKNOWN as a plain error', (_what, said) => {
+    expect(classifyError(new UsageError(said), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.INVALID_ARGS });
+    expect(classifyError(new Error(said), installedCommands)).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.UNKNOWN });
   });
 });
 
 describe('classifyError: typed setup errors keep their own code', () => {
   // Agents read errorCode from --json / MCP; these must not collapse to UNKNOWN.
   it.each([
-    ['UNSUPPORTED_LEDGER', async () => new (await import('../lib/ledger-guard.ts')).UnsupportedLedgerError('preview', 1000300n)],
-    ['LOCAL_STACK_UNREACHABLE', async () => new (await import('../lib/ledger-guard.ts')).LocalStackUnreachableError('indexer', 'http://localhost:8088/api/v4/graphql')],
-    ['LOCALNET_UNAVAILABLE', async () => new (await import('../lib/localnet.ts')).LocalnetUnavailableError()],
-    ['AMBIGUOUS_LOCAL_STACKS', async () => new (await import('../lib/network.ts')).AmbiguousLocalStacksError({ node: [9944, 29944], indexer: [8088, 28088], proofServer: [6300] })],
+    ['UNSUPPORTED_LEDGER', async () => new (await import('@kuiralabs/midnight-chain')).UnsupportedLedgerError('preview', 1000300n)],
+    ['LOCAL_STACK_UNREACHABLE', async () => new (await import('@kuiralabs/midnight-chain')).LocalStackUnreachableError('indexer', 'http://localhost:8088/api/v4/graphql')],
+    ['LOCALNET_UNAVAILABLE', async () => new (await import('@kuiralabs/midnight-dev')).LocalnetUnavailableError()],
+    ['AMBIGUOUS_LOCAL_STACKS', async () => new (await import('@kuiralabs/midnight-cli-core')).AmbiguousLocalStacksError({ node: [9944, 29944], indexer: [8088, 28088], proofServer: [6300] })],
   ])('%s', async (code, make) => {
-    const result = classifyError(await make());
+    const result = classifyError(await make(), installedCommands);
     expect(result.errorCode).toBe(code);
     expect(result.errorCode).toBe(ERROR_CODES[code as keyof typeof ERROR_CODES]);
     expect(result.exitCode).toBe(EXIT_NETWORK_ERROR);
@@ -71,35 +66,44 @@ describe('classifyError: typed setup errors keep their own code', () => {
 
   it('ignores a code that is not a known setup code', () => {
     const err = Object.assign(new Error('something odd'), { code: 'ENOENT' });
-    expect(classifyError(err).errorCode).toBe(ERROR_CODES.UNKNOWN);
+    expect(classifyError(err, installedCommands).errorCode).toBe(ERROR_CODES.UNKNOWN);
   });
 });
 
 describe('classifyError: mn grant', () => {
   it('gives a wallet with no account its own code, so a caller can deploy one', () => {
-    expect(classifyError(new NoAccountError('alice', 'undeployed'))).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.NO_ACCOUNT });
+    expect(classifyError(new NoAccountError('alice', 'undeployed'), installedCommands)).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.NO_ACCOUNT });
+  });
+
+  it('counts a caller pin the network\'s account can\'t hold as the caller\'s to fix: grant\'s refusal, and the account package\'s own by its code', () => {
+    expect(classifyError(new CallerPinUnavailableError('stagenet', 'c4'.repeat(32)), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.CALLER_PIN_UNSUPPORTED });
+    expect(classifyError(new CallerPinUnsupportedError('this build of the account (AccountStagenet) pins no caller'), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.CALLER_PIN_UNSUPPORTED });
   });
 
   it('counts a network the account package can\'t reach as the caller\'s to fix', () => {
-    expect(classifyError(new UnreachableByAccountError('PreProd'))).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.INVALID_ARGS });
+    expect(classifyError(new UnreachableByAccountError('PreProd'), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.INVALID_ARGS });
+  });
+
+  it('names a call on the other SDK set\'s network, and an install that mixes an engine\'s SDK copies', () => {
+    expect(classifyError(new OtherSdkSetError('rc', 'beta'), installedCommands)).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.OTHER_SDK_SET });
+    expect(classifyError(new MixedSdkLayoutError("mn's beta engine", '@midnightntwrk/ledger-v9', ['/a', '/b']), installedCommands)).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.MIXED_SDK_LAYOUT });
   });
 
   it('says a Node.js too old for the account package is an unsupported Node.js', () => {
-    expect(classifyError(new NodeTooOldForAccountError('22.10.0'))).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.UNSUPPORTED_NODE });
+    expect(classifyError(new NodeTooOldForAccountError('22.10.0'), installedCommands)).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.UNSUPPORTED_NODE });
   });
 
   it("names a wrong passphrase, and a missing one, as the caller's to fix", () => {
-    expect(classifyError(new WrongPassphraseError())).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.WRONG_PASSPHRASE });
-    expect(classifyError(new NoPassphraseError())).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.PASSPHRASE_REQUIRED });
+    expect(classifyError(new WrongPassphraseError(), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.WRONG_PASSPHRASE });
+    expect(classifyError(new NoPassphraseError(), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.PASSPHRASE_REQUIRED });
   });
 });
 
 describe('classifyError: usage errors', () => {
   it('classifies any UsageError as INVALID_ARGS (exit 2), whatever its text, so MCP agents get INVALID_ARGS too', async () => {
-    const { UsageError } = await import('../lib/errors.ts');
-    expect(classifyError(new UsageError('A contract address is 64 hex characters (32 bytes); got "deadbeef" (8 characters).')))
+    expect(classifyError(new UsageError('A contract address is 64 hex characters (32 bytes); got "deadbeef" (8 characters).'), installedCommands))
       .toEqual({ exitCode: 2, errorCode: 'INVALID_ARGS' });
-    expect(classifyError(new UsageError('increment takes 0 arguments; --args gave 3.')))
+    expect(classifyError(new UsageError('increment takes 0 arguments; --args gave 3.'), installedCommands))
       .toEqual({ exitCode: 2, errorCode: 'INVALID_ARGS' });
   });
 });

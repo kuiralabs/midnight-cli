@@ -2,10 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import addressCommand from '../commands/address.ts';
-import { parseArgs } from '../lib/argv.ts';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core';
+import { addressDefinition } from '@kuiralabs/midnight-wallet/commands';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
+
+// The handler, as the shell loads it.
+const { default: addressCommand } = await addressDefinition.load();
 
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
 const TEST_DIR = path.join(os.tmpdir(), `midnight-address-cmd-test-${process.pid}`);

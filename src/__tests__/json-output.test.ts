@@ -1,25 +1,32 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { parseArgs } from '../lib/argv.ts';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
-import { classifyError, EXIT_WALLET_NOT_FOUND, EXIT_INVALID_ARGS, EXIT_CANCELLED, EXIT_NETWORK_ERROR, EXIT_INSUFFICIENT_BALANCE, EXIT_TX_REJECTED, EXIT_GENERAL_ERROR, ERROR_CODES } from '../lib/exit-codes.ts';
-import { writeJsonResult, writeJsonError } from '../lib/json-output.ts';
+import { parseArgs, classifyError, EXIT_NETWORK_ERROR, EXIT_INSUFFICIENT_BALANCE, EXIT_TX_REJECTED, EXIT_GENERAL_ERROR, ERROR_CODES, writeJsonResult, writeJsonError, loadCliConfig } from '@kuiralabs/midnight-cli-core';
+import { toEngineError } from '@kuiralabs/midnight-cli-core/engine';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
+import { installedCommands } from '../lib/installed-commands.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
 // Commands that can be tested without network/Docker
-import generateCommand from '../commands/generate.ts';
-import infoCommand from '../commands/info.ts';
-import addressCommand from '../commands/address.ts';
-import genesisAddressCommand from '../commands/genesis-address.ts';
-import inspectCostCommand from '../commands/inspect-cost.ts';
-import configCommand from '../commands/config.ts';
+import { inspectCostDefinition } from '@kuiralabs/midnight-contract/commands';
+import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
+import { generateDefinition, infoDefinition, addressDefinition, genesisAddressDefinition } from '@kuiralabs/midnight-wallet/commands';
 import helpCommand from '../commands/help.ts';
-import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveAllAddresses } from '../lib/derive-address.ts';
-import { loadCliConfig } from '../lib/cli-config.ts';
-import { localIndexerFlags } from './helpers/local-indexer.ts';
+import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../test-support/plain-wallet.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { localIndexerFlags } from '../../test-support/local-indexer.ts';
 import { cliCall } from './helpers/cli-call.ts';
+import { stateRootIn } from '../../test-support/state-root-in.ts';
+
+// The handlers, as the shell loads them.
+const { default: inspectCostCommand } = await inspectCostDefinition.load();
+const { default: generateCommand } = await generateDefinition.load();
+const { default: infoCommand } = await infoDefinition.load();
+const { default: addressCommand } = await addressDefinition.load();
+const { default: genesisAddressCommand } = await genesisAddressDefinition.load();
+
+// The config handler, as the shell loads it.
+const { default: configCommand } = await configDefinition.load();
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-json-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
@@ -27,7 +34,7 @@ const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000
 const TEST_CONFIG_SEED = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
 const TEST_CONFIG: WalletConfig = {
   seed: TEST_CONFIG_SEED,
-  addresses: deriveAllAddresses(Buffer.from(TEST_CONFIG_SEED, 'hex')),
+  addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_CONFIG_SEED, 'hex')),
   createdAt: '2026-01-15T10:30:00.000Z',
 };
 
@@ -59,101 +66,35 @@ function parseJsonOutput(): Record<string, unknown> {
 }
 
 // ── classifyError ─────────────────────────────────────────
+// Only an error's code is read. The SDK's words for its failures are read once,
+// at the engine boundary (toEngineError), which gives them their codes.
 describe('classifyError', () => {
-  it('classifies wallet not found', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Wallet file not found: /foo/bar'));
-    expect(exitCode).toBe(EXIT_WALLET_NOT_FOUND);
-    expect(errorCode).toBe(ERROR_CODES.WALLET_NOT_FOUND);
+  it.each([
+    ['ECONNREFUSED 127.0.0.1:9944', ERROR_CODES.NETWORK_ERROR, EXIT_NETWORK_ERROR],
+    ['Insufficient balance for transfer', ERROR_CODES.INSUFFICIENT_BALANCE, EXIT_INSUFFICIENT_BALANCE],
+    ['Transaction rejected by the node', ERROR_CODES.TX_REJECTED, EXIT_TX_REJECTED],
+    ['Stale UTXO detected', ERROR_CODES.STALE_UTXO, EXIT_TX_REJECTED],
+    ['No dust available for fee payment', ERROR_CODES.DUST_REQUIRED, EXIT_INSUFFICIENT_BALANCE],
+    ['Failed to prove transaction', ERROR_CODES.PROOF_FAILURE, EXIT_TX_REJECTED],
+    ['Transaction failed: error 170 InvalidDustSpendProof', ERROR_CODES.INVALID_DUST_PROOF, EXIT_TX_REJECTED],
+    ['Stale cache: applied > highest', ERROR_CODES.STALE_CACHE, EXIT_TX_REJECTED],
+    ['Wallet sync timed out', ERROR_CODES.SYNC_TIMEOUT, EXIT_NETWORK_ERROR],
+    ['Timed out waiting for dust tokens', ERROR_CODES.SYNC_TIMEOUT, EXIT_NETWORK_ERROR],
+  ])('classifies the SDK saying "%s", read at the engine boundary, as %s', (said, errorCode, exitCode) => {
+    expect(classifyError(toEngineError(new Error(said)) as Error, installedCommands)).toStrictEqual({ exitCode, errorCode });
   });
 
-  it('classifies missing required flag as invalid args', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Missing required flag: --seed'));
-    expect(exitCode).toBe(EXIT_INVALID_ARGS);
-    expect(errorCode).toBe(ERROR_CODES.INVALID_ARGS);
-  });
-
-  it('classifies unknown command as invalid args', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Unknown command: "bogus"'));
-    expect(exitCode).toBe(EXIT_INVALID_ARGS);
-    expect(errorCode).toBe(ERROR_CODES.INVALID_ARGS);
-  });
-
-  it('classifies cancelled operations', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Operation cancelled'));
-    expect(exitCode).toBe(EXIT_CANCELLED);
-    expect(errorCode).toBe(ERROR_CODES.CANCELLED);
-  });
-
-  it('classifies connection errors', () => {
-    const { exitCode, errorCode } = classifyError(new Error('ECONNREFUSED 127.0.0.1:9944'));
-    expect(exitCode).toBe(EXIT_NETWORK_ERROR);
-    expect(errorCode).toBe(ERROR_CODES.NETWORK_ERROR);
-  });
-
-  it('classifies insufficient balance', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Insufficient balance for transfer'));
-    expect(exitCode).toBe(EXIT_INSUFFICIENT_BALANCE);
-    expect(errorCode).toBe(ERROR_CODES.INSUFFICIENT_BALANCE);
-  });
-
-  it('classifies transaction rejected', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Transaction rejected by the node'));
-    expect(exitCode).toBe(EXIT_TX_REJECTED);
-    expect(errorCode).toBe(ERROR_CODES.TX_REJECTED);
-  });
-
-  it('classifies stale UTXO', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Stale UTXO detected'));
-    expect(exitCode).toBe(EXIT_TX_REJECTED);
-    expect(errorCode).toBe(ERROR_CODES.STALE_UTXO);
-  });
-
-  it('classifies dust errors', () => {
-    const { exitCode, errorCode } = classifyError(new Error('No dust available for fee payment'));
-    expect(exitCode).toBe(EXIT_INSUFFICIENT_BALANCE);
-    expect(errorCode).toBe(ERROR_CODES.DUST_REQUIRED);
-  });
-
-  it('returns unknown for unrecognized errors', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Something unexpected happened'));
-    expect(exitCode).toBe(EXIT_GENERAL_ERROR);
-    expect(errorCode).toBe(ERROR_CODES.UNKNOWN);
-  });
-
-  it('classifies "Failed to prove transaction" as PROOF_FAILURE', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Failed to prove transaction'));
-    expect(exitCode).toBe(EXIT_TX_REJECTED);
-    expect(errorCode).toBe(ERROR_CODES.PROOF_FAILURE);
-  });
-
-  it('classifies "Custom error 170" as INVALID_DUST_PROOF', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Transaction failed: error 170 InvalidDustSpendProof'));
-    expect(exitCode).toBe(EXIT_TX_REJECTED);
-    expect(errorCode).toBe(ERROR_CODES.INVALID_DUST_PROOF);
-  });
-
-  it('classifies stale-cache messages as STALE_CACHE', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Stale cache: applied > highest'));
-    expect(exitCode).toBe(EXIT_TX_REJECTED);
-    expect(errorCode).toBe(ERROR_CODES.STALE_CACHE);
-  });
-
-  it('classifies "Wallet sync timed out" as SYNC_TIMEOUT', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Wallet sync timed out'));
-    expect(exitCode).toBe(EXIT_NETWORK_ERROR);
-    expect(errorCode).toBe(ERROR_CODES.SYNC_TIMEOUT);
-  });
-
-  it('classifies "Timed out waiting for dust tokens" as SYNC_TIMEOUT', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Timed out waiting for dust tokens'));
-    expect(exitCode).toBe(EXIT_NETWORK_ERROR);
-    expect(errorCode).toBe(ERROR_CODES.SYNC_TIMEOUT);
-  });
-
-  it('classifies "did not respond within 30s" (proof-server gate) as SYNC_TIMEOUT', () => {
-    const { exitCode, errorCode } = classifyError(new Error('Proof server at http://localhost:6300/ did not respond within 30s'));
-    expect(exitCode).toBe(EXIT_NETWORK_ERROR);
-    expect(errorCode).toBe(ERROR_CODES.SYNC_TIMEOUT);
+  // Approved (Y52): words alone no longer give a code. mn throws each of these
+  // as its typed error (error-code-parity.test.ts has every site).
+  it.each([
+    'Wallet file not found: /foo/bar',
+    'Missing required flag: --seed',
+    'Unknown command: "bogus"',
+    'Operation cancelled',
+    'Proof server at http://localhost:6300/ did not respond within 30s',
+    'Something unexpected happened',
+  ])('returns UNKNOWN (exit 1) for a plain error saying "%s"', (said) => {
+    expect(classifyError(new Error(said), installedCommands)).toStrictEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.UNKNOWN });
   });
 });
 
@@ -344,12 +285,12 @@ describe('config --json', () => {
   let originalNetwork: string;
 
   beforeEach(() => {
-    originalNetwork = loadCliConfig().network;
+    originalNetwork = loadCliConfig(stateRootIn(TEST_DIR)).network;
   });
 
   afterEach(async () => {
     // Restore original config
-    if (loadCliConfig().network !== originalNetwork) {
+    if (loadCliConfig(stateRootIn(TEST_DIR)).network !== originalNetwork) {
       io.restore();
       const restoreIo = captureOutput();
       await cliCall(configCommand, parseArgs(['config', 'set', 'network', originalNetwork]));

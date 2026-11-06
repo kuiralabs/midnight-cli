@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { buildManual } from '../commands/manual.ts';
+import { getConfigValue } from '@kuiralabs/midnight-cli-core';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, '');
@@ -42,6 +47,20 @@ describe('mn manual', () => {
     }
   });
 
+  it("ends each command's page with its errors, as help shows them", () => {
+    const m = stripAnsi(buildManual());
+    const tx = m.split('▸ tx')[1]!.split('▸ ')[0]!;
+    expect(tx.indexOf('ERRORS')).toBeGreaterThan(tx.indexOf('EXAMPLES'));
+    expect(tx).toContain('  ERRORS\n    NETWORK_ERROR                  4  Indexer/node/proof-server connection refused or DNS failure.\n');
+    expect(tx).toContain('    Also: the network codes, and INVALID_ARGS, CANCELLED, UNKNOWN, UNSUPPORTED_NODE, NO_STATE_ROOT (mn manual lists them all).\n');
+  });
+
+  it('lists each set of codes the commands name, with its codes', () => {
+    const codes = stripAnsi(buildManual()).split('Sets of codes')[1]!.split('TROUBLESHOOTING')[0]!;
+    expect(codes).toContain('\n    network  AMBIGUOUS_LOCAL_STACKS, BLOCKFROST_PROJECT_ID_REQUIRED, BLOCKFROST_PROJECT_ID_REJECTED, BLOCKFROST_LIMIT_REACHED, ENDPOINT_SHUT_DOWN\n');
+    expect(codes).toContain('\n    chain    UNSUPPORTED_LEDGER, LOCAL_STACK_UNREACHABLE\n');
+  });
+
   it('lists the stable error code strings', () => {
     const m = stripAnsi(buildManual());
     for (const code of [
@@ -73,5 +92,25 @@ describe('mn manual', () => {
   it('produces non-trivial length (at least 200 lines)', () => {
     const m = stripAnsi(buildManual());
     expect(m.split('\n').length).toBeGreaterThanOrEqual(200);
+  });
+
+  it('describes every key `config` accepts', () => {
+    // The keys config accepts, as its refusal of an unknown key lists them.
+    let refusal = '';
+    const root = mkdtempSync(join(tmpdir(), 'mn-manual-'));
+    try { getConfigValue('no-such-key', root); } catch (err) { refusal = (err as Error).message; } finally { rmSync(root, { recursive: true, force: true }); }
+    const keys = refusal.split('Valid keys: ')[1]!.split(', ');
+    expect(keys.length).toBeGreaterThan(0);
+    const section = stripAnsi(buildManual()).split('Config keys')[1]!.split('Compatibility alias')[0]!;
+    for (const key of keys) expect(section, key).toMatch(new RegExp(`^ {4}${key}\\b`, 'm'));
+  });
+});
+
+describe('help --json global flags', () => {
+  it('describes every flag the shell accepts on every command', () => {
+    const described = installedCommands.globalFlagsHelp.map((flag) => flag.name).join(' ');
+    for (const flag of installedCommands.globalFlags) {
+      expect(described, flag.name).toContain(flag.name.length === 1 ? `-${flag.name}` : `--${flag.name}`);
+    }
   });
 });

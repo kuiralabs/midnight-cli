@@ -2,22 +2,18 @@
 // Horizontal layout: logo on left, commands on right (all on stderr)
 // Agent-friendly: plain text when piped (non-TTY)
 // JSON mode: outputs capability manifest for agent self-discovery
-// Every list of commands it shows comes from the command registry (plan 2D),
-// and the agent manual from the installed packages' guidance (2G).
+// Every list of commands it shows comes from the command registry, and the
+// agent manual from the installed packages' guidance.
 
-import { type ParsedArgs, hasFlag } from '../lib/argv.ts';
-import { bold, teal, gray, dim } from '../ui/colors.ts';
-import { header } from '../ui/format.ts';
+import { type ParsedArgs, hasFlag, commandHelpSpecs, introBriefs, type CommandHelpSpec, UsageError, type CallContext, type CallOutput } from '@kuiralabs/midnight-cli-core';
+import { bold, teal, gray, dim, header } from '@kuiralabs/midnight-cli-core/ui';
 import { animateMaterialize } from '../ui/animate.ts';
 import { WORDMARK_BIG } from '../ui/art.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { agentManual } from '../lib/agent-manual.ts';
-import { commandHelpSpecs, introBriefs, type CommandHelpSpec } from '../lib/command-definition.ts';
+import { commandCodeLines } from '../lib/code-tables.ts';
 import { hasShownIntroThisSession, markIntroShown } from '../lib/intro-marker.ts';
-import { UsageError } from '../lib/errors.ts';
-import type { CallContext, CallOutput } from '../lib/call-context.ts';
 import { PKG_NAME, PKG_VERSION, PKG_DESCRIPTION } from '../lib/pkg.ts';
-import { INDEXER_GRAPHQL_WS_PATH } from '../lib/constants.ts';
 
 type CommandSpec = CommandHelpSpec;
 
@@ -81,6 +77,10 @@ function printCommandHelp(output: CallOutput, spec: CommandSpec): void {
     }
     output.stdout('\n');
   }
+
+  output.stdout(gray('Errors:') + '\n');
+  for (const line of commandCodeLines(spec, 2)) output.stdout(`${line}\n`);
+  output.stdout('\n');
 }
 
 function outputJsonManifest(ctx: CallContext): void {
@@ -99,13 +99,16 @@ function outputJsonManifest(ctx: CallContext): void {
       flags: spec.flags,
       examples: spec.examples,
       jsonFields: spec.jsonFields,
+      errorCodes: spec.errorCodes.map(({ code, exitCode }) => ({ code, exitCode })),
+      errorSets: spec.errorSets,
+      exitCodes: spec.exitCodes,
     })),
   };
 
   ctx.output.result(manifest);
 }
 
-// The agent manual: the shell's skeleton and each installed package's pieces (2G).
+// The agent manual: the shell's skeleton and each installed package's pieces.
 function printAgentManual(output: CallOutput): void {
   output.stdout(agentManual(installedCommands));
 }

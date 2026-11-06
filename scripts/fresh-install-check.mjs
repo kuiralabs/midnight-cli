@@ -1,6 +1,11 @@
-// What a user gets from npm, checked: packs this package, installs the tarball
-// into an empty directory (no lockfile there, as for any consumer), and checks
-// that the dependency tree npm resolves today still works.
+// What a user gets from npm, checked: packs mn and the workspace packages it
+// depends on, serves them from a local registry as npm serves published
+// packages, installs mn globally from it into an empty prefix, and checks the
+// tree the install holds still works: one copy of each WASM package per SDK
+// engine (the shrinkwrap mn ships keeps each engine's set apart), each
+// engine's copy of the account package on that engine's copies and grant on
+// none, each engine loading, the packages a contract run's script imports,
+// and the files the code reads at run time.
 //
 // The test suite runs on the lockfile's tree, which a consumer never sees. Two
 // features broke that way without a test noticing: a newer @scure/base refused
@@ -13,12 +18,43 @@
 //   node scripts/fresh-install-check.mjs      (after `npm run build`)
 
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { PUBLIC_PACKAGES } from './api-report.mjs';
+import { packRelease } from './pack-release.mjs';
+import { SOURCE_CONDITION } from './publish-manifest.mjs';
 
 const repo = new URL('..', import.meta.url).pathname;
 const run = (command, args, cwd) => execFileSync(command, args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+/** Each public package's name, read from its manifest in the workspace. */
+const PUBLIC_NAMES = PUBLIC_PACKAGES.map((dir) => JSON.parse(readFileSync(join(repo, 'packages', dir, 'package.json'), 'utf-8')).name);
+
+/**
+ * What an installed package's manifest says of its source, which no published
+ * manifest may: the source condition, and each exports target that is a
+ * source file (under ./src/, or a .ts file that is not a declaration).
+ */
+function sourceInManifest(manifest) {
+  const found = [];
+  const walk = (value, at) => {
+    if (typeof value === 'string') {
+      if (value.startsWith('./src/') || (value.endsWith('.ts') && !value.endsWith('.d.ts'))) found.push(`${at} → ${value}`);
+      return;
+    }
+    if (typeof value !== 'object' || value === null) return;
+    for (const [key, inner] of Object.entries(value)) {
+      if (key === SOURCE_CONDITION) found.push(`${at} ${SOURCE_CONDITION}`);
+      walk(inner, at === '' ? key : `${at} ${key}`);
+    }
+  };
+  walk(manifest.exports ?? {}, '');
+  return found;
+}
+
+/** The SDK's WASM packages: an object one copy of them makes, another copy refuses. */
+const WASM_PACKAGES = ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4'];
 
 /** Every installed copy of a package under `root`, as its versions. */
 function copiesOf(root, name) {
@@ -36,6 +72,39 @@ function copiesOf(root, name) {
   };
   walk(root);
   return found;
+}
+
+/** The folder of `dep` as Node resolves it from the package in `from`, or null. */
+function resolveFrom(from, dep) {
+  for (let at = from; ; at = dirname(at)) {
+    const manifest = join(at, 'node_modules', dep, 'package.json');
+    if (existsSync(manifest)) return realpathSync(dirname(manifest));
+    if (dirname(at) === at) return null;
+  }
+}
+
+/**
+ * Every copy of `name` that the package in `dir` reaches through its
+ * dependencies, by Node's resolution from each package's folder: the copies a
+ * process that loads it can load.
+ */
+function resolvedCopies(dir, name) {
+  const found = new Map();
+  const seen = new Set();
+  // By the name code imports it under: an npm alias of the same package under another name is another package to its importers.
+  const walk = (pkgDir) => {
+    if (seen.has(pkgDir)) return;
+    seen.add(pkgDir);
+    const manifest = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf-8'));
+    for (const dep of Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies })) {
+      const resolved = resolveFrom(pkgDir, dep);
+      if (resolved === null) continue;
+      if (dep === name) found.set(resolved, JSON.parse(readFileSync(join(resolved, 'package.json'), 'utf-8')).version);
+      walk(resolved);
+    }
+  };
+  walk(realpathSync(dir));
+  return [...found].map(([at, version]) => ({ dir: at, version }));
 }
 
 /**
@@ -89,21 +158,74 @@ const check = (what, ok, detail = '') => {
   if (!ok) failures.push(what);
 };
 
-const work = mkdtempSync(join(tmpdir(), 'mn-fresh-install-'));
-try {
-  const tarball = run('npm', ['pack', '--pack-destination', work], repo).trim().split('\n').pop();
-  writeFileSync(join(work, 'package.json'), JSON.stringify({ name: 'fresh-install-check', private: true }));
-  run('npm', ['install', '--no-audit', '--no-fund', join(work, tarball)], work);
+const ACCOUNT_PACKAGE = '@kuiralabs/midnight-account-chain';
 
-  const version = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8')).version;
-  const mn = join(work, 'node_modules', '.bin', 'mn');
-  check('the installed mn runs', run(mn, ['--version'], work).trim() === version, version);
-
-  // One copy each: an object made by one copy of a WASM package is refused by another.
-  for (const name of ['@midnightntwrk/ledger-v9', '@midnight-ntwrk/ledger-v8', '@midnight-ntwrk/compact-runtime', '@midnightntwrk/onchain-runtime-v4']) {
-    const copies = copiesOf(work, name);
-    check(`one copy of ${name}`, copies.length === 1, copies.join(', '));
+/**
+ * Each engine installs the account package, whose Midnight libraries are peer
+ * dependencies: in the install at `root`, the copy each engine resolves
+ * reaches that engine's own copy of each WASM package (its compact runtime
+ * picks the contract build), the two engines' copies are two, and grant,
+ * which reaches the package through an engine, reaches no WASM package.
+ */
+function checkAccountPackagePerEngine(root, who) {
+  const shown = (dir) => (dir === null ? 'none' : `${JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8')).version} ${dir.slice(realpathSync(root).length)}`);
+  const copies = [];
+  for (const set of ['rc', 'beta']) {
+    const engine = join(root, 'node_modules', '@kuiralabs', `midnight-engine-${set}`);
+    const account = resolveFrom(engine, ACCOUNT_PACKAGE);
+    check(`${who}the ${set} engine resolves ${ACCOUNT_PACKAGE}`, account !== null, shown(account));
+    if (account === null) continue;
+    copies.push(account);
+    for (const sdk of WASM_PACKAGES) {
+      const fromAccount = resolveFrom(account, sdk);
+      const fromEngine = resolveFrom(engine, sdk);
+      check(`${who}the ${set} engine's ${ACCOUNT_PACKAGE} resolves ${sdk} to the engine's copy`, fromAccount !== null && fromAccount === fromEngine, `account package: ${shown(fromAccount)}; engine: ${shown(fromEngine)}`);
+    }
   }
+  check(`${who}each engine has a copy of ${ACCOUNT_PACKAGE} of its own`, copies.length === 2 && copies[0] !== copies[1], copies.map(shown).join('; '));
+  for (const sdk of WASM_PACKAGES) {
+    const grant = resolvedCopies(join(root, 'node_modules', '@kuiralabs', 'midnight-grant'), sdk);
+    check(`${who}@kuiralabs/midnight-grant reaches no copy of ${sdk}`, grant.length === 0, grant.map((c) => shown(c.dir)).join(', '));
+  }
+}
+
+const work = mkdtempSync(join(tmpdir(), 'mn-fresh-install-'));
+let registry;
+try {
+  // mn and the workspace packages it depends on, as a release publishes them,
+  // served by a local registry as npm installs a published package.
+  const packed = await packRelease(join(work, 'registry'));
+  registry = packed.registry;
+  const { workspaces } = packed;
+  const manifest = { name: packed.name, version: packed.version };
+
+  const version = manifest.version;
+  const prefix = join(work, 'prefix');
+  run('npm', ['install', '-g', '--prefix', prefix, '--cache', join(work, 'npm-cache'), '--registry', registry.url, '--no-audit', '--no-fund', `${manifest.name}@${version}`], work);
+  const installed = join(prefix, 'lib', 'node_modules', manifest.name);
+  const mn = join(prefix, 'bin', 'mn');
+  check('the installed mn runs', run(mn, ['--version'], work).trim() === version, version);
+  check('the package shipped its shrinkwrap', existsSync(join(installed, 'npm-shrinkwrap.json')));
+
+  // mn depends on every public package, so the checks below of each package mn installed cover them all.
+  const missing = PUBLIC_NAMES.filter((name) => !workspaces.some((pkg) => pkg.name === name));
+  check('mn installs every public package', missing.length === 0, missing.length > 0 ? `not a dependency of mn: ${missing.join(', ')}` : `${PUBLIC_NAMES.length} packages`);
+  // One copy of each workspace package: a second copy of core's module state (its settings, its typed errors) splits the process.
+  for (const { name } of workspaces) {
+    const copies = copiesOf(installed, name);
+    check(`one copy of ${name}`, copies.length === 1, copies.join(', '));
+    const source = sourceInManifest(JSON.parse(readFileSync(join(installed, 'node_modules', name, 'package.json'), 'utf-8')));
+    check(`the installed ${name} manifest names no source`, source.length === 0, source.join(', '));
+  }
+  // Each engine resolves one copy of each WASM package: an object made by one copy is refused by another.
+  for (const { name } of workspaces.filter(({ name }) => name.startsWith('@kuiralabs/midnight-engine-'))) {
+    const engine = join(installed, 'node_modules', name);
+    for (const sdk of WASM_PACKAGES) {
+      const copies = resolvedCopies(engine, sdk);
+      check(`${name} resolves one copy of ${sdk}`, copies.length === 1, copies.map((c) => `${c.version} ${c.dir.slice(realpathSync(installed).length)}`).join(', '));
+    }
+  }
+  checkAccountPackagePerEngine(installed, '');
 
   // A shielded address is longer than bech32's 90 characters; the address
   // library must still read the one the installed mn derives.
@@ -123,29 +245,90 @@ try {
     } catch (error) {
       console.log(error.message);
     }
-  `], join(work, 'node_modules', 'midnight-wallet-cli'));
+  `], join(installed, 'node_modules', '@kuiralabs', 'midnight-engine-rc'));
   check('a shielded address parses', parsed.trim() === 'parsed' && address.length > 90, `${address.length} characters${parsed.trim() === 'parsed' ? '' : `, ${parsed.trim()}`}`);
 
-  // mn grant drives the account package it installed: its owner records load
-  // from the installed tree and answer that the new wallet has no account.
-  // Asking that reaches no chain and opens no proving-artefact cache (the
-  // release gate's live run checks the cache, around the first deploy).
-  let grant = '';
-  try {
-    execFileSync(mn, ['grant', 'status', '--wallet', 'check', '--network', 'undeployed', '--node', 'ws://127.0.0.1:9', '--indexer-ws', 'ws://127.0.0.1:9/api/v4/graphql/ws', '--proof-server', 'http://127.0.0.1:9'], {
-      cwd: work, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], env,
-    });
-    grant = 'answered without an error';
-  } catch (error) {
-    grant = String(error.stderr ?? error.message);
+  // Each engine loads from the install: deriving a network's address loads the engine of its set.
+  for (const [network, prefixOf] of [['undeployed', 'mn_addr_undeployed1'], ['stagenet', 'mn_addr_stagenet1']]) {
+    let derived = '';
+    try {
+      derived = JSON.parse(execFileSync(mn, ['address', '--wallet', 'check', '--network', network, '--json'], { cwd: work, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], env })).address ?? '';
+    } catch (error) {
+      derived = String(error.stderr ?? error.message).trim().split('\n').pop();
+    }
+    check(`the ${network === 'stagenet' ? 'beta' : 'rc'} engine derives a ${network} address`, derived.startsWith(prefixOf), derived.slice(0, 40));
   }
-  check('mn grant drives the installed account package', /Wallet "check" has no account on undeployed yet/.test(grant), grant.includes('has no account') ? 'no account yet, as for a new wallet' : grant.trim().split('\n').slice(-2).join(' | '));
+
+  // A contract run from the install: the contract package's runner has the
+  // network's engine write the script, links the packages it imports into the
+  // dApp's folder from where the engine finds each by name (never by a path
+  // from the runner's own package), and runs it with Node. Each engine finds
+  // every package its scripts import; a state read of a compiled contract gets
+  // as far as asking the indexer (every import resolved, the dApp's contract
+  // module loaded), which refuses the connection, reported as NETWORK_ERROR
+  // from the script's marked line; and the dApp's folder is left as it was.
+  for (const [network, set] of [['undeployed', 'rc'], ['stagenet', 'beta']]) {
+    const dapp = join(work, `dapp-${set}`);
+    const ran = JSON.parse(run(process.execPath, ['--input-type=module', '-e', `
+      import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+      import { join } from 'node:path';
+      import { createHost, getNetworkConfig } from '@kuiralabs/midnight-cli-core';
+      import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
+      import { createBetaEngine } from '@kuiralabs/midnight-engine-beta';
+      import { runState } from '@kuiralabs/midnight-contract';
+      const [dapp, network, home] = process.argv.slice(1);
+      const host = createHost({
+        paths: { stateRoot: join(home, '.midnight'), home },
+        engineLoader: async (set, host) => set === 'beta' ? createBetaEngine(host) : createRcEngine(host),
+      });
+      const { scripts } = (await host.engines.for(network)).contracts;
+      const missing = scripts.packages.filter((name) => scripts.packageFolder(name) === null);
+      const managedDir = join(dapp, 'managed', 'counter');
+      mkdirSync(join(managedDir, 'compiler'), { recursive: true });
+      mkdirSync(join(managedDir, 'contract'), { recursive: true });
+      writeFileSync(join(dapp, 'package.json'), JSON.stringify({ name: 'dapp', private: true, type: 'module' }));
+      writeFileSync(join(managedDir, 'compiler', 'contract-info.json'), JSON.stringify({ 'compiler-version': '0.35.0', 'language-version': '0.27.0', 'runtime-version': scripts.compactRuntimeVersion, circuits: [], witnesses: [] }));
+      writeFileSync(join(managedDir, 'contract', 'index.js'), 'export function ledger() { return {}; }\\n');
+      const before = readdirSync(dapp).sort();
+      const said = [];
+      const networkConfig = { ...getNetworkConfig(network), indexer: 'http://127.0.0.1:9/api/v4/graphql', indexerWS: 'ws://127.0.0.1:9/api/v4/graphql/ws', node: 'ws://127.0.0.1:9', proofServer: 'http://127.0.0.1:9' };
+      let failed;
+      try {
+        await runState({ dappDir: dapp, network, root: join(home, '.midnight'), engines: host.engines, networkConfig, managedDir, contractName: 'counter', contractAddress: 'ab'.repeat(32), onMessage: (message) => said.push(message) });
+      } catch (error) {
+        failed = { name: error.name, code: error.code, message: error.message };
+      }
+      console.log(JSON.stringify({ packages: scripts.packages.length, missing, said, failed, leftAsItWas: JSON.stringify(readdirSync(dapp).sort()) === JSON.stringify(before) }));
+    `, dapp, network, home], installed));
+    check(`the ${set} engine finds the ${ran.packages} packages its contract scripts import`, ran.missing.length === 0, ran.missing.length > 0 ? `not found: ${ran.missing.join(', ')}` : '');
+    const reached = ran.said.includes('Querying contract state...') && ran.failed?.name === 'ContractScriptError' && ran.failed?.code === 'NETWORK_ERROR';
+    check(`a ${network} contract state read runs its script in a dApp, as far as the indexer`, reached, ran.failed === undefined ? 'it did not fail' : `${ran.failed.name} ${ran.failed.code ?? '(no code)'}: ${ran.failed.message.split('\n').pop()}`);
+    check(`the ${network} run leaves the dApp's folder as it was`, ran.leftAsItWas);
+  }
+
+  // mn grant drives the account package it installed, through the engine of
+  // each network's set: its owner records load from that engine's copy in the
+  // installed tree and answer that the new wallet has no account. Asking that
+  // reaches no chain and opens no proving-artefact cache (the release gate's
+  // live run checks the cache, around the first deploy).
+  for (const [network, set] of [['undeployed', 'rc'], ['stagenet', 'beta']]) {
+    let grant = '';
+    try {
+      execFileSync(mn, ['grant', 'status', '--wallet', 'check', '--network', network, '--node', 'ws://127.0.0.1:9', '--indexer-ws', 'ws://127.0.0.1:9/api/v4/graphql/ws', '--proof-server', 'http://127.0.0.1:9'], {
+        cwd: work, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], env,
+      });
+      grant = 'answered without an error';
+    } catch (error) {
+      grant = String(error.stderr ?? error.message);
+    }
+    check(`mn grant on ${network} drives the ${set} engine's installed account package`, new RegExp(`Wallet "check" has no account on ${network} yet`).test(grant), grant.includes('has no account') ? 'no account yet, as for a new wallet' : grant.trim().split('\n').slice(-2).join(' | '));
+  }
   check('it opens no proving-artefact cache', !existsSync(join(home, '.midnight', 'account-artifacts')), 'none under ~/.midnight');
-  const chains = copiesOf(work, '@kuiralabs/midnight-account-chain');
-  check('one copy of @kuiralabs/midnight-account-chain', chains.length === 1, chains.join(', '));
+  const chains = copiesOf(installed, ACCOUNT_PACKAGE);
+  check(`two copies of ${ACCOUNT_PACKAGE}, one for each engine`, chains.length === 2, chains.join(', '));
 
   // The MCP server reads its skill documents from the installed package.
-  const { tools, resources } = await askMcpServer(join(work, 'node_modules', '.bin', 'midnight-wallet-mcp'), env);
+  const { tools, resources } = await askMcpServer(join(prefix, 'bin', 'midnight-wallet-mcp'), env);
   check('the MCP server lists its skill resources', resources.length >= 2, `${resources.length}`);
   for (const { uri, text, error } of resources) {
     check(`the MCP server serves ${uri}`, error === undefined && text.length > 0, error ? error.replace(work, '<install>') : `${text.length} characters`);
@@ -154,9 +337,103 @@ try {
     const unknown = named.filter((name) => !tools.includes(name));
     check(`${uri} names only tools the server has`, unknown.length === 0, unknown.length > 0 ? `not a tool: ${unknown.join(', ')}` : `${named.length} of ${tools.length} tools named`);
   }
+
+  // A program that loads an engine without mn: it installs the workspace
+  // packages from the registry, each engine and grant with the shrinkwrap it
+  // ships, and gets each engine's SDK set once, with its copy of the account
+  // package, beside one copy of each package it shares.
+  const outside = join(work, 'outside');
+  mkdirSync(outside);
+  writeFileSync(join(outside, 'package.json'), JSON.stringify({ name: 'outside', private: true, type: 'module' }));
+  run('npm', ['install', '--cache', join(work, 'npm-cache'), '--registry', registry.url, '--no-audit', '--no-fund', ...workspaces.map(({ name, version }) => `${name}@${version}`)], outside);
+  for (const { name } of workspaces.filter(({ name }) => !name.startsWith('@kuiralabs/midnight-engine-'))) {
+    const copies = copiesOf(outside, name);
+    check(`a program outside mn: one copy of ${name}`, copies.length === 1, copies.join(', '));
+  }
+  for (const { name } of workspaces.filter(({ name }) => name.startsWith('@kuiralabs/midnight-engine-'))) {
+    const engine = join(outside, 'node_modules', name);
+    for (const sdk of WASM_PACKAGES) {
+      const copies = resolvedCopies(engine, sdk);
+      check(`a program outside mn: ${name} resolves one copy of ${sdk}`, copies.length === 1, copies.map((c) => `${c.version} ${c.dir.slice(realpathSync(outside).length)}`).join(', '));
+    }
+  }
+  checkAccountPackagePerEngine(outside, 'a program outside mn: ');
+  writeFileSync(join(outside, 'load.mjs'), `
+    import { createHost } from '@kuiralabs/midnight-cli-core';
+    const host = createHost({
+      paths: { stateRoot: ${JSON.stringify(join(outside, 'state'))}, home: ${JSON.stringify(outside)} },
+      engineLoader: async (set, host) => set === 'beta' ? (await import('@kuiralabs/midnight-engine-beta')).createBetaEngine(host) : (await import('@kuiralabs/midnight-engine-rc')).createRcEngine(host),
+    });
+    try { console.log((await host.engines.for(process.argv[2])).set); } catch (error) { console.log(error.code ?? error.message); }
+  `);
+  for (const [network, set] of [['undeployed', 'rc'], ['stagenet', 'beta']]) {
+    const loaded = run(process.execPath, ['load.mjs', network], outside).trim();
+    check(`a program outside mn loads the ${set} engine for ${network}`, loaded === set, loaded);
+  }
+
+  // The installed packages are imported by their entry points alone: each
+  // named entry point loads, the published manifests name no source (neither
+  // the source condition nor a source file), and a module that is not an
+  // entry point is refused.
+  writeFileSync(join(outside, 'entry.mjs'), `
+    try { await import(process.argv[2]); console.log('loaded'); } catch (error) { console.log(error.code ?? error.message); }
+  `);
+  for (const { name } of workspaces) {
+    const manifest = readFileSync(join(outside, 'node_modules', name, 'package.json'), 'utf-8');
+    const source = sourceInManifest(JSON.parse(manifest));
+    check(`a program outside mn: ${name}'s manifest names no source`, source.length === 0 && !manifest.includes(SOURCE_CONDITION), source.join(', '));
+    for (const entry of Object.keys(JSON.parse(manifest).exports).filter((key) => !key.includes('*'))) {
+      const specifier = entry === '.' ? name : `${name}${entry.slice(1)}`;
+      const loaded = run(process.execPath, ['entry.mjs', specifier], outside).trim();
+      check(`a program outside mn imports ${specifier}`, loaded === 'loaded', loaded);
+    }
+  }
+  // A module of each package that is not an entry point, named as the open
+  // `./*` used to export it (core's lib/errors as `<name>/lib/errors`): one
+  // for every public package.
+  const deepPaths = [
+    ['@kuiralabs/midnight-cli-core', 'lib/errors'],
+    ['@kuiralabs/midnight-chain', 'lib/chain-id'],
+    ['@kuiralabs/midnight-engine-rc', 'derive-address'],
+    ['@kuiralabs/midnight-engine-beta', 'derive-address'],
+    ['@kuiralabs/midnight-wallet', 'lib/passphrase'],
+    ['@kuiralabs/midnight-contract', 'lib/contract/runner'],
+    ['@kuiralabs/midnight-connect', 'lib/ws-rpc'],
+    ['@kuiralabs/midnight-dev', 'lib/localnet'],
+    ['@kuiralabs/midnight-grant', 'lib/grant/account'],
+  ];
+  const untried = PUBLIC_NAMES.filter((name) => !deepPaths.some(([each]) => each === name));
+  check('a deep path is tried for every public package', untried.length === 0, untried.length > 0 ? `none for ${untried.join(', ')}` : '');
+  for (const [name, deepPath] of deepPaths) {
+    check(`a program outside mn finds ${name}'s ${deepPath} built`, existsSync(join(outside, 'node_modules', name, 'dist', `${deepPath}.js`)));
+    const deep = run(process.execPath, ['entry.mjs', `${name}/${deepPath}`], outside).trim();
+    check(`a program outside mn is refused ${name}/${deepPath}`, deep === 'ERR_PACKAGE_PATH_NOT_EXPORTED', deep);
+  }
+
+  // The same packages installed with bun (Y65): its installer ignores each
+  // engine's shrinkwrap and resolves the ranges again, so each engine must
+  // refuse to load, before any SDK module does, with MIXED_SDK_LAYOUT and the
+  // npm command, under Node and under bun. Skipped where bun isn't installed.
+  const bunInstalled = (() => { try { run('bun', ['--version'], work); return true; } catch { return false; } })();
+  if (bunInstalled) {
+    const bunOutside = join(work, 'bun-outside');
+    mkdirSync(bunOutside);
+    writeFileSync(join(bunOutside, 'package.json'), JSON.stringify({ name: 'bun-outside', private: true, type: 'module' }));
+    execFileSync('bun', ['add', ...workspaces.map(({ name, version }) => `${name}@${version}`)], { cwd: bunOutside, env: { ...process.env, BUN_CONFIG_REGISTRY: registry.url, BUN_INSTALL_CACHE_DIR: join(work, 'bun-cache') }, stdio: 'pipe' });
+    writeFileSync(join(bunOutside, 'load.mjs'), readFileSync(join(outside, 'load.mjs'), 'utf-8').replace(`console.log(error.code ?? error.message)`, `console.log(error.code, /Install with npm/.test(error.message) ? 'names npm' : '')`).replaceAll(JSON.stringify(join(outside, 'state')), JSON.stringify(join(bunOutside, 'state'))));
+    for (const runtime of [process.execPath, 'bun']) {
+      for (const [network, set] of [['undeployed', 'rc'], ['stagenet', 'beta']]) {
+        const refused = run(runtime, ['load.mjs', network], bunOutside).trim();
+        check(`installed with bun, the ${set} engine refuses to load under ${runtime === 'bun' ? 'bun' : 'Node'}, naming npm`, refused === 'MIXED_SDK_LAYOUT names npm', refused);
+      }
+    }
+  } else {
+    console.log('  (bun is not installed: the bun install is not checked)');
+  }
 } catch (error) {
   check('the fresh install and its checks ran', false, String(error.stderr || error.message).trim().split('\n').slice(-3).join(' | '));
 } finally {
+  await registry?.close();
   rmSync(work, { recursive: true, force: true });
 }
 

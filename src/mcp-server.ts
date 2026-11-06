@@ -1,5 +1,5 @@
 // Midnight Wallet CLI — MCP Server
-// Exposes all CLI commands as MCP tools via stdio transport
+// Exposes the installed commands' MCP tools via stdio transport
 // Launch: midnight-wallet-mcp (or: node dist/mcp-server.js)
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -14,18 +14,17 @@ import {
   type ServerRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { CommandRun } from './lib/run-command.ts';
-import { servePayer } from './lib/serve-payer.ts';
-import { classifyError } from './lib/exit-codes.ts';
-import { trimAgentMessage } from './lib/error-trim.ts';
+import { servePayer } from '@kuiralabs/midnight-connect';
+import { classifyError, asReported, trimAgentMessage, needsConfirmation, type CommandRun, type Host } from '@kuiralabs/midnight-cli-core';
+import { withServerAdvice } from './lib/mcp/server-advice.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { createConfirmationStore } from './lib/mcp/confirmation.ts';
-import { assertKnownParams } from './lib/mcp/known-params.ts';
+import { assertKnownParams, assertParamTypes } from './lib/mcp/known-params.ts';
 import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from './lib/mcp/registry-tools.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
-import { installCliHost, type CliHost } from './lib/cli-host.ts';
+import { createCliHost } from './lib/cli-host.ts';
 import { installedCommands } from './lib/installed-commands.ts';
 import { skillCore, skillFull } from './lib/mcp/skills.ts';
 
@@ -36,7 +35,7 @@ import { skillCore, skillFull } from './lib/mcp/skills.ts';
 //           Fetch on demand (errors, multi-step flows, concept questions).
 // The original `midnight-wallet://skill` URI stays as a deprecated alias for
 // /full so existing MCP clients keep working. Both are assembled from the
-// installed packages' guidance at each read (2G).
+// installed packages' guidance at each read.
 const SKILL_CORE_URI = 'midnight-wallet://skill/core';
 const SKILL_FULL_URI = 'midnight-wallet://skill/full';
 const SKILL_LEGACY_URI = 'midnight-wallet://skill';
@@ -44,7 +43,7 @@ const SKILL_LEGACY_URI = 'midnight-wallet://skill';
 const confirmationStore = createConfirmationStore();
 
 // What the host gives the tools' runs, once main() has installed it.
-let host: CliHost | null = null;
+let host: Host | null = null;
 
 // ── Server setup ────────────────────────────────────────────
 
@@ -96,15 +95,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   const params = (rawParams ?? {}) as Record<string, unknown>;
   const call = toolCall(request.params._meta?.progressToken, extra);
 
-  // A parameter outside the tool's schema is refused before anything runs or
-  // a token is given (Y29, 2E). An unknown tool is reported by executeTool.
+  // A parameter outside the tool's schema, or not of its type, is refused
+  // before anything runs or a token is given. An unknown tool is reported by
+  // executeTool.
   const tool = findTool(installedCommands, name);
   const schema = name === CONFIRM_TOOL.name ? CONFIRM_TOOL : tool;
   if (schema !== undefined) {
     try {
       assertKnownParams(schema, params);
+      assertParamTypes(schema, params);
     } catch (err) {
-      return errorResponse(err instanceof Error ? err : new Error(String(err)));
+      return errorResponse(err instanceof Error ? err : new Error(String(err)), call);
     }
   }
 
@@ -113,18 +114,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const token = typeof params.token === 'string' ? params.token : '';
     const pending = confirmationStore.redeem(token);
     if (!pending) {
-      return errorResponse(new Error('Unknown or expired confirmation token. The first-step tool call may need to be re-issued.'));
+      return errorResponse(new Error('Unknown or expired confirmation token. The first-step tool call may need to be re-issued.'), call);
     }
     return executeTool(pending.tool, pending.args, call);
   }
 
   // Step 1 of confirmation: return a pending token instead of executing.
-  if (tool?.confirmation !== undefined) {
+  if (tool !== undefined && needsConfirmation(tool, params)) {
     let description: string;
     try {
       description = await confirmationFor(tool, params, call);
     } catch (err) {
-      return errorResponse(err instanceof Error ? err : new Error(String(err)));
+      return errorResponse(err instanceof Error ? err : new Error(String(err)), call);
     }
     const pending = confirmationStore.create({ tool: name, args: params, description });
     return {
@@ -153,14 +154,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
  */
 function toolCall(progressToken: ProgressToken | undefined, extra: RequestHandlerExtra<ServerRequest, ServerNotification>): CommandRun {
   if (host === null) throw new Error('The MCP server took a call before its host was installed');
-  const { sdkWarnings } = host;
-  if (progressToken === undefined) return { signal: extra.signal, payer: servePayer, sdkWarnings };
+  if (progressToken === undefined) return { signal: extra.signal, payer: servePayer, host };
   let progress = 0;
   let last: string | undefined;
   return {
     signal: extra.signal,
     payer: servePayer,
-    sdkWarnings,
+    host,
     onProgress: (message) => {
       if (message === last) return;
       last = message;
@@ -183,7 +183,7 @@ function stamp<T extends Record<string, unknown>>(payload: T): T & { _serverVers
 
 async function executeTool(name: string, params: Record<string, unknown>, call: CommandRun) {
   const tool = findTool(installedCommands, name);
-  if (!tool) return errorResponse(new Error(`Unknown tool: ${name}`));
+  if (!tool) return errorResponse(new Error(`Unknown tool: ${name}`), call);
 
   try {
     const result = await runTool(tool, params, call);
@@ -191,12 +191,14 @@ async function executeTool(name: string, params: Record<string, unknown>, call: 
       content: [{ type: 'text' as const, text: JSON.stringify(stamp(result), null, 2) }],
     };
   } catch (err) {
-    return errorResponse(err instanceof Error ? err : new Error(String(err)));
+    return errorResponse(err instanceof Error ? err : new Error(String(err)), call);
   }
 }
 
-function errorResponse(error: Error) {
-  const { errorCode } = classifyError(error);
+function errorResponse(thrown: Error, call: CommandRun) {
+  // A node's refusal is reported in the node's words, also when a command wrapped it.
+  const error = withServerAdvice(asReported(thrown), call.host.paths().stateRoot);
+  const { errorCode } = classifyError(error, installedCommands);
   return {
     content: [{
       type: 'text' as const,
@@ -213,7 +215,7 @@ async function main() {
   // Endpoint URLs can carry a Blockfrost project id: no response or log shows it.
   hideProjectIdsInOutput();
   // What the tools' libraries get from their host, as the CLI gives them (no prompter: no terminal here).
-  host = installCliHost();
+  host = createCliHost({ prompter: null });
   // The server runs facades on demand (balance/transfer/etc.). A cold shielded
   // sync would overflow Node's default heap, so re-exec once at startup with
   // more headroom. No-op when launched via `mn --mcp` (already bumped) or when

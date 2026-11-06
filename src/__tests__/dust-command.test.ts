@@ -1,13 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import dustCommand from '../commands/dust.ts';
-import { parseArgs } from '../lib/argv.ts';
-import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveAllAddresses } from '../lib/derive-address.ts';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { parseArgs } from '@kuiralabs/midnight-cli-core';
+import { dustDefinition } from '@kuiralabs/midnight-wallet/commands';
+import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../test-support/plain-wallet.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { cliCall } from './helpers/cli-call.ts';
+
+// The handler, as the shell loads it.
+const { default: dustCommand } = await dustDefinition.load();
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-dust-cmd-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
@@ -31,7 +34,7 @@ describe('dust command — subcommand validation', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -44,7 +47,7 @@ describe('dust command — subcommand validation', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -57,7 +60,7 @@ describe('dust command — subcommand validation', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);

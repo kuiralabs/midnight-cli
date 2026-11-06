@@ -1,14 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import airdropCommand from '../commands/airdrop.ts';
-import { parseArgs } from '../lib/argv.ts';
-import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveAllAddresses } from '../lib/derive-address.ts';
-import { GENESIS_SEED } from '../lib/constants.ts';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { parseArgs, GENESIS_SEED } from '@kuiralabs/midnight-cli-core';
+import { airdropDefinition } from '@kuiralabs/midnight-wallet/commands';
+import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../test-support/plain-wallet.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { cliCall } from './helpers/cli-call.ts';
+
+// The handler, as the shell loads it.
+const { default: airdropCommand } = await airdropDefinition.load();
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-airdrop-cmd-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
@@ -32,7 +34,7 @@ describe('airdrop command — argument validation', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -45,7 +47,7 @@ describe('airdrop command — argument validation', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -58,7 +60,7 @@ describe('airdrop command — argument validation', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -71,7 +73,7 @@ describe('airdrop command — argument validation', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -95,7 +97,7 @@ describe('airdrop command — network restriction', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -108,7 +110,7 @@ describe('airdrop command — network restriction', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -121,7 +123,7 @@ describe('airdrop command — network restriction', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -204,7 +206,7 @@ describe('airdrop command — shielded flag', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -217,7 +219,7 @@ describe('airdrop command — shielded flag', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);

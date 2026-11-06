@@ -1,5 +1,5 @@
 // Writes docs/SKILL-CORE.md and docs/SKILL.md from the installed packages'
-// guidance, as the MCP server assembles skill/core and skill/full (plan 2G).
+// guidance, as the MCP server assembles skill/core and skill/full.
 // The copies stay in the repository for the README's links and the npm
 // package; a test fails when they differ from the assembly.
 //

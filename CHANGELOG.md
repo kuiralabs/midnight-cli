@@ -4,7 +4,87 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0-rc.14] - 2026-11-05
+
 ### Added
+
+- **Several open swap offers of one token.** `mn swap make` needs a free coin worth exactly what the offer gives. When the wallet has none, it first sends that amount to itself, paying a fee in Dust. It then waits for the receipt and for the new coin, and makes the offer from it. The JSON gains `split` (`txHash` and the receipt).
+- **Mounting mn's commands in a program.** Core exports `runCommand` (what mn's shell does around a handler), `captureCommand` (the MCP form) and `toolDescription` (a tool's description with its codes). Each package's `./commands` exports its registry entry: `coreCommands`, `chainCommands`, `walletCommands`, `swapCommands`, `contractCommands`, `connectCommands`, `devCommands` and `grantCommands`.
+- **A README for each package:** how to install it, its entry points, what you call, its codes, and an example that mounts its commands. Every example is run as written in the test suite.
+- **New codes:** `CONTRACT_NOT_COMPILED` ("No compiled contract found") and `NO_TEST_CONFIG` ("No dapp.test.json found"). Both used to report `UNKNOWN`.
+
+### Changed
+
+- **Spends leave open offers' coins alone.** Both engines pick shielded coins with mn's own picker. A spend never takes an open offer's coins, except to cancel that offer, and it prefers a coin of the exact amount. `OFFER_COINS_IN_USE` now comes only when nothing else could pay, before any proof is made. `mn swap cancel` spends only the cancelled offer's coins, so the wallet's other offers stay live.
+- **Install with npm 11 or older, run with Node or bun.** Each engine ships an `npm-shrinkwrap.json` with the SDK set it was tested on. npm 12 no longer reads one, and bun's installer ignores it, so both resolve the dependency ranges again. An engine installed that way is refused before any SDK loads, with `MIXED_SDK_LAYOUT` and the command to use instead. With npm 12, install with `npx -y npm@11 install -g midnight-wallet-cli@next`. A tree that npm 11 or older installed, nested or hoisted, runs under both Node and bun.
+- **Grant on account-chain 0.3.0-rc.3:** both engines pin `@kuiralabs/midnight-account-chain` 0.3.0-rc.3, which batches inbox appends (one transaction for up to four entries), and grant pins `@kuiralabs/midnight-account` 0.2.0-rc.1. An account deployed with rc.2 has the older contract, so deploy a new one.
+
+### Fixed
+
+- **A program's mounted command drew its spinners on the process's stderr** whatever output the program gave it. Progress now draws through the call's output.
+- **Under bun, a program's contract deploy failed** because the script couldn't import `ws`. The engines now find the script's packages under bun as Node does.
+
+### Packages
+
+- Every `@kuiralabs` workspace package moves to `0.1.0-rc.3`.
+
+## [0.6.0-rc.13] - 2026-11-04
+
+### Added
+
+- **`mn grant` on stagenet.** Grants now work on both SDK sets. Each engine carries its own copy of `@kuiralabs/midnight-account-chain` 0.3.0-rc.2, and grant uses the loaded engine's copy: the stagenet build on stagenet (no caller pin), the full build on ledger-9 local chains. On stagenet, a request that names a caller is refused before any transaction (`CALLER_PIN_UNSUPPORTED`, exit 2).
+- **`mn grant deposit <amount> --token <type>`** deposits any shielded token into the account. Give the raw type as `mn balance` lists it, and the amount in the token's smallest unit. Without `--token` it deposits NIGHT, as before.
+- **Programs can use mn's packages directly.** mn is split into packages, each with named entry points:
+  - core: `.`, `./engine`, `./ui`, `./commands`, `./process`
+  - chain and every domain package: `.` and `./commands`
+  - each engine: `.`
+  - the domain packages: `@kuiralabs/midnight-wallet` (with swap), `-contract`, `-connect`, `-dev` and `-grant`
+
+  A program creates a host with `createHost` (its own state folder, settings, notices and engine) and passes it in. Two hosts in one process don't mix. Each command's work is a library function: `readWalletBalance`, `transferNight`, `airdropNight`, `registerDust`, `deployContract`, `makeSwapOffer`, `takeSwapOffer`, `transactionStatus` and the rest. Each takes plain values, and amounts are exact bigints. `openWalletSession` is exported again. `installSdkProcessGuard` and `syncHeapAdvice` give a program what mn's shell does for its own process; see "Your process" in core's README.
+- **Error codes are owned per package and classified by code alone**, never by message text. Each command's help, the manuals and the MCP tool descriptions list the codes it can end with. New codes: `NO_STATE_ROOT`, `NO_PAYER`, `NO_NODE_RUNTIME`, `COMMAND_FAILED`, `CALLER_PIN_UNSUPPORTED`.
+
+### Changed
+
+- **Error codes that changed:**
+  - A missing passphrase reports `PASSPHRASE_REQUIRED` on the CLI too; it used to report `INVALID_ARGS`.
+  - A wallet with no NIGHT reports `INSUFFICIENT_BALANCE`.
+  - An unreachable indexer, node or proof server reports `NETWORK_ERROR`, whatever its message says.
+  - A ZK proof that times out reports `PROOF_TIMEOUT`.
+  - A contract script's refused transaction reports `TX_REJECTED` (or the stale-UTXO or Dust-proof code).
+  - Errors that only matched a code by accident of wording now report `UNKNOWN`.
+  - Bad-argument errors print as "Usage".
+- **Exact amounts:** amounts are exact end to end, and an amount too large for a JS number is no longer refused.
+
+### Fixed
+
+- **Programs end after `close()`:** a program ends after `session.close()`. The engines open their node submission client only on the first submit, so a session that never submitted no longer keeps reconnecting to an unreachable node.
+- **Shielded deposits on stagenet:** a grant deposit syncs the wallet's shielded side, as swaps do. On stagenet it used to see no shielded coins.
+
+### Packages
+
+- Every `@kuiralabs` workspace package now shares one version, `0.1.0-rc.2`. The existing ones are core, chain, engine-rc and engine-beta. The new ones are wallet, connect, contract, dev and grant. Both engines pin `@kuiralabs/midnight-account-chain` 0.3.0-rc.2.
+
+## [0.6.0-rc.12] - 2026-11-03
+
+### Added
+
+- **`midnight tx status <hash or identifier>`: what became of a transaction**, from the indexer: its block (height, hash, time), the fee it paid in DUST (exact, and in specks), and its result (`SUCCESS`, `PARTIAL_SUCCESS` with each segment, or `FAILURE`). It takes the transaction's hash or any of its identifiers, which is what mn prints as `txHash` after a submit. The indexer lists only finalized transactions, so one it has is final; one it doesn't have is reported as `notFound` (not on chain yet, dropped, or never sent). `--wait` asks until it is listed, up to `--timeout` seconds (120 by default). MCP tool `midnight_tx_status`, read-only.
+- **Receipts in the results of the commands that submit.** `transfer`, `airdrop`, `dust register`, `swap take` and `swap cancel` wait up to 60 s for the indexer to list their transaction and add a `receipt` to their `--json` output (block, fee and result, as `tx status` gives them) and its block and fee to their text. If the indexer has not listed it by then, `receipt` is null and `receiptMissing` says why; the transaction is submitted either way.
+
+### Packages
+
+- `@kuiralabs/midnight-chain` 0.1.0-rc.1 (adds the transaction status and receipts), and `@kuiralabs/midnight-engine-rc` and `-beta` 0.1.0-rc.1 (no change but their chain dependency). `@kuiralabs/midnight-cli-core` stays 0.1.0-rc.0.
+
+## [0.6.0-rc.11] - 2026-11-02
+
+### Added
+
+- **Private swaps of shielded tokens, through offer files: `midnight swap make | inspect | take | cancel | list`.** The maker proves and signs its half of a swap (one shielded token for another, no fee) and `make` writes it as an offer file to hand on. `inspect` reads the file from its own bytes and asks the indexer whether its coins are still unspent. `take` adds the taker's half and the fee and submits, after checking, before anything is built or spent, that the file is an offer for this network, that it says what its bytes say, that its terms are the ones agreed (`--give`, `--give-token`, `--want`, `--want-token`), that the maker's expiry (`--expires-in`, a day by default) hasn't passed, and that it wasn't taken. The maker's open offers are recorded, and a later command of the maker's that would spend their coins is refused (`OFFER_COINS_IN_USE`); `cancel <id>` spends an offer's coins back to the wallet, which is what makes an expiry binding on chain; `list` shows the open offers and closes the ones taken. New error codes, exit code 2: `NOT_AN_OFFER`, `TERMS_MISMATCH`, `OFFER_EXPIRED`, `OFFER_COINS_IN_USE`.
+- **MCP tools `midnight_swap_make`, `_inspect`, `_take`, `_cancel` and `_list`.** Make, take and cancel return a confirmation token; take's confirmation names what is paid and what is got, read from the offer itself, and a take at other terms is refused before a token is issued.
+- **`mn balance` lists every shielded token the wallet holds**, by its raw type, after NIGHT: in the text, as `SHIELDED_<type>=<amount>` lines on stdout, and as `shielded.tokens` in `--json`. NIGHT's fields are unchanged.
+- **Stagenet**, Midnight's public ledger-9 network, on the SDK's beta set: wallets get a stagenet address (an existing wallet gets one when it is next read), and every command, the help, the manuals and the MCP tools take `--network stagenet`. Stagenet skips the shielded sync unless a command needs it (a swap) or `--force-shielded` is passed, and reads Dust in WASM, with a notice, until a ledger-9 sidecar exists.
+- **Two SDK engines, the network picks one.** The SDK sits behind an engine package: `@kuiralabs/midnight-engine-rc` (the local network) and `@kuiralabs/midnight-engine-beta` (stagenet). `midnight config set sdk-set <rc|beta> [--network <name>]` runs a network on the other set. A process that loaded one set refuses work on the other (`OTHER_SDK_SET`), and the MCP server says to start one for that network.
+- **A wallet session for programs.** `openWalletSession` in `@kuiralabs/midnight-cli-core` opens a seed's wallet in the program's own process, on either engine, synced and with its Dust ready, and gives balances, addresses, signing, swaps (`swap`, `makeOffer`, `takeOffer`, `cancelOffers`), reading a transaction and submitting it, with hex and plain values only. Closing it reverts what it built but never submitted.
 
 - **Every secret mn keeps is encrypted under one passphrase.** Each wallet's seed and mnemonic, and each account's owner key, records (its encryption secrets), roster of grants and private state, are sealed at rest: scrypt to a key, then AES-256-GCM, each secret bound to what it is for. A wallet's addresses stay readable, so `wallet list`, `wallet info` and anything that only reads addresses ask for nothing. A command that needs a secret asks for the passphrase once at a terminal, or reads `MN_PASSPHRASE` (scripts, CI, the MCP server); without one it is refused (`PASSPHRASE_REQUIRED`), and a wrong one changes nothing (`WRONG_PASSPHRASE`). The first new wallet sets it, at least 12 characters.
 - **`midnight wallet protect`** sets the passphrase and encrypts every wallet and account an earlier mn wrote in plain text, in one step, without loss: an account's private state is moved off the public password every account used before onto a password of its own. An interrupted run is finished by running it again. Until then plain-text wallets and accounts keep working, with a warning.
@@ -16,6 +96,16 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 
 ### Changed
 
+- **mn comes with four packages of its own.** `midnight-wallet-cli` now depends on `@kuiralabs/midnight-cli-core`, `@kuiralabs/midnight-chain` and the two engines, at exact versions, and ships an `npm-shrinkwrap.json` of the tree its tests ran on; each engine ships one of its own SDK set, for a program that installs it without mn.
+- **A contract compiled for another compact runtime is refused up front**, naming both runtimes and the compiler the network's engine needs: by `contract deploy` and `call` before the wallet starts, by their MCP tools before a confirmation token, and by the runner before any script. It used to fail inside its script after the wallet had synced ("Version mismatch").
+- **A transaction the node refuses says why, everywhere.** The CLI and the MCP server report "The node refused the transaction: <reason>", as `INVALID_DUST_PROOF` or `STALE_UTXO` when the reason is known and `TX_REJECTED` otherwise (exit code 6). It was `UNKNOWN` (exit 1), the reason only in the node's log.
+- **The CLI refuses a flag that belongs to another subcommand** (`INVALID_ARGS`, exit 2), naming the subcommands it is for: `mn dust register --seed x` ran and ignored the seed. The MCP server already refused it.
+- **`mn <command> --help` shows the command's own help**, also on a subcommand line (`mn wallet generate --help`).
+- **MCP confirmations name the endpoints a call is sent to**, given ones as given and configured ones marked "set with config".
+- **MCP on/off parameters are booleans** (`force`, `shielded`, `no-cache`), and the server refuses a parameter of the wrong type or one a tool doesn't take (`INVALID_ARGS`): `"false"` used to switch them on. `midnight_wallet_generate` with `force` asks for confirmation, and `midnight_wallet_remove` asks too, refusing a wallet it can't remove before asking.
+- **Every command stops when it is cancelled**, at the terminal or by an MCP client, with `CANCELLED`, including while its first network read hangs.
+- **`mn contract` takes the configured network** (`midnight config set network`), as every other command does; it always took undeployed.
+
 - **A new account's owner key is its own, encrypted.** It is made on this machine as a valid secp256k1 key, independent of the wallet's seed (MIP-0013), and kept encrypted with the account's records; results say `ownerKey: "sealed"`, or `"plain-text"` for an account an earlier mn made, until `wallet protect`.
 - **`wallet seed`** asks for the passphrase.
 
@@ -26,6 +116,9 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 - **`list` no longer suggests `revoke-exhausted`**, a command of the account build's own command line that mn never had.
 
 ### Fixed
+
+- **`mn contract state` outside the contract's directory shows the state**, as plain JSON, not the runtime's handle (`{"__wbg_ptr":…}`); and a cancelled `contract state` stops instead of waiting for ever on an indexer that never answers.
+- **A wallet `mn contract` serves restores from the Dust checkpoint**: with no saved wallet it replayed the whole Dust history and, on stagenet, ran out of time (`SYNC_TIMEOUT`).
 
 - **A refused `mn grant` command leaves no account folder behind.** The folder under `~/.midnight/accounts/<network>/<wallet>/` was made before the command checked its wallet or its account; now only `deploy`, `import` and `device new` make it, once the wallet's file is found. `wallet protect` passes over an empty one an earlier release left, rather than naming it as an account whose wallet is gone.
 

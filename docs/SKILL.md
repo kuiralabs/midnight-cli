@@ -2,11 +2,22 @@
 
 You have access to the `midnight-wallet-cli` MCP server. This document teaches you how to use it well. Read it once at the start of a session; use it as reference throughout.
 
-> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 (preview and preprod today) is refused up front with an error saying so: tell the user to use `midnight-wallet-cli` 0.5.x for it, don't retry. `midnight_localnet_up` is refused too, because no published indexer image runs ledger 9 yet. The user runs a ledger-9 stack themselves; on the default ports (node 9944, indexer 8088, proof server 6300) `undeployed` reaches it with no configuration, otherwise set its URLs with `midnight_config_set` (keys `node`, `indexer-ws`, `proof-server`) or pass `--node` / `--indexer-ws` / `--proof-server` on the CLI.
+> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 (preview and preprod today) is refused up front with an error saying so: tell the user to use `midnight-wallet-cli` 0.5.x for it, don't retry. The user runs a ledger-9 stack themselves; on the default ports (node 9944, indexer 8088, proof server 6300) `undeployed` reaches it with no configuration, otherwise set its URLs with `midnight_config_set` (keys `node`, `indexer-ws`, `proof-server`) or pass `--node` / `--indexer-ws` / `--proof-server` on the CLI.
+
+> `midnight_localnet_up` is refused on this build, because no published indexer image runs ledger 9 yet.
 
 ## What you can do with this CLI
 
-Manage wallets, check balances, transfer NIGHT tokens, register dust (fee token), manage a local Midnight network, act as a fee wallet for an agent's dApp transactions (`mn serve --approve-fees`), and deploy/call/inspect Compact smart contracts — all on behalf of the user. Every CLI command is also an MCP tool.
+Act on the user's behalf on Midnight, through what the installed packages bring:
+
+- Manage wallets, check balances, transfer NIGHT (unshielded or shielded) and register Dust, the fee token.
+- Deploy, call, inspect and read Compact smart contracts, and read the chain's block limits.
+- Serve a wallet to a dApp over the DApp connector, including as a fee wallet for an agent's transactions (`mn serve --approve-fees`).
+- Scaffold and run a dApp's end-to-end tests, and manage a local Midnight network.
+- Swap one shielded token for another privately with another wallet, through an offer file: make it, inspect it, take it at the agreed terms.
+- Deploy the wallet's account, fund it, and issue and revoke the grants that let an agent spend from it.
+
+Most commands are MCP tools (`tools/list` shows each, and what it takes). These have none, and the user runs them in their own terminal: `mn generate`, `mn serve`, `mn dev`, `mn help`, `mn manual`; some subcommands have none either.
 
 ## Core concepts (teach these accurately)
 
@@ -19,6 +30,7 @@ Manage wallets, check balances, transfer NIGHT tokens, register dust (fee token)
   - `undeployed` — local network. Use this for dev iteration. On this build it must be a ledger-9 stack the user runs (`mn localnet up` is refused, see the note at the top).
   - `preprod` — public testnet (ledger 8 today, so refused by this build). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod needs a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware.
   - `preview` — public preview testnet (ledger 8 today, so refused by this build). Same first-sync trade-off as preprod.
+  - `stagenet` — Sig Network's testnet, on the beta SDK set (mn loads its beta engine for it). No shielded faucet, so shielded sync is off by default; NIGHT from https://faucet.stagenet.shielded.tools. Its proof server must match its node (`midnightntwrk/proof-server:9.0.0-rc.5_experimental`). Grant is refused there for now.
 - **Proof server** — local HTTP service that generates ZK proofs for transactions. Default port 6300. Version must match the network's ledger version or writes fail with "Custom error 170".
 
 ### mn's secrets are encrypted under one passphrase
@@ -99,10 +111,10 @@ When an agent builds and proves its own ledger-9 transaction (its own value alre
 
 A wallet's account is a contract its owner deploys. A grant lets an agent spend from it within limits, on the agent's own key; the owner can revoke it at any time. The `midnight_grant_*` tools (CLI: `mn grant`) run the account owner's code from the account package mn installs (`@kuiralabs/midnight-account-chain`) in mn's own process. `midnight_grant_status`, `midnight_grant_list` and `midnight_grant_request` read the account without the wallet; the others are paid by the wallet, with no `mn serve` and no port. They are experimental: names, parameters and results can change.
 
-What has to be true first: Node.js is 22.18 or newer, and the network is `undeployed` (a local ledger-9 stack). The first grant tool also needs to reach github.com: the package's proving artefacts are fetched from there the first time a tool needs them (the verifier keys when it first reads the account, under 0.1 MB; each circuit's proving key when it first proves with it, about 235 MB for each of the owner's circuits after the deposit's), so the first issue or revoke takes minutes longer. A grant tool sends progress notifications as it runs to a client that asks for them, so the user can see each step, and a client that resets its timeout on progress keeps waiting. Anything else is refused with what to do.
+What has to be true first: Node.js is 22.18 or newer, and the network is `undeployed` (a local ledger-9 stack) or `stagenet` (where a grant request that pins its calling contract is refused with `CALLER_PIN_UNSUPPORTED`). The first grant tool also needs to reach github.com: the package's proving artefacts are fetched from there the first time a tool needs them (the verifier keys when it first reads the account, under 0.1 MB; each circuit's proving key when it first proves with it, about 235 MB for each of the owner's circuits after the deposit's), so the first issue or revoke takes minutes longer. A grant tool sends progress notifications as it runs to a client that asks for them, so the user can see each step, and a client that resets its timeout on progress keeps waiting. Anything else is refused with what to do.
 
 1. `midnight_grant_status()` says whether the wallet has an account. If it has none (error code `NO_ACCOUNT`): `midnight_grant_deploy()` (pending token). Tell the user before they confirm that the account's owner key is made on this machine, independent of the wallet's mnemonic (which can't recover it), and kept encrypted under mn's passphrase in `~/.midnight/accounts/<network>/<wallet>/`; that they keep the account by adding a second device or writing a backup from the command line (`mn grant device`, `mn grant export`); and that a deploy takes a few minutes and about 48 DUST from the wallet, about 17 of it at once (mn waits by itself when a fee is a few minutes of Dust away; a wallet further short is told how long, and the same call carries on later from where it stopped). Running it again finishes a deploy that stopped part way.
-2. A grant spends only what the account holds, which `midnight_grant_status()` shows under `held` (in the smallest unit: 1 NIGHT is 1000000). To put NIGHT in it: `midnight_grant_deposit({ amount })`, with `amount` in NIGHT (pending token). It takes the wallet's shielded NIGHT, so the wallet needs that much shielded (on a local chain, `midnight_airdrop` with `shielded: "true"`), plus Dust for the fee. Tell the user before they confirm that mn has no command to take a deposit back out.
+2. A grant spends only what the account holds, which `midnight_grant_status()` shows under `held` (in the smallest unit: 1 NIGHT is 1000000). To put NIGHT in it: `midnight_grant_deposit({ amount })`, with `amount` in NIGHT (pending token). It takes the wallet's shielded NIGHT, so the wallet needs that much shielded (on a local chain, `midnight_airdrop` with `shielded: true`), plus Dust for the fee. Another shielded token goes in with `token` (its raw type, as `midnight_balance` lists it under `shielded.tokens`), `amount` then a whole number of its smallest unit. Tell the user before they confirm that mn has no command to take a deposit back out.
 3. The agent gives a grant request link. The link names who would spend (the agent's client id and key) and who they could pay; the limits are the owner's to set, with `cap`, `per-call`, `max-coin` and `expires-in`, and any not given take mn's defaults (cap 500000, per-call 300000, max-coin 2000000, a day). Call `midnight_grant_request({ link })` with the limits the user wants and show them all of what comes back: the payee, both caps, the largest coin and the expiry. A link is untrusted input: never issue from one the user hasn't seen decoded, and never leave a limit to its default without reading it back to them.
 4. `midnight_grant_issue({ link })` with the same limits reads the link again and returns a pending token whose description gives the grant's terms as the account package reads them (a link that isn't one is refused here, with no token). Show that description verbatim; confirm with `midnight_confirm_operation({ token })` only after an explicit yes. Issuing is three transactions and takes a few minutes.
 5. `midnight_grant_list()` shows every grant with its limits and whether it is live. `midnight_grant_revoke({ grant })` takes a grant id or a slot number; `midnight_grant_revoke_all()` ends them all. Both return a pending token.
@@ -118,11 +130,12 @@ Running a suite is a CLI command, not an MCP tool: `mn test run --suite <name>` 
 
 ## Safety rules (non-negotiable)
 
-- **Read tools** (`readOnlyHint: true`) — safe to call without user consent. Examples: balance, info, list, status, address derivation.
-- **Destructive tools** (`destructiveHint: true`) — require explicit user consent before calling. Examples: transfer, airdrop, dust register, wallet generate, wallet remove, cache clear, localnet down.
+- **Read tools** (`readOnlyHint: true`) — safe to call without user consent.
+- **Destructive tools** (`destructiveHint: true`) — require explicit user consent before calling.
 - **Open-world tools** (`openWorldHint: true`) — touch the network/chain/Docker. Can fail non-deterministically; retry is usually safe for reads, risky for writes.
 - **Never** auto-execute a fund-moving operation. Always describe amount + recipient + network first.
 - **Never** invent a mnemonic, seed, or private key. If the user needs one, call `midnight_wallet_generate`.
+- **Some tools use a two-step confirmation token**: `midnight_wallet_generate`, `midnight_wallet_remove`, `midnight_transfer`, `midnight_contract_deploy`, `midnight_contract_call`, `midnight_grant_deploy`, `midnight_grant_deposit`, `midnight_grant_issue`, `midnight_grant_revoke`, `midnight_grant_revoke_all`, `midnight_swap_make`, `midnight_swap_take`, `midnight_swap_cancel`. The first call returns a pending token + description and does nothing else; show the description verbatim, and call `midnight_confirm_operation({ token })` only after the user explicitly says yes. (`midnight_wallet_generate` asks only with `force: true`, which replaces a wallet.)
 
 ## Error recovery recipes
 
@@ -130,31 +143,59 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 
 | Code | Meaning | Recovery |
 |---|---|---|
-| `INSUFFICIENT_BALANCE` | Wallet doesn't have enough NIGHT to cover the requested amount. | Show the user. On localnet: `midnight_airdrop({ amount: "..." })`. On hosted networks: tell user to fund the address. |
-| `DUST_REQUIRED` | Wallet has NIGHT but not enough DUST for the fee. | Not registered (`midnight_dust_status()` shows `registered: false`): run `midnight_dust_register()`. Registered: its NIGHT is still generating the fee, which happens with time. mn has already waited when the fee was a few minutes away; the message says how long the rest takes ("generates the rest in about 4 minutes"). Wait that long and retry, don't retry at once. |
-| `INVALID_DUST_PROOF` | Chain rejected the dust spend proof as malformed (substrate "Custom error 170"). Stale commitment tree. | `midnight_cache_clear({ wallet: "<name>" })` then retry. |
-| `STALE_CACHE` | Local wallet cache disagrees with chain (e.g. localnet reset, remote testnet re-indexed). | `midnight_cache_clear({ wallet: "<name>" })` then retry. |
-| `STALE_UTXO` | UTXO was already spent on-chain (substrate "error code 115"). | Re-sync (the next call will refresh state) and retry. |
-| `PROOF_FAILURE` | Proof server rejected or failed to generate the ZK proof. Often a stale commitment tree or unreachable proof server. | Check that the proof server is running (`midnight_localnet_status()`, or the endpoint the user configured); if it is, `midnight_cache_clear({ wallet: "<name>" })` then retry. |
-| `PROOF_TIMEOUT` | ZK proof generation didn't finish within the deadline. | Retry — proofs can be slow under load. |
-| `SYNC_TIMEOUT` | Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync. | Retry; the cache resumes from the last applied event so progress is preserved. |
+| `INVALID_ARGS` | Missing/invalid argument. | Show the message to the user verbatim — it names the missing field. |
+| `WALLET_NOT_FOUND` | Named wallet doesn't exist on disk. | `midnight_wallet_list()` — user may have removed it. |
 | `NETWORK_ERROR` | Indexer/node/proof-server connection refused or DNS failure. | Check `midnight_localnet_status()` or the endpoints the user configured; on this build `midnight_localnet_up()` is refused, so ask the user to start their ledger-9 stack. |
+| `SYNC_TIMEOUT` | Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync. | Retry; the cache resumes from the last applied event so progress is preserved. |
+| `INSUFFICIENT_BALANCE` | Wallet doesn't have enough NIGHT to cover the requested amount. | Show the user. On localnet: `midnight_airdrop({ amount: "..." })`. On hosted networks: tell user to fund the address. |
+| `TX_REJECTED` | Chain rejected the submitted transaction (catch-all when no more specific code applies). | Read the message; usually a state mismatch resolved by re-sync + retry. |
+| `STALE_UTXO` | UTXO was already spent on-chain (substrate "error code 115"). | Re-sync (the next call will refresh state) and retry. |
+| `STALE_CACHE` | Local wallet cache disagrees with chain (e.g. localnet reset, remote testnet re-indexed). | `midnight_cache_clear({ wallet: "<name>" })` then retry. |
+| `PROOF_TIMEOUT` | ZK proof generation didn't finish within the deadline. | Retry — proofs can be slow under load. |
+| `PROOF_FAILURE` | Proof server rejected or failed to generate the ZK proof. Often a stale commitment tree or unreachable proof server. | Check that the proof server is running (`midnight_localnet_status()`, or the endpoint the user configured); if it is, `midnight_cache_clear({ wallet: "<name>" })` then retry. |
+| `INVALID_DUST_PROOF` | Chain rejected the dust spend proof as malformed (substrate "Custom error 170"). Stale commitment tree. | `midnight_cache_clear({ wallet: "<name>" })` then retry. |
+| `DUST_REQUIRED` | Wallet has NIGHT but not enough DUST for the fee. | Not registered (`midnight_dust_status()` shows `registered: false`): run `midnight_dust_register()`. Registered: its NIGHT is still generating the fee, which happens with time. mn has already waited when the fee was a few minutes away; the message says how long the rest takes ("generates the rest in about 4 minutes"). Wait that long and retry, don't retry at once. |
+| `DUST_GENERATING` | A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust. | The message says when: run `midnight_dust_register()` again then, or add NIGHT. |
+| `CHAIN_CLOCK_BEHIND` | The chain's clock lags this computer's (a local chain after sleep), so Dust estimates don't hold. | Wait for it to catch up, or ask the user to restart the local chain. |
 | `UNSUPPORTED_LEDGER` | The network is on ledger 8; this build supports ledger 9 only. | Tell the user: this network needs midnight-wallet-cli 0.5.x. Don't retry. |
-| `LOCALNET_UNAVAILABLE` | `midnight_localnet_up()` can't start a ledger-9 stack on this build. | Ask the user to start their ledger-9 stack and point mn at it (endpoint config). |
+| `LOCALNET_UNAVAILABLE` | `mn localnet up` (`midnight_localnet_up()`) can't start a ledger-9 stack on this build. | Ask the user to start their ledger-9 stack and point mn at it (endpoint config). |
+| `NO_TEST_CONFIG` | No dapp.test.json in the folder the test command ran in. | Ask the user to run it from the dApp's root, or create one with `mn test create`. |
 | `LOCAL_STACK_UNREACHABLE` | No ledger-9 stack answers at the configured endpoints. | Ask the user to start their stack or fix the configured node / indexer-ws / proof-server endpoints. |
 | `AMBIGUOUS_LOCAL_STACKS` | Several local Midnight stacks are running and no endpoints are configured, so mn won't guess. | Ask the user which stack to use; they set its endpoints with `midnight config set`. Don't retry blindly. |
-| `NO_ACCOUNT` | A `midnight_grant_*` tool was called for a wallet that has no account on this network. | Offer `midnight_grant_deploy()`, after telling the user how its owner key is kept (see the allowance flow). |
-| `PASSPHRASE_REQUIRED` | A tool needed a secret (a wallet's seed, an account's owner key) and the MCP server has no passphrase. | Ask the user to set `MN_PASSPHRASE` in the MCP server's environment and restart it. Never ask them to type the passphrase into the chat. |
+| `UNSUPPORTED_NODE` | Node.js is older than 22 (22.18 for mn grant). | Ask the user to install a current Node.js. |
+| `NO_NODE_RUNTIME` | Contract scripts run under Node.js, and none was found on PATH. | Ask the user to install Node.js 22 or later, or to run mn under Node. |
+| `CONTRACT_NOT_COMPILED` | No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json). | Ask the user to compile the contract (compact compile), or pass the dApp folder (path) or the managed folder (managed). |
+| `NO_ACCOUNT` | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. | Offer `midnight_grant_deploy()`, after telling the user how its owner key is kept (see the allowance flow). |
+| `CALLER_PIN_UNSUPPORTED` | A grant request pins the contract that calls the account, and the account on this network (stagenet) has no caller pin; nothing was submitted. | Tell the user; ask the agent for a grant request that names no calling contract, or issue it on undeployed. |
 | `WRONG_PASSPHRASE` | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. | Ask the user to correct `MN_PASSPHRASE` in the MCP server's environment. Nothing was changed. |
+| `PASSPHRASE_REQUIRED` | A tool needed a secret (a wallet's seed, an account's owner key) and no passphrase could be had: `MN_PASSPHRASE` is unset and there is no terminal to ask at (the MCP server has none). | Ask the user to set `MN_PASSPHRASE` in the MCP server's environment and restart it. Never ask them to type the passphrase into the chat. |
 | `BLOCKFROST_PROJECT_ID_REQUIRED` | The network (preprod) is served by Blockfrost and no project id is set. | Ask the user to create a Midnight preprod project at https://blockfrost.io and run `midnight config set blockfrost-project-id <project id>` themselves. Never ask them to paste the id into the chat. Don't retry until they have. |
 | `BLOCKFROST_PROJECT_ID_REJECTED` | Blockfrost refused the project id (HTTP 403): mistyped, revoked, or for another network. | Ask the user to check it at blockfrost.io and set it again. Don't retry blindly. |
 | `BLOCKFROST_LIMIT_REACHED` | Blockfrost's plan limit or rate limit. | Wait and retry once; if it persists, tell the user it is their Blockfrost plan. |
 | `ENDPOINT_SHUT_DOWN` | An endpoint set by flag or config was shut down by its operator (the old preprod indexer). | `midnight_config_unset({ key: "indexer-ws" })` (and `node` if set), then retry. |
-| `WALLET_NOT_FOUND` | Named wallet doesn't exist on disk. | `midnight_wallet_list()` — user may have removed it. |
-| `INVALID_ARGS` | Missing/invalid argument. | Show the message to the user verbatim — it names the missing field. |
-| `TX_REJECTED` | Chain rejected the submitted transaction (catch-all when no more specific code applies). | Read the message; usually a state mismatch resolved by re-sync + retry. |
+| `OTHER_SDK_SET` | The process runs one SDK set's engine and the network runs on the other (an MCP server that served rc asked for stagenet). | Make the call in a process of its own: ask the user to start an MCP server for that network. |
+| `MIXED_SDK_LAYOUT` | mn's packages were installed without each engine's shrinkwrap (bun's installer): an engine's SDK tree isn't the one it was tested with. | Ask the user to install mn with npm. |
+| `NO_STATE_ROOT` | The host gave mn no place to keep its state (a program's `createHost` without paths). | Give the host its paths (`createHost({ paths })`). |
+| `NO_PAYER` | A command that submits a transaction was called without a payer. | Give the call a payer. |
+| `COMMAND_FAILED` | A command ended with a non-zero exit code without throwing (an MCP test run whose tests failed); the message carries its result. | Read the command's result in the message. |
+| `NOT_AN_OFFER` | The bytes given as a swap offer are not one. | Ask the maker for the offer again. |
+| `TERMS_MISMATCH` | A swap offer's own terms differ from the agreed ones. | Don't take it; agree the terms again with the maker. |
+| `OFFER_EXPIRED` | A swap offer is past the expiry its maker set. | Ask the maker for a new one. |
+| `OFFER_COINS_IN_USE` | A spend would use coins an open swap offer of this wallet's holds, cancelling it. | Cancel the offer first (`mn swap cancel`), or wait until it is taken. |
 | `CANCELLED` | Operation was aborted (SIGINT, or the MCP call was cancelled). | A transaction already submitted may still have landed: read the state first (`midnight_grant_status`, `midnight_balance`). Don't retry without confirming with the user. |
 | `UNKNOWN` | Error didn't match any known classifier. | Surface the message to the user. If reproducible, a new code may be warranted. |
+
+A tool's description ends with the codes it can fail with: its own, and sets of them by name. The sets:
+
+| Set | Codes |
+|---|---|
+| network | `AMBIGUOUS_LOCAL_STACKS`, `BLOCKFROST_PROJECT_ID_REQUIRED`, `BLOCKFROST_PROJECT_ID_REJECTED`, `BLOCKFROST_LIMIT_REACHED`, `ENDPOINT_SHUT_DOWN` |
+| wallet | `WALLET_NOT_FOUND`, `WRONG_PASSPHRASE`, `PASSPHRASE_REQUIRED` |
+| engine | `OTHER_SDK_SET`, `MIXED_SDK_LAYOUT` |
+| sync | `NETWORK_ERROR`, `SYNC_TIMEOUT`, `STALE_CACHE` |
+| paying | `TX_REJECTED`, `STALE_UTXO`, `INVALID_DUST_PROOF`, `PROOF_TIMEOUT`, `PROOF_FAILURE`, `DUST_REQUIRED`, `DUST_GENERATING`, `INSUFFICIENT_BALANCE`, `OFFER_COINS_IN_USE` |
+| offers | `NOT_AN_OFFER`, `TERMS_MISMATCH` |
+| chain | `UNSUPPORTED_LEDGER`, `LOCAL_STACK_UNREACHABLE` |
 
 ## When to use which network
 
@@ -166,11 +207,12 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 ## What this CLI is NOT
 
 - Not a custody service. Keys are on the user's disk (`~/.midnight/wallets/<name>.json`).
-- Not an instant-sync tool for a first-time wallet on a hosted network. First run replays the chain's event history; the CLI caches state after that so repeat runs are fast. On this ledger-9 build dust priming always runs in WASM (the native accelerator is built for ledger 8 and is not used), so a cold prime takes minutes, not seconds.
+- Not an instant-sync tool for a first-time wallet on a hosted network. First run replays the chain's event history; the CLI caches state after that so repeat runs are fast.
 - Not a contract compiler. The project's `package.json` should expose a `compact` script (Midnight convention, e.g. `"compact": "compact compile src/foo.compact src/managed/foo"`) or a `compile` script as a generic fallback. `mn dev` detects whichever is present; create-mn-app and midnight-starship templates ship with the `compact` script already wired.
+- Not quick to prime Dust on a hosted network, on this ledger-9 build: priming always runs in WASM (the native accelerator is built for ledger 8 and is not used), so a cold prime takes minutes, not seconds.
 
 ## Authoritative references
 
 - `mn help <command>` — per-command usage and flags.
 - `mn help --agent` — structured reference manual for AI clients.
-- `mn status` — live network health (indexer, node, proof server).
+- `mn help --json` — every command's usage, flags and JSON fields, as JSON.

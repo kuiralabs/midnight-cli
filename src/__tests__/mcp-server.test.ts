@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { commandHelpSpecs } from '../lib/command-definition.ts';
+import { commandHelpSpecs } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
 import { listedTools } from '../lib/mcp/registry-tools.ts';
 

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import helpCommand, { helpSpecs } from '../commands/help.ts';
-import { parseArgs } from '../lib/argv.ts';
+import { parseArgs, declaredCodes } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 
 let io: CapturedOutput;
@@ -148,7 +148,7 @@ describe('help\'s specs (from the registry)', () => {
   });
 });
 
-describe('help — the lists come from the registry (2D)', () => {
+describe('help — the lists come from the registry', () => {
   /** The intro's command lines, in the order shown: `  name   brief`. */
   function introLines(stderr: string): string[] {
     return stderr.split('\n').filter((line) => /^ {2}[a-z-]+ {2,}\S/.test(line)).map((line) => line.trim().replace(/\s{2,}/, '  '));
@@ -158,14 +158,15 @@ describe('help — the lists come from the registry (2D)', () => {
     Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true });
     await cliCall(helpCommand, parseArgs(['help']));
     const lines = introLines(io.stderr());
-    expect(lines.slice(9, 14)).toStrictEqual([
+    expect(lines.slice(9, 15)).toStrictEqual([
       'contract  Inspect, deploy, call contracts',
       'dev  Contract dev loop (watch + deploy)',
       'grant  Grants that let agents spend',
+      'swap  Private swaps through offer files',
+      'tx  What became of a transaction',
       'config  Manage CLI config',
-      'cache  Manage wallet cache',
     ]);
-    expect(lines).toHaveLength(19);
+    expect(lines).toHaveLength(21);
   });
 
   it('the TTY intro lists grant after dev, with its brief', async () => {
@@ -185,7 +186,7 @@ describe('help — the lists come from the registry (2D)', () => {
     expect(manifest.globalFlags).toStrictEqual([
       { name: '--json', description: 'Output structured JSON to stdout (suppresses all stderr)' },
       { name: '--wallet <name|file>', description: 'Wallet name or path' },
-      { name: '--network <name>', description: 'Override network (preprod, preview, undeployed)' },
+      { name: '--network <name>', description: 'Override network (preprod, preview, stagenet, undeployed)' },
       { name: '--version, -v', description: 'Print CLI version' },
       { name: '--help, -h', description: 'Show help' },
     ]);
@@ -193,6 +194,48 @@ describe('help — the lists come from the registry (2D)', () => {
     expect(manifest.commands.map((c) => c.name)).toStrictEqual(
       installedCommands.commands.filter((c) => c.help !== undefined).map((c) => c.name));
     expect(manifest.commands.map((c) => c.name)).not.toContain('status');
+  });
+
+  it('help <command> ends with its errors: its own codes with exit code and meaning, its outcomes, then its sets of codes and every command\'s', async () => {
+    await cliCall(helpCommand, parseArgs(['help', 'tx']));
+    const out = io.stdout().replace(/\x1b\[[0-9;]*m/g, '');
+    expect(out.indexOf('Errors:')).toBeGreaterThan(out.indexOf('Examples:'));
+    expect(out.split('Errors:\n')[1]).toBe([
+      '  NETWORK_ERROR                  4  Indexer/node/proof-server connection refused or DNS failure.',
+      '  Also: the network codes, and INVALID_ARGS, CANCELLED, UNKNOWN, UNSUPPORTED_NODE, NO_STATE_ROOT (mn manual lists them all).',
+      '',
+      '',
+    ].join('\n'));
+    io.restore();
+    io = captureOutput();
+    await cliCall(helpCommand, parseArgs(['help', 'test']));
+    expect(io.stdout()).toContain([
+      '  NO_TEST_CONFIG                 1  No dapp.test.json in the folder the test command ran in.',
+      '  NO_NODE_RUNTIME                1  Contract scripts run under Node.js, and none was found on PATH.',
+      '  CONTRACT_NOT_COMPILED          1  No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json).',
+      '  (no error)                     1  A test failed',
+      '  Also: the network, wallet, engine, sync, paying, offers and chain codes, and INVALID_ARGS, CANCELLED, UNKNOWN, UNSUPPORTED_NODE, NO_STATE_ROOT (mn manual lists them all).',
+    ].join('\n'));
+  });
+
+  it('help --json gives each command every code it declares with its exit code, the sets by name, and every exit code it can end with', async () => {
+    await cliCall(helpCommand, parseArgs(['help', '--json']));
+    const manifest = JSON.parse(io.stdout()) as { commands: { name: string; errorCodes: { code: string; exitCode: number }[]; errorSets: string[]; exitCodes: number[] }[] };
+    const tx = manifest.commands.find((c) => c.name === 'tx')!;
+    expect(tx.errorCodes).toStrictEqual([
+      { code: 'NETWORK_ERROR', exitCode: 4 },
+      { code: 'AMBIGUOUS_LOCAL_STACKS', exitCode: 4 },
+      { code: 'BLOCKFROST_PROJECT_ID_REQUIRED', exitCode: 4 },
+      { code: 'BLOCKFROST_PROJECT_ID_REJECTED', exitCode: 4 },
+      { code: 'BLOCKFROST_LIMIT_REACHED', exitCode: 4 },
+      { code: 'ENDPOINT_SHUT_DOWN', exitCode: 4 },
+    ]);
+    expect(tx.errorSets).toStrictEqual(['network']);
+    // Success, its codes' 4, and every command's: INVALID_ARGS 2, CANCELLED 7, the rest 1.
+    expect(tx.exitCodes).toStrictEqual([0, 1, 2, 4, 7]);
+    for (const command of manifest.commands) {
+      expect(command.errorCodes.map((c) => c.code).sort(), command.name).toStrictEqual(declaredCodes(installedCommands.find(command.name)!).sort());
+    }
   });
 
   it('help <command> finds a command by its definition, and names the rest when it can\'t', async () => {

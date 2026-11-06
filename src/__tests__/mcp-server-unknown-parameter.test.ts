@@ -1,6 +1,5 @@
-// A tool parameter the tool doesn't take is refused (Y29): since 2E, one
-// outside the tool's schema, which lists every parameter the tool takes (2C
-// also let through any flag of the tool's command). The server used to turn
+// A tool parameter the tool doesn't take is refused: one outside the tool's
+// schema, which lists every parameter the tool takes. The server used to turn
 // every parameter into a flag unchecked, so a misspelt one was silently
 // dropped and the command ran on its defaults (the CLI has refused unknown flags since the wrong-chain write).
 // Run through this checkout's MCP server as a real process with a temporary
@@ -13,6 +12,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { expectDeclaredToolResult } from './helpers/expect-declared.ts';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const TSX = path.join(REPO, 'node_modules', '.bin', 'tsx');
@@ -34,13 +34,16 @@ afterAll(async () => {
 
 const call = async (name: string, args: Record<string, unknown>) => {
   const result = await client.callTool({ name, arguments: args });
-  return { isError: result.isError === true, body: JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as Record<string, unknown> };
+  const body = JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as Record<string, unknown>;
+  // The confirm tool is the server's own: called here with no token it issued, it runs no command.
+  if (name !== 'midnight_confirm_operation') expectDeclaredToolResult(name, body);
+  return { isError: result.isError === true, body };
 };
 
 // A port nothing listens on: an endpoint a call is given never reaches a chain.
 const CLOSED = { node: 'ws://127.0.0.1:1', 'indexer-ws': 'ws://127.0.0.1:1/api/v4/graphql/ws', 'proof-server': 'http://127.0.0.1:1' };
 
-describe('a tool\'s schema, generated from its command\'s flags (plan 2E)', () => {
+describe('a tool\'s schema, generated from its command\'s flags', () => {
   it('shows midnight_transfer\'s network and endpoints, which agents could pass but not see', async () => {
     const { tools } = await client.listTools();
     const transfer = tools.find((tool) => tool.name === 'midnight_transfer')!;
@@ -48,12 +51,12 @@ describe('a tool\'s schema, generated from its command\'s flags (plan 2E)', () =
       'to', 'amount', 'wallet', 'force-shielded', 'network', 'shielded', 'node', 'indexer-ws', 'proof-server',
     ]);
     expect(transfer.inputSchema.properties!.network).toStrictEqual({
-      type: 'string', enum: ['preprod', 'preview', 'undeployed'], description: 'Network to send on (default: the selected one)',
+      type: 'string', enum: ['preprod', 'preview', 'stagenet', 'undeployed'], description: 'Network to send on (default: the selected one)',
     });
     expect(transfer.inputSchema.required).toStrictEqual(['to', 'amount']);
   }, 60_000);
 
-  it('is the one check: a flag of the command outside it is refused, though 2C let it through', async () => {
+  it('is the one check: a flag of the command outside it is refused, though the old pass-through rule let it through', async () => {
     // --json is a flag every command takes, and the server always sets it.
     const { isError, body } = await call('midnight_genesis_address', { network: 'undeployed', json: true });
     expect(isError).toBe(true);
@@ -98,7 +101,7 @@ describe('a tool parameter outside the tool\'s schema', () => {
     const { isError, body } = await call('midnight_transfer', { to: 'mn_addr_undeployed1x', amount: '1', network: 'undeployed', nodes: 'ws://x' });
     expect(isError).toBe(true);
     expect(body).toMatchObject({ error: true, code: 'INVALID_ARGS' });
-    // network is in the schema since 2E: transfer accepts --network and the tool passes it on.
+    // network is in the schema: transfer accepts --network and the tool passes it on.
     expect(body.message).toBe(
       'Unknown parameter for midnight_transfer: nodes\n' +
       'Its parameters: to, amount, wallet, force-shielded, network, shielded, node, indexer-ws, proof-server',
@@ -107,7 +110,7 @@ describe('a tool parameter outside the tool\'s schema', () => {
     expect(body.pending).toBeUndefined();
   }, 60_000);
 
-  it('lets through a flag of the command its schema gained in 2E, which reaches the command', async () => {
+  it('lets through a flag of the command its schema gained, which reaches the command', async () => {
     // address's schema gained --wallet; with --seed given too, the seed wins, as at the CLI.
     const { tools } = await client.listTools();
     expect(Object.keys(tools.find((t) => t.name === 'midnight_address')!.inputSchema.properties ?? {})).toContain('wallet');
@@ -125,5 +128,40 @@ describe('a tool parameter outside the tool\'s schema', () => {
     const { isError, body } = await call('midnight_config_get', { key: 'network' });
     expect(isError).toBe(false);
     expect(body).toMatchObject({ action: 'get', key: 'network' });
+  }, 60_000);
+});
+
+describe('a tool parameter of the wrong type', () => {
+  it('refuses "false" for an on/off parameter, which used to switch it on, and the tool does not run', async () => {
+    const { isError, body } = await call('midnight_airdrop', { amount: '10', shielded: 'false', network: 'undeployed', ...CLOSED });
+    expect(isError).toBe(true);
+    expect(body).toStrictEqual({
+      error: true,
+      code: 'INVALID_ARGS',
+      message: 'Invalid parameter for midnight_airdrop: shielded must be true or false, not "false"',
+      _serverVersion: expect.any(String),
+    });
+  }, 60_000);
+
+  it('refuses force as a string before a token is given', async () => {
+    const { body } = await call('midnight_wallet_generate', { name: 'alice', force: 'true' });
+    expect(body).toMatchObject({ error: true, code: 'INVALID_ARGS', message: 'Invalid parameter for midnight_wallet_generate: force must be true or false, not "true"' });
+    expect(body.token).toBeUndefined();
+    expect(fs.existsSync(path.join(home, '.midnight', 'wallets', 'alice.json'))).toBe(false);
+  }, 60_000);
+
+  it('names every mistyped parameter: a value outside its list, and an object for a string', async () => {
+    const { body } = await call('midnight_address', { seed: '01'.repeat(32), network: 'mainnet', index: { n: 1 } });
+    expect(body).toMatchObject({
+      error: true,
+      code: 'INVALID_ARGS',
+      message: 'Invalid parameters for midnight_address: network must be one of preprod, preview, stagenet, undeployed, not "mainnet"; index must be a string, not {"n":1}',
+    });
+  }, 60_000);
+
+  it('takes a number for a string parameter as its digits', async () => {
+    const { isError, body } = await call('midnight_address', { seed: '01'.repeat(32), network: 'undeployed', index: 2 });
+    expect(isError).toBe(false);
+    expect(body).toMatchObject({ network: 'undeployed', index: 2 });
   }, 60_000);
 });

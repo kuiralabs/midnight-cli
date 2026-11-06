@@ -1,14 +1,17 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
-import balanceCommand from '../commands/balance.ts';
-import { parseArgs } from '../lib/argv.ts';
-import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveUnshieldedAddress, deriveAllAddresses } from '../lib/derive-address.ts';
-import { GENESIS_SEED } from '../lib/constants.ts';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { parseArgs, GENESIS_SEED } from '@kuiralabs/midnight-cli-core';
+import { balanceDefinition } from '@kuiralabs/midnight-wallet/commands';
+import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../test-support/plain-wallet.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
+import { testHost } from '../../test-support/test-host.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { cliCall } from './helpers/cli-call.ts';
+
+// The handler, as the shell loads it.
+const { default: balanceCommand } = await balanceDefinition.load();
 
 // Live tests against a running ledger-9 indexer: run by `npm run test:live`,
 // never by `npm test`. They read balances only, from undeployed's saved
@@ -20,11 +23,11 @@ const TEST_DIR = path.join(os.tmpdir(), `midnight-balance-cmd-test-${process.pid
 
 // Derive real valid addresses for testing against the local undeployed indexer
 const genesisSeedBuffer = Buffer.from(GENESIS_SEED, 'hex');
-const GENESIS_UNDEPLOYED_ADDRESS = deriveUnshieldedAddress(genesisSeedBuffer, 'undeployed');
+const GENESIS_UNDEPLOYED_ADDRESS = rcKeys.unshieldedAddress(genesisSeedBuffer, 'undeployed');
 
 // A different seed with no balance — used to test "No balance found" path
 const EMPTY_SEED = '0000000000000000000000000000000000000000000000000000000000000099';
-const EMPTY_ADDRESS = deriveUnshieldedAddress(Buffer.from(EMPTY_SEED, 'hex'), 'undeployed');
+const EMPTY_ADDRESS = rcKeys.unshieldedAddress(Buffer.from(EMPTY_SEED, 'hex'), 'undeployed');
 
 let io: CapturedOutput;
 
@@ -55,8 +58,8 @@ afterEach(() => {
 });
 
 beforeAll(async () => {
-  const { resolveNetwork } = await import('../lib/resolve-network.ts');
-  const { indexer } = resolveNetwork({ args: parseArgs(['balance', '--network', 'undeployed']) }).config;
+  const { resolveNetwork } = await import('@kuiralabs/midnight-cli-core');
+  const { indexer } = resolveNetwork({ args: parseArgs(['balance', '--network', 'undeployed']), configDir: testHost().paths().stateRoot }, testHost().settings()).config;
   const answered = await fetch(indexer, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: '{ block { height } }' }), signal: AbortSignal.timeout(5_000) })
     .then((r) => r.ok, () => false);
   if (!answered) throw new Error(`No ledger-9 indexer answers at ${indexer}: start the local chain (or point undeployed at one with midnight config set) before npm run test:live.`);
@@ -67,7 +70,7 @@ describe('balance command — reads address from wallet file', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: GENESIS_SEED,
-      addresses: deriveAllAddresses(genesisSeedBuffer),
+      addresses: rcKeys.unshieldedAddresses(genesisSeedBuffer),
       createdAt: '2026-01-01T00:00:00.000Z',
     };
     saveWalletConfig(config, walletFile);
@@ -81,6 +84,26 @@ describe('balance command — reads address from wallet file', () => {
     expect(err).toContain('undeployed');
     expect(err).toContain('Unshielded');
     expect(err).toContain('Shielded');
+  });
+
+  it('lists the shielded test tokens genesis holds, by raw type, in the text and in --json', async () => {
+    // Every dev chain's genesis wallet holds two shielded test tokens beside NIGHT.
+    const tokens = ['00'.repeat(31) + '01', '00'.repeat(31) + '02'];
+    const walletFile = path.join(TEST_DIR, 'wallet.json');
+    saveWalletConfig({ seed: GENESIS_SEED, addresses: rcKeys.unshieldedAddresses(genesisSeedBuffer), createdAt: '2026-01-01T00:00:00.000Z' }, walletFile);
+
+    await cliCall(balanceCommand, parseArgs(['balance', '--wallet', walletFile, '--network', 'undeployed']));
+    for (const token of tokens) {
+      expect(io.stdout()).toMatch(new RegExp(`^SHIELDED_${token}=[1-9]\\d*$`, 'm'));
+      expect(io.stderr()).toContain(token);
+    }
+
+    io.restore();
+    io = captureOutput();
+    await cliCall(balanceCommand, parseArgs(['balance', '--wallet', walletFile, '--network', 'undeployed', '--json']));
+    const data = JSON.parse(io.stdout().trim());
+    for (const token of tokens) expect(data.shielded.tokens[token]).toMatch(/^[1-9]\d*$/);
+    expect(data.shielded.tokens).not.toHaveProperty('NIGHT');
   });
 });
 

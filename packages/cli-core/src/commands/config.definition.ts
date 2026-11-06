@@ -1,0 +1,96 @@
+// The `config` command, described once.
+
+import type { CommandDefinition } from '../lib/command-definition.ts';
+import { INDEXER_GRAPHQL_WS_PATH } from '../lib/constants.ts';
+import { RESOLVES_NETWORK } from './core.codes.ts';
+
+export const configDefinition: CommandDefinition = {
+  name: 'config',
+  order: 110,
+  subcommands: ['get', 'set', 'unset'],
+  flags: [
+    {
+      name: 'network',
+      takesValue: true,
+      agent: {
+        type: 'string',
+        description: 'For node / indexer-ws / proof-server / sdk-set: the network to read or write them for (default: the selected network)',
+      },
+    },
+  ],
+  help: {
+    description: 'Manage persistent config (default network, endpoints, etc.)',
+    usage: 'midnight config <get|set|unset> <key> [value] [--network <name>]',
+    flags: [
+      'get <key>           Read a config value',
+      'set <key> <value>   Write a config value',
+      'unset <key>         Reset a config value to its default',
+      '',
+      'Keys: network, wallet, proof-server, node, indexer-ws,',
+      '      blockfrost-project-id, sdk-set',
+      '',
+      'Endpoint keys (proof-server, node, indexer-ws) are scoped to a',
+      'network: the selected one, or the one given with --network — a',
+      'preprod node URL never applies to --network undeployed runs.',
+      '',
+      'blockfrost-project-id: preprod\'s indexer and node are served by Blockfrost,',
+      'which needs your own project id (create a Midnight preprod project at',
+      'https://blockfrost.io). It is filed under the network its prefix names,',
+      'shown masked, and never printed. MN_BLOCKFROST_PROJECT_ID or',
+      'BLOCKFROST_PROJECT_ID in the environment is used instead when set.',
+      '',
+      'sdk-set (rc or beta): the SDK set mn runs a network on, scoped like the',
+      'endpoints. Each network has its own (stagenet beta, the others rc); set',
+      'this only for a chain that moved to the other set. Each set keeps its',
+      'own caches, so a switch never reads the other set\'s state.',
+    ],
+    examples: [
+      'midnight config get network',
+      'midnight config set network preprod',
+      'midnight config set wallet alice',
+      'midnight config set blockfrost-project-id nightpreprod...',
+      'midnight config set proof-server http://localhost:6300',
+      'midnight config set node wss://rpc.preview.midnight.network',
+      `midnight config set indexer-ws wss://indexer.preview.midnight.network${INDEXER_GRAPHQL_WS_PATH}`,
+      'midnight config set sdk-set beta --network undeployed',
+      'midnight config unset proof-server',
+    ],
+    jsonFields: { action: 'get, set, or unset', key: 'Config key name', value: 'Config value' },
+  },
+  intro: { brief: 'Manage CLI config', order: 13 },
+  needsWalletSdk: false,
+  shell: {},
+  errors: { codes: [RESOLVES_NETWORK] },
+  load: () => import('./config.ts'),
+  mcp: {
+    tools: [
+      {
+        name: 'midnight_config_get',
+        description: 'Read config.',
+        annotations: { readOnlyHint: true, idempotentHint: true },
+        params: [{ name: 'key', schema: { type: 'string' } }, { flag: 'network' }],
+        required: ['key'],
+        argv: { subcommand: 'get', positionals: ['key'], flags: ['network'] },
+        order: 15,
+      },
+      {
+        name: 'midnight_config_set',
+        description: 'Write config.',
+        annotations: { idempotentHint: true },
+        params: [{ name: 'key', schema: { type: 'string' } }, { flag: 'network' }, { name: 'value', schema: { type: 'string' } }],
+        required: ['key', 'value'],
+        argv: { subcommand: 'set', positionals: ['key', 'value'], flags: ['network'] },
+        order: 16,
+      },
+      {
+        name: 'midnight_config_unset',
+        description: 'Reset config.',
+        annotations: { idempotentHint: true },
+        params: [{ name: 'key', schema: { type: 'string' } }, { flag: 'network' }],
+        required: ['key'],
+        argv: { subcommand: 'unset', positionals: ['key'], flags: ['network'] },
+        order: 18,
+      },
+    ],
+  },
+};

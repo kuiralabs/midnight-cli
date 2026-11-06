@@ -1,14 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import transferCommand from '../commands/transfer.ts';
-import { parseArgs } from '../lib/argv.ts';
-import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from './helpers/plain-wallet.ts';
-import { deriveUnshieldedAddress, deriveAllAddresses } from '../lib/derive-address.ts';
-import { GENESIS_SEED } from '../lib/constants.ts';
-import { captureOutput, type CapturedOutput } from './helpers/capture-output.ts';
+import { parseArgs, GENESIS_SEED } from '@kuiralabs/midnight-cli-core';
+import { transferDefinition } from '@kuiralabs/midnight-wallet/commands';
+import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../test-support/plain-wallet.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { cliCall } from './helpers/cli-call.ts';
+
+// The handler, as the shell loads it.
+const { default: transferCommand } = await transferDefinition.load();
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-transfer-cmd-test-${process.pid}`);
 const TEST_SEED = '0000000000000000000000000000000000000000000000000000000000000002';
@@ -32,7 +34,7 @@ describe('transfer command — argument validation', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -45,12 +47,12 @@ describe('transfer command — argument validation', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
 
-    const recipientAddr = deriveUnshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
+    const recipientAddr = rcKeys.unshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
     const args = parseArgs(['transfer', recipientAddr, '--wallet', walletFile]);
     await expect(cliCall(transferCommand, args)).rejects.toThrow('Missing amount');
   });
@@ -59,12 +61,12 @@ describe('transfer command — argument validation', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
 
-    const recipientAddr = deriveUnshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
+    const recipientAddr = rcKeys.unshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
     const args = parseArgs(['transfer', recipientAddr, 'notanumber', '--wallet', walletFile]);
     await expect(cliCall(transferCommand, args)).rejects.toThrow('Invalid amount');
   });
@@ -73,18 +75,18 @@ describe('transfer command — argument validation', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
 
-    const recipientAddr = deriveUnshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
+    const recipientAddr = rcKeys.unshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
     const args = parseArgs(['transfer', recipientAddr, '0', '--wallet', walletFile]);
     await expect(cliCall(transferCommand, args)).rejects.toThrow('greater than 0');
   });
 
   it('throws when no wallet file exists', async () => {
-    const recipientAddr = deriveUnshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
+    const recipientAddr = rcKeys.unshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
     const args = parseArgs(['transfer', recipientAddr, '100', '--wallet', path.join(TEST_DIR, 'nonexistent.json')]);
     await expect(cliCall(transferCommand, args)).rejects.toThrow('Wallet file not found');
   });
@@ -95,7 +97,7 @@ describe('transfer command — address validation errors', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -108,7 +110,7 @@ describe('transfer command — address validation errors', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -124,7 +126,7 @@ describe('transfer command — wallet name resolution', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -140,7 +142,7 @@ describe('transfer command — wallet name resolution', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -156,7 +158,7 @@ describe('transfer command — shielded flag', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -169,7 +171,7 @@ describe('transfer command — shielded flag', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
@@ -184,7 +186,7 @@ describe('transfer command — shielded flag', () => {
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
-      addresses: deriveAllAddresses(Buffer.from(TEST_SEED, 'hex')),
+      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);

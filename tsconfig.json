@@ -4,6 +4,8 @@
     "module": "ES2022",
     "lib": ["ES2022"],
     "moduleResolution": "bundler",
+    // Inside this repository the workspace packages run from their source.
+    "customConditions": ["midnight-cli-source"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -13,6 +15,6 @@
     "noEmit": true,
     "types": ["node", "vitest/globals", "ws"]
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "test-support/**/*.ts", "packages/cli-core/src/**/*.ts", "packages/chain/src/**/*.ts", "packages/engine-rc/src/**/*.ts", "packages/engine-beta/src/**/*.ts", "packages/wallet/src/**/*.ts", "packages/contract/src/**/*.ts", "packages/connect/src/**/*.ts", "packages/dev/src/**/*.ts", "packages/grant/src/**/*.ts"],
   "exclude": ["node_modules"]
 }

@@ -5,11 +5,12 @@
 // search and scroll. Disable with --no-pager.
 
 import { spawn } from 'node:child_process';
-import { type ParsedArgs, hasFlag, getFlag } from '../lib/argv.ts';
-import type { CallContext, CallOutput } from '../lib/call-context.ts';
-import { bold, dim, teal, yellow, white } from '../ui/colors.ts';
+import { type ParsedArgs, hasFlag, getFlag, type CallContext, type CallOutput } from '@kuiralabs/midnight-cli-core';
+import { bold, dim, teal, yellow, white } from '@kuiralabs/midnight-cli-core/ui';
 import { helpSpecs, type CommandSpec } from './help.ts';
 import { PKG_NAME, PKG_VERSION, PKG_REPOSITORY_URL } from '../lib/pkg.ts';
+import { installedCommands } from '../lib/installed-commands.ts';
+import { codeSetLines, commandCodeLines, manualCodeLines } from '../lib/code-tables.ts';
 
 const SECTION_BAR = '═'.repeat(63);
 const RULE = '─'.repeat(64);
@@ -54,6 +55,9 @@ function renderCommandSection(spec: CommandSpec): string {
       lines.push(`    ${dim('$')} ${dim(example)}`);
     }
   }
+  lines.push('');
+  lines.push(`  ${bold('ERRORS')}`);
+  lines.push(...commandCodeLines(spec, 4, yellow));
   return lines.join('\n');
 }
 
@@ -73,8 +77,8 @@ export function buildManual(): string {
   out.push('');
   out.push(`${bold('DESCRIPTION')}`);
   out.push(`    midnight-wallet-cli is a standalone CLI that handles wallet`);
-  out.push(`    operations, contract deployment, and a development loop, on three`);
-  out.push(`    networks (undeployed, preprod, preview). Every command speaks`);
+  out.push(`    operations, contract deployment, and a development loop, on four`);
+  out.push(`    networks (undeployed, preprod, preview, stagenet). Every command speaks`);
   out.push(`    JSON via --json for use with AI agents and scripts. An MCP`);
   out.push(`    server ships with the package.`);
   out.push('');
@@ -176,6 +180,8 @@ export function buildManual(): string {
   out.push(`                   Your Blockfrost project id for preprod, whose indexer and`);
   out.push(`                   node Blockfrost serves. Kept per network, shown masked,`);
   out.push(`                   never printed. Or: MN_BLOCKFROST_PROJECT_ID / BLOCKFROST_PROJECT_ID.`);
+  out.push(`    ${yellow('sdk-set')}        The SDK set a network runs on (rc or beta), per network;`);
+  out.push(`                   each network has its own (stagenet beta, the rest rc).`);
   out.push('');
   out.push(`    ${bold('Compatibility alias')}`);
   out.push(`    ${yellow('network-id')}     Resolves transparently to ${yellow('network')}.`);
@@ -207,14 +213,12 @@ export function buildManual(): string {
   out.push(`  ${dim('6')}  Transaction rejected / STALE_UTXO / PROOF_TIMEOUT`);
   out.push(`  ${dim('7')}  Cancelled by user`);
   out.push('');
-  out.push(`  ${bold('Stable error code strings')} (in JSON ${yellow('--json')} error output):`);
-  out.push(`    ${yellow('DUST_REQUIRED')}         No dust available to pay fees`);
-  out.push(`    ${yellow('STALE_UTXO')}            UTXO consumed concurrently, retry`);
-  out.push(`    ${yellow('PROOF_TIMEOUT')}         Proof generation exceeded deadline`);
-  out.push(`    ${yellow('PROOF_FAILURE')}         Proof server rejected the proof`);
-  out.push(`    ${yellow('INVALID_DUST_PROOF')}    Stale commitment tree, run ${dim('mn cache clear')}`);
-  out.push(`    ${yellow('STALE_CACHE')}           Local cache out of sync, run ${dim('mn cache clear')}`);
-  out.push(`    ${yellow('SYNC_TIMEOUT')}          Wallet sync exceeded its deadline`);
+  out.push(`  ${bold('Stable error code strings')} (in JSON ${yellow('--json')} error output), with the exit code of each:`);
+  // Every installed package's codes, from their definitions.
+  out.push(...manualCodeLines(installedCommands, yellow));
+  out.push('');
+  out.push(`  ${bold('Sets of codes')} (a command's ERRORS names those it can end with):`);
+  out.push(...codeSetLines(installedCommands, 4));
 
   // ── Troubleshooting ───────────────────────────────────────
   out.push(subhead('TROUBLESHOOTING'));

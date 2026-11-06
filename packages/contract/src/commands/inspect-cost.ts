@@ -1,0 +1,49 @@
+// inspect-cost command — display the chain's current block limits, from the
+// ledger parameters of its latest block, as the engine for the chain's SDK
+// set reads them.
+
+import { type ParsedArgs, hasFlag, type CallContext, resolveNetwork } from '@kuiralabs/midnight-cli-core';
+import { header, keyValue, divider, bold, dim } from '@kuiralabs/midnight-cli-core/ui';
+import { fetchLedgerParameters } from '../lib/chain-params.ts';
+import { assertLedgerSupported, fetchProtocolVersion } from '@kuiralabs/midnight-chain';
+
+const UNITS: Record<string, string> = {
+  readTime: 'picoseconds',
+  computeTime: 'picoseconds',
+  blockUsage: 'bytes',
+  bytesWritten: 'bytes',
+  bytesChurned: 'bytes',
+};
+
+export default async function inspectCostCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
+  const root = ctx.config.paths.stateRoot;
+  const { name: networkName, config } = resolveNetwork({ args, configDir: root }, ctx.config.settings);
+  // A ledger-8 chain's parameters aren't ledger-9 ones: refuse it like every other chain read.
+  await assertLedgerSupported(networkName, config, fetchProtocolVersion, ctx.signal);
+  const { height, parametersHex } = await fetchLedgerParameters(config.indexer, ctx.signal);
+  const limits = (await ctx.host.engines.for(networkName)).ledger.blockLimits(parametersHex);
+
+  // JSON mode
+  if (hasFlag(args, 'json')) {
+    ctx.output.result({ ...limits, network: networkName, height });
+    return;
+  }
+
+  // Bare data to stdout (pipeable)
+  for (const [dimension, value] of Object.entries(limits)) {
+    ctx.output.stdout(`${dimension}=${value}\n`);
+  }
+
+  // Formatted details to stderr
+  ctx.output.stderr('\n' + header('Block Limits') + '\n\n');
+  ctx.output.stderr(dim(`  From the ledger parameters of block ${height} on ${networkName}`) + '\n\n');
+
+  for (const [dimension, value] of Object.entries(limits)) {
+    const unit = UNITS[dimension] ?? '';
+    ctx.output.stderr(keyValue(dimension, `${bold(value.toLocaleString())} ${dim(unit)}`) + '\n');
+  }
+
+  ctx.output.stderr('\n' + divider() + '\n');
+  ctx.output.stderr(dim('  bytesWritten is typically the tightest constraint') + '\n');
+  ctx.output.stderr(dim('  for large contract deployments.') + '\n\n');
+}

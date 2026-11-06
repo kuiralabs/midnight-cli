@@ -1,0 +1,136 @@
+// Genesis wallet seed (seed 0x01) — used for local devnet funding
+export const GENESIS_SEED = '0000000000000000000000000000000000000000000000000000000000000001';
+
+// Native NIGHT token type (all zeros, 32 bytes hex)
+export const NATIVE_TOKEN_TYPE = '0000000000000000000000000000000000000000000000000000000000000000';
+
+// Midnight indexer GraphQL API version. Single source of truth — anything
+// that builds an indexer URL (per-network defaults, testcontainer overrides,
+// help examples, healthchecks) reads from these. Bumping the version here
+// flows everywhere.
+export const INDEXER_API_VERSION = 'v4';
+export const INDEXER_GRAPHQL_PATH = `/api/${INDEXER_API_VERSION}/graphql`;
+export const INDEXER_GRAPHQL_WS_PATH = `/api/${INDEXER_API_VERSION}/graphql/ws`;
+
+// NIGHT has 6 decimal places (1 NIGHT = 1_000_000 micro-NIGHT)
+export const TOKEN_DECIMALS = 6;
+export const TOKEN_MULTIPLIER = 1_000_000;
+
+// Dust wallet cost parameters — matches the reference implementation.
+// The SDK uses: feesWithMargin(ledgerParams, feeBlocksMargin) + additionalFeeOverhead
+// Reference (kuira-verification-test): 300T overhead, 5 blocks margin.
+export const DUST_COST_OVERHEAD = 300_000_000_000_000n;
+export const DUST_FEE_BLOCKS_MARGIN = 5;
+
+// Minimum dust balance for a transfer transaction.
+// The actual fee = feesWithMargin(tx, ledgerParams, feeBlocksMargin) + DUST_COST_OVERHEAD.
+// We can't compute the exact feesWithMargin without building the transaction;
+// a 1 NIGHT unshielded transfer cost ~0.85 DUST on a ledger-9 localnet
+// (2026-10-05), so 0.9 DUST. Used as a pre-flight check: below it the transfer
+// waits for Dust that is moments away, or fails fast with how long it takes.
+// Measured on a localnet only; a transaction whose fee is higher (more inputs,
+// other fee prices) is caught by the transfer retry, which waits for Dust to grow.
+export const MIN_DUST_FOR_TRANSFER = 900_000_000_000_000n;
+
+// Initial dust-accrual parameters (protocol constants, matching the ledger's
+// INITIAL_PARAMETERS). Single source of truth: the direct dust readers build a
+// `DustParameters` from these. The native sidecar (Rust) carries its own copy
+// from the same midnight-ledger crate — keep them in sync if the protocol changes.
+export const INITIAL_NIGHT_DUST_RATIO = 5_000_000_000n;
+export const INITIAL_GENERATION_DECAY_RATE = 8_267n;
+export const INITIAL_DUST_GRACE_PERIOD_SECONDS = 10_800n; // 3h (3 * 60 * 60)
+
+// Timeouts (milliseconds)
+export const SYNC_TIMEOUT_MS = 300_000;       // 5 minutes — full wallet sync (used by dust/balance commands)
+export const SYNC_ATTEMPT_TIMEOUT_MS = 30_000;        // 30 seconds — per sync attempt on localnet
+export const SYNC_ATTEMPT_REMOTE_TIMEOUT_MS = 120_000; // 120 seconds — per sync attempt on remote networks (preview/preprod)
+export const PRE_SEND_SYNC_TIMEOUT_MS = 10_000; // 10 seconds — quick sync before tx
+export const DUST_TIMEOUT_MS = 120_000;        // 2 minutes — wait for dust generation
+export const PROOF_TIMEOUT_MS = 300_000;       // 5 minutes — ZK proof generation
+export const BALANCE_CHECK_TIMEOUT_MS = 60_000; // 1 minute — GraphQL balance subscription
+
+// Cold-sync heap headroom.
+// The first (cold) shielded/dust sync against a hosted network streams the whole
+// chain history through the wallet SDK. The live working set stays small (~300 MB),
+// but the scan churns through a firehose of short-lived JS objects; under Node's
+// default old-space cap (~4 GB) GC can't keep pace with the allocation rate and the
+// process dies with "JavaScript heap out of memory" before it can finish — and write
+// the cache that makes every later run cheap. Measured cold preprod shielded-sync
+// high-water: ~8.4 GB. process/sync-heap.ts advises this headroom; mn's shell re-execs sync commands with it.
+// Note: the cap must sit comfortably *above* the high-water, not just at it —
+// crowding the limit makes V8 thrash on full GCs, which starves the sync loop
+// and trips the per-attempt timeout. A 12 GB cap timed out; 16 GB completes.
+export const SYNC_HEAP_TARGET_MB = 16384;   // 16 GB — proven headroom over the ~8.4 GB high-water
+export const SYNC_HEAP_RAM_FRACTION = 0.7;  // never request more than 70% of physical RAM
+export const SYNC_HEAP_MIN_GAIN_MB = 512;   // skip the re-exec if the headroom gain is smaller than this
+
+// Transaction defaults
+export const TX_TTL_MINUTES = 10;
+
+// Retry configuration
+export const MAX_RETRY_ATTEMPTS = 3;
+export const RETRY_BASE_DELAY_MS = 1_000; // 1s, 2s, 4s (exponential)
+
+// Dust registration retry — on a fresh localnet, the estimated dust generation
+// may be less than the registration fee until enough time has passed since UTXO
+// creation. The SDK computes allow_fee_payment = (currentTime - utxo.ctime) * rate,
+// which starts near zero and grows over time. Observed ~5 minutes on fresh localnets.
+export const DUST_REGISTRATION_TIMEOUT_MS = 600_000; // 10 minutes max for registration retries
+export const DUST_REGISTRATION_RETRY_DELAY_MS = 15_000; // 15 seconds between retries
+
+// Error codes from the node
+export const STALE_UTXO_ERROR_CODE = 115;
+export const BALANCE_OVERSPEND_ERROR_CODE = 138;
+
+// Default storage directory
+export const MIDNIGHT_DIR = '.midnight';
+export const DEFAULT_WALLET_FILENAME = 'wallet.json';
+export const DEFAULT_CONFIG_FILENAME = 'config.json';
+
+// File system permissions (POSIX octal)
+export const DIR_MODE = 0o700;   // owner rwx only — directories holding sensitive files
+export const FILE_MODE = 0o600;  // owner rw only — wallet files containing seeds/keys
+
+// Localnet directory name (under ~/.midnight/)
+export const LOCALNET_DIR_NAME = 'localnet';
+
+// Wallet state cache. v2: ledger-9 states replace ledger-8 ones. Dev-preset localnets share a genesis
+// hash, so the chain-id guard can't keep a ledger-8 cache off a ledger-9 chain.
+export const CACHE_VERSION = 2;
+export const CACHE_DIR_NAME = 'cache';
+
+// Multi-wallet support
+export const WALLETS_DIR_NAME = 'wallets';
+export const DEFAULT_WALLET_NAME = 'default';
+
+/**
+ * Validate a wallet name (not a path).
+ * Rejects empty strings, path separators, '.json' suffix, '..' traversal,
+ * and control characters. Returns true if the name is safe.
+ */
+export function isValidWalletName(name: string): boolean {
+  if (!name || name !== name.trim()) return false;
+  if (/[\/\\]/.test(name)) return false;
+  if (name.endsWith('.json')) return false;
+  if (name === '.' || name === '..') return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f]/.test(name)) return false;
+  return true;
+}
+
+// Dust retry — facade calls that consume dust may fail transiently after
+// a rejection or sync hiccup. Retry with delay gives pending coins time
+// to be released back to available.
+export const DUST_RETRY_ATTEMPTS = 10;
+export const DUST_RETRY_DELAY_MS = 3_000;
+
+// Abandoned transaction timeout — if a DApp balances a tx but never submits
+// (or disconnects uncleanly), auto-revert after this timeout to release
+// pending dust coins. Shorter than the SDK's internal TX_TTL_MINUTES (10m).
+export const ABANDONED_TX_TIMEOUT_MS = 120_000; // 2 minutes
+
+// DApp Connector server port (99=midnight, 32=ws)
+export const DEFAULT_SERVE_PORT = 9932;
+
+// Dashboard URL — serves canary-verified status.json, compatibility.json, issues.json
+export const DASHBOARD_BASE_URL = 'https://midnight-comp-tracker.vercel.app';

@@ -1,0 +1,101 @@
+// Address derivation helper — wraps HD derivation + keystore + PublicKey
+// into a single call returning the bech32m address string.
+
+import { HDWallet, Roles } from '@midnightntwrk/wallet-sdk/hd';
+import { createKeystore, PublicKey } from '@midnightntwrk/wallet-sdk/unshielded';
+import {
+  MidnightBech32m,
+  ShieldedAddress,
+  ShieldedCoinPublicKey,
+  ShieldedEncryptionPublicKey,
+} from '@midnightntwrk/wallet-sdk/address-format';
+import * as ledger from '@midnightntwrk/ledger-v9';
+import { networkIdForName } from '@kuiralabs/midnight-cli-core/engine';
+import { type NetworkName, getValidNetworkNames } from '@kuiralabs/midnight-cli-core';
+import { deriveShieldedSeed } from './derivation.ts';
+
+/**
+ * Derive an unshielded address from a seed buffer, network, and optional key index.
+ * Path: m/44'/2400'/0'/NightExternal/<keyIndex>
+ *
+ * Returns the bech32m address string (e.g., mn_addr_preprod1...).
+ */
+export function deriveUnshieldedAddress(
+  seedBuffer: Buffer,
+  networkName: NetworkName,
+  keyIndex: number = 0,
+): string {
+  const networkId = networkIdForName(networkName);
+
+  const hdResult = HDWallet.fromSeed(seedBuffer);
+  if (hdResult.type !== 'seedOk') {
+    throw new Error('Invalid seed for HD wallet');
+  }
+
+  const derivation = hdResult.hdWallet
+    .selectAccount(0)
+    .selectRole(Roles.NightExternal)
+    .deriveKeyAt(keyIndex);
+
+  if (derivation.type === 'keyOutOfBounds') {
+    throw new Error(`Key index ${keyIndex} out of bounds`);
+  }
+
+  const keystore = createKeystore({ kind: 'schnorr', secret: derivation.key }, networkId);
+  const publicKey = PublicKey.fromKeyStore(keystore);
+  return publicKey.address;
+}
+
+/**
+ * Derive unshielded addresses for all supported networks from a single seed.
+ * Returns a map of network name → bech32m address string.
+ */
+export function deriveAllAddresses(
+  seedBuffer: Buffer,
+  keyIndex: number = 0,
+): Record<NetworkName, string> {
+  const addresses = {} as Record<NetworkName, string>;
+  for (const name of getValidNetworkNames()) {
+    addresses[name as NetworkName] = deriveUnshieldedAddress(seedBuffer, name as NetworkName, keyIndex);
+  }
+  return addresses;
+}
+
+/**
+ * Derive shielded (Zswap) addresses for all supported networks from a single seed.
+ * The underlying keys are network-independent — only the bech32m prefix changes
+ * per network (e.g. mn_shield-addr_preprod1..., mn_shield-addr_preview1...).
+ *
+ * Returns a map of network name → bech32m shielded address string.
+ */
+export function deriveAllShieldedAddresses(
+  seedBuffer: Buffer,
+): Record<NetworkName, string> {
+  const address = deriveShieldedAddress(seedBuffer);
+  const out = {} as Record<NetworkName, string>;
+  for (const name of getValidNetworkNames()) {
+    const networkId = networkIdForName(name as NetworkName);
+    out[name as NetworkName] = MidnightBech32m.encode(networkId, address).asString();
+  }
+  return out;
+}
+
+/** The shielded address on one network, as its bech32m string. */
+export function deriveShieldedAddressString(seedBuffer: Buffer, networkName: NetworkName): string {
+  return MidnightBech32m.encode(networkIdForName(networkName), deriveShieldedAddress(seedBuffer)).asString();
+}
+
+/**
+ * Derive the raw `ShieldedAddress` (SDK type) from a seed. Cheap — pure
+ * key derivation, no facade or network needed. Use when you need an
+ * address as an SDK call argument (e.g. `transferTransaction`'s
+ * `receiverAddress` field).
+ */
+export function deriveShieldedAddress(seedBuffer: Buffer): ShieldedAddress {
+  const shieldedSeed = deriveShieldedSeed(seedBuffer);
+  const keys = ledger.ZswapSecretKeys.fromSeed(shieldedSeed);
+  return new ShieldedAddress(
+    new ShieldedCoinPublicKey(Buffer.from(keys.coinPublicKey, 'hex')),
+    new ShieldedEncryptionPublicKey(Buffer.from(keys.encryptionPublicKey, 'hex')),
+  );
+}

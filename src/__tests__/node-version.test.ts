@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MIN_NODE_MAJOR, UnsupportedNodeError, assertNodeSupported } from '../lib/node-version.ts';
-import { classifyError } from '../lib/exit-codes.ts';
+import { classifyError } from '@kuiralabs/midnight-cli-core';
+import { installedCommands } from '../lib/installed-commands.ts';
 
 describe('assertNodeSupported', () => {
   it('accepts Node.js 22 and newer', () => {
@@ -27,7 +28,7 @@ describe('assertNodeSupported', () => {
   });
 
   it('is UNSUPPORTED_NODE, exit code 1, for --json and MCP callers', () => {
-    expect(classifyError(new UnsupportedNodeError('20.10.0'))).toEqual({ exitCode: 1, errorCode: 'UNSUPPORTED_NODE' });
+    expect(classifyError(new UnsupportedNodeError('20.10.0'), installedCommands)).toEqual({ exitCode: 1, errorCode: 'UNSUPPORTED_NODE' });
   });
 
   it('accepts the Node.js these tests run on', () => {

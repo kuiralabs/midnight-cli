@@ -1,26 +1,28 @@
-// A handler called as the CLI calls it (2F): with a context built as the
+// A handler called as the CLI calls it: with a context built as the
 // shell builds one, its result written at once to stdout as one JSON line.
 // Tests that read a command's output from the process's streams call it so.
 
-import type { ParsedArgs } from '../../lib/argv.ts';
-import { createCallContext, runHandler, type CommandHandler, type CommandOutcome } from '../../lib/call-context.ts';
+import { type ParsedArgs, createCallContext, runHandler, type CommandHandler, type CommandOutcome, type Payer, type Host } from '@kuiralabs/midnight-cli-core';
 import { processOutput } from '../../lib/command-dispatch.ts';
-import type { Payer } from '../../lib/payer.ts';
+import { testHost } from '../../../test-support/test-host.ts';
 
 export interface CliCallOptions<Protector> {
   /** The call's cancellation; none: it is never cancelled. */
   signal?: AbortSignal;
   payer?: Payer;
   protectors?: readonly Protector[];
+  /** The host the call runs in; a test host when not given. */
+  host?: Host;
 }
 
 /** Runs `handler` with `args` as the CLI does, and returns the exit code it gives. */
 export function cliCall<Protector = unknown>(
   handler: CommandHandler<Protector>,
   args: ParsedArgs,
-  { signal, payer, protectors }: CliCallOptions<Protector> = {},
+  { signal, payer, protectors, host }: CliCallOptions<Protector> = {},
 ): Promise<CommandOutcome | void> {
   const ctx = createCallContext<Protector>({
+    host: host ?? testHost(),
     args,
     signal: signal ?? new AbortController().signal,
     output: processOutput,
