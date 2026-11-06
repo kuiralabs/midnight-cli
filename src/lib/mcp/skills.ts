@@ -115,13 +115,14 @@ Act on the user's behalf on Midnight, through what the installed packages bring:
 - **Midnight** — a privacy-first blockchain. Supports both **unshielded** (transparent, like Bitcoin) and **shielded** (ZK-private, like Zcash) transactions in one chain.
 - **NIGHT** — the native token. 1 NIGHT = 1,000,000 micro-NIGHT (6 decimals).
 - **DUST** — a second token used to pay transaction fees. Not transferable. **Generated passively** by registered NIGHT UTXOs. Every wallet holding NIGHT must register those UTXOs for dust generation before it can send anything. Don't explain dust as "gas" — it's time-phase regenerative, not a fee market.
-- **Shielded vs unshielded** — shielded addresses start \`mn_shield-addr_*\`; unshielded start \`mn_addr_*\`. A wallet has one of each per network. Sender controls the privacy: \`mn transfer --shielded\` sends privately.
+- **Shielded vs unshielded** — shielded addresses start \`mn_shield-addr_*\`; unshielded start \`mn_addr_*\` (on mainnet, with no network segment: \`mn_shield-addr1…\`, \`mn_addr1…\`). A wallet has one of each per network. Sender controls the privacy: \`mn transfer --shielded\` sends privately.
 - **No self-shielding** — a wallet cannot move its own funds from unshielded to shielded. To get shielded NIGHT, receive a shielded transfer from a wallet that already has some (genesis wallet has 250M shielded NIGHT on localnet).
 - **Networks**
   - \`undeployed\` — local network (\`midnight_localnet_up()\` starts it). Use this for dev iteration.
-  - \`preprod\` — public testnet (ledger 8 today, so refused by this build). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod needs a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware.
+  - \`preprod\` — public testnet (ledger 8 today, so refused by this build). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod and mainnet need a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware.
   - \`preview\` — public preview testnet (ledger 8 today, so refused by this build). Same first-sync trade-off as preprod.
   - \`stagenet\` — Sig Network's testnet, on the beta SDK set (mn loads its beta engine for it). No shielded faucet, so shielded sync is off by default; NIGHT from https://faucet.stagenet.shielded.tools. Its proof server must match its node (\`midnightntwrk/proof-server:9.0.0-rc.5_experimental\`). Grant is refused there for now.
+  - \`mainnet\` — Midnight Mainnet: real value. Reached only through Blockfrost with the user's mainnet project id (it starts with \`nightmainnet\`); the proof server is the user's local one. No faucet. Used only when named on each call (\`network: "mainnet"\`, or \`--network mainnet\`): it can't be the saved network, and a call without a network never reaches it. \`midnight_airdrop\`, the test tools and the grant tools are refused there with \`MAINNET_REFUSED\`.
 - **Proof server** — local HTTP service that generates ZK proofs for transactions. Default port 6300. Version must match the network's ledger version or writes fail with "Custom error 170".
 
 `,
@@ -146,9 +147,9 @@ Every secret mn keeps (each wallet's seed and mnemonic, each account's owner key
       text: 'skill-full',
       section: 'blockfrost',
       order: 0,
-      body: `### Preprod needs a Blockfrost project id
+      body: `### Preprod and mainnet need a Blockfrost project id
 
-Midnight shut its own preprod indexer down on 2026-10-09. Blockfrost serves preprod's indexer and node now, and every request needs the user's own project id (created at https://blockfrost.io, one project per network; preprod ids start with \`nightpreprod\`; requests count against the user's Blockfrost plan). The user sets it once with \`midnight config set blockfrost-project-id <project id>\` in their own terminal, or \`BLOCKFROST_PROJECT_ID\` (or \`MN_BLOCKFROST_PROJECT_ID\`) in the MCP server's environment. It is a secret: \`midnight_config_get\` shows it masked, no tool result contains it, and you should never ask for it in chat or echo it. Preview and the local network need none.
+Midnight shut its own preprod and mainnet indexers down on 2026-10-09. Blockfrost serves their indexers and nodes now, and every request needs the user's own project id (created at https://blockfrost.io, one project per network; preprod ids start with \`nightpreprod\`, mainnet ids with \`nightmainnet\`; each is kept for its own network and never sent to the other; requests count against the user's Blockfrost plan). The user sets it once with \`midnight config set blockfrost-project-id <project id>\` in their own terminal, or \`BLOCKFROST_PROJECT_ID\` (or \`MN_BLOCKFROST_PROJECT_ID\`) in the MCP server's environment. It is a secret: \`midnight_config_get\` shows it masked, no tool result contains it, and you should never ask for it in chat or echo it. Preview and the local network need none.
 
 `,
     },
@@ -226,7 +227,7 @@ Every MCP tool error returns \`{ error: true, code: <ERROR_CODE>, message: <huma
 - **Developing a contract?** → \`undeployed\` (a ledger-9 stack the user runs locally). No first-sync cost; everything is local.
 - **Integration testing against a hosted chain?** → \`preprod\`, once it runs ledger 9 (refused while it is on ledger 8). First sync for a new wallet on this network processes full event history; subsequent syncs restore from cache and are much faster.
 - **Demoing to users?** → \`preview\` (if the dApp is deployed there) or \`undeployed\` (if self-contained).
-- **Mainnet?** → not on this CLI yet. Don't claim it is.
+- **Mainnet?** → \`mainnet\`, named on every call (\`network: "mainnet"\`); it is never the default. Needs the user's mainnet Blockfrost project id. Moves real value: describe amount, recipient and network and get the user's go-ahead before any write. No faucet; no airdrop, test suites or grants there.
 
 `,
     },

@@ -48,7 +48,7 @@ describe('resolveNetworkName', () => {
     });
 
     it('throws for invalid --network flag with valid network list', () => {
-      const ctx = makeCtx({ args: makeArgs(['--network', 'mainnet']) });
+      const ctx = makeCtx({ args: makeArgs(['--network', 'testnet']) });
       expect(() => resolveNetworkName(ctx)).toThrow('Invalid network');
       expect(() => resolveNetworkName(ctx)).toThrow('mainnet');
       expect(() => resolveNetworkName(ctx)).toThrow('preprod');
@@ -142,8 +142,54 @@ describe('resolveBlockfrostProjectId', () => {
   });
 
   it('refuses an environment value that is no project id', () => {
-    expect(() => resolveBlockfrostProjectId('preprod', TEST_DIR, settingsFromEnvironment({ MN_BLOCKFROST_PROJECT_ID: 'nightmainnetAbCdEfGhIjKl' })))
-      .toThrow('it should start with "nightpreprod" (preprod)');
+    expect(() => resolveBlockfrostProjectId('preprod', TEST_DIR, settingsFromEnvironment({ MN_BLOCKFROST_PROJECT_ID: 'nighttestnetAbCdEfGhIjKl' })))
+      .toThrow('it should start with "nightpreprod" (preprod), "nightmainnet" (mainnet)');
+  });
+
+  describe('with a mainnet id', () => {
+    const MAINNET_ID = 'nightmainnetMainMainMainMain0004';
+
+    it('gives each network its own id, from the config', () => {
+      setConfigValue('blockfrost-project-id', FROM_CONFIG, TEST_DIR);
+      setConfigValue('blockfrost-project-id', MAINNET_ID, TEST_DIR);
+      expect(resolveBlockfrostProjectId('preprod', TEST_DIR, settingsFromEnvironment({}))).toBe(FROM_CONFIG);
+      expect(resolveBlockfrostProjectId('mainnet', TEST_DIR, settingsFromEnvironment({}))).toBe(MAINNET_ID);
+    });
+
+    it('takes mn\'s variable only for the network its id is for', () => {
+      setConfigValue('blockfrost-project-id', FROM_CONFIG, TEST_DIR);
+      const env = settingsFromEnvironment({ MN_BLOCKFROST_PROJECT_ID: MAINNET_ID });
+      expect(resolveBlockfrostProjectId('mainnet', TEST_DIR, env)).toBe(MAINNET_ID);
+      expect(resolveBlockfrostProjectId('preprod', TEST_DIR, env)).toBe(FROM_CONFIG);
+      expect(resolveBlockfrostProjectId('preprod', TEST_DIR + '-none', env)).toBeUndefined();
+    });
+
+    it('never gives mainnet a preprod id, from the environment or the config', () => {
+      setConfigValue('blockfrost-project-id', FROM_CONFIG, TEST_DIR);
+      expect(resolveBlockfrostProjectId('mainnet', TEST_DIR, settingsFromEnvironment({ MN_BLOCKFROST_PROJECT_ID: FROM_ENV, BLOCKFROST_PROJECT_ID: FROM_ENV }))).toBeUndefined();
+    });
+  });
+});
+
+describe('resolveNetwork on mainnet', () => {
+  const MAINNET_ID = 'nightmainnetMainMainMainMain0004';
+
+  it('gives Blockfrost\'s mainnet endpoints with the mainnet id, when the command names mainnet', () => {
+    setConfigValue('blockfrost-project-id', 'nightpreprodConfigConfigConfig0001', TEST_DIR);
+    setConfigValue('blockfrost-project-id', MAINNET_ID, TEST_DIR);
+    const { name, config } = resolveNetwork(makeCtx({ args: makeArgs(['--network', 'mainnet']) }), SETTINGS);
+    expect(name).toBe('mainnet');
+    expect(config.networkId).toBe('MainNet');
+    expect(config.indexerWS).toBe(`wss://midnight-mainnet.blockfrost.io/api/v0/ws?project_id=${MAINNET_ID}`);
+    expect(config.node).toBe(`wss://rpc.midnight-mainnet.blockfrost.io?project_id=${MAINNET_ID}`);
+    expect(config.proofServer).toBe('http://localhost:6300');
+  });
+
+  it('carries no project id when only a preprod one is set', () => {
+    setConfigValue('blockfrost-project-id', 'nightpreprodConfigConfigConfig0001', TEST_DIR);
+    const { config } = resolveNetwork(makeCtx({ args: makeArgs(['--network', 'mainnet']) }), SETTINGS);
+    expect(config.indexerWS).toBe('wss://midnight-mainnet.blockfrost.io/api/v0/ws');
+    expect(config.node).toBe('wss://rpc.midnight-mainnet.blockfrost.io');
   });
 });
 

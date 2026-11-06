@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { detectNetworkFromAddress, isValidNetworkName, getNetworkConfig, getValidNetworkNames, resolveNetworkConfig, applyEndpointOverrides, indexerHttpFromWs } from '../lib/network.ts';
+import { addressPrefix, defaultSdkSetOf, detectNetworkFromAddress, isNamedOnlyNetwork, isValidNetworkName, getNetworkConfig, getValidNetworkNames, looksLikeShieldedAddress, looksLikeUnshieldedAddress, NetworkNotNamedError, resolveNetworkConfig, applyEndpointOverrides, indexerHttpFromWs } from '../lib/network.ts';
+import { UsageError } from '../lib/errors.ts';
+import { ProjectIdNetworkMismatchError } from '../lib/blockfrost.ts';
 
 describe('detectNetworkFromAddress', () => {
   it('detects preprod from address prefix', () => {
@@ -17,7 +19,17 @@ describe('detectNetworkFromAddress', () => {
     expect(detectNetworkFromAddress('mn_addr_undeployed1qqqqqq...')).toBe('undeployed');
   });
 
+  it('detects mainnet from its prefix, which has no network segment', () => {
+    expect(detectNetworkFromAddress('mn_addr1qqqqqq...')).toBe('mainnet');
+  });
+
+  it('keeps mainnet apart from every network whose prefix has a segment', () => {
+    expect(detectNetworkFromAddress('mn_addr_preprod1qqqqqq...')).not.toBe('mainnet');
+    expect(detectNetworkFromAddress('mn_addr_stagenet1qqqqqq...')).toBe('stagenet');
+  });
+
   it('returns null for unknown prefix', () => {
+    // Mainnet's addresses carry no network segment, so this one names no network.
     expect(detectNetworkFromAddress('mn_addr_mainnet1qqqqqq...')).toBeNull();
   });
 
@@ -42,9 +54,13 @@ describe('isValidNetworkName', () => {
     expect(isValidNetworkName('undeployed')).toBe(true);
   });
 
+  it('accepts mainnet', () => {
+    expect(isValidNetworkName('mainnet')).toBe(true);
+  });
+
   it('rejects unknown networks', () => {
-    expect(isValidNetworkName('mainnet')).toBe(false);
     expect(isValidNetworkName('testnet')).toBe(false);
+    expect(isValidNetworkName('MainNet')).toBe(false);
   });
 
   it('rejects empty string', () => {
@@ -58,6 +74,16 @@ describe('isValidNetworkName', () => {
 });
 
 describe('getNetworkConfig', () => {
+  it('returns Blockfrost\'s mainnet URLs without a project id, the local proof server, and the MainNet id', () => {
+    expect(getNetworkConfig('mainnet')).toEqual({
+      indexer: 'https://midnight-mainnet.blockfrost.io/api/v0',
+      indexerWS: 'wss://midnight-mainnet.blockfrost.io/api/v0/ws',
+      node: 'wss://rpc.midnight-mainnet.blockfrost.io',
+      proofServer: 'http://localhost:6300',
+      networkId: 'MainNet',
+    });
+  });
+
   // Midnight shut its own preprod indexer down on 2026-10-09; Blockfrost serves it.
   it('returns Blockfrost\'s URLs for preprod, without a project id', () => {
     const config = getNetworkConfig('preprod');
@@ -97,13 +123,14 @@ describe('getNetworkConfig', () => {
 });
 
 describe('getValidNetworkNames', () => {
-  it('returns all four networks', () => {
+  it('returns all five networks', () => {
     const names = getValidNetworkNames();
+    expect(names).toContain('mainnet');
     expect(names).toContain('preprod');
     expect(names).toContain('preview');
     expect(names).toContain('stagenet');
     expect(names).toContain('undeployed');
-    expect(names).toHaveLength(4);
+    expect(names).toHaveLength(5);
   });
 
   it('agrees with isValidNetworkName', () => {
@@ -155,8 +182,57 @@ describe('resolveNetworkConfig', () => {
     expect(config.indexer).toBe('https://my-indexer/api/v4/graphql');
   });
 
+  it('puts a mainnet project id on mainnet\'s indexer and node', () => {
+    const config = resolveNetworkConfig('mainnet', { blockfrostProjectId: 'nightmainnetAbCdEfGhIjKlMnOp' });
+    expect(config.indexer).toBe('https://midnight-mainnet.blockfrost.io/api/v0?project_id=nightmainnetAbCdEfGhIjKlMnOp');
+    expect(config.indexerWS).toBe('wss://midnight-mainnet.blockfrost.io/api/v0/ws?project_id=nightmainnetAbCdEfGhIjKlMnOp');
+    expect(config.node).toBe('wss://rpc.midnight-mainnet.blockfrost.io?project_id=nightmainnetAbCdEfGhIjKlMnOp');
+  });
+
+  it('never sends one network\'s project id to the other', () => {
+    expect(() => resolveNetworkConfig('mainnet', { blockfrostProjectId: 'nightpreprodAbCdEfGhIjKlMnOp' })).toThrow(ProjectIdNetworkMismatchError);
+    expect(() => resolveNetworkConfig('preprod', { blockfrostProjectId: 'nightmainnetAbCdEfGhIjKlMnOp' })).toThrow(ProjectIdNetworkMismatchError);
+  });
+
   it('gives a project id to no network Blockfrost doesn\'t serve', () => {
     expect(resolveNetworkConfig('preview', { blockfrostProjectId: 'nightpreprodAbCdEfGhIjKlMnOp' })).toEqual(getNetworkConfig('preview'));
+  });
+});
+
+describe('mainnet', () => {
+  it('runs on the rc SDK set', () => {
+    expect(defaultSdkSetOf('mainnet')).toBe('rc');
+  });
+
+  it('is the one network a command must name itself', () => {
+    expect(isNamedOnlyNetwork('mainnet')).toBe(true);
+    for (const name of ['preprod', 'preview', 'stagenet', 'undeployed']) expect(isNamedOnlyNetwork(name)).toBe(false);
+  });
+
+  it('says how to name it when it was not, as a usage mistake', () => {
+    const err = new NetworkNotNamedError('mainnet', 'it can\'t be the saved network');
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.code).toBe('INVALID_ARGS');
+    expect(err.message).toContain('--network mainnet');
+  });
+});
+
+describe('address prefixes', () => {
+  it('are mainnet\'s without a network segment, the others\' with one', () => {
+    expect(addressPrefix('unshielded', 'mainnet')).toBe('mn_addr1');
+    expect(addressPrefix('shielded', 'mainnet')).toBe('mn_shield-addr1');
+    expect(addressPrefix('unshielded', 'preprod')).toBe('mn_addr_preprod1');
+    expect(addressPrefix('shielded', 'undeployed')).toBe('mn_shield-addr_undeployed1');
+  });
+
+  it('tell an address, mainnet\'s included, from a wallet name', () => {
+    expect(looksLikeUnshieldedAddress('mn_addr1qqq')).toBe(true);
+    expect(looksLikeUnshieldedAddress('mn_addr_preprod1qqq')).toBe(true);
+    expect(looksLikeUnshieldedAddress('alice')).toBe(false);
+    expect(looksLikeUnshieldedAddress('mn_shield-addr1qqq')).toBe(false);
+    expect(looksLikeShieldedAddress('mn_shield-addr1qqq')).toBe(true);
+    expect(looksLikeShieldedAddress('mn_shield-addr_preview1qqq')).toBe(true);
+    expect(looksLikeShieldedAddress('mn_addr1qqq')).toBe(false);
   });
 });
 

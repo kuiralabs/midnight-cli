@@ -2,7 +2,7 @@
 // Usage: midnight test <run|list|results> [options]
 // Discovers dapp.test.json in the current directory and executes test suites.
 
-import { isValidNetworkName, type NetworkName, type ParsedArgs, getFlag, hasFlag, CancelledError, throwIfCancelled, UsageError, type CallContext, type CallOutput, type CallProgress, type CommandOutcome } from '@kuiralabs/midnight-cli-core';
+import { isValidNetworkName, type NetworkName, type ParsedArgs, getFlag, hasFlag, CancelledError, refuseOnMainnet, throwIfCancelled, UsageError, type CallContext, type CallOutput, type CallProgress, type CommandOutcome } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, divider, bold, dim, green, red, teal, yellow, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { StringDecoder } from 'node:string_decoder';
 import { join } from 'node:path';
@@ -66,6 +66,12 @@ function parseStrategyFlag(flag: string | undefined): CreateStrategy | undefined
   throw new UsageError(`Unknown strategy "${flag}". Use "cli" or "ui".`);
 }
 
+/** A test run deploys throwaway contracts and funds test wallets: refused on mainnet, for `create` and `run` alike. */
+function refuseTestOnMainnet(network: NetworkName | undefined, what: string): void {
+  if (network === undefined) return;
+  refuseOnMainnet(network, what, 'a test suite deploys throwaway contracts and funds test wallets', 'Run the suite on undeployed (a local network) or a test network such as preprod.');
+}
+
 /** Narrow a free-form network flag down to the supported set, or undefined. */
 function parseNetworkFlag(flag: string | undefined): NetworkOpt | undefined {
   return flag !== undefined && isValidNetworkName(flag) ? flag : undefined;
@@ -119,6 +125,7 @@ function browserOptionsFromFlags(prefilled: Partial<BrowserOptions>): BrowserOpt
 }
 
 async function handleCreate(args: ParsedArgs, jsonMode: boolean, ctx: CallContext): Promise<void> {
+  refuseTestOnMainnet(parseNetworkFlag(getFlag(args, 'network')), 'mn test create');
   const { resolve } = await import('node:path');
   const { findContractInfo } = await import('@kuiralabs/midnight-contract');
   const { buildScaffold } = await import('../lib/test/create.ts');
@@ -403,6 +410,7 @@ async function aiUiScaffold(deps: AiScaffoldDeps, goal: string | undefined): Pro
 async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext): Promise<CommandOutcome | void> {
   const { signal } = ctx;
   const { config, dappDir } = discoverDappConfig();
+  refuseTestOnMainnet(config.network, 'mn test run');
   const suites = discoverTestSuites(dappDir);
   const suiteName = getFlag(args, 'suite');
 

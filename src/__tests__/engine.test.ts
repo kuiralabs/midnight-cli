@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { OtherSdkSetError, sdkSetOf, type Engine, type SdkSet, createHost, type Host, settingsFromEnvironment, getValidNetworkNames, sdkSetOfNetwork, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core';
+import { OtherSdkSetError, addressPrefix, sdkSetOf, type Engine, type SdkSet, createHost, type Host, settingsFromEnvironment, getValidNetworkNames, sdkSetOfNetwork, type NetworkConfig, type NetworkName } from '@kuiralabs/midnight-cli-core';
 import type { BalanceSummary } from '@kuiralabs/midnight-chain';
 import { createRcEngine, type RcEngineOptions } from '@kuiralabs/midnight-engine-rc';
 
@@ -67,10 +67,13 @@ describe('a host\'s engine for a network', () => {
     const shielded = keys.shieldedAddresses(seed);
     for (const network of getValidNetworkNames() as NetworkName[]) {
       expect(unshielded[network]).toBe(keys.unshieldedAddress(seed, network));
-      expect(unshielded[network]).toMatch(new RegExp(`^mn_addr_${network}1`));
+      // Mainnet's prefix has no network segment (mn_addr1…); every other network's names it.
+      expect(unshielded[network]!.startsWith(addressPrefix('unshielded', network))).toBe(true);
       expect(shielded[network]).toBe(keys.shieldedAddress(seed, network));
-      expect(shielded[network]).toMatch(new RegExp(`^mn_shield-addr_${network}1`));
+      expect(shielded[network]!.startsWith(addressPrefix('shielded', network))).toBe(true);
     }
+    expect(unshielded.mainnet).toMatch(/^mn_addr1/);
+    expect(shielded.mainnet).toMatch(/^mn_shield-addr1/);
   });
 
   it('refuses without an engine loader, naming the option', async () => {

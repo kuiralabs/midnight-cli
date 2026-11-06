@@ -51,7 +51,7 @@ describe('a tool\'s schema, generated from its command\'s flags', () => {
       'to', 'amount', 'wallet', 'force-shielded', 'network', 'shielded', 'node', 'indexer-ws', 'proof-server',
     ]);
     expect(transfer.inputSchema.properties!.network).toStrictEqual({
-      type: 'string', enum: ['preprod', 'preview', 'stagenet', 'undeployed'], description: 'Network to send on (default: the selected one)',
+      type: 'string', enum: ['mainnet', 'preprod', 'preview', 'stagenet', 'undeployed'], description: 'Network to send on (default: the selected one)',
     });
     expect(transfer.inputSchema.required).toStrictEqual(['to', 'amount']);
   }, 60_000);
@@ -151,11 +151,11 @@ describe('a tool parameter of the wrong type', () => {
   }, 60_000);
 
   it('names every mistyped parameter: a value outside its list, and an object for a string', async () => {
-    const { body } = await call('midnight_address', { seed: '01'.repeat(32), network: 'mainnet', index: { n: 1 } });
+    const { body } = await call('midnight_address', { seed: '01'.repeat(32), network: 'testnet', index: { n: 1 } });
     expect(body).toMatchObject({
       error: true,
       code: 'INVALID_ARGS',
-      message: 'Invalid parameters for midnight_address: network must be one of preprod, preview, stagenet, undeployed, not "mainnet"; index must be a string, not {"n":1}',
+      message: 'Invalid parameters for midnight_address: network must be one of mainnet, preprod, preview, stagenet, undeployed, not "testnet"; index must be a string, not {"n":1}',
     });
   }, 60_000);
 

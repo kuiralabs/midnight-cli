@@ -2,7 +2,7 @@
 // before syncing, the MCP server before it issues a confirmation token, so a
 // typo in the amount or the recipient is refused up front.
 
-import { type ParsedArgs, getFlag, hasFlag, UsageError, resolveNetworkName, sdkSetOf, type EngineKeys, parseAmount, type NetworkName } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, getFlag, hasFlag, UsageError, resolveNetworkName, sdkSetOf, type EngineKeys, parseAmount, type NetworkName, looksLikeShieldedAddress, looksLikeUnshieldedAddress } from '@kuiralabs/midnight-cli-core';
 import { loadWalletConfig, resolveWalletPath, walletAddress, walletShieldedAddress, type UnlockHost, type WalletConfig } from './wallet-config.ts';
 import { assertShieldedTransferAllowed } from './wallet/transfer.ts';
 
@@ -65,11 +65,12 @@ function assertRecipient(keys: EngineKeys, address: string, shielded: boolean, n
 }
 
 /**
- * An address (mn_addr_ or mn_shield-addr_ prefix) is used as given. Anything
- * else is a wallet name, and the address comes from that wallet's file.
+ * An address (mn_addr or mn_shield-addr prefix, with mainnet's having no
+ * network segment) is used as given. Anything else is a wallet name, and the
+ * address comes from that wallet's file.
  */
 async function resolveRecipient(input: string, args: ParsedArgs, shielded: boolean, root: string, host: UnlockHost): Promise<string> {
-  if (input.startsWith('mn_addr_') || input.startsWith('mn_shield-addr_')) {
+  if (looksLikeUnshieldedAddress(input) || looksLikeShieldedAddress(input)) {
     return input;
   }
 

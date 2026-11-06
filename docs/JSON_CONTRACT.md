@@ -31,10 +31,10 @@ field involved.
 ### Network names
 
 ```
-"undeployed" | "preprod" | "preview"
+"undeployed" | "preprod" | "preview" | "mainnet"
 ```
 
-These three values are stable. Adding a new network (e.g. `mainnet`)
+These values are stable. Adding a new network (e.g. `mainnet`)
 is additive. Renaming or removing one is a major bump.
 
 ### Address formats
@@ -44,8 +44,10 @@ Bech32m, network-tagged in the HRP:
 - Unshielded: `mn_addr_<network>1...`
 - Shielded:   `mn_shield-addr_<network>1...`
 
+On mainnet the HRP has no network segment: `mn_addr1...` and `mn_shield-addr1...`.
+
 The HRP encoding is stable. Tools may rely on `mn_addr_<network>` as
-a parseable network indicator.
+a parseable network indicator, and on a missing segment meaning mainnet.
 
 ### Wallet file (`~/.midnight/wallets/<name>.json`)
 
@@ -120,10 +122,11 @@ Stable identifiers used in error messages and structured error objects, with the
 | `CALLER_PIN_UNSUPPORTED` | 2 | A grant request pins the contract that calls the account, and the account on this network (stagenet) has no caller pin; nothing was submitted. |
 | `WRONG_PASSPHRASE` | 2 | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. |
 | `PASSPHRASE_REQUIRED` | 2 | A tool needed a secret (a wallet's seed, an account's owner key) and no passphrase could be had: `MN_PASSPHRASE` is unset and there is no terminal to ask at (the MCP server has none). |
-| `BLOCKFROST_PROJECT_ID_REQUIRED` | 4 | The network (preprod) is served by Blockfrost and no project id is set. |
+| `BLOCKFROST_PROJECT_ID_REQUIRED` | 4 | The network (preprod or mainnet) is served by Blockfrost and no project id is set for it. |
 | `BLOCKFROST_PROJECT_ID_REJECTED` | 4 | Blockfrost refused the project id (HTTP 403): mistyped, revoked, or for another network. |
 | `BLOCKFROST_LIMIT_REACHED` | 4 | Blockfrost's plan limit or rate limit. |
-| `ENDPOINT_SHUT_DOWN` | 4 | An endpoint set by flag or config was shut down by its operator (the old preprod indexer). |
+| `ENDPOINT_SHUT_DOWN` | 4 | An endpoint set by flag or config was shut down by its operator (the old preprod indexer, mainnet's old Midnight-hosted indexer and node). |
+| `MAINNET_REFUSED` | 2 | The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (no released account build there). |
 | `OTHER_SDK_SET` | 1 | The process runs one SDK set's engine and the network runs on the other (an MCP server that served rc asked for stagenet). |
 | `MIXED_SDK_LAYOUT` | 1 | mn's packages were installed without each engine's shrinkwrap (bun's installer): an engine's SDK tree isn't the one it was tested with. |
 | `NO_STATE_ROOT` | 1 | The host gave mn no place to keep its state (a program's `createHost` without paths). |

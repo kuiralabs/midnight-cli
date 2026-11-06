@@ -74,7 +74,7 @@ export const airdropDefinition: CommandDefinition = {
   intro: { brief: 'Fund from genesis wallet', order: 7 },
   needsWalletSdk: true,
   shell: {},
-  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND'] },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'MAINNET_REFUSED'] },
   load: () => import('./airdrop.ts'),
   mcp: {
     tools: [

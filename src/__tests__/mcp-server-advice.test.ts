@@ -20,7 +20,7 @@ describe('the MCP server\'s advice for a call on the other SDK set', () => {
   });
 
   it('names every network of the rc set the other way round', () => {
-    expect(withServerAdvice(new OtherSdkSetError('beta', 'rc'), ROOT).message).toContain('and preprod, preview, undeployed run on the rc set');
+    expect(withServerAdvice(new OtherSdkSetError('beta', 'rc'), ROOT).message).toContain('and mainnet, preprod, preview, undeployed run on the rc set');
   });
 
   it('leaves every other error as it was', () => {

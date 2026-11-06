@@ -67,6 +67,19 @@ describe('resolveTransferRequest', () => {
     expect((await request('bob', '2', '--wallet', 'sender', '--shielded')).recipientAddress).toBe(RECIPIENT_SHIELDED.undeployed);
   });
 
+  it('takes a mainnet address, whose prefix has no network segment, as an address on mainnet', async () => {
+    expect(RECIPIENT.mainnet.startsWith('mn_addr1')).toBe(true);
+    const r = await request(RECIPIENT.mainnet, '1', '--wallet', 'sender', '--network', 'mainnet');
+    expect(r).toMatchObject({ recipientAddress: RECIPIENT.mainnet, networkName: 'mainnet' });
+    saveWallet('bob', RECIPIENT_SEED, true);
+    expect((await request('bob', '1', '--wallet', 'sender', '--network', 'mainnet')).recipientAddress).toBe(RECIPIENT.mainnet);
+  });
+
+  it('refuses a mainnet address on another network as the wrong address, not as a missing wallet', async () => {
+    await expect(request(RECIPIENT.mainnet, '1', '--wallet', 'sender')).rejects.toThrow('Expected a bech32m address (mn_addr_...) for network "undeployed"');
+    await expect(request(RECIPIENT_SHIELDED.mainnet, '1', '--wallet', 'sender', '--shielded')).rejects.toThrow('Invalid shielded address');
+  });
+
   it.each([
     [[], 'Missing recipient address'],
     [[RECIPIENT.undeployed], 'Missing amount'],

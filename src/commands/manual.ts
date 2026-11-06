@@ -77,8 +77,8 @@ export function buildManual(): string {
   out.push('');
   out.push(`${bold('DESCRIPTION')}`);
   out.push(`    midnight-wallet-cli is a standalone CLI that handles wallet`);
-  out.push(`    operations, contract deployment, and a development loop, on four`);
-  out.push(`    networks (undeployed, preprod, preview, stagenet). Every command speaks`);
+  out.push(`    operations, contract deployment, and a development loop, on five`);
+  out.push(`    networks (undeployed, preprod, preview, stagenet, mainnet). Every command speaks`);
   out.push(`    JSON via --json for use with AI agents and scripts. An MCP`);
   out.push(`    server ships with the package.`);
   out.push('');
@@ -100,6 +100,10 @@ export function buildManual(): string {
   out.push(`    ${teal('preprod')}      Public testnet. Persistent, real ZK proofs. (Ledger 8 today: refused.)`);
   out.push(`                 Served by Blockfrost: needs your own project id (see Configuration).`);
   out.push(`    ${teal('preview')}      Public testnet, smaller scale. (Ledger 8 today: refused.)`);
+  out.push(`    ${teal('mainnet')}      Real value. Only when named per command (--network mainnet);`);
+  out.push(`                 never the saved network. Served by Blockfrost: needs your own`);
+  out.push(`                 mainnet project id (nightmainnet...). No faucet: airdrop,`);
+  out.push(`                 mn test and mn grant are refused there.`);
   out.push('');
   out.push(`  ${bold('Tokens')}`);
   out.push(`    ${yellow('NIGHT')}        Native asset. Used for transfers and contract value.`);
@@ -107,12 +111,13 @@ export function buildManual(): string {
   out.push('');
   out.push(`  ${bold('Wallets')}`);
   out.push(`    Stored at ${dim('~/.midnight/wallets/<name>.json')}`);
-  out.push(`    Three networks share one seed; each gets its own derived address.`);
+  out.push(`    Every network shares one seed; each gets its own derived address.`);
   out.push(`    A tip-aware cache makes repeated reads finish in seconds.`);
   out.push('');
   out.push(`  ${bold('Shielded vs Unshielded')}`);
   out.push(`    ${yellow('Unshielded')} addresses (mn_addr_*) are like UTXOs.`);
   out.push(`    ${yellow('Shielded')} addresses (mn_shield-addr_*) hide amount and recipient.`);
+  out.push(`    On mainnet they have no network segment: mn_addr1..., mn_shield-addr1...`);
 
   // ── Commands ──────────────────────────────────────────────
   out.push(subhead('COMMANDS'));
@@ -172,8 +177,9 @@ export function buildManual(): string {
   out.push(`    ${yellow('node')}           Override substrate RPC URL`);
   out.push(`    ${yellow('indexer-ws')}     Override indexer WebSocket URL`);
   out.push(`    ${yellow('blockfrost-project-id')}`);
-  out.push(`                   Your Blockfrost project id for preprod, whose indexer and`);
-  out.push(`                   node Blockfrost serves. Kept per network, shown masked,`);
+  out.push(`                   Your Blockfrost project id for preprod or mainnet, whose`);
+  out.push(`                   indexer and node Blockfrost serves (nightpreprod... or`);
+  out.push(`                   nightmainnet...). Kept per network, shown masked,`);
   out.push(`                   never printed. Or: MN_BLOCKFROST_PROJECT_ID / BLOCKFROST_PROJECT_ID.`);
   out.push(`    ${yellow('sdk-set')}        The SDK set a network runs on (rc or beta), per network;`);
   out.push(`                   each network has its own (stagenet beta, the rest rc).`);

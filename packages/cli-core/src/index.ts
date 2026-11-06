@@ -79,10 +79,12 @@ export {
   freshDataKey, isSealedSecret, type KeyedSecret, openSecret, openWithKey, type SealedSecret,
   sealSecret, sealWithKey, WrongPassphraseError
 } from './lib/keystore.ts';
+export { MainnetRefusedError, refuseOnMainnet } from './lib/mainnet-refusal.ts';
 export {
-  AmbiguousLocalStacksError, applyEndpointOverrides, detectLocalStacks, endpointFlags,
-  type EndpointOverrides, getNetworkConfig, getValidNetworkNames, isValidNetworkName,
-  LEDGER_9_FORK_VERSION, type NetworkConfig, type NetworkName, networksOnSdkSet, resolveNetworkConfig,
+  addressPrefix, AmbiguousLocalStacksError, applyEndpointOverrides, detectLocalStacks, detectNetworkFromAddress,
+  endpointFlags, type EndpointOverrides, getNetworkConfig, getValidNetworkNames, isNamedOnlyNetwork,
+  isValidNetworkName, LEDGER_9_FORK_VERSION, looksLikeShieldedAddress, looksLikeUnshieldedAddress,
+  type NetworkConfig, type NetworkName, NetworkNotNamedError, networksOnSdkSet, resolveNetworkConfig,
   sdkSetOfNetwork
 } from './lib/network.ts';
 export { type NetworkChoice, networkChoiceFromArgs, networkTargetOf } from './lib/network-target.ts';

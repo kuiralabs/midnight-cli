@@ -9,7 +9,7 @@
 //      file required, useful for funding externally-generated addresses.
 //      A shielded address implies --shielded; the flag is optional there.
 
-import { UsageError, type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites, networkChoiceFromArgs, nightAmountJson, nightAmountText, parseAmount, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { UsageError, type ParsedArgs, getFlag, hasFlag, looksLikeShieldedAddress, looksLikeUnshieldedAddress, rejectNoCacheForWrites, networkChoiceFromArgs, nightAmountJson, nightAmountText, parseAmount, type CallContext } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, divider, formatAddress, successMessage, bold, dim, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { airdropNight, type AirdropAddressed, type AirdropRecipient, type NightAirdrop } from '../lib/wallet/airdrop.ts';
 import { receiptJson } from '@kuiralabs/midnight-chain';
@@ -50,7 +50,7 @@ export default async function airdropCommand(args: ParsedArgs, ctx: CallContext)
 
 /** `--wallet`: a bech32m address is funded as given; anything else names a wallet file (absent: the active wallet). */
 function recipientOf(walletFlag: string | undefined): AirdropRecipient {
-  return walletFlag !== undefined && (walletFlag.startsWith('mn_addr_') || walletFlag.startsWith('mn_shield-addr_'))
+  return walletFlag !== undefined && (looksLikeUnshieldedAddress(walletFlag) || looksLikeShieldedAddress(walletFlag))
     ? { address: walletFlag }
     : { wallet: walletFlag };
 }

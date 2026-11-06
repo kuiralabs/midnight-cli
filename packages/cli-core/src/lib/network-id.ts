@@ -5,10 +5,11 @@
 
 import type { NetworkName } from './network.ts';
 
-/** A network id as the SDK takes it ("preprod", "preview", "stagenet", "undeployed"). */
-export type MidnightNetworkId = 'preprod' | 'preview' | 'stagenet' | 'undeployed';
+/** A network id as the SDK takes it ("mainnet", "preprod", "preview", "stagenet", "undeployed"). */
+export type MidnightNetworkId = 'mainnet' | 'preprod' | 'preview' | 'stagenet' | 'undeployed';
 
 const NETWORK_ID_MAP: Record<string, MidnightNetworkId> = {
+  MainNet: 'mainnet',
   PreProd: 'preprod',
   Preview: 'preview',
   StageNet: 'stagenet',
@@ -16,6 +17,7 @@ const NETWORK_ID_MAP: Record<string, MidnightNetworkId> = {
 };
 
 const NETWORK_ID_BY_NAME: Record<NetworkName, MidnightNetworkId> = {
+  mainnet: 'mainnet',
   preprod: 'preprod',
   preview: 'preview',
   stagenet: 'stagenet',

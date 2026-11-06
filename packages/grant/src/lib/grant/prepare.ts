@@ -4,7 +4,7 @@
 // an issue, that the network's account can hold the grant asked for. The CLI
 // runs it first; the MCP server runs it before it issues a confirmation token.
 
-import { type ParsedArgs, getFlag, UsageError, type PayingTarget, resolvePayingTarget, type Host } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, getFlag, UsageError, type PayingTarget, refuseOnMainnet, resolvePayingTarget, type Host } from '@kuiralabs/midnight-cli-core';
 import { assertWalletFileExists, getActiveWalletName, resolveWalletPath } from '@kuiralabs/midnight-wallet';
 import { type AccountChain, accountChainFor } from './account-chain.ts';
 import { assertAccountNetwork, assertNodeRunsAccount } from './account.ts';
@@ -49,6 +49,7 @@ export async function prepareGrant(args: ParsedArgs, root: string, host: Host): 
   assertNodeRunsAccount();
   const target = resolvePayingTarget(args, 'grant', request.subcommand, root, host);
   // Refuses a network the account can't reach before anything is created.
+  refuseOnMainnet(target.network, 'mn grant', "the account contract's current build has no released key set for mainnet", 'Use mn grant on undeployed (a local ledger-9 network) or stagenet.');
   const network = assertAccountNetwork(target.networkConfig);
   const chain = () => accountChainFor(host.engines, network);
   const walletName = accountWalletName(getFlag(args, 'wallet'), () => getActiveWalletName(root));

@@ -15,6 +15,10 @@ describe('getNetworkId', () => {
     expect(getNetworkId('Preview')).toBe(NetworkId.NetworkId.Preview);
   });
 
+  it('returns MainNet for "MainNet"', () => {
+    expect(getNetworkId('MainNet')).toBe(NetworkId.NetworkId.MainNet);
+  });
+
   it('throws for unknown networkId', () => {
     expect(() => getNetworkId('Mainnet')).toThrow('Unknown networkId: Mainnet');
   });
@@ -31,6 +35,7 @@ describe('the plain values the base keeps match the SDK', () => {
     expect(networkIdForName('preprod')).toBe(NetworkId.NetworkId.PreProd);
     expect(networkIdForName('preview')).toBe(NetworkId.NetworkId.Preview);
     expect(networkIdForName('undeployed')).toBe(NetworkId.NetworkId.Undeployed);
+    expect(networkIdForName('mainnet')).toBe(NetworkId.NetworkId.MainNet);
   });
 
   it("keeps the ledger-9 fork at the SDK's version, and the facade's schedule starts there", async () => {

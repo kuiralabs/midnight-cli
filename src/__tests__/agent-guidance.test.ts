@@ -237,7 +237,7 @@ describe('the texts, assembled from the installed packages', () => {
     expect(full).not.toContain('allowance (experimental)');
     expect(full).not.toContain('`NO_ACCOUNT`');
     // The passphrase paragraph keeps its own part and its paragraph break.
-    expect(full).toContain('which encrypts every wallet and account in one step.\n\n### Preprod needs a Blockfrost project id');
+    expect(full).toContain('which encrypts every wallet and account in one step.\n\n### Preprod and mainnet need a Blockfrost project id');
   });
 
   it('keeps a shared section\'s other packages in order when one is missing', () => {

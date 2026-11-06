@@ -186,7 +186,7 @@ describe('help — the lists come from the registry', () => {
     expect(manifest.globalFlags).toStrictEqual([
       { name: '--json', description: 'Output structured JSON to stdout (suppresses all stderr)' },
       { name: '--wallet <name|file>', description: 'Wallet name or path' },
-      { name: '--network <name>', description: 'Override network (preprod, preview, stagenet, undeployed)' },
+      { name: '--network <name>', description: 'Override network (mainnet, preprod, preview, stagenet, undeployed)' },
       { name: '--version, -v', description: 'Print CLI version' },
       { name: '--help, -h', description: 'Show help' },
     ]);
@@ -213,6 +213,7 @@ describe('help — the lists come from the registry', () => {
       '  NO_TEST_CONFIG                 1  No dapp.test.json in the folder the test command ran in.',
       '  NO_NODE_RUNTIME                1  Contract scripts run under Node.js, and none was found on PATH.',
       '  CONTRACT_NOT_COMPILED          1  No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json).',
+      '  MAINNET_REFUSED                2  The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (no released account build there).',
       '  (no error)                     1  A test failed',
       '  Also: the network, wallet, engine, sync, paying, offers and chain codes, and INVALID_ARGS, CANCELLED, UNKNOWN, UNSUPPORTED_NODE, NO_STATE_ROOT (mn manual lists them all).',
     ].join('\n'));

@@ -4,8 +4,9 @@ import { loadCliConfig, getEndpointOverridesForNetwork, getSdkSetOverride } from
 import { INDEXER_GRAPHQL_PATH, INDEXER_GRAPHQL_WS_PATH } from './constants.ts';
 import type { Settings } from './settings.ts';
 import type { SdkSet } from './engine.ts';
+import { UsageError } from './errors.ts';
 
-export type NetworkName = 'preprod' | 'preview' | 'stagenet' | 'undeployed';
+export type NetworkName = 'mainnet' | 'preprod' | 'preview' | 'stagenet' | 'undeployed';
 
 /**
  * The protocol version ledger 9 starts at on the chains this build targets:
@@ -24,6 +25,13 @@ export interface NetworkConfig {
 }
 
 const NETWORK_CONFIGS: Record<NetworkName, NetworkConfig> = {
+  // Served only by Blockfrost. No faucet. These carry no project id:
+  // `resolveNetworkConfig` adds it.
+  mainnet: {
+    ...blockfrostEndpoints('mainnet', undefined),
+    proofServer: 'http://localhost:6300',
+    networkId: 'MainNet',
+  },
   // Served by Blockfrost since Midnight shut its own preprod indexer down
   // (2026-10-09). These carry no project id: `resolveNetworkConfig` adds it.
   preprod: {
@@ -57,6 +65,7 @@ const NETWORK_CONFIGS: Record<NetworkName, NetworkConfig> = {
 
 /** The SDK set each network runs on, whose engine a call on it loads (D28). */
 const NETWORK_SDK_SETS: Record<NetworkName, SdkSet> = {
+  mainnet: 'rc',
   preprod: 'rc',
   preview: 'rc',
   stagenet: 'beta',
@@ -81,10 +90,34 @@ export function sdkSetOfNetwork(name: NetworkName, root: string): SdkSet {
   return getSdkSetOverride(loadCliConfig(root), name) ?? NETWORK_SDK_SETS[name];
 }
 
-const VALID_NETWORK_NAMES: readonly NetworkName[] = ['preprod', 'preview', 'stagenet', 'undeployed'] as const;
+const VALID_NETWORK_NAMES: readonly NetworkName[] = ['mainnet', 'preprod', 'preview', 'stagenet', 'undeployed'] as const;
 
 export function isValidNetworkName(name: string): name is NetworkName {
   return VALID_NETWORK_NAMES.includes(name as NetworkName);
+}
+
+/**
+ * Networks a command acts on only when it names them itself (`--network`, a
+ * tool's network parameter): never the saved network, never one inferred
+ * from an address. Mainnet's transactions move real value.
+ */
+const NAMED_ONLY_NETWORKS: readonly NetworkName[] = ['mainnet'];
+
+/** Whether a command must name `name` itself to act on it. */
+export function isNamedOnlyNetwork(name: string): boolean {
+  return NAMED_ONLY_NETWORKS.includes(name as NetworkName);
+}
+
+/** A named-only network was asked for where it would not be named per command: as the saved network, or inferred from an address. `asked` says which. */
+export class NetworkNotNamedError extends UsageError {
+  constructor(network: NetworkName, asked: string) {
+    super(
+      `${network} is used only when a command names it: ${asked}.\n`
+      + `Name it on each command instead: --network ${network} (for an MCP tool, its network parameter).`,
+    );
+    this.name = 'NetworkNotNamedError';
+    Object.setPrototypeOf(this, NetworkNotNamedError.prototype);
+  }
 }
 
 export function getNetworkConfig(name: NetworkName): NetworkConfig {
@@ -96,15 +129,33 @@ export function getValidNetworkNames(): readonly string[] {
 }
 
 /**
- * Detect network from a Midnight bech32m address prefix.
+ * Detect network from a Midnight bech32m address prefix: `mn_addr_<network>1…`,
+ * or `mn_addr1…` on mainnet, whose addresses carry no network segment.
  * Returns null if the prefix doesn't match any known network.
  */
 export function detectNetworkFromAddress(address: string): NetworkName | null {
+  if (address.startsWith('mn_addr1')) return 'mainnet';
   if (address.startsWith('mn_addr_preprod1')) return 'preprod';
   if (address.startsWith('mn_addr_preview1')) return 'preview';
   if (address.startsWith('mn_addr_stagenet1')) return 'stagenet';
   if (address.startsWith('mn_addr_undeployed1')) return 'undeployed';
   return null;
+}
+
+/** Whether the text is written as an unshielded address (`mn_addr1…` on mainnet, `mn_addr_<network>1…` elsewhere) rather than a wallet name. */
+export function looksLikeUnshieldedAddress(text: string): boolean {
+  return text.startsWith('mn_addr1') || text.startsWith('mn_addr_');
+}
+
+/** Whether the text is written as a shielded address (`mn_shield-addr1…` on mainnet, `mn_shield-addr_<network>1…` elsewhere). */
+export function looksLikeShieldedAddress(text: string): boolean {
+  return text.startsWith('mn_shield-addr1') || text.startsWith('mn_shield-addr_');
+}
+
+/** The bech32m prefix, up to and including the separator, of an address of that kind on `network`: mainnet's has no network segment. */
+export function addressPrefix(kind: 'unshielded' | 'shielded', network: NetworkName): string {
+  const hrp = kind === 'shielded' ? 'mn_shield-addr' : 'mn_addr';
+  return network === 'mainnet' ? `${hrp}1` : `${hrp}_${network}1`;
 }
 
 interface TestcontainerPorts {

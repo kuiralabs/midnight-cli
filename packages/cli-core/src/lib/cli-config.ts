@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DEFAULT_CONFIG_FILENAME, DIR_MODE, FILE_MODE, isValidWalletName } from './constants.ts';
 import { blockfrostNetworks, checkProjectId, maskProjectId, networkOfProjectId } from './blockfrost.ts';
-import { type NetworkName, SDK_SETS, getValidNetworkNames, isValidNetworkName } from './network.ts';
+import { type NetworkName, NetworkNotNamedError, SDK_SETS, getValidNetworkNames, isNamedOnlyNetwork, isValidNetworkName } from './network.ts';
 import type { SdkSet } from './engine.ts';
 import { UsageError } from './errors.ts';
 
@@ -107,8 +107,10 @@ export function loadCliConfig(configDir: string): CliConfig {
     return { ...DEFAULT_CLI_CONFIG };
   }
 
+  // A network a command must name itself (mainnet) is never the saved one,
+  // even written into the file by hand: it is read as the default.
   const config: CliConfig = {
-    network: parsed.network && isValidNetworkName(parsed.network)
+    network: parsed.network && isValidNetworkName(parsed.network) && !isNamedOnlyNetwork(parsed.network)
       ? parsed.network
       : DEFAULT_CLI_CONFIG.network,
   };
@@ -266,6 +268,7 @@ export function setConfigValue(key: string, value: string, configDir: string, sc
         `Invalid network: "${value}"\nValid networks: ${getValidNetworkNames().join(', ')}`
       );
     }
+    if (isNamedOnlyNetwork(value)) throw new NetworkNotNamedError(value, 'it can\'t be the saved network, which was left as it was');
     migrateFlatEndpointsToScope(config, config.network);
     config.network = value;
   } else if (canonical === 'wallet') {

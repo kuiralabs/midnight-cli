@@ -81,7 +81,7 @@ describe('networkTargetOf', () => {
   });
 
   it('refuses a name that is no network\'s', () => {
-    expect(() => networkTargetOf(hostAt(stateRootIn(home)), { ...GIVEN, network: 'mainnet' as NetworkName })).toThrow('Invalid network: "mainnet"');
+    expect(() => networkTargetOf(hostAt(stateRootIn(home)), { ...GIVEN, network: 'testnet' as NetworkName })).toThrow('Invalid network: "testnet"');
   });
 
   it('gives what resolvePayingTarget gives for the same flags', () => {

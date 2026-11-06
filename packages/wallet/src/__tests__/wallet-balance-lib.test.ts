@@ -73,6 +73,19 @@ describe('readAddressBalance', () => {
     expect(indexer.subscriptions).toEqual([]);
   });
 
+  it('never infers mainnet from a mainnet address: refused before reading, saying to name it', async () => {
+    const address = rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'mainnet');
+    await expect(readAddressBalance(programHost('a'), address, endpoints())).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('--network mainnet') });
+    expect(indexer.subscriptions).toEqual([]);
+  });
+
+  it('reads a mainnet address when the call names mainnet', async () => {
+    const address = rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'mainnet');
+    const result = await readAddressBalance(programHost('a'), address, { ...endpoints(), network: 'mainnet', forceFresh: true });
+    expect(result).toMatchObject({ address, network: 'mainnet', utxoCount: 2 });
+    expect(indexer.subscriptions.map((s) => s.address)).toEqual([address]);
+  });
+
   it('fails with NETWORK_ERROR when the indexer refuses the connection', async () => {
     const address = rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed');
     await expect(readAddressBalance(programHost('a'), address, { ...endpoints(), indexerWS: `ws://127.0.0.1:${refusing.port}/api/v4/graphql/ws`, forceFresh: true })).rejects.toMatchObject({ code: 'NETWORK_ERROR' });

@@ -75,7 +75,7 @@ describe('config command — error handling', () => {
   });
 
   it('throws for invalid network value on set', async () => {
-    const args = parseArgs(['config', 'set', 'network', 'mainnet']);
+    const args = parseArgs(['config', 'set', 'network', 'testnet']);
     await expect(cliCall(configCommand, args)).rejects.toThrow('Invalid network');
   });
 });

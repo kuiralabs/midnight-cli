@@ -1,5 +1,5 @@
-// Blockfrost serves the indexer and node RPC of the networks Midnight no
-// longer hosts itself (preprod since 2026-10-09). Every request needs the
+// Blockfrost serves the indexer and node RPC of the networks Midnight doesn't
+// host itself (preprod and mainnet since 2026-10-09). Every request needs the
 // user's own project id, passed as a `project_id` query parameter, and a
 // project id belongs to one network: its prefix says which.
 //
@@ -12,6 +12,7 @@ import { UsageError } from './errors.ts';
 /** The networks whose indexer and node Blockfrost serves, with the prefix of their project ids. */
 const BLOCKFROST_NETWORKS = {
   preprod: { host: 'midnight-preprod.blockfrost.io', prefix: 'nightpreprod' },
+  mainnet: { host: 'midnight-mainnet.blockfrost.io', prefix: 'nightmainnet' },
 } as const;
 
 export type BlockfrostNetwork = keyof typeof BLOCKFROST_NETWORKS;
@@ -23,6 +24,8 @@ export const SET_PROJECT_ID_COMMAND = 'midnight config set blockfrost-project-id
 /** Hosts Midnight shut down, with the day it did: connecting can only fail. */
 const SHUT_DOWN_HOSTS: Readonly<Record<string, string>> = {
   'indexer.preprod.midnight.network': '2026-10-09',
+  'indexer.mainnet.midnight.network': '2026-10-09',
+  'rpc.mainnet.midnight.network': '2026-10-09',
 };
 
 export function usesBlockfrost(network: string): network is BlockfrostNetwork {
@@ -55,12 +58,28 @@ export function checkProjectId(given: string): { projectId: string; network: Blo
   return { projectId, network };
 }
 
+/** The prefix a project id for `network` starts with. */
+export function projectIdPrefix(network: BlockfrostNetwork): string {
+  return BLOCKFROST_NETWORKS[network].prefix;
+}
+
+/** A project id was about to be sent to a network it isn't for. */
+export class ProjectIdNetworkMismatchError extends Error {
+  constructor(network: BlockfrostNetwork) {
+    super(`The Blockfrost project id given for ${network} is not a ${network} project id (those start with "${projectIdPrefix(network)}"), so it is not sent. Set the ${network} one with: ${SET_PROJECT_ID_COMMAND}`);
+    this.name = 'ProjectIdNetworkMismatchError';
+    Object.setPrototypeOf(this, ProjectIdNetworkMismatchError.prototype);
+  }
+}
+
 /**
  * The network's Blockfrost endpoints, carrying the project id when there is
  * one. Without one they are still the right hosts: a command that connects
  * is stopped by `assertEndpointUsable`, one that doesn't is not bothered.
+ * Throws when the project id is another network's: it is never sent there.
  */
 export function blockfrostEndpoints(network: BlockfrostNetwork, projectId: string | undefined): { indexer: string; indexerWS: string; node: string } {
+  if (projectId !== undefined && networkOfProjectId(projectId) !== network) throw new ProjectIdNetworkMismatchError(network);
   const { host } = BLOCKFROST_NETWORKS[network];
   const query = projectId === undefined ? '' : `?${PROJECT_ID_PARAM}=${projectId}`;
   return {
@@ -96,9 +115,10 @@ export class BlockfrostProjectIdRequiredError extends Error {
   readonly code = 'BLOCKFROST_PROJECT_ID_REQUIRED';
 
   constructor(network: string) {
+    const prefix = usesBlockfrost(network) ? ` (its id starts with "${projectIdPrefix(network)}")` : '';
     super(
-      `${network}'s indexer and node are served by Blockfrost, which needs your own project id on every request, and none is set.\n`
-      + `Create a project for Midnight ${network} at ${BLOCKFROST_SITE} and set its id once:\n`
+      `${network}'s indexer and node are served by Blockfrost, which needs your own project id on every request, and none is set for ${network}.\n`
+      + `Create a project for Midnight ${network} at ${BLOCKFROST_SITE}${prefix} and set its id once:\n`
       + `  ${SET_PROJECT_ID_COMMAND}`,
     );
     this.name = 'BlockfrostProjectIdRequiredError';
@@ -146,7 +166,7 @@ export class EndpointShutDownError extends Error {
     super(
       `${hostname} was shut down${since === undefined ? '' : ` on ${since}`}: it no longer serves the network.\n`
       + 'It is set as an endpoint, by a flag or with "midnight config set". Remove it (midnight config unset indexer-ws, or node) '
-      + `to use the network's current endpoints; preprod's are Blockfrost's and need a project id:\n`
+      + `to use the network's current endpoints; preprod's and mainnet's are Blockfrost's and need a project id:\n`
       + `  ${SET_PROJECT_ID_COMMAND}`,
     );
     this.name = 'EndpointShutDownError';

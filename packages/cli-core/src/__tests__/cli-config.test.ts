@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { loadCliConfig, saveCliConfig, getConfigValue, setConfigValue, unsetConfigValue, getValidConfigKeys, getBlockfrostProjectId, getSdkSetOverride } from '../lib/cli-config.ts';
-import { sdkSetOfNetwork } from '../lib/network.ts';
+import { NetworkNotNamedError, sdkSetOfNetwork } from '../lib/network.ts';
+import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { getCachePath, networkCacheFolder } from '../lib/wallet-cache.ts';
 import { getDustCachePath } from '../lib/reader-cache-files.ts';
 
@@ -41,7 +42,7 @@ describe('loadCliConfig', () => {
   it('falls back to default for invalid network value', () => {
     fs.writeFileSync(
       path.join(TEST_DIR, 'config.json'),
-      JSON.stringify({ network: 'mainnet' }),
+      JSON.stringify({ network: 'testnet' }),
     );
     const config = loadCliConfig(TEST_DIR);
     expect(config.network).toBe('undeployed');
@@ -129,8 +130,8 @@ describe('setConfigValue', () => {
   });
 
   it('throws for invalid network value with guidance', () => {
-    expect(() => setConfigValue('network', 'mainnet', TEST_DIR)).toThrow('Invalid network');
-    expect(() => setConfigValue('network', 'mainnet', TEST_DIR)).toThrow('preprod');
+    expect(() => setConfigValue('network', 'testnet', TEST_DIR)).toThrow('Invalid network');
+    expect(() => setConfigValue('network', 'testnet', TEST_DIR)).toThrow('preprod');
   });
 
   it('throws for unknown key', () => {
@@ -383,8 +384,55 @@ describe('blockfrost-project-id config key', () => {
   });
 
   it('refuses a project id for a network mn doesn\'t reach through Blockfrost, and writes nothing', () => {
-    expect(() => setConfigValue('blockfrost-project-id', 'nightmainnetAbCdEfGhIjKlMnOp', TEST_DIR)).toThrow('it should start with "nightpreprod" (preprod)');
+    expect(() => setConfigValue('blockfrost-project-id', 'nighttestnetAbCdEfGhIjKlMnOp', TEST_DIR)).toThrow('it should start with "nightpreprod" (preprod), "nightmainnet" (mainnet)');
     expect(fs.existsSync(path.join(TEST_DIR, 'config.json'))).toBe(false);
+  });
+
+  describe('beside a mainnet one', () => {
+    const MAINNET_ID = 'nightmainnetZyXwVuTsRqPoNmLkJiHg9876';
+
+    it('files each under its own network, and neither replaces the other', () => {
+      setConfigValue('blockfrost-project-id', ID, TEST_DIR);
+      setConfigValue('blockfrost-project-id', MAINNET_ID, TEST_DIR);
+      expect(raw().networks.preprod['blockfrost-project-id']).toBe(ID);
+      expect(raw().networks.mainnet['blockfrost-project-id']).toBe(MAINNET_ID);
+      expect(getBlockfrostProjectId(loadCliConfig(TEST_DIR), 'preprod')).toBe(ID);
+      expect(getBlockfrostProjectId(loadCliConfig(TEST_DIR), 'mainnet')).toBe(MAINNET_ID);
+    });
+
+    it('is shown masked with its network, beside the preprod one', () => {
+      setConfigValue('blockfrost-project-id', ID, TEST_DIR);
+      setConfigValue('blockfrost-project-id', MAINNET_ID, TEST_DIR);
+      expect(getConfigValue('blockfrost-project-id', TEST_DIR)).toBe('nightpreprod…0123 (preprod), nightmainnet…9876 (mainnet)');
+      expect(getConfigValue('blockfrost-project-id', TEST_DIR, 'mainnet')).toBe('nightmainnet…9876 (mainnet)');
+    });
+
+    it('takes --network mainnet for a mainnet id, and refuses it for the preprod one', () => {
+      setConfigValue('blockfrost-project-id', MAINNET_ID, TEST_DIR, 'mainnet');
+      expect(getBlockfrostProjectId(loadCliConfig(TEST_DIR), 'mainnet')).toBe(MAINNET_ID);
+      expect(() => setConfigValue('blockfrost-project-id', ID, TEST_DIR, 'mainnet')).toThrow('That is a preprod project id, and --network says mainnet.');
+      expect(() => setConfigValue('blockfrost-project-id', MAINNET_ID, TEST_DIR, 'preprod')).toThrow('That is a mainnet project id, and --network says preprod.');
+    });
+
+    it('is removed by unset --network mainnet alone, leaving the preprod one', () => {
+      setConfigValue('blockfrost-project-id', ID, TEST_DIR);
+      setConfigValue('blockfrost-project-id', MAINNET_ID, TEST_DIR);
+      unsetConfigValue('blockfrost-project-id', TEST_DIR, 'mainnet');
+      expect(getBlockfrostProjectId(loadCliConfig(TEST_DIR), 'mainnet')).toBeUndefined();
+      expect(getBlockfrostProjectId(loadCliConfig(TEST_DIR), 'preprod')).toBe(ID);
+    });
+
+    it('is never read for preprod when filed by hand under it, nor a preprod one for mainnet', () => {
+      fs.writeFileSync(path.join(TEST_DIR, 'config.json'), JSON.stringify({ networks: { preprod: { 'blockfrost-project-id': MAINNET_ID }, mainnet: { 'blockfrost-project-id': ID } } }));
+      expect(getBlockfrostProjectId(loadCliConfig(TEST_DIR), 'preprod')).toBeUndefined();
+      expect(getBlockfrostProjectId(loadCliConfig(TEST_DIR), 'mainnet')).toBeUndefined();
+    });
+
+    it('leaves a preprod id stored before mainnet existed where it was', () => {
+      fs.writeFileSync(path.join(TEST_DIR, 'config.json'), JSON.stringify({ network: 'preprod', networks: { preprod: { 'blockfrost-project-id': ID } } }));
+      expect(getBlockfrostProjectId(loadCliConfig(TEST_DIR), 'preprod')).toBe(ID);
+      expect(getBlockfrostProjectId(loadCliConfig(TEST_DIR), 'mainnet')).toBeUndefined();
+    });
   });
 
   it('takes --network when it names the id\'s own network, and refuses another', () => {
@@ -417,6 +465,41 @@ describe('blockfrost-project-id config key', () => {
   it('ignores one filed by hand under a network it isn\'t for', () => {
     fs.writeFileSync(path.join(TEST_DIR, 'config.json'), JSON.stringify({ network: 'preview', networks: { preview: { 'blockfrost-project-id': ID } } }));
     expect(getBlockfrostProjectId(loadCliConfig(TEST_DIR), 'preview')).toBeUndefined();
+  });
+});
+
+describe('mainnet as the saved network', () => {
+  const configPath = () => path.join(TEST_DIR, 'config.json');
+
+  it('is refused by config set, which leaves the saved network as it was', () => {
+    setConfigValue('network', 'preprod', TEST_DIR);
+    expect(() => setConfigValue('network', 'mainnet', TEST_DIR)).toThrow(NetworkNotNamedError);
+    expect(() => setConfigValue('network', 'mainnet', TEST_DIR)).toThrow('--network mainnet');
+    expect(getConfigValue('network', TEST_DIR)).toBe('preprod');
+  });
+
+  it('is refused through the network-id alias too', () => {
+    expect(() => setConfigValue('network-id', 'mainnet', TEST_DIR)).toThrow(NetworkNotNamedError);
+    expect(fs.existsSync(configPath())).toBe(false);
+  });
+
+  it('is never read from a config file written by hand: the default network is', () => {
+    fs.writeFileSync(configPath(), JSON.stringify({ network: 'mainnet' }));
+    expect(loadCliConfig(TEST_DIR).network).toBe('undeployed');
+    expect(getConfigValue('network', TEST_DIR)).toBe('undeployed');
+  });
+
+  it('never resolves a command without --network to mainnet, and --network mainnet does', () => {
+    fs.writeFileSync(configPath(), JSON.stringify({ network: 'mainnet' }));
+    const args = (flags: Record<string, string>) => ({ command: 'balance', subcommand: undefined, positionals: [], flags });
+    expect(resolveNetworkName({ args: args({}), configDir: TEST_DIR })).toBe('undeployed');
+    expect(resolveNetworkName({ args: args({ network: 'mainnet' }), configDir: TEST_DIR })).toBe('mainnet');
+  });
+
+  it('still lets mainnet\'s own settings be kept, which apply only when a command names it', () => {
+    setConfigValue('proof-server', 'http://localhost:16300', TEST_DIR, 'mainnet');
+    expect(getConfigValue('proof-server', TEST_DIR, 'mainnet')).toBe('http://localhost:16300');
+    expect(getConfigValue('network', TEST_DIR)).toBe('undeployed');
   });
 });
 

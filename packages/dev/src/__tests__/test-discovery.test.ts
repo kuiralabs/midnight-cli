@@ -45,7 +45,7 @@ describe('discoverDappConfig', () => {
 
   it('throws on invalid network', () => {
     writeFileSync(join(tempDir, 'dapp.test.json'), JSON.stringify({
-      name: 'test', network: 'mainnet', prep: [],
+      name: 'test', network: 'testnet', prep: [],
     }));
     expect(() => discoverDappConfig(tempDir)).toThrow('"network" must be one of');
   });

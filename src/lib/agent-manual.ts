@@ -78,18 +78,26 @@ blockchain. It manages wallets, balances, transfers (unshielded and
 shielded), dust fees, a DApp connector server, contract inspection,
 E2E testing, and a local devnet — all from the terminal.
 
-Wallets are network-agnostic: one seed derives addresses for all four
-networks (undeployed, preprod, preview, stagenet). Network is chosen at
-runtime. Stagenet is Sig Network's chain on the beta SDK set; mn runs it
+Wallets are network-agnostic: one seed derives addresses for all five
+networks (undeployed, preprod, preview, stagenet, mainnet). Network is chosen
+at runtime. Stagenet is Sig Network's chain on the beta SDK set; mn runs it
 through its own engine, picked by the network.
 
-Preprod's indexer and node are served by Blockfrost (Midnight shut its own
-preprod indexer down on 2026-10-09). Every request needs the user's own
-project id, from a Midnight preprod project at https://blockfrost.io:
+Mainnet moves real value. mn reaches it only when a call names it
+(--network mainnet, or a tool's network parameter): it can't be the saved
+network, and a call without a network never reaches it. It is served only by
+Blockfrost, with the user's mainnet project id (it starts with nightmainnet).
+No faucet: airdrop, mn test and mn grant are refused there with
+MAINNET_REFUSED. Its addresses have no network segment (mn_addr1...).
+
+Preprod's and mainnet's indexers and nodes are served by Blockfrost (Midnight
+shut its own down on 2026-10-09). Every request needs the user's own project
+id, one per network (preprod's start with nightpreprod, mainnet's with
+nightmainnet), from a Midnight project at https://blockfrost.io:
   midnight config set blockfrost-project-id <project id>
 or MN_BLOCKFROST_PROJECT_ID (or BLOCKFROST_PROJECT_ID) in the environment.
 Without one, a command that
-reaches preprod fails with BLOCKFROST_PROJECT_ID_REQUIRED. The project id is
+reaches preprod or mainnet fails with BLOCKFROST_PROJECT_ID_REQUIRED. The project id is
 a secret: mn never prints it. Preview and undeployed need none.
 
 LEDGER 9 ONLY: this build of mn speaks ledger 9 only. A chain still on

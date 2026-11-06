@@ -509,6 +509,7 @@ export declare const ERROR_CODES: {
     readonly CANCELLED: "CANCELLED";
     readonly UNSUPPORTED_LEDGER: "UNSUPPORTED_LEDGER";
     readonly LOCAL_STACK_UNREACHABLE: "LOCAL_STACK_UNREACHABLE";
+    readonly MAINNET_REFUSED: "MAINNET_REFUSED";
     readonly AMBIGUOUS_LOCAL_STACKS: "AMBIGUOUS_LOCAL_STACKS";
     readonly UNSUPPORTED_NODE: "UNSUPPORTED_NODE";
     readonly NO_ACCOUNT: "NO_ACCOUNT";
@@ -588,12 +589,19 @@ export declare class WrongPassphraseError extends Error {
     readonly code = "WRONG_PASSPHRASE";
     constructor(message?: string);
 }
+export declare class MainnetRefusedError extends Error {
+    readonly code = "MAINNET_REFUSED";
+    constructor(what: string, why: string, instead: string);
+}
+export declare function refuseOnMainnet(network: NetworkName, what: string, why: string, instead: string): void;
+export declare function addressPrefix(kind: 'unshielded' | 'shielded', network: NetworkName): string;
 export declare class AmbiguousLocalStacksError extends Error {
     readonly code = "AMBIGUOUS_LOCAL_STACKS";
     constructor(found: LocalStackPorts);
 }
 export declare function applyEndpointOverrides(config: NetworkConfig, flagOverrides: EndpointOverrides, networkName: NetworkName, configDir: string): NetworkConfig;
 export declare function detectLocalStacks(settings: Pick<Settings, 'isLocalDetectOff'>): LocalStackPorts;
+export declare function detectNetworkFromAddress(address: string): NetworkName | null;
 export declare function endpointFlags(e: EndpointOverrides): Record<string, string>;
 export interface EndpointOverrides {
     proofServer?: string;
@@ -602,8 +610,11 @@ export interface EndpointOverrides {
 }
 export declare function getNetworkConfig(name: NetworkName): NetworkConfig;
 export declare function getValidNetworkNames(): readonly string[];
+export declare function isNamedOnlyNetwork(name: string): boolean;
 export declare function isValidNetworkName(name: string): name is NetworkName;
 export declare const LEDGER_9_FORK_VERSION = 2000000n;
+export declare function looksLikeShieldedAddress(text: string): boolean;
+export declare function looksLikeUnshieldedAddress(text: string): boolean;
 export interface NetworkConfig {
     indexer: string;
     indexerWS: string;
@@ -611,7 +622,10 @@ export interface NetworkConfig {
     proofServer: string;
     networkId: string;
 }
-export type NetworkName = 'preprod' | 'preview' | 'stagenet' | 'undeployed';
+export type NetworkName = 'mainnet' | 'preprod' | 'preview' | 'stagenet' | 'undeployed';
+export declare class NetworkNotNamedError extends UsageError {
+    constructor(network: NetworkName, asked: string);
+}
 export declare function networksOnSdkSet(set: SdkSet, root: string): NetworkName[];
 export declare function resolveNetworkConfig(name: NetworkName, options?: ResolveNetworkConfigOptions): NetworkConfig;
 export declare function sdkSetOfNetwork(name: NetworkName, root: string): SdkSet;
@@ -862,8 +876,8 @@ export declare const coreCodes: readonly [
         readonly code: "BLOCKFROST_PROJECT_ID_REQUIRED";
         readonly exitCode: 4;
         readonly order: 240;
-        readonly summary: "The network (preprod) is served by Blockfrost and no project id is set.";
-        readonly recovery: "Ask the user to create a Midnight preprod project at https://blockfrost.io and run `midnight config set blockfrost-project-id <project id>` themselves. Never ask them to paste the id into the chat. Don't retry until they have.";
+        readonly summary: "The network (preprod or mainnet) is served by Blockfrost and no project id is set for it.";
+        readonly recovery: "Ask the user to create a Blockfrost project for that Midnight network at https://blockfrost.io (a preprod id starts with `nightpreprod`, a mainnet id with `nightmainnet`) and run `midnight config set blockfrost-project-id <project id>` themselves. Never ask them to paste the id into the chat. Don't retry until they have.";
     },
     {
         readonly code: "BLOCKFROST_PROJECT_ID_REJECTED";
@@ -883,8 +897,15 @@ export declare const coreCodes: readonly [
         readonly code: "ENDPOINT_SHUT_DOWN";
         readonly exitCode: 4;
         readonly order: 270;
-        readonly summary: "An endpoint set by flag or config was shut down by its operator (the old preprod indexer).";
+        readonly summary: "An endpoint set by flag or config was shut down by its operator (the old preprod indexer, mainnet's old Midnight-hosted indexer and node).";
         readonly recovery: "`midnight_config_unset({ key: \"indexer-ws\" })` (and `node` if set), then retry.";
+    },
+    {
+        readonly code: "MAINNET_REFUSED";
+        readonly exitCode: 2;
+        readonly order: 275;
+        readonly summary: "The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (no released account build there).";
+        readonly recovery: "Tell the user why (the message says) and don't retry on mainnet; offer undeployed or a test network instead.";
     },
     {
         readonly code: "CANCELLED";

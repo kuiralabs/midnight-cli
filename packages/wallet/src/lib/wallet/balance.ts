@@ -3,7 +3,7 @@
 // NIGHT and tokens, read with its secret keys, where the network has a
 // shielded faucet (or when asked).
 
-import { type Host, throwIfCancelled, UsageError, isValidNetworkName, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core';
+import { type Host, throwIfCancelled, UsageError, detectNetworkFromAddress, isNamedOnlyNetwork, NetworkNotNamedError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core';
 import { assertLedgerSupported, fetchProtocolVersion, getChainGenesisHash } from '@kuiralabs/midnight-chain';
 import { saveShieldedAddress } from '../wallet-config.ts';
 import { seedOf, type WalletSource } from '../seed-resolver.ts';
@@ -27,11 +27,14 @@ export interface ReadAddressBalanceOptions extends Omit<WalletCallOptions, 'sdkW
 
 /**
  * The network to read `address` on: `network` when given, else the one its
- * prefix names (`mn_addr_<network>1…`), else undefined (the saved network).
- * Throws UsageError when the two differ: the indexer would refuse the address.
+ * prefix names (`mn_addr_<network>1…`, mainnet's `mn_addr1…`), else undefined
+ * (the saved network). Throws UsageError when the two differ: the indexer
+ * would refuse the address. A network a command must name (mainnet) is never
+ * inferred: its address without `network` is refused.
  */
 export function addressNetwork(address: string, network?: NetworkName): NetworkName | undefined {
-  const inferred = inferNetworkFromAddress(address);
+  const inferred = detectNetworkFromAddress(address);
+  if (!network && inferred && isNamedOnlyNetwork(inferred)) throw new NetworkNotNamedError(inferred, `${address} is a ${inferred} address, and the command didn't name ${inferred}`);
   if (network && inferred && network !== inferred) {
     throw new UsageError(
       `Address belongs to ${inferred} but --network is ${network}.\n` +
@@ -39,14 +42,6 @@ export function addressNetwork(address: string, network?: NetworkName): NetworkN
     );
   }
   return network ?? inferred ?? undefined;
-}
-
-/** The network an address's prefix names, or null when it names none. */
-function inferNetworkFromAddress(address: string): NetworkName | null {
-  const match = address.match(/^mn_addr_([a-z]+)1/);
-  if (!match) return null;
-  const candidate = match[1];
-  return isValidNetworkName(candidate) ? candidate : null;
 }
 
 /**

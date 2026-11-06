@@ -1,10 +1,10 @@
-// Blockfrost serves preprod's indexer and node since 2026-10-09 and needs the
-// user's project id on every request. What mn knows about that, without a
+// Blockfrost serves preprod's and mainnet's indexer and node since 2026-10-09
+// and needs the user's project id, one per network, on every request. What mn knows about that, without a
 // connection: the endpoints, whose project id is whose, what a refusal means,
 // and how the project id is kept out of anything printed.
 
 import { describe, expect, it } from 'vitest';
-import { BlockfrostLimitError, BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, EndpointShutDownError, assertEndpointUsable, blockfrostEndpoints, checkProjectId, endpointRefusal, endpointRefusalFromWsError, isBlockfrostUrl, maskProjectId, mayHoldProjectId, networkOfProjectId, redactProjectId, usesBlockfrost } from '../lib/blockfrost.ts';
+import { BlockfrostLimitError, BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, EndpointShutDownError, ProjectIdNetworkMismatchError, assertEndpointUsable, blockfrostEndpoints, checkProjectId, endpointRefusal, endpointRefusalFromWsError, isBlockfrostUrl, maskProjectId, mayHoldProjectId, networkOfProjectId, redactProjectId, usesBlockfrost } from '../lib/blockfrost.ts';
 import { UsageError } from '../lib/errors.ts';
 import { ERROR_CODES, EXIT_NETWORK_ERROR, classifyError } from '../lib/exit-codes.ts';
 import { CORE_CODES } from '../../../../test-support/core-codes.ts';
@@ -12,10 +12,13 @@ import { CORE_CODES } from '../../../../test-support/core-codes.ts';
 const ID = 'nightpreprodAbCdEfGhIjKlMnOpQrStUv0123';
 const WITH_ID = blockfrostEndpoints('preprod', ID);
 const WITHOUT_ID = blockfrostEndpoints('preprod', undefined);
+const MAINNET_ID = 'nightmainnetZyXwVuTsRqPoNmLkJiHg9876';
+const MAINNET_WITH_ID = blockfrostEndpoints('mainnet', MAINNET_ID);
 
 describe('which networks Blockfrost serves', () => {
-  it('serves preprod, not preview or a local network', () => {
+  it('serves preprod and mainnet, not preview or a local network', () => {
     expect(usesBlockfrost('preprod')).toBe(true);
+    expect(usesBlockfrost('mainnet')).toBe(true);
     expect(usesBlockfrost('preview')).toBe(false);
     expect(usesBlockfrost('undeployed')).toBe(false);
   });
@@ -24,22 +27,25 @@ describe('which networks Blockfrost serves', () => {
 describe('a project id', () => {
   it('belongs to the network its prefix names', () => {
     expect(networkOfProjectId(ID)).toBe('preprod');
-    expect(networkOfProjectId('nightmainnetAbCdEfGhIjKl')).toBeUndefined();
+    expect(networkOfProjectId(MAINNET_ID)).toBe('mainnet');
+    expect(networkOfProjectId('nighttestnetAbCdEfGhIjKl')).toBeUndefined();
     expect(networkOfProjectId('preprodAbCdEfGhIjKl')).toBeUndefined();
   });
 
   it('is accepted with its network, spaces around it dropped', () => {
     expect(checkProjectId(`  ${ID}\n`)).toEqual({ projectId: ID, network: 'preprod' });
+    expect(checkProjectId(MAINNET_ID)).toEqual({ projectId: MAINNET_ID, network: 'mainnet' });
   });
 
-  it.each(['nightmainnetAbCdEfGhIjKl', 'abc', '', `${ID}&x=1`, `https://midnight-preprod.blockfrost.io/api/v0?project_id=${ID}`])(
+  it.each(['nighttestnetAbCdEfGhIjKl', 'abc', '', `${ID}&x=1`, `https://midnight-preprod.blockfrost.io/api/v0?project_id=${ID}`])(
     'is refused when it is %j, saying what one looks like', (given) => {
       expect(() => checkProjectId(given)).toThrow(UsageError);
-      expect(() => checkProjectId(given)).toThrow('it should start with "nightpreprod" (preprod)');
+      expect(() => checkProjectId(given)).toThrow('it should start with "nightpreprod" (preprod), "nightmainnet" (mainnet)');
     });
 
   it('is shown as its prefix and last four characters', () => {
     expect(maskProjectId(ID)).toBe('nightpreprod…0123');
+    expect(maskProjectId(MAINNET_ID)).toBe('nightmainnet…9876');
   });
 });
 
@@ -50,6 +56,21 @@ describe('blockfrostEndpoints', () => {
       indexerWS: `wss://midnight-preprod.blockfrost.io/api/v0/ws?project_id=${ID}`,
       node: `wss://rpc.midnight-preprod.blockfrost.io?project_id=${ID}`,
     });
+  });
+
+  it('are mainnet\'s own hosts, with its project id', () => {
+    expect(MAINNET_WITH_ID).toEqual({
+      indexer: `https://midnight-mainnet.blockfrost.io/api/v0?project_id=${MAINNET_ID}`,
+      indexerWS: `wss://midnight-mainnet.blockfrost.io/api/v0/ws?project_id=${MAINNET_ID}`,
+      node: `wss://rpc.midnight-mainnet.blockfrost.io?project_id=${MAINNET_ID}`,
+    });
+  });
+
+  it('refuse to carry another network\'s project id, and name the right prefix without the id', () => {
+    expect(() => blockfrostEndpoints('mainnet', ID)).toThrow(ProjectIdNetworkMismatchError);
+    expect(() => blockfrostEndpoints('mainnet', ID)).toThrow('"nightmainnet"');
+    expect(() => blockfrostEndpoints('mainnet', ID)).not.toThrow(ID);
+    expect(() => blockfrostEndpoints('preprod', MAINNET_ID)).toThrow('"nightpreprod"');
   });
 
   it('is the same hosts with no query when there is no project id', () => {
@@ -84,6 +105,22 @@ describe('assertEndpointUsable', () => {
       expect(() => assertEndpointUsable(url)).toThrow(BlockfrostProjectIdRequiredError);
       expect(() => assertEndpointUsable(url)).toThrow('midnight config set blockfrost-project-id <project id>');
       expect(() => assertEndpointUsable(url)).toThrow('https://blockfrost.io');
+    }
+  });
+
+  it('names the network and the prefix its project id starts with when none is set', () => {
+    const mainnetNoId = blockfrostEndpoints('mainnet', undefined);
+    expect(() => assertEndpointUsable(mainnetNoId.node)).toThrow(BlockfrostProjectIdRequiredError);
+    expect(() => assertEndpointUsable(mainnetNoId.indexerWS)).toThrow('none is set for mainnet');
+    expect(() => assertEndpointUsable(mainnetNoId.indexerWS)).toThrow('"nightmainnet"');
+    expect(() => assertEndpointUsable(WITHOUT_ID.indexerWS)).toThrow('none is set for preprod');
+    expect(() => assertEndpointUsable(WITHOUT_ID.indexerWS)).toThrow('"nightpreprod"');
+  });
+
+  it('stops mainnet\'s Midnight-hosted indexer and node, which were retired', () => {
+    for (const old of ['wss://indexer.mainnet.midnight.network/api/v4/graphql/ws', 'wss://rpc.mainnet.midnight.network']) {
+      expect(() => assertEndpointUsable(old)).toThrow(EndpointShutDownError);
+      expect(() => assertEndpointUsable(old)).toThrow('was shut down on 2026-10-09');
     }
   });
 
@@ -156,6 +193,12 @@ describe('redactProjectId', () => {
 
   it('hides one standing alone', () => {
     expect(redactProjectId(`blockfrost-project-id = ${ID}`)).toBe('blockfrost-project-id = nightpreprod***');
+  });
+
+  it('hides a mainnet project id too, in a URL or alone', () => {
+    expect(redactProjectId(`Node: ${MAINNET_WITH_ID.node}`)).toBe('Node: wss://rpc.midnight-mainnet.blockfrost.io?project_id=***');
+    expect(redactProjectId(`id ${MAINNET_ID}`)).toBe('id nightmainnet***');
+    expect(mayHoldProjectId(MAINNET_ID)).toBe(true);
   });
 
   it('hides every one in a text', () => {

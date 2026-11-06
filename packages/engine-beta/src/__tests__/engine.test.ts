@@ -73,6 +73,8 @@ describe('the beta engine', () => {
     const seed = Buffer.alloc(32, 2);
     expect(betaEngine.keys.unshieldedAddress(seed, 'stagenet')).toBe(RECIPIENT);
     expect(betaEngine.keys.unshieldedAddresses(seed).undeployed).toBe('mn_addr_undeployed1ugtvumxjrspvh598y6agtw3sdk06qf8sl0x0pfu6lf2080wrnprsdj8xxx');
+    // Mainnet's prefix has no network segment.
+    expect(betaEngine.keys.unshieldedAddresses(seed).mainnet).toBe('mn_addr1ugtvumxjrspvh598y6agtw3sdk06qf8sl0x0pfu6lf2080wrnprsvaf25q');
   });
 });
 

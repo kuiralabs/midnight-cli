@@ -116,6 +116,26 @@ describe('airdropNight', () => {
     expect(indexer.queries).toEqual([]);
   });
 
+  it.each([
+    ['to a wallet', {}],
+    ['to an address', { to: { address: ADDRESS.mainnet } }],
+    ['shielded', { to: { address: SHIELDED.mainnet } }],
+  ])('refuses mainnet %s with MAINNET_REFUSED before anything runs: it has no faucet', async (_case, extra) => {
+    const host = programHost('a');
+    aliceOf(host);
+    const said: Said[] = [];
+    const refused = airdropNight(host, airdrop({ network: 'mainnet', ...extra, onProgress: (event) => said.push(event) }));
+    await expect(refused).rejects.toMatchObject({ code: 'MAINNET_REFUSED', message: expect.stringContaining('Airdrop is refused on mainnet: mainnet has no faucet') });
+    expect(said).toEqual([]);
+    expect(indexer.queries).toEqual([]);
+    expect(host.asked()).toBe(0);
+  });
+
+  it('takes a mainnet address as an address, and refuses it on another network by its prefix', async () => {
+    await expect(airdropNight(programHost('a'), airdrop({ to: { address: ADDRESS.mainnet } }))).rejects.toThrow('Address does not match network "undeployed".\nExpected prefix: mn_addr_undeployed1\nGot: mn_addr1');
+    expect(indexer.queries).toEqual([]);
+  });
+
   it('refuses a wallet that is not there with WALLET_NOT_FOUND, and an amount of 0 with INVALID_ARGS', async () => {
     await expect(airdropNight(programHost('a'), airdrop({ to: { wallet: 'nobody' } }))).rejects.toMatchObject({ code: 'WALLET_NOT_FOUND' });
     await expect(airdropNight(programHost('a'), airdrop({ to: { address: ADDRESS.undeployed }, amount: 0n }))).rejects.toMatchObject({ code: 'INVALID_ARGS' });

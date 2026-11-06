@@ -3,7 +3,7 @@
 // from its shielded ones. Only the undeployed network has such a wallet; on
 // preprod and preview a faucet or another wallet funds one.
 
-import { type Host, throwIfCancelled, UsageError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, nightAmountText, GENESIS_SEED, type HostEngines } from '@kuiralabs/midnight-cli-core';
+import { type Host, throwIfCancelled, UsageError, type NetworkName, addressPrefix, looksLikeShieldedAddress, networkTargetOf, refuseOnMainnet, progressSteps, withCallSdkWarnings, nightAmountText, GENESIS_SEED, type HostEngines } from '@kuiralabs/midnight-cli-core';
 import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
 import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
 import { resolveWalletPath, saveShieldedAddress, walletAddress, walletShieldedAddress, type UnlockHost } from '../wallet-config.ts';
@@ -61,6 +61,7 @@ export async function airdropNight(host: Host, options: AirdropNightOptions): Pr
   if (amount <= 0n) throw new UsageError(`Invalid amount: ${nightAmountText(amount)} NIGHT — must be greater than 0`);
   const { network, networkConfig, root } = networkTargetOf(host, networkChoiceOf(options));
 
+  refuseOnMainnet(network, 'Airdrop', 'mainnet has no faucet and no genesis wallet to fund from', 'Fund a mainnet wallet by transferring NIGHT to it from another wallet.');
   if (network !== 'undeployed') {
     throw new Error(
       `Airdrop is only available on the "undeployed" network (local devnet).\n` +
@@ -72,7 +73,7 @@ export async function airdropNight(host: Host, options: AirdropNightOptions): Pr
   // A shielded address prefix is unambiguous: it makes the airdrop shielded
   // without being asked twice. The reverse (shielded with an unshielded
   // address) is a real contradiction, refused in addressDestination.
-  const shielded = options.shielded === true || ('address' in options.to && options.to.address.startsWith('mn_shield-addr_'));
+  const shielded = options.shielded === true || ('address' in options.to && looksLikeShieldedAddress(options.to.address));
   const destination = await resolveDestination(host, root, network, options.to, shielded);
   // A wallet file keeps the shielded address it is funded at, so later reads skip deriving it.
   if (destination.walletPath !== undefined) saveShieldedAddress(destination.walletPath, network, destination.address);
@@ -158,7 +159,7 @@ async function resolveDestination(host: UnlockHost, root: string, network: Netwo
 
 /** `address`, checked to be one of the airdrop's kind on the network. */
 async function addressDestination(address: string, engines: HostEngines, network: NetworkName, shielded: boolean): Promise<string> {
-  const looksShielded = address.startsWith('mn_shield-addr_');
+  const looksShielded = looksLikeShieldedAddress(address);
 
   // The inverse mismatch (a shielded address, not asked for shielded) never
   // reaches here: airdropNight infers shielded from the prefix.
@@ -170,9 +171,7 @@ async function addressDestination(address: string, engines: HostEngines, network
     );
   }
 
-  const expectedPrefix = shielded
-    ? `mn_shield-addr_${network}1`
-    : `mn_addr_${network}1`;
+  const expectedPrefix = addressPrefix(shielded ? 'shielded' : 'unshielded', network);
 
   if (!address.startsWith(expectedPrefix)) {
     throw new Error(

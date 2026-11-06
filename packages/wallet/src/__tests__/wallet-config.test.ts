@@ -261,3 +261,43 @@ describe('a wallet written before stagenet', () => {
     expect((await loadWalletConfig(filePath, host.engines)).addresses.stagenet).toBe(stagenetAddress);
   });
 });
+
+describe('a wallet written before mainnet', () => {
+  // The addresses an earlier mn wrote: every network but mainnet.
+  const { mainnet: mainnetAddress, ...earlierAddresses } = VALID_ADDRESSES;
+  const { mainnet: mainnetShielded, ...earlierShielded } = rcKeys.shieldedAddresses(Buffer.from(VALID_SEED, 'hex'));
+
+  it('derives the mainnet addresses with their prefix, which has no network segment', () => {
+    expect(mainnetAddress.startsWith('mn_addr1')).toBe(true);
+    expect(mainnetShielded.startsWith('mn_shield-addr1')).toBe(true);
+  });
+
+  it('gets its mainnet address derived and saved when a plain-text wallet is read', async () => {
+    const filePath = path.join(TEST_DIR, 'plain.json');
+    fs.writeFileSync(filePath, JSON.stringify({ seed: VALID_SEED, addresses: earlierAddresses, createdAt: VALID_CONFIG.createdAt }));
+    const config = await loadWalletConfig(filePath, host.engines);
+    expect(config.addresses.mainnet).toBe(mainnetAddress);
+    expect(JSON.parse(fs.readFileSync(filePath, 'utf-8')).addresses).toEqual(VALID_ADDRESSES);
+    expect(await walletAddress(filePath, 'mainnet', stateRootIn(TEST_DIR), host)).toBe(mainnetAddress);
+  });
+
+  it('derives and saves a sealed wallet\'s mainnet addresses once it is unlocked, keeping the others as written', async () => {
+    const filePath = path.join(TEST_DIR, 'sealed.json');
+    writeSealedWallet(filePath, { addresses: earlierAddresses as typeof VALID_ADDRESSES, shieldedAddresses: earlierShielded as typeof VALID_ADDRESSES, createdAt: VALID_CONFIG.createdAt }, { seed: VALID_SEED }, PASSPHRASE);
+
+    expect((await loadWalletConfig(filePath, host.engines)).addresses.mainnet).toBeUndefined();
+
+    const unlocked = await unlockWallet(filePath, UNLOCK);
+    expect(unlocked.addresses.mainnet).toBe(mainnetAddress);
+    expect(unlocked.shieldedAddresses?.mainnet).toBe(mainnetShielded);
+    const saved = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(saved.addresses).toEqual(VALID_ADDRESSES);
+    expect(saved.shieldedAddresses.mainnet).toBe(mainnetShielded);
+    expect(saved.seed).toBeUndefined();
+  });
+
+  it('is found as the owner of its mainnet address, on mainnet', () => {
+    const wallet: WalletInfo = { name: 'alice', addresses: VALID_ADDRESSES, isActive: true, file: path.join(TEST_DIR, 'alice.json') };
+    expect(matchWalletAddress([wallet], mainnetAddress)).toEqual({ wallet, network: 'mainnet' });
+  });
+});

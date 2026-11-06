@@ -95,5 +95,18 @@ describe('balance command — network inference from address HRP', () => {
     const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, '--network', 'preprod']);
     await expect(cliCall(balanceCommand, args)).rejects.toThrow(/belongs to undeployed.*--network is preprod/);
   });
+
+  it('never infers mainnet from a mainnet address: it must be named', async () => {
+    const mainnetAddress = rcKeys.unshieldedAddress(Buffer.from(EMPTY_SEED, 'hex'), 'mainnet');
+    await expect(cliCall(balanceCommand, parseArgs(['balance', mainnetAddress]))).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('--network mainnet') });
+  });
+
+  it('never infers mainnet from a wallet\'s shielded mainnet address either', async () => {
+    const seed = Buffer.from(EMPTY_SEED, 'hex');
+    const walletsDir = path.join(TEST_DIR, '.midnight', 'wallets');
+    saveWalletConfig({ seed: EMPTY_SEED, addresses: rcKeys.unshieldedAddresses(seed), shieldedAddresses: rcKeys.shieldedAddresses(seed), createdAt: new Date(0).toISOString() }, path.join(walletsDir, 'bob.json'));
+    const args = parseArgs(['balance', rcKeys.shieldedAddresses(seed).mainnet, '--shielded']);
+    await expect(cliCall(balanceCommand, args)).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining("wallet bob's mainnet address") });
+  });
 });
 

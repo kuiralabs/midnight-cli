@@ -79,7 +79,8 @@ Transfer commands accept wallet names instead of full addresses:
   midnight transfer alice 10 --shielded → resolves alice's shielded address
 
 Names are resolved from ~/.midnight/wallets/<name>.json. If the input
-starts with mn_addr_ or mn_shield-addr_, it's used as an address directly.
+starts with mn_addr or mn_shield-addr (mainnet's mn_addr1 / mn_shield-addr1
+included), it's used as an address directly.
 
 `,
     },
@@ -116,6 +117,12 @@ starts with mn_addr_ or mn_shield-addr_, it's used as an address directly.
 
   Stagenet (Sig Network's testnet, on the beta SDK set): the same steps
   with value "stagenet", funded at https://faucet.stagenet.shielded.tools/.
+
+  Mainnet (real value; never the saved network): pass network: "mainnet"
+  on every call instead of setting it. Needs the user's mainnet Blockfrost
+  project id (nightmainnet...). No faucet and no airdrop: the wallet is
+  funded by a transfer from another wallet. Describe every write and get
+  the user's consent before confirming it.
 
 `,
     },

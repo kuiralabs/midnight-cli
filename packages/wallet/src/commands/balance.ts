@@ -1,7 +1,7 @@
 // balance command — check unshielded + shielded balance via full wallet sync
 // For positional address: unshielded only (GraphQL, no facade)
 
-import { type ParsedArgs, hasFlag, isMinimalMode, networkChoiceFromArgs, networkTargetOf, shieldedDisabledReason, type CallContext, UsageError } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, hasFlag, isMinimalMode, isNamedOnlyNetwork, networkChoiceFromArgs, networkTargetOf, NetworkNotNamedError, shieldedDisabledReason, type CallContext, UsageError } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, divider, formatNight, formatAddress, toNight, bold, dim, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { findWalletByAddress } from '../lib/wallet-config.ts';
 import { walletSourceOf } from '../lib/seed-resolver.ts';
@@ -33,6 +33,10 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
     const { network: networkName, root } = networkTargetOf(ctx.host, { ...choice, network: addressNetwork(address, choice.network) });
     const owned = await findWalletByAddress(root, address, ctx.host.engines);
     if (owned) {
+      // The owning wallet's network is inferred from the address: never one a command must name.
+      if (isNamedOnlyNetwork(owned.network) && choice.network !== owned.network) {
+        throw new NetworkNotNamedError(owned.network, `${address} is wallet ${owned.wallet.name}'s ${owned.network} address, and the command didn't name ${owned.network}`);
+      }
       ctx.diagnostics.line('balance', `shielded positional → wallet ${owned.wallet.name} on ${owned.network}`);
       const delegated: ParsedArgs = {
         ...args,

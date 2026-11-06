@@ -45,6 +45,8 @@ export const ERROR_CODES = {
   /** `mn localnet up` can't start a ledger-9 stack on this build. Recovery: run one yourself and point mn at it (endpoint flags or `midnight config set`). */
   /** No ledger-9 stack answers at the configured endpoints. Recovery: start one, or fix the endpoints. */
   LOCAL_STACK_UNREACHABLE: 'LOCAL_STACK_UNREACHABLE',
+  /** The command is refused on mainnet (an airdrop, a test suite, mn grant) before anything runs. Recovery: run it on undeployed or a test network. */
+  MAINNET_REFUSED: 'MAINNET_REFUSED',
   /** Several local Midnight stacks run and no endpoints were given. Recovery: pass endpoint flags or `midnight config set` them. */
   AMBIGUOUS_LOCAL_STACKS: 'AMBIGUOUS_LOCAL_STACKS',
   /** This Node.js is older than mn supports (22). Recovery: install a current Node.js. */

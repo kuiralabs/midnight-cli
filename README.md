@@ -113,8 +113,22 @@ midnight transfer mn_addr_preprod1... 100
 | `preprod` | Midnight pre-production testnet (ledger 8 today: refused by this build, use 0.5.x). Its indexer and node are served by Blockfrost: needs a project id |
 | `preview` | Midnight preview testnet (ledger 8 today: refused by this build, use 0.5.x) |
 | `stagenet` | Sig Network's testnet, on the beta SDK set: mn runs it through its beta engine, picked by the network. NIGHT from https://faucet.stagenet.shielded.tools; no shielded faucet, so shielded sync is off by default. Its proof server must match its node (`midnightntwrk/proof-server:9.0.0-rc.5_experimental`). `mn grant` is refused there for now |
+| `mainnet` | Midnight Mainnet (ledger 9, on the rc SDK set). Reached only through Blockfrost, with a mainnet project id (it starts with `nightmainnet`); the proof server is your local one. No faucet. Real value: it must be named on every command with `--network mainnet` (it can't be the saved network), and `airdrop`, `mn test` and `mn grant` are refused there with `MAINNET_REFUSED`. Its addresses have no network segment: `mn_addr1…`, `mn_shield-addr1…` |
 
-Wallets are network-agnostic — one seed derives addresses for all four networks. Use `--network <name>` on any command, or persist it with `midnight config set network preview`.
+Wallets are network-agnostic — one seed derives addresses for all five networks. Use `--network <name>` on any command, or persist a test network with `midnight config set network preview` (mainnet is never persisted).
+
+### Mainnet
+
+mn reaches mainnet only when a command names it: `--network mainnet` on the command line, or the network parameter of an MCP tool. `midnight config set network mainnet` is refused, a saved config never resolves to mainnet, and a mainnet address (`mn_addr1…`) given to `midnight balance` without `--network mainnet` is refused instead of being read on mainnet.
+
+Its indexer and node are served only by Blockfrost (Midnight's own `indexer.mainnet.midnight.network` and `rpc.mainnet.midnight.network` were retired on 2026-10-09). Create a project for Midnight Mainnet at [blockfrost.io](https://blockfrost.io) and set its id; mn keeps it beside a preprod id, each for its own network:
+
+```bash
+midnight config set blockfrost-project-id nightmainnet...   # filed under mainnet by its prefix
+midnight balance --network mainnet
+```
+
+There is no faucet: fund a mainnet wallet by transferring NIGHT to it. `airdrop`, `mn test` (it deploys throwaway contracts) and `mn grant` (the account contract has no released key set for mainnet yet) are refused there before anything runs, with `MAINNET_REFUSED`. `mn dev` works on the local network only.
 
 ### Preprod and Blockfrost
 
@@ -124,6 +138,7 @@ Midnight shut its own preprod indexer down on 2026-10-09; [Blockfrost serves it 
 midnight config set blockfrost-project-id <project id>   # or: export BLOCKFROST_PROJECT_ID=<project id>  (MN_BLOCKFROST_PROJECT_ID wins if both are set)
 ```
 
+- Project ids are per network: a preprod id starts with `nightpreprod`, a mainnet id with `nightmainnet`. mn files each under its own network and never sends one to the other network.
 - Without one, a command that reaches preprod stops with `BLOCKFROST_PROJECT_ID_REQUIRED` and these instructions. A refused id is `BLOCKFROST_PROJECT_ID_REJECTED`. Requests count against your Blockfrost plan. (On this ledger-9 build preprod is then refused as a ledger-8 chain, until it forks.)
 - The project id is a secret. mn keeps it in `~/.midnight/config.json` (mode 0600), shows it masked in `config get`, and hides it in everything it prints, errors and `--verbose` logs included.
 - `mn serve` gives a connected dApp the wallet's indexer and node URLs (the DApp connector's `getConfiguration`), and on preprod those carry your project id: connect only dApps you trust with it.

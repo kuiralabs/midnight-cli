@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { deriveUnshieldedAddress, deriveAllShieldedAddresses } from '../derive-address.ts';
-import { GENESIS_SEED } from '@kuiralabs/midnight-cli-core';
+import { GENESIS_SEED, detectNetworkFromAddress } from '@kuiralabs/midnight-cli-core';
 
 const genesisSeedBuffer = Buffer.from(GENESIS_SEED, 'hex');
 
@@ -18,6 +18,13 @@ describe('deriveUnshieldedAddress', () => {
   it('derives an undeployed address with correct prefix', () => {
     const address = deriveUnshieldedAddress(genesisSeedBuffer, 'undeployed');
     expect(address.startsWith('mn_addr_undeployed1')).toBe(true);
+  });
+
+  it('derives a mainnet address with no network segment in its prefix', () => {
+    const address = deriveUnshieldedAddress(genesisSeedBuffer, 'mainnet');
+    expect(address.startsWith('mn_addr1')).toBe(true);
+    expect(detectNetworkFromAddress(address)).toBe('mainnet');
+    expect(address).not.toBe(deriveUnshieldedAddress(genesisSeedBuffer, 'preprod'));
   });
 
   it('same seed + network produces the same address', () => {
@@ -72,7 +79,7 @@ describe('deriveUnshieldedAddress', () => {
 describe('deriveAllShieldedAddresses', () => {
   it('returns one shielded address per supported network', () => {
     const out = deriveAllShieldedAddresses(genesisSeedBuffer);
-    expect(Object.keys(out).sort()).toEqual(['preprod', 'preview', 'stagenet', 'undeployed']);
+    expect(Object.keys(out).sort()).toEqual(['mainnet', 'preprod', 'preview', 'stagenet', 'undeployed']);
   });
 
   it('each address has the correct network prefix', () => {
@@ -80,6 +87,7 @@ describe('deriveAllShieldedAddresses', () => {
     expect(out.preprod.startsWith('mn_shield-addr_preprod1')).toBe(true);
     expect(out.preview.startsWith('mn_shield-addr_preview1')).toBe(true);
     expect(out.undeployed.startsWith('mn_shield-addr_undeployed1')).toBe(true);
+    expect(out.mainnet.startsWith('mn_shield-addr1')).toBe(true);
   });
 
   it('addresses differ across networks', () => {
