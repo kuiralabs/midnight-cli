@@ -1,8 +1,7 @@
 // The localnet library: the compose file it writes (its services, ports,
-// health checks and restart policies) and its version, the refusal every start
-// path meets on this ledger-9 build, which containers a clean removes, and how
-// docker compose's status lines are read. The localnet command's arguments,
-// help and its refused up are the shell's tests (src/__tests__/localnet-command.test.ts).
+// health checks and restart policies) and its version, which containers a clean
+// removes, and how docker compose's status lines are read. The localnet
+// command's arguments and help are the shell's tests (src/__tests__/localnet-command.test.ts).
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs';
@@ -13,7 +12,6 @@ import {
   COMPOSE_VERSION,
   ensureComposeFile,
   getComposePath,
-  LocalnetUnavailableError,
   parseServiceStatus,
 } from '../lib/localnet.ts';
 
@@ -43,7 +41,7 @@ describe('COMPOSE_YAML content', () => {
   });
 
   it('includes healthcheck for node', () => {
-    expect(COMPOSE_YAML).toContain('http://localhost:9944/health');
+    expect(COMPOSE_YAML).toContain('http://localhost:9944 | grep');
   });
 
   it('includes healthcheck for indexer', () => {
@@ -89,29 +87,17 @@ describe('COMPOSE_VERSION', () => {
   });
 });
 
-describe('ledger-9 build: mn localnet cannot start a network', () => {
-  // The compose stack is ledger 8, which wallet-sdk 2.0 can't sync with, and
-  // no published indexer image runs ledger 9 yet. Every start path goes
-  // through ensureComposeFile, so it refuses there, before writing anything.
-  // A state root of the test's own, which nothing creates.
-  const root = join(tmpdir(), `midnight-localnet-ledger9-${process.pid}`);
-  const composeFingerprint = () => {
-    const path = getComposePath(root);
-    return existsSync(path) ? `${statSync(path).mtimeMs}:${readFileSync(path, 'utf-8').length}` : 'absent';
-  };
+describe('the ledger-9 stack', () => {
+  // The newest public ledger-9 images: what wallet-sdk 2.0 and midnight-js 5 sync with.
+  it('runs node 2.1, indexer 4.4 and proof server 9.0', () => {
+    expect(COMPOSE_YAML).toContain("image: 'midnightntwrk/midnight-node:2.1.0-rc.4'");
+    expect(COMPOSE_YAML).toContain("image: 'midnightntwrk/indexer-standalone:4.4.0-rc.6'");
+    expect(COMPOSE_YAML).toContain("image: 'midnightntwrk/proof-server:9.0.0'");
+  });
 
-  it('ensureComposeFile refuses, says what to run instead, and writes nothing', () => {
-    const before = composeFingerprint();
-    let err: unknown;
-    try { ensureComposeFile(root); } catch (e) { err = e; }
-    expect(err).toBeInstanceOf(LocalnetUnavailableError);
-    const msg = (err as Error).message;
-    expect(msg).toContain('ledger 9');
-    expect(msg).toContain('--node');
-    expect(msg).toContain('--indexer-ws');
-    expect(msg).toContain('--proof-server');
-    expect(msg).toContain('midnight config set');
-    expect(composeFingerprint()).toBe(before);
+  it('calls the node healthy only once block 1 exists, which the indexer needs at its start', () => {
+    expect(COMPOSE_YAML).toContain('chain_getHeader');
+    expect(COMPOSE_YAML).toContain(`grep -q '"number":"0x[1-9a-f]'`);
   });
 });
 

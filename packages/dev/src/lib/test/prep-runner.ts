@@ -99,8 +99,8 @@ async function stepCacheClear(config: DappTestConfig, root: string): Promise<voi
 }
 
 async function stepLocalnetUp(config: DappTestConfig, ctx: PrepContext, callbacks: PrepCallbacks): Promise<void> {
-  // This build can't start a localnet (no published ledger-9 indexer image),
-  // so the step requires a running ledger-9 stack at the resolved endpoints.
+  // The step requires a running ledger-9 stack at the resolved endpoints
+  // (`mn localnet up` starts one); it doesn't start one itself.
   const network = config.network ?? 'undeployed';
   const { config: networkConfig } = resolveNetwork({
     args: { command: 'test', subcommand: undefined, positionals: [], flags: { network } },

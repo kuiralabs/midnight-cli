@@ -33,7 +33,7 @@ import { rcKeys } from '../../test-support/rc-engine.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { readPassphrase, assertWalletFileExists, assertWalletRemovable, setActiveWallet, walletSecretFrom, assertWalletCanPay, NoSuchOfferError } from '@kuiralabs/midnight-wallet';
 import { walletDefinition, generateDefinition, addressDefinition, airdropDefinition, balanceDefinition } from '@kuiralabs/midnight-wallet/commands';
-import { LocalnetUnavailableError, PrepStepFailedError } from '@kuiralabs/midnight-dev';
+import { PrepStepFailedError } from '@kuiralabs/midnight-dev';
 import { testDefinition } from '@kuiralabs/midnight-dev/commands';
 import { findContractInfo } from '@kuiralabs/midnight-contract';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
@@ -163,7 +163,6 @@ const ROWS: Row[] = [
   ['a ledger-8 chain', () => { throw new UnsupportedLedgerError('preprod', 8_000_000n); }, as('UNSUPPORTED_LEDGER', 4), as('UNSUPPORTED_LEDGER', 4)],
   ['no stack at the endpoints', () => { throw new LocalStackUnreachableError('node', 'ws://127.0.0.1:1'); }, as('LOCAL_STACK_UNREACHABLE', 4), as('LOCAL_STACK_UNREACHABLE', 4)],
   ["the chain's clock behind", () => { throw new ChainClockBehindError(new Date(0), new Date(3_600_000)); }, as('CHAIN_CLOCK_BEHIND', 4), as('CHAIN_CLOCK_BEHIND', 4)],
-  ['localnet up refused', () => { throw new LocalnetUnavailableError(); }, as('LOCALNET_UNAVAILABLE', 4), as('LOCALNET_UNAVAILABLE', 4)],
   ['no block within the wait', () => waitForFirstBlock(CLOSED_WS, { timeoutMs: 1, pollIntervalMs: 1 }), as('SYNC_TIMEOUT', 4), as('SYNC_TIMEOUT', 4)],
   ['no funds at the indexer within the wait', () => waitForAddressFunded(CLOSED_WS, ADDRESSES.undeployed, { timeoutMs: 1, pollIntervalMs: 1 }), as('SYNC_TIMEOUT', 4), as('SYNC_TIMEOUT', 4)],
   ['no proof server within the wait', () => waitForProofServerReady(CLOSED_HTTP, { timeoutMs: 1, pollIntervalMs: 1 }), as('SYNC_TIMEOUT', 4), as('SYNC_TIMEOUT', 4)],

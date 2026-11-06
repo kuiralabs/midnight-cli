@@ -43,7 +43,6 @@ export const ERROR_CODES = {
   /** The chain is on ledger 8; this build supports ledger 9 only. Recovery: use midnight-wallet-cli 0.5.x for that network. */
   UNSUPPORTED_LEDGER: 'UNSUPPORTED_LEDGER',
   /** `mn localnet up` can't start a ledger-9 stack on this build. Recovery: run one yourself and point mn at it (endpoint flags or `midnight config set`). */
-  LOCALNET_UNAVAILABLE: 'LOCALNET_UNAVAILABLE',
   /** No ledger-9 stack answers at the configured endpoints. Recovery: start one, or fix the endpoints. */
   LOCAL_STACK_UNREACHABLE: 'LOCAL_STACK_UNREACHABLE',
   /** Several local Midnight stacks run and no endpoints were given. Recovery: pass endpoint flags or `midnight config set` them. */

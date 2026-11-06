@@ -16,13 +16,10 @@ export const localnetDefinition: CommandDefinition = {
     },
   ],
   help: {
-    description: 'Manage a local Midnight network via Docker Compose (up is refused on this ledger-9 build)',
+    description: 'Manage a local Midnight network via Docker Compose',
     usage: 'midnight localnet <up|stop|down|status|logs|clean>',
     flags: [
-      'up              Refused on this build: mn\'s compose stack is ledger 8, and no',
-      '                published indexer image runs ledger 9 yet. Run a ledger-9 stack',
-      '                yourself and point mn at it with --node/--indexer-ws/--proof-server',
-      '                or midnight config set node|indexer-ws|proof-server <url>',
+      'up              Start the local network (node, indexer, proof server)',
       'stop            Stop containers (preserves state for fast restart)',
       'down            Full teardown: containers, networks, volumes, + undeployed wallet cache',
       'status          Show service status and ports',
@@ -31,6 +28,7 @@ export const localnetDefinition: CommandDefinition = {
       '                node / indexer / proof-server are left alone and listed)',
     ],
     examples: [
+      'midnight localnet up',
       'midnight localnet status',
       'midnight localnet stop',
       'midnight localnet down',
@@ -47,13 +45,13 @@ export const localnetDefinition: CommandDefinition = {
   intro: { brief: 'Manage local network', order: 15 },
   needsWalletSdk: false,
   shell: {},
-  errors: { codes: [RESOLVES_NETWORK, LOADS_ENGINE, 'NETWORK_ERROR', 'SYNC_TIMEOUT', 'LOCALNET_UNAVAILABLE'] },
+  errors: { codes: [RESOLVES_NETWORK, LOADS_ENGINE, 'NETWORK_ERROR', 'SYNC_TIMEOUT'] },
   load: () => import('./localnet.ts'),
   mcp: {
     tools: [
       {
         name: 'midnight_localnet_up',
-        description: 'Refused on this ledger-9 build: mn\'s localnet is ledger 8 and no ledger-9 indexer image is published. Run a ledger-9 stack yourself and point mn at it (config_set node / indexer-ws / proof-server).',
+        description: 'Start the local network (node, indexer, proof server) with Docker Compose and wait until it is healthy.',
         annotations: { openWorldHint: true },
         params: [],
         argv: { subcommand: 'up', flags: [] },

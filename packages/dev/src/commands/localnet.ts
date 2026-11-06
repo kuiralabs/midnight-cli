@@ -5,7 +5,6 @@ import { spawn } from 'child_process';
 import { type ParsedArgs, hasFlag, getFlag, CancelledError, UsageError, execProgram, ProgramFailedError, type ExecRunner, type CallContext } from '@kuiralabs/midnight-cli-core';
 import { header, divider, bold, green, red, dim, yellow } from '@kuiralabs/midnight-cli-core/ui';
 import {
-  assertLocalnetCanStart,
   checkDockerAvailable,
   ensureComposeFile,
   dockerCompose,
@@ -200,7 +199,7 @@ async function handleStatus(jsonMode: boolean, ctx: CallContext, docker: DockerC
   if (services.length === 0) {
     ctx.output.stderr('\n' + header('Localnet Status') + '\n\n');
     ctx.output.stderr(dim('  No services running.') + '\n');
-    ctx.output.stderr(dim('  ') + bold('midnight localnet up') + dim(' is refused on this ledger-9 build; see ') + bold('midnight help localnet') + dim('.') + '\n\n');
+    ctx.output.stderr(dim('  Run ') + bold('midnight localnet up') + dim(' to start.') + '\n\n');
     return;
   }
 
@@ -303,18 +302,15 @@ export async function runLocalnet(args: ParsedArgs, ctx: CallContext, exec: Exec
     throw new UsageError(
       `Usage: midnight localnet <${VALID_SUBCOMMANDS.join('|')}>\n\n` +
       `Subcommands:\n` +
-      `  up        Start the local network (refused on this ledger-9 build)\n` +
+      `  up        Start the local network (node, indexer, proof server)\n` +
       `  stop      Stop containers (preserves state)\n` +
       `  down      Remove containers, networks, volumes\n` +
       `  status    Show service status\n` +
       `  logs      Stream service logs\n` +
       `  clean     Remove conflicting containers\n\n` +
-      `Example: midnight localnet status`
+      `Example: midnight localnet up`
     );
   }
-
-  // `up` is refused on this build whatever Docker's state: say that, not "install Docker".
-  if (subcommand === 'up') assertLocalnetCanStart();
 
   // Docker runs as a step of this call: its stderr goes where the call's text goes, and the call's cancellation kills it.
   const docker: DockerCall = { signal: ctx.signal, exec, onStderr: (text) => ctx.output.stderr(text), root: ctx.config.paths.stateRoot };

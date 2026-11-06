@@ -30,7 +30,7 @@ Each error a package throws carries a `code`; `classifyError(err, registry)` giv
 | Code | Exit | What went wrong | What to do |
 |------|------|-----------------|------------|
 | `INVALID_ARGS` | 2 | Missing/invalid argument. | Show the message to the user verbatim — it names the missing field. |
-| `NETWORK_ERROR` | 4 | Indexer/node/proof-server connection refused or DNS failure. | Check `midnight_localnet_status()` or the endpoints the user configured; on this build `midnight_localnet_up()` is refused, so ask the user to start their ledger-9 stack. |
+| `NETWORK_ERROR` | 4 | Indexer/node/proof-server connection refused or DNS failure. | Check `midnight_localnet_status()` (start it with `midnight_localnet_up()`) or the endpoints the user configured. |
 | `SYNC_TIMEOUT` | 4 | Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync. | Retry; the cache resumes from the last applied event so progress is preserved. |
 | `INSUFFICIENT_BALANCE` | 5 | Wallet doesn't have enough NIGHT to cover the requested amount. | Show the user. On localnet: `midnight_airdrop({ amount: "..." })`. On hosted networks: tell user to fund the address. |
 | `TX_REJECTED` | 6 | Chain rejected the submitted transaction (catch-all when no more specific code applies). | Read the message; usually a state mismatch resolved by re-sync + retry. |

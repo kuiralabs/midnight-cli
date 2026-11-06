@@ -87,11 +87,10 @@ starts with mn_addr_ or mn_shield-addr_, it's used as an address directly.
       text: 'agent-manual',
       section: 'typical-workflows',
       order: 10,
-      body: `  Local development (undeployed, against a ledger-9 stack you run):
+      body: `  Local development (undeployed):
   1. midnight_config_set           → Set network (key: "network", value: "undeployed")
-     midnight_config_set           → node / indexer-ws / proof-server URLs of that stack
   2. midnight_wallet_generate      → Create wallet (name: "alice")
-  3. (midnight_localnet_up is refused on this build; see OVERVIEW)
+  3. midnight_localnet_up          → Start node, indexer, proof server
   4. midnight_airdrop              → Fund wallet (amount: "1000")
   5. midnight_dust_register        → Register for fee tokens
   6. midnight_balance              → Check unshielded + shielded balance

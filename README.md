@@ -15,7 +15,7 @@ Built for two audiences: **beginners** starting their first Midnight project (a 
 > [!IMPORTANT]
 > **0.6.0 (prerelease, `npm install -g midnight-wallet-cli@next`) is ledger-9 only.** It is built on wallet-sdk 2.0.0, ledger-v9 1.0.0, midnight-js 5.0.0 and compact-runtime 0.21.0 (contracts compiled with Compact 0.36 / language 0.28). `stagenet` runs on the beta set instead (wallet-sdk 5.0 beta split packages, ledger-v9 1.0.0-rc.3, midnight-js 5.0.0-beta.6, compact-runtime 0.18.0-rc.1, contracts compiled with compactc 0.33), which mn loads for that network alone. It refuses any chain still on ledger 8, which today includes `preview` and `preprod`: stay on 0.5.x (`npm install -g midnight-wallet-cli@latest`) for those.
 >
-> `midnight localnet up` is refused on this build, because no published indexer image runs ledger 9 yet. Run a ledger-9 stack yourself (node 2.1.0-rc.2, proof-server 9.0.0-rc.8, a 4.4 indexer) and point mn at it. On the default ports (node 9944, indexer 8088, proof server 6300) `--network undeployed` reaches it with no configuration. On other ports pass `--node`, `--indexer-ws` and `--proof-server` per command, or save them once with `midnight config set node <url>`, `midnight config set indexer-ws <url>` and `midnight config set proof-server <url>`.
+> `midnight localnet up` starts a ledger-9 stack (node 2.1.0-rc.4, indexer 4.4.0-rc.6, proof server 9.0.0). To use another ledger-9 stack instead: on the default ports (node 9944, indexer 8088, proof server 6300) `--network undeployed` reaches it with no configuration. On other ports pass `--node`, `--indexer-ws` and `--proof-server` per command, or save them once with `midnight config set node <url>`, `midnight config set indexer-ws <url>` and `midnight config set proof-server <url>`.
 
 ## Install
 
@@ -52,7 +52,7 @@ Install the prerelease with npm 11 or older (or run it with `npx`; with npm 12, 
 | `midnight swap <make\|inspect\|take\|cancel\|list> [options]` | Private swaps of shielded tokens, through offer files (experimental) |
 | `midnight tx status <hash or identifier> [options]` | What became of a transaction: its block, time, fee and result |
 | `midnight grant <deploy\|deposit\|status\|list\|issue\|revoke\|revoke-all\|export\|import\|device> [options]` | This wallet's account, and the grants that let an agent spend from it (experimental) |
-| `midnight localnet <up\|stop\|down\|status\|logs\|clean>` | Manage a local Midnight network via Docker Compose (up is refused on this ledger-9 build) |
+| `midnight localnet <up\|stop\|down\|status\|logs\|clean>` | Manage a local Midnight network via Docker Compose |
 | `midnight help [command]` | Show usage for all commands or a specific command |
 | `midnight manual [--no-pager] [--raw] [--json]` | Full reference manual (long form, paged through $PAGER) |
 <!-- commands: end -->
@@ -62,8 +62,8 @@ Install the prerelease with npm 11 or older (or run it with `npx`; with npm 12, 
 ### Local development (undeployed)
 
 ```bash
-# 1. Start a ledger-9 node, indexer and proof server yourself (see the note at the top).
-#    `midnight localnet up` is refused on this build.
+# 1. Start the local network (a ledger-9 node, indexer and proof server)
+midnight localnet up
 
 # 2. Create a wallet and set the network
 midnight wallet generate alice
@@ -109,7 +109,7 @@ midnight transfer mn_addr_preprod1... 100
 
 | Network | Description |
 |---------|-------------|
-| `undeployed` | Local network. On this build: a ledger-9 stack you run yourself (`midnight localnet up` is refused) |
+| `undeployed` | Local network (`midnight localnet up` starts it) |
 | `preprod` | Midnight pre-production testnet (ledger 8 today: refused by this build, use 0.5.x). Its indexer and node are served by Blockfrost: needs a project id |
 | `preview` | Midnight preview testnet (ledger 8 today: refused by this build, use 0.5.x) |
 | `stagenet` | Sig Network's testnet, on the beta SDK set: mn runs it through its beta engine, picked by the network. NIGHT from https://faucet.stagenet.shielded.tools; no shielded faucet, so shielded sync is off by default. Its proof server must match its node (`midnightntwrk/proof-server:9.0.0-rc.5_experimental`). `mn grant` is refused there for now |
@@ -297,7 +297,7 @@ Once connected, your AI agent gets access to 38 tools:
 | `midnight_config_set` | Write config value |
 | `midnight_config_unset` | Remove config value |
 | `midnight_cache_clear` | Clear wallet state cache |
-| `midnight_localnet_up` | Start local network (refused on this ledger-9 build) |
+| `midnight_localnet_up` | Start local network (Docker) |
 | `midnight_localnet_stop` | Stop local network |
 | `midnight_localnet_down` | Remove local network |
 | `midnight_localnet_status` | Show service status |
@@ -356,7 +356,7 @@ Found a bug or have a feature request? [Open an issue](https://github.com/kuiral
 ## Requirements
 
 - Node.js >= 22
-- Docker (for `midnight localnet` commands; `up` is refused on this build)
+- Docker (for `midnight localnet` commands)
 - A ledger-9 chain to talk to: node, indexer (4.4) and proof server. The proof server defaults to `localhost:6300` and is required for transactions on every network
 
 ## Development

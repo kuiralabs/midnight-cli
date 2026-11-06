@@ -8,28 +8,26 @@ import { join } from 'path';
 import { LOCALNET_DIR_NAME, DIR_MODE, CancelledError, CANCELLED_MESSAGE, throwIfCancelled, type ExecRunner, sleep } from '@kuiralabs/midnight-cli-core';
 
 // Version tag — bump when compose content changes so stale files get overwritten
-export const COMPOSE_VERSION = '3.0.6';
+export const COMPOSE_VERSION = '4.0.0';
 
-// Docker image versions: the ledger-8 stack (Preview/Preprod row of the
-// Midnight support matrix: midnight-js 4.1.1, ledger-v8 8.x, compact-runtime
-// 0.16.0). This ledger-9 build refuses to start it (see LOCALNET_CAN_START);
-// stop/down/status/logs still manage an existing one.
-// See https://docs.midnight.network/relnotes/support-matrix
-const NODE_IMAGE = 'midnightntwrk/midnight-node:1.0.0';
-const INDEXER_IMAGE = 'midnightntwrk/indexer-standalone:4.3.3';
-const PROOF_SERVER_IMAGE = 'midnightntwrk/proof-server:8.1.0';
+// Docker image versions: the newest public ledger-9 images, the ones the
+// midnight-examples ledger-9 compatibility matrix runs its local network on.
+// The node and indexer are pre-releases of the 2.1 and 4.4 lines.
+const NODE_IMAGE = 'midnightntwrk/midnight-node:2.1.0-rc.4';
+const INDEXER_IMAGE = 'midnightntwrk/indexer-standalone:4.4.0-rc.6';
+const PROOF_SERVER_IMAGE = 'midnightntwrk/proof-server:9.0.0';
 
 // Built when used, under the state root the call gives; never when this module loads.
 const localnetDir = (root: string): string => join(root, LOCALNET_DIR_NAME);
 const composePath = (root: string): string => join(localnetDir(root), 'compose.yml');
 const versionPath = (root: string): string => join(localnetDir(root), '.version');
 
-// Full compose.yml for midnight-local-network: the ledger-8 stack above, which
-// this ledger-9 build does not start.
+// Full compose.yml for midnight-local-network: the ledger-9 stack above.
 export const COMPOSE_YAML = `services:
   proof-server:
     image: '${PROOF_SERVER_IMAGE}'
     container_name: "proof-server"
+    command: ['midnight-proof-server', '-v']
     # Self-heal across Docker Desktop restarts and transient stops. Without this,
     # a stopped node/proof-server never comes back while the indexer (below) does,
     # leaving a half-dead localnet: the indexer answers but the node's ws is gone,
@@ -81,11 +79,18 @@ export const COMPOSE_YAML = `services:
     restart: unless-stopped
     ports:
       - "9944:9944"
+    # Healthy once block 1 exists, not just once /health answers: the indexer's
+    # SPO indexer exits if it starts while the chain is at block 0.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9944/health"]
+      test:
+        - "CMD-SHELL"
+        - >-
+          curl -sf -H 'Content-Type: application/json'
+          -d '{"id":1,"jsonrpc":"2.0","method":"chain_getHeader","params":[]}'
+          http://localhost:9944 | grep -q '"number":"0x[1-9a-f]'
       interval: 2s
       timeout: 5s
-      retries: 5
+      retries: 30
       start_period: 5s
     environment:
       CFG_PRESET: "dev"
@@ -135,41 +140,11 @@ export async function checkDockerAvailable({ signal, exec }: DockerCall): Promis
 }
 
 /**
- * This build of mn targets ledger 9, and the stack below is ledger 8 (which
- * wallet-sdk 2.0 can't sync with). No published indexer image runs ledger 9
- * yet, so mn can't start a localnet for now. stop/down/status/logs still
- * manage an existing stack; only starting is refused.
- */
-const LOCALNET_CAN_START: boolean = false;
-
-export class LocalnetUnavailableError extends Error {
-  readonly code = 'LOCALNET_UNAVAILABLE';
-  constructor() {
-    super(
-      'mn localnet can\'t start a ledger-9 network yet: no published indexer image runs ledger 9.\n' +
-      'Run a ledger-9 stack yourself (node 2.1.0-rc.2, proof-server 9.0.0-rc.8, a 4.4 indexer) and point mn at it:\n' +
-      '  per command:  --node ws://localhost:9944 --indexer-ws ws://localhost:8088/api/v4/graphql/ws --proof-server http://localhost:6300\n' +
-      '  or once:      midnight config set node <url>; midnight config set indexer-ws <url>; midnight config set proof-server <url>',
-    );
-    this.name = 'LocalnetUnavailableError';
-  }
-}
-
-/** Throw LocalnetUnavailableError when this build can't start a local network (ledger 9: it can't). */
-export function assertLocalnetCanStart(): void {
-  if (!LOCALNET_CAN_START) throw new LocalnetUnavailableError();
-}
-
-/**
  * Write compose.yml to the localnet folder if it doesn't exist or the version has changed.
  * Returns true if the file was written, false if it was already up to date.
- *
- * Every path that starts the localnet calls this first, so it is where a
- * ledger-9 build refuses, before anything is written or started. The folder
- * is the one under the state root `root`.
+ * The folder is the one under the state root `root`.
  */
 export function ensureComposeFile(root: string): boolean {
-  assertLocalnetCanStart();
   const versionMatches =
     existsSync(versionPath(root)) &&
     existsSync(composePath(root)) &&
@@ -273,7 +248,7 @@ export async function waitForHealthy(docker: DockerCall, timeoutMs: number = 120
 /**
  * Starts the localnet's containers (`docker compose up -d`) and waits for
  * them to be healthy: true when they are, false when the wait timed out.
- * The command calls it after ensureComposeFile, where this build refuses.
+ * The command calls it after ensureComposeFile.
  * Cancelled, it fails with what localnetUpCancelled says.
  */
 export async function startLocalnet(docker: DockerCall, onStatus: (status: string) => void, healthTimeoutMs: number = 120_000): Promise<boolean> {

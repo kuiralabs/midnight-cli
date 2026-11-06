@@ -110,7 +110,6 @@ Stable identifiers used in error messages and structured error objects, with the
 | `DUST_GENERATING` | 5 | A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust. |
 | `CHAIN_CLOCK_BEHIND` | 4 | The chain's clock lags this computer's (a local chain after sleep), so Dust estimates don't hold. |
 | `UNSUPPORTED_LEDGER` | 4 | The network is on ledger 8; this build supports ledger 9 only. |
-| `LOCALNET_UNAVAILABLE` | 4 | `mn localnet up` (`midnight_localnet_up()`) can't start a ledger-9 stack on this build. |
 | `NO_TEST_CONFIG` | 1 | No dapp.test.json in the folder the test command ran in. |
 | `LOCAL_STACK_UNREACHABLE` | 4 | No ledger-9 stack answers at the configured endpoints. |
 | `AMBIGUOUS_LOCAL_STACKS` | 4 | Several local Midnight stacks are running and no endpoints are configured, so mn won't guess. |

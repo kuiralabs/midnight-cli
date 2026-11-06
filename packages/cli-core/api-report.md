@@ -508,7 +508,6 @@ export declare const ERROR_CODES: {
     readonly SYNC_TIMEOUT: "SYNC_TIMEOUT";
     readonly CANCELLED: "CANCELLED";
     readonly UNSUPPORTED_LEDGER: "UNSUPPORTED_LEDGER";
-    readonly LOCALNET_UNAVAILABLE: "LOCALNET_UNAVAILABLE";
     readonly LOCAL_STACK_UNREACHABLE: "LOCAL_STACK_UNREACHABLE";
     readonly AMBIGUOUS_LOCAL_STACKS: "AMBIGUOUS_LOCAL_STACKS";
     readonly UNSUPPORTED_NODE: "UNSUPPORTED_NODE";
@@ -850,7 +849,7 @@ export declare const coreCodes: readonly [
         readonly exitCode: 4;
         readonly order: 30;
         readonly summary: "Indexer/node/proof-server connection refused or DNS failure.";
-        readonly recovery: "Check `midnight_localnet_status()` or the endpoints the user configured; on this build `midnight_localnet_up()` is refused, so ask the user to start their ledger-9 stack.";
+        readonly recovery: "Check `midnight_localnet_status()` (start it with `midnight_localnet_up()`) or the endpoints the user configured.";
     },
     {
         readonly code: "AMBIGUOUS_LOCAL_STACKS";

@@ -15,22 +15,6 @@ export const devGuidance: PackageGuidance = {
 `,
     },
     {
-      text: 'skill-core',
-      section: 'title',
-      order: 10,
-      body: `\`midnight_localnet_up\` is refused on this build: no published indexer image runs ledger 9 yet.
-
-`,
-    },
-    {
-      text: 'skill-full',
-      section: 'title',
-      order: 10,
-      body: `> \`midnight_localnet_up\` is refused on this build, because no published indexer image runs ledger 9 yet.
-
-`,
-    },
-    {
       text: 'agent-manual',
       section: 'e2e-testing',
       order: 10,
@@ -54,8 +38,8 @@ contract deployment, circuit calls, and state verification.
   Run "mn dev" in a Compact project. It checks the local network is up,
   provisions 3 funded wallets (dev-alice/dev-bob/dev-carol), compiles on
   save, and accepts a "d" keystroke to deploy the current artifact with
-  dev-alice. See "mn help dev". On this ledger-9 build it uses a ledger-9
-  stack you run (configured endpoints) instead of starting one.
+  dev-alice. See "mn help dev". Start the local network first with
+  "mn localnet up", or point mn at another ledger-9 stack (endpoint config).
 
 `,
     },
@@ -63,7 +47,7 @@ contract deployment, circuit calls, and state verification.
       text: 'skill-core',
       section: 'intent-routing',
       order: 20,
-      body: `| "Start localnet" / "start a local network" | Refused on this build: explain, and point the user at running a ledger-9 stack (see \`/full\`) |
+      body: `| "Start localnet" / "start a local network" | \`midnight_localnet_up()\` |
 | "Stop localnet" | \`midnight_localnet_stop()\` |
 | "Show localnet logs" / "what's the indexer doing" | \`midnight_localnet_logs({ tail: "200" })\` |
 `,
@@ -79,7 +63,7 @@ contract deployment, circuit calls, and state verification.
       text: 'skill-full',
       section: 'intent-routing',
       order: 20,
-      body: `| "Start localnet" / "start a local network" | Explain that \`midnight_localnet_up()\` is refused on this ledger-9 build; the user runs a ledger-9 stack and points mn at it (see the note at the top) |
+      body: `| "Start localnet" / "start a local network" | \`midnight_localnet_up()\` |
 | "Stop localnet" | \`midnight_localnet_stop()\` |
 `,
     },
@@ -107,7 +91,7 @@ Running a suite is a CLI command, not an MCP tool: \`mn test run --suite <name>\
     ...codeGuidancePieces(devCodes),
   ],
   toolsTable: [
-    { tool: 'midnight_localnet_up', group: 'local-network', order: 10, description: ['Refused on this ledger-9 build (see OVERVIEW)'] },
+    { tool: 'midnight_localnet_up', group: 'local-network', order: 10, description: ['Start local network (Docker)'] },
     { tool: 'midnight_localnet_stop', group: 'local-network', order: 20, description: ['Stop local network (preserves state)'] },
     { tool: 'midnight_localnet_down', group: 'local-network', order: 30, description: ['Full teardown (volumes + undeployed cache)'] },
     { tool: 'midnight_localnet_status', group: 'local-network', order: 40, description: ['Show service status and ports'] },

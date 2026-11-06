@@ -243,8 +243,8 @@ describe('the texts, assembled from the installed packages', () => {
   it('keeps a shared section\'s other packages in order when one is missing', () => {
     const manual = agentManual(withoutPackage('dev'));
     const codes = manual.split('ERROR CODES')[1]!.split('MCP SERVER')[0]!;
-    expect(codes).not.toContain('LOCALNET_UNAVAILABLE');
-    // dev's code (order 160) is gone from between chain's two (150 and 170).
+    expect(codes).not.toContain('NO_TEST_CONFIG');
+    // dev's code (order 165) is gone from between chain's two (150 and 170).
     const ledger = chainCodes.find((definition) => definition.code === 'UNSUPPORTED_LEDGER')!;
     expect(codes).toContain(`${manualCodeRow(ledger)}  LOCAL_STACK_UNREACHABLE 4`);
     expect(manual).not.toContain('E2E TESTING');

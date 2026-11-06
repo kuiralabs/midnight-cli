@@ -1,5 +1,5 @@
 // The localnet command as the shell runs it: its arguments, its help and
-// intro, and up refused on this ledger-9 build. The localnet library's own
+// intro, and up without Docker. The localnet library's own
 // tests are the dev package's (packages/dev/src/__tests__/localnet.test.ts).
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -89,14 +89,13 @@ describe('help integration', () => {
   });
 });
 
-describe('localnet up on this ledger-9 build', () => {
-  it('refuses with LOCALNET_UNAVAILABLE even without Docker, rather than asking to install Docker', async () => {
+describe('localnet up', () => {
+  it('says Docker is required when there is no Docker to run', async () => {
     const originalPath = process.env.PATH;
     process.env.PATH = '/nonexistent'; // no docker binary to find
     try {
       const err: any = await cliCall(localnetCommand, parseArgs(['localnet', 'up'])).catch((e) => e);
-      expect(err.code).toBe('LOCALNET_UNAVAILABLE');
-      expect(err.message).not.toContain('Docker Compose v2 is required');
+      expect(err.message).toContain('Docker is required but was not found');
     } finally {
       process.env.PATH = originalPath;
     }

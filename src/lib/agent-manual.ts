@@ -95,9 +95,7 @@ a secret: mn never prints it. Preview and undeployed need none.
 LEDGER 9 ONLY: this build of mn speaks ledger 9 only. A chain still on
 ledger 8 (preview and preprod today) is refused up front with an
 error saying so; use midnight-wallet-cli 0.5.x for those. localnet up
-is refused too (no published ledger-9 indexer image yet): run a ledger-9
-stack yourself and point mn at it with --node / --indexer-ws /
---proof-server, or once with midnight config set node|indexer-ws|proof-server.
+starts a ledger-9 stack on undeployed.
 
 STRUCTURED JSON OUTPUT
 ──────────────────────

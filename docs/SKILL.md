@@ -2,9 +2,7 @@
 
 You have access to the `midnight-wallet-cli` MCP server. This document teaches you how to use it well. Read it once at the start of a session; use it as reference throughout.
 
-> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 (preview and preprod today) is refused up front with an error saying so: tell the user to use `midnight-wallet-cli` 0.5.x for it, don't retry. The user runs a ledger-9 stack themselves; on the default ports (node 9944, indexer 8088, proof server 6300) `undeployed` reaches it with no configuration, otherwise set its URLs with `midnight_config_set` (keys `node`, `indexer-ws`, `proof-server`) or pass `--node` / `--indexer-ws` / `--proof-server` on the CLI.
-
-> `midnight_localnet_up` is refused on this build, because no published indexer image runs ledger 9 yet.
+> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 (preview and preprod today) is refused up front with an error saying so: tell the user to use `midnight-wallet-cli` 0.5.x for it, don't retry. `midnight_localnet_up()` starts a ledger-9 stack for `undeployed` on the default ports (node 9944, indexer 8088, proof server 6300); another stack is reached by setting its URLs with `midnight_config_set` (keys `node`, `indexer-ws`, `proof-server`) or passing `--node` / `--indexer-ws` / `--proof-server` on the CLI.
 
 ## What you can do with this CLI
 
@@ -27,7 +25,7 @@ Most commands are MCP tools (`tools/list` shows each, and what it takes). These 
 - **Shielded vs unshielded** — shielded addresses start `mn_shield-addr_*`; unshielded start `mn_addr_*`. A wallet has one of each per network. Sender controls the privacy: `mn transfer --shielded` sends privately.
 - **No self-shielding** — a wallet cannot move its own funds from unshielded to shielded. To get shielded NIGHT, receive a shielded transfer from a wallet that already has some (genesis wallet has 250M shielded NIGHT on localnet).
 - **Networks**
-  - `undeployed` — local network. Use this for dev iteration. On this build it must be a ledger-9 stack the user runs (`mn localnet up` is refused, see the note at the top).
+  - `undeployed` — local network (`midnight_localnet_up()` starts it). Use this for dev iteration.
   - `preprod` — public testnet (ledger 8 today, so refused by this build). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod needs a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware.
   - `preview` — public preview testnet (ledger 8 today, so refused by this build). Same first-sync trade-off as preprod.
   - `stagenet` — Sig Network's testnet, on the beta SDK set (mn loads its beta engine for it). No shielded faucet, so shielded sync is off by default; NIGHT from https://faucet.stagenet.shielded.tools. Its proof server must match its node (`midnightntwrk/proof-server:9.0.0-rc.5_experimental`). Grant is refused there for now.
@@ -56,7 +54,7 @@ Midnight shut its own preprod indexer down on 2026-10-09. Blockfrost serves prep
 | "Fund this address …" (localnet only) | `midnight_airdrop({ amount: "1000", wallet: "mn_addr_undeployed1…" })` — `wallet` accepts a name, path, or raw bech32m address |
 | "Register dust" / "I need fees" | `midnight_dust_register()` |
 | "Am I registered for dust?" | `midnight_dust_status()` |
-| "Start localnet" / "start a local network" | Explain that `midnight_localnet_up()` is refused on this ledger-9 build; the user runs a ledger-9 stack and points mn at it (see the note at the top) |
+| "Start localnet" / "start a local network" | `midnight_localnet_up()` |
 | "Stop localnet" | `midnight_localnet_stop()` |
 
 ## Canonical flows
@@ -145,7 +143,7 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 |---|---|---|
 | `INVALID_ARGS` | Missing/invalid argument. | Show the message to the user verbatim — it names the missing field. |
 | `WALLET_NOT_FOUND` | Named wallet doesn't exist on disk. | `midnight_wallet_list()` — user may have removed it. |
-| `NETWORK_ERROR` | Indexer/node/proof-server connection refused or DNS failure. | Check `midnight_localnet_status()` or the endpoints the user configured; on this build `midnight_localnet_up()` is refused, so ask the user to start their ledger-9 stack. |
+| `NETWORK_ERROR` | Indexer/node/proof-server connection refused or DNS failure. | Check `midnight_localnet_status()` (start it with `midnight_localnet_up()`) or the endpoints the user configured. |
 | `SYNC_TIMEOUT` | Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync. | Retry; the cache resumes from the last applied event so progress is preserved. |
 | `INSUFFICIENT_BALANCE` | Wallet doesn't have enough NIGHT to cover the requested amount. | Show the user. On localnet: `midnight_airdrop({ amount: "..." })`. On hosted networks: tell user to fund the address. |
 | `TX_REJECTED` | Chain rejected the submitted transaction (catch-all when no more specific code applies). | Read the message; usually a state mismatch resolved by re-sync + retry. |
@@ -158,7 +156,6 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 | `DUST_GENERATING` | A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust. | The message says when: run `midnight_dust_register()` again then, or add NIGHT. |
 | `CHAIN_CLOCK_BEHIND` | The chain's clock lags this computer's (a local chain after sleep), so Dust estimates don't hold. | Wait for it to catch up, or ask the user to restart the local chain. |
 | `UNSUPPORTED_LEDGER` | The network is on ledger 8; this build supports ledger 9 only. | Tell the user: this network needs midnight-wallet-cli 0.5.x. Don't retry. |
-| `LOCALNET_UNAVAILABLE` | `mn localnet up` (`midnight_localnet_up()`) can't start a ledger-9 stack on this build. | Ask the user to start their ledger-9 stack and point mn at it (endpoint config). |
 | `NO_TEST_CONFIG` | No dapp.test.json in the folder the test command ran in. | Ask the user to run it from the dApp's root, or create one with `mn test create`. |
 | `LOCAL_STACK_UNREACHABLE` | No ledger-9 stack answers at the configured endpoints. | Ask the user to start their stack or fix the configured node / indexer-ws / proof-server endpoints. |
 | `AMBIGUOUS_LOCAL_STACKS` | Several local Midnight stacks are running and no endpoints are configured, so mn won't guess. | Ask the user which stack to use; they set its endpoints with `midnight config set`. Don't retry blindly. |
