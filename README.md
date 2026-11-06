@@ -26,7 +26,7 @@ npm install -g midnight-wallet-cli@next   # this ledger-9 prerelease
 
 This installs two commands: `midnight` (or `mn` for short) and `midnight-wallet-mcp`.
 
-Install the prerelease with npm (or run it with `npx`). Each engine ships an `npm-shrinkwrap.json` that pins the SDK set it was tested with; bun's installer ignores it and resolves the packages again, so an engine bun installed is refused before any SDK loads, saying so (`MIXED_SDK_LAYOUT`). bun can run what npm installed.
+Install the prerelease with npm 11 or older (or run it with `npx`; with npm 12, `npx -y npm@11 install -g midnight-wallet-cli@next`). Each engine ships an `npm-shrinkwrap.json` that pins the SDK set it was tested with; npm 12 and bun's installer ignore it and resolve the packages again, so an engine either installed is refused before any SDK loads, saying so (`MIXED_SDK_LAYOUT`). bun can run what npm installed.
 
 ## Commands
 

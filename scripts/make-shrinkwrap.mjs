@@ -39,9 +39,21 @@ const repo = fileURLToPath(new URL('..', import.meta.url));
 /** A published package's tarball and integrity, as `registry` serves them. */
 export function registryDist(registry) {
   return (name, version) => {
-    const dist = JSON.parse(execFileSync('npm', ['view', `${name}@${version}`, 'dist', '--json', '--registry', registry], { encoding: 'utf-8' }));
+    const dist = viewedField(execFileSync('npm', ['view', `${name}@${version}`, 'dist', '--json', '--registry', registry], { encoding: 'utf-8' }));
     return { resolved: dist.tarball, integrity: dist.integrity };
   };
+}
+
+/**
+ * The one field `npm view <name>@<version> <field> --json` printed: the value
+ * itself up to npm 11, an array of one value from npm 12 (the release job
+ * installs the latest npm).
+ */
+export function viewedField(output) {
+  const parsed = JSON.parse(output);
+  if (!Array.isArray(parsed)) return parsed;
+  if (parsed.length !== 1) throw new Error(`npm view --json printed ${parsed.length} values, not one: ${output.slice(0, 200)}`);
+  return parsed[0];
 }
 
 /** The lockfile path a package named `name` resolves to from the package at `from`, or undefined. */

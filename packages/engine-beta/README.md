@@ -8,7 +8,7 @@ The Midnight CLI's engine for the SDK's beta set that stagenet runs (wallet SDK 
 npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-engine-beta@next
 ```
 
-Install with npm: this package ships an `npm-shrinkwrap.json` that pins its SDK set, and npm honours it, so it gets exactly the SDK it was tested with (one copy of each ledger). An install that isn't that tree (bun's installer ignores the shrinkwrap and resolves the packages again) is refused before any SDK module loads, with `MIXED_SDK_LAYOUT` and the npm command; bun can run what npm installed. A program that also uses the other networks (`@kuiralabs/midnight-engine-rc`) installs both; a process loads one of them.
+Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): this package ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it, so it gets exactly the SDK it was tested with (one copy of each ledger). An install that isn't that tree (bun's installer ignores the shrinkwrap and resolves the packages again) is refused before any SDK module loads, with `MIXED_SDK_LAYOUT` and the npm command; bun can run what npm installed. A program that also uses the other networks (`@kuiralabs/midnight-engine-rc`) installs both; a process loads one of them.
 
 ## Entry points
 

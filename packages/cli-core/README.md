@@ -8,7 +8,7 @@ The base of the Midnight CLI packages: the host a program passes to them, typed 
 npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-engine-rc@next
 ```
 
-Every package is a release candidate on the `next` tag. Install with npm: each engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm honours it. bun's installer ignores it and resolves the packages again, so an engine bun installed refuses to load, before any SDK module does, with `MIXED_SDK_LAYOUT` and the npm command; bun runs what npm installed. A program that runs the SDK installs an engine too: `@kuiralabs/midnight-engine-rc` for preprod, preview and a local network, `@kuiralabs/midnight-engine-beta` for stagenet.
+Every package is a release candidate on the `next` tag. Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): each engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it. bun's installer ignores it and resolves the packages again, so an engine bun installed refuses to load, before any SDK module does, with `MIXED_SDK_LAYOUT` and the npm command; bun runs what npm installed. A program that runs the SDK installs an engine too: `@kuiralabs/midnight-engine-rc` for preprod, preview and a local network, `@kuiralabs/midnight-engine-beta` for stagenet.
 
 ## Entry points
 

@@ -111,9 +111,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: .bun-version
-      # OIDC trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.x.
+      # OIDC trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.x. Held at npm 11: npm 12 neither packs
+      # nor reads npm-shrinkwrap.json, which each engine and grant ship (and mn's own).
       - name: Upgrade npm for OIDC trusted publishing
-        run: npm install -g npm@latest
+        run: npm install -g npm@11
       - run: npm ci
       - name: Download all platform binaries
         if: env.PRERELEASE != 'true'

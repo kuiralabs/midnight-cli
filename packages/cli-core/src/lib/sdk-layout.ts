@@ -79,8 +79,8 @@ export class NotInstalledAsShippedError extends Error {
     super(
       `${engine} isn't installed as it was tested: ${drift.length} of its dependencies resolve to other versions than the npm-shrinkwrap.json it ships ` +
       `(${first.name} ${first.found ?? 'missing'} where ${first.shipped} was tested, for ${first.from}), so it could fail in ways nobody has seen. ` +
-      'This happens with an installer that ignores the shrinkwrap, such as bun\'s. ' +
-      'Install with npm (npm install -g midnight-wallet-cli for mn, or npm install for a program); bun can run what npm installed.',
+      'This happens with an installer that ignores the shrinkwrap, such as bun\'s or npm 12 and later. ' +
+      'Install with npm 11 or older (npm install -g midnight-wallet-cli for mn, or npm install for a program; with npm 12, npx -y npm@11 install …); bun can run what npm installed.',
     );
     this.name = 'NotInstalledAsShippedError';
     this.drift = drift;

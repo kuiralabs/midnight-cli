@@ -16,7 +16,7 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 ### Changed
 
 - **Spends leave open offers' coins alone.** Both engines pick shielded coins with mn's own picker. A spend never takes an open offer's coins, except to cancel that offer, and it prefers a coin of the exact amount. `OFFER_COINS_IN_USE` now comes only when nothing else could pay, before any proof is made. `mn swap cancel` spends only the cancelled offer's coins, so the wallet's other offers stay live.
-- **Install with npm, run with Node or bun.** An engine installed by bun's installer is refused before any SDK loads, with `MIXED_SDK_LAYOUT` naming the npm command. bun's installer resolves the dependency ranges again and ignores the engine's shrinkwrap. A tree that npm installed, nested or hoisted, runs under both Node and bun.
+- **Install with npm 11 or older, run with Node or bun.** Each engine ships an `npm-shrinkwrap.json` with the SDK set it was tested on. npm 12 no longer reads one, and bun's installer ignores it, so both resolve the dependency ranges again. An engine installed that way is refused before any SDK loads, with `MIXED_SDK_LAYOUT` and the command to use instead. With npm 12, install with `npx -y npm@11 install -g midnight-wallet-cli@next`. A tree that npm 11 or older installed, nested or hoisted, runs under both Node and bun.
 - **Grant on account-chain 0.3.0-rc.3:** both engines pin `@kuiralabs/midnight-account-chain` 0.3.0-rc.3, which batches inbox appends (one transaction for up to four entries), and grant pins `@kuiralabs/midnight-account` 0.2.0-rc.1. An account deployed with rc.2 has the older contract, so deploy a new one.
 
 ### Fixed

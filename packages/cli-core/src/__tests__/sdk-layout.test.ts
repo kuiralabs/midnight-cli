@@ -105,7 +105,7 @@ describe('an engine installed as shipped', () => {
     expect(refusal).toBeInstanceOf(NotInstalledAsShippedError);
     expect((refusal as NotInstalledAsShippedError).code).toBe('MIXED_SDK_LAYOUT');
     expect((refusal as Error).message).toContain('the test engine isn\'t installed as it was tested: 1 of its dependencies');
-    expect((refusal as Error).message).toContain('Install with npm');
+    expect((refusal as Error).message).toContain('Install with npm 11 or older');
   });
 
   // As bun's installer leaves graphql-tag: sharing the top-level graphql instead of the one nested for it.
