@@ -9,7 +9,7 @@ import type { ContractInfo } from '../lib/contract/inspect.ts';
 
 const UINT = { 'type-name': 'Uint', maxval: 255 } as never;
 const COUNTER: ContractInfo = {
-  name: 'counter', managedDir: '/m', compilerVersion: '0.35.0', languageVersion: '0.27.0', runtimeVersion: '0.20.0',
+  name: 'counter', managedDir: '/m', compilerVersion: '0.36.0', languageVersion: '0.28.0', runtimeVersion: '0.21.0',
   circuits: [
     { name: 'increment', pure: false, proof: true, arguments: [], 'result-type': { 'type-name': 'Tuple', types: [] } as never },
     { name: 'add', pure: false, proof: true, arguments: [{ name: 'x', type: UINT }, { name: 'y', type: UINT }], 'result-type': UINT },

@@ -40,8 +40,7 @@ const wallet = { getCoinPublicKey: () => COIN_KEY } as unknown as FeeWallet;
 const privateStateUnder = async (password: string) => {
   const account = await openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), host, source: { env: { [PASSPHRASE_ENV]: PASSPHRASE } }, warn: () => {} });
   const providers = accountProviders(account.context, wallet, privateStateLocationOf(dir, () => password));
-  providers.privateStateProvider.setContractAddress(ACCOUNT);
-  return providers.privateStateProvider;
+  return providers.privateStateProvider.forContract(ACCOUNT);
 };
 
 // An account as mn 0.6.0-rc.10 left it: plain records and roster, its private state under the public password.

@@ -17,7 +17,7 @@ function compiledContract(name: string, witnesses: { name: string }[] = []): voi
   const compiler = join(dir, 'managed', name, 'compiler');
   mkdirSync(compiler, { recursive: true });
   writeFileSync(join(compiler, 'contract-info.json'), JSON.stringify({
-    'compiler-version': '0.35.0', 'language-version': '0.27.0', 'runtime-version': '0.20.0',
+    'compiler-version': '0.36.0', 'language-version': '0.28.0', 'runtime-version': '0.21.0',
     circuits: [
       { name: 'increment', pure: false, proof: true, arguments: [], 'result-type': { 'type-name': 'Tuple', types: [] } },
       { name: 'add', pure: false, proof: true, arguments: [{ name: 'x', type: UINT }, { name: 'y', type: UINT }], 'result-type': UINT },

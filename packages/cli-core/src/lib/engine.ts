@@ -125,7 +125,7 @@ export interface EngineContractScripts {
   packageFolder(name: string): string | null;
   /** The compact runtime this engine runs contracts on. */
   readonly compactRuntimeVersion: string;
-  /** The compiler whose contracts that runtime runs, as a person would ask for it: `compactc 0.35`. */
+  /** The compiler whose contracts that runtime runs, as a person would ask for it: `compactc 0.36`. */
   readonly compiler: string;
   /** Whether this engine's compact runtime runs a contract compiled for `runtimeVersion` (the runtime's own rule). */
   acceptsRuntime(runtimeVersion: string): boolean;

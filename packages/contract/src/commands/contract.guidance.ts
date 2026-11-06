@@ -23,8 +23,8 @@ export const contractGuidance: PackageGuidance = {
 
 Run these commands from the root of a dApp project that contains a
 compiled Compact contract (managed/ directory with .js and .d.ts files).
-Compile with Compact 0.35 (language 0.27): mn bundles compact-runtime
-0.20.0, and code compiled for another runtime is rejected at deploy/call.
+Compile with Compact 0.36 (language 0.28): mn bundles compact-runtime
+0.21.0, and code compiled for another runtime is rejected at deploy/call.
 
   Inspect — show circuits, witnesses, types:
     midnight contract inspect [--path <dir>] [--json]
@@ -59,7 +59,7 @@ Compile with Compact 0.35 (language 0.27): mn bundles compact-runtime
       order: 20,
       body: `  # Contract inspection
   midnight contract inspect --json
-  # → {"name":"bboard","compilerVersion":"0.35.0","circuits":[{"name":"post",...}],"witnesses":[...]}
+  # → {"name":"bboard","compilerVersion":"0.36.0","circuits":[{"name":"post",...}],"witnesses":[...]}
 
   # Deploy contract (from dApp root directory)
   midnight contract deploy --json
@@ -105,7 +105,7 @@ Use \`midnight_contract_*\` MCP tools (or \`mn contract\` CLI). Flow: \`compact 
 
 Plain strings, booleans, fractional numbers, and \`null\` pass through unchanged. No hex-string detection — \`"1234"\` stays a string.
 
-**Compatibility caveat — runtime version skew.** Contracts must be compiled with Compact 0.35 (language 0.27). The CLI bundles \`@midnight-ntwrk/compact-runtime\` \`0.20.0\`, so contracts have to target runtime \`0.20.0\`. Artifacts built for another runtime (e.g. \`0.16.0\`, from a ledger-8 toolchain) are rejected at deploy/call with a message like \`CompactError: Version mismatch: compiled code expects 0.16.0\`. The fix is to recompile with Compact 0.35 (\`compact compile\`) rather than asking the user to change \`mn\`; a contract that must stay on the ledger-8 toolchain belongs with \`midnight-wallet-cli\` 0.5.x. \`midnight_contract_inspect\` shows the compiled \`runtimeVersion\` so you can flag the mismatch before attempting deploy.
+**Compatibility caveat — runtime version skew.** Contracts must be compiled with Compact 0.36 (language 0.28). The CLI bundles \`@midnight-ntwrk/compact-runtime\` \`0.21.0\`, so contracts have to target runtime \`0.21.0\`. Artifacts built for another runtime (e.g. \`0.16.0\`, from a ledger-8 toolchain) are rejected at deploy/call with a message like \`CompactError: Version mismatch: compiled code expects 0.16.0\`. The fix is to recompile with Compact 0.36 (\`compact compile\`) rather than asking the user to change \`mn\`; a contract that must stay on the ledger-8 toolchain belongs with \`midnight-wallet-cli\` 0.5.x. \`midnight_contract_inspect\` shows the compiled \`runtimeVersion\` so you can flag the mismatch before attempting deploy.
 
 `,
     },

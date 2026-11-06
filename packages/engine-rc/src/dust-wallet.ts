@@ -9,9 +9,9 @@
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { Imbalances, InsufficientFundsError as NoCoinsCoverIt, getBalanceRecipe, makeIndexerChainVersionProbe } from '@midnightntwrk/wallet-sdk/capabilities';
-import { CustomForkingDustWallet, DustWallet as SdkDustWallet, asV8DustParameters } from '@midnightntwrk/wallet-sdk/dust';
+import { CustomForkingDustWallet, DustWallet as SdkDustWallet, dustVariantConfigurations } from '@midnightntwrk/wallet-sdk/dust';
 import { V1Builder } from '@midnightntwrk/wallet-sdk/dust/v1';
-import { Migration, Transacting, V2Builder, WalletError } from '@midnightntwrk/wallet-sdk/dust/v2';
+import { Transacting, V2Builder, WalletError } from '@midnightntwrk/wallet-sdk/dust/v2';
 import { LedgerOps } from '@midnightntwrk/wallet-sdk/utilities';
 import { type DustInput, chooseDustCoins, planDustInputs, spreadFeeAcrossInputs, type DustShortfall, withDustShortfall } from '@kuiralabs/midnight-cli-core/engine';
 
@@ -119,25 +119,20 @@ const makeConvergingTransacting: typeof Transacting.makeDefaultTransactingCapabi
  * ledger-9 variant's transacting replaced.
  */
 export function DustWallet(configuration: Parameters<typeof SdkDustWallet>[0]): ReturnType<typeof SdkDustWallet> {
-  const dustParameters = configuration.dustParameters ?? ledger.LedgerParameters.initialParameters().dust;
+  // Each variant gets the rates as its own ledger's DustParameters (a WASM
+  // object belongs to the ledger module that made it), and the migration
+  // values the hand-over with ledger-9's.
+  const { v1, v2, migration } = dustVariantConfigurations(configuration);
   const withProbe = {
     ...configuration,
     chainVersionProbe: configuration.chainVersionProbe ?? makeIndexerChainVersionProbe(configuration),
   };
   return CustomForkingDustWallet(
     withProbe,
+    { builder: new V1Builder().withDefaults(), configuration: v1 },
     {
-      builder: new V1Builder().withDefaults(),
-      // A WASM object belongs to the ledger module that made it, so the
-      // ledger-8 variant gets the same rates rebuilt as ledger-8's.
-      configuration: { ...configuration, dustParameters: asV8DustParameters(dustParameters) },
-    },
-    {
-      builder: new V2Builder()
-        .withDefaults()
-        .withTransacting(makeConvergingTransacting)
-        .withMigration(() => Migration.makeCrossLedgerMigration({ dustParameters })),
-      configuration,
+      builder: new V2Builder().withDefaults().withTransacting(makeConvergingTransacting).withMigration(migration),
+      configuration: v2,
     },
   );
 }

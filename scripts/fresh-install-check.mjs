@@ -287,7 +287,7 @@ try {
       mkdirSync(join(managedDir, 'compiler'), { recursive: true });
       mkdirSync(join(managedDir, 'contract'), { recursive: true });
       writeFileSync(join(dapp, 'package.json'), JSON.stringify({ name: 'dapp', private: true, type: 'module' }));
-      writeFileSync(join(managedDir, 'compiler', 'contract-info.json'), JSON.stringify({ 'compiler-version': '0.35.0', 'language-version': '0.27.0', 'runtime-version': scripts.compactRuntimeVersion, circuits: [], witnesses: [] }));
+      writeFileSync(join(managedDir, 'compiler', 'contract-info.json'), JSON.stringify({ 'compiler-version': '0.36.0', 'language-version': '0.28.0', 'runtime-version': scripts.compactRuntimeVersion, circuits: [], witnesses: [] }));
       writeFileSync(join(managedDir, 'contract', 'index.js'), 'export function ledger() { return {}; }\\n');
       const before = readdirSync(dapp).sort();
       const said = [];

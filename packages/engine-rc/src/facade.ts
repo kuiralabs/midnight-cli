@@ -34,18 +34,11 @@ export type SyncMode = 'full' | 'lite' | 'no-dust';
 // no-dust = shielded + unshielded (skip dust — used by balance; dust isn't needed
 //           to read NIGHT balances and avoids the dust `isConnected` SDK hang)
 
-/** A shielded or dust wallet that can be started from its seed (both SDK forking wallets can). */
-interface SeedStartable {
-  startWithSeed(seed: Uint8Array): Promise<void>;
-}
-
 export interface FacadeBundle {
   facade: WalletFacade;
   keystore: UnshieldedKeystore;
   /** Per-role seeds: the material the wallets are started with. */
   seeds: WalletSeeds;
-  /** The shielded and dust wallets the facade wraps, kept so a restored facade can be started from seeds. */
-  seedStartable: { shielded: SeedStartable; dust: SeedStartable };
   /** How the shielded wallet picks the coins a spend uses: never an open offer's, except in its cancel. */
   coinPicking: CoinPicking<ShieldedCoin>;
   /** Active subscription that keeps shareReplay buffers alive. Cleaned up by stopFacade. */
@@ -118,20 +111,15 @@ export async function buildFacade(
     relayURL: new URL(networkConfig.node),
   };
 
-  // The init factories hand back the wallets they build, so the bundle can
-  // start a restored facade from seeds (see startFacade).
-  let shielded: SeedStartable | undefined;
-  let dust: SeedStartable | undefined;
-
-  // Fresh build. The class-level startWithSeed derives and keeps both ledger
-  // versions' keys, so the wallet can read whichever side of the fork the
-  // chain is on. It doesn't start syncing; startFacade does that.
+  // Fresh build. The class-level startWithSeed probes which side of the fork
+  // the chain is on and builds the wallet there. It doesn't start syncing;
+  // startFacade does that.
   const initFresh = () => WalletFacade.init({
     configuration,
     submissionService: (config) => submissionOnDemand(config.relayURL),
-    shielded: async (cfg) => (shielded = await PickingShieldedWallet(cfg, coinPicking).startWithSeed(seeds.shielded)),
+    shielded: (cfg) => PickingShieldedWallet(cfg, coinPicking).startWithSeed(seeds.shielded),
     unshielded: (cfg) => UnshieldedWallet(cfg).startWithPublicKey(PublicKey.fromKeyStore(keystore)),
-    dust: async (cfg) => (dust = await DustWallet(cfg).startWithSeed(seeds.dust)),
+    dust: (cfg) => DustWallet(cfg).startWithSeed(seeds.dust),
   });
 
   // Bridge: if the dust-direct cache has a more recent DustLocalState than the
@@ -152,9 +140,9 @@ export async function buildFacade(
       facade = await WalletFacade.init({
         configuration,
         submissionService: (config) => submissionOnDemand(config.relayURL),
-        shielded: (cfg) => (shielded = PickingShieldedWallet(cfg, coinPicking).restore(effectiveCache.shielded)),
+        shielded: (cfg) => PickingShieldedWallet(cfg, coinPicking).restore(effectiveCache.shielded),
         unshielded: (cfg) => UnshieldedWallet(cfg).restore(effectiveCache.unshielded),
-        dust: (cfg) => (dust = DustWallet(cfg).restore(effectiveCache.dust)),
+        dust: (cfg) => DustWallet(cfg).restore(effectiveCache.dust),
       });
       restoredFromCache = true;
       log?.('facade', 'Cache restore successful');
@@ -168,10 +156,7 @@ export async function buildFacade(
     facade = await initFresh();
   }
 
-  if (!shielded || !dust) {
-    throw new Error('Wallet facade was built without its shielded or dust wallet');
-  }
-  return { facade, keystore, seeds, seedStartable: { shielded, dust }, coinPicking, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS };
+  return { facade, keystore, seeds, coinPicking, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS };
 }
 
 /** What the facade submits through, as WalletFacade.init takes it. */
@@ -197,31 +182,13 @@ export function submissionOnDemand(relayURL: URL): FacadeSubmission {
 }
 
 /**
- * Start the facade's wallets and background sync, exactly once.
- *
- * A fresh facade takes the SDK's own path. Its wallets already hold both
- * ledger versions' keys, and `facade.start` adds the ledger-v9 ones.
- *
- * A restored facade can't take that path. A snapshot carries no keys, and
- * `facade.start` only supplies ledger-v9 keys, which can't drive a wallet
- * restored onto the ledger-v8 variant. So the shielded and dust wallets are
- * started from their seeds instead, which covers both ledger versions.
- * Starting a wallet twice runs two sync streams against the same state, so
- * this replaces `facade.start` rather than following it, and starts the same
- * four things it does.
+ * Start the facade's wallets and background sync, exactly once. From seeds,
+ * `facade.start` gives the shielded and dust wallets both ledger versions'
+ * keys, so a wallet restored onto either side of the fork can sync, fresh or
+ * restored alike.
  */
 async function startFacade(bundle: FacadeBundle): Promise<void> {
-  const { facade, seeds, seedStartable } = bundle;
-  if (!bundle.restoredFromCache) {
-    await facade.start(seeds);
-    return;
-  }
-  await Promise.all([
-    seedStartable.shielded.startWithSeed(seeds.shielded),
-    facade.unshielded.start(),
-    seedStartable.dust.startWithSeed(seeds.dust),
-    facade.pendingTransactionsService.start(),
-  ]);
+  await bundle.facade.start(bundle.seeds);
 }
 
 /**

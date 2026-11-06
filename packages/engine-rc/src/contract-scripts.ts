@@ -25,10 +25,10 @@ export const SCRIPT_PACKAGES = [
   '@midnight-ntwrk/midnight-js-http-client-proof-provider',
   '@midnight-ntwrk/midnight-js-indexer-public-data-provider',
   '@midnight-ntwrk/midnight-js-level-private-state-provider',
-  '@midnight-ntwrk/midnight-js-network-id',
   '@midnight-ntwrk/midnight-js-node-zk-config-provider',
   '@midnight-ntwrk/midnight-js-types',
   '@midnight-ntwrk/midnight-js-utils',
+  '@midnightntwrk/ledger-v9',
   'ws',
 ] as const;
 
@@ -76,7 +76,8 @@ function installedFolder(name: string, dir: string): string | null {
  * those fragments so a test can evaluate a fragment with the same bindings.
  */
 export const PROVIDER_IMPORTS = `
-import { createWalletProvider, createMidnightProvider, Transaction } from '@midnight-ntwrk/midnight-js-types';
+import { createLedger9WalletProvider, createLedger9MidnightProvider } from '@midnight-ntwrk/midnight-js-types';
+import { Transaction } from '@midnightntwrk/ledger-v9';
 import { toHex, fromHex } from '@midnight-ntwrk/midnight-js-utils';
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -86,27 +87,29 @@ import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-pri
 
 /**
  * walletProvider + midnightProvider backed by mn serve RPC. midnight-js 5
- * passes version-tagged txs ({ version: 'v9', tx }) and refuses providers that
- * do not declare `supportedEras`; createWalletProvider/createMidnightProvider
- * declare v9 and unwrap/re-tag, so the bodies below see live ledger-v9 txs.
+ * hands providers transaction handles (bytes tagged with their ledger era) and
+ * refuses providers that don't say which eras they serve; the ledger-9
+ * builders declare v9. The wallet answers a balance with the transaction's
+ * bytes, and a submit returns the transaction's id, read from the transaction
+ * decoded with this script's ledger.
  */
 export function walletProviderCode(): string {
   return `
 const walletState = await rpcCall('getShieldedAddresses', {});
 
-const walletProvider = createWalletProvider({
+const walletProvider = createLedger9WalletProvider({
   getCoinPublicKey: () => walletState.shieldedCoinPublicKey,
   getEncryptionPublicKey: () => walletState.shieldedEncryptionPublicKey,
   // ttl is ignored: mn serve applies its own TTL when balancing.
   async balanceTx(tx) {
     const result = await rpcCall('balanceUnsealedTransaction', { tx: toHex(tx.serialize()) });
-    return Transaction.deserialize('signature', 'proof', 'binding', fromHex(result.tx));
+    return fromHex(result.tx);
   },
 });
 
-const midnightProvider = createMidnightProvider(async (tx) => {
+const midnightProvider = createLedger9MidnightProvider(async (tx) => {
   await rpcCall('submitTransaction', { tx: toHex(tx.serialize()) });
-  return tx.identifiers()[0];
+  return tx.deserialize({ v9: Transaction }).identifiers()[0];
 });
 `;
 }
@@ -186,12 +189,18 @@ const compiled = witnesses
 `;
 }
 
+/** How long a transaction a script builds stays valid: midnight-js's own default, one hour. */
+const TX_TTL_SECONDS = 3600;
+
 /** The `providers` object deploy/call pass to midnight-js-contracts. */
 export function providerSetupCode(networkConfig: NetworkConfig, privateStateKey: string, parts: ScriptParts): string {
   return `
 const zkConfigProvider = new NodeZkConfigProvider(MANAGED_DIR);
 
 const providers = {
+  // The network the transactions are built for, and how long one stays valid
+  // (mn serve applies its own TTL when it balances).
+  config: { networkId: ${JSON.stringify(networkConfig.networkId.toLowerCase())}, ttlSeconds: ${TX_TTL_SECONDS} },
   privateStateProvider: levelPrivateStateProvider({
     privateStateStoreName: ${JSON.stringify(privateStateKey)},
     privateStoragePasswordProvider: () => Promise.resolve('mn-contract-default-pwd-16ch'),
@@ -220,9 +229,6 @@ export function generateDeployScript(opts: DeployScript, parts: ScriptParts): st
   const argsLiteral = JSON.stringify(opts.args ?? []);
 
   return `${parts.prelude}
-import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-setNetworkId(${JSON.stringify(opts.networkConfig.networkId.toLowerCase())});
-
 ${parts.rpcClientCode(opts.servePort)}
 ${contractSetupCode(opts.contractName, opts.managedDir, parts)}
 
@@ -259,9 +265,6 @@ export function generateCallScript(opts: CallScript, parts: ScriptParts): string
   const privateStateKey = opts.privateStateKey ?? `${opts.contractName}PrivateState`;
 
   return `${parts.prelude}
-import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-setNetworkId(${JSON.stringify(opts.networkConfig.networkId.toLowerCase())});
-
 ${parts.rpcClientCode(opts.servePort)}
 ${contractSetupCode(opts.contractName, opts.managedDir, parts)}
 
@@ -296,12 +299,10 @@ process.exit(0);
 
 export function generateStateScript(opts: StateScript, parts: ScriptParts): string {
   return `${parts.prelude}
-import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-setNetworkId(${JSON.stringify(opts.networkConfig.networkId.toLowerCase())});
-
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
+import { ContractState } from '@midnight-ntwrk/compact-runtime';
 
 const MANAGED_DIR = ${JSON.stringify(opts.managedDir)};
 
@@ -318,14 +319,15 @@ const provider = indexerPublicDataProvider({
   subscriptionURL: process.env.${parts.indexerWsUrlEnv},
 });
 
-const contractState = await provider.queryContractState(${JSON.stringify(opts.contractAddress)});
-if (!contractState) {
+const read = await provider.queryContractState(${JSON.stringify(opts.contractAddress)});
+if (!read) {
   fail(new Error('No contract found at address ${opts.contractAddress}'));
 }
 
 process.stderr.write('Parsing ledger state...\\n');
-// ledger() expects contractState.data (ChargedState), not the full ContractState
-const state = contractMod.ledger(contractState.data ?? contractState);
+// The state comes as the bytes the ledger wrote; the compact runtime the
+// contract was compiled for decodes it, and ledger() reads its data (ChargedState).
+const state = contractMod.ledger(read.contractState.deserialize({ v9: ContractState }).data);
 
 // Extract scalar fields and map fields
 const fields = {};

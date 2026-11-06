@@ -45,7 +45,7 @@ beforeAll(async () => {
   const compiler = path.join(dappDir, 'managed', 'counter', 'compiler');
   fs.mkdirSync(compiler, { recursive: true });
   fs.writeFileSync(path.join(compiler, 'contract-info.json'), JSON.stringify({
-    'compiler-version': '0.35.0', 'language-version': '0.27.0', 'runtime-version': '0.20.0',
+    'compiler-version': '0.36.0', 'language-version': '0.28.0', 'runtime-version': '0.21.0',
     circuits: [{ name: 'increment', pure: false, proof: true, arguments: [], 'result-type': { 'type-name': 'Tuple', types: [] } }],
     witnesses: [],
   }));

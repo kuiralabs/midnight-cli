@@ -30,12 +30,13 @@ afterAll(() => fs.rmSync(ROOT, { recursive: true, force: true }));
 describe('the rc engine\'s compact runtime', () => {
   it('is the one it says, and takes contracts compiled for it, by the runtime\'s own rule', () => {
     const { scripts } = rcEngine.contracts;
-    expect(scripts.compactRuntimeVersion).toBe('0.20.0');
-    expect(scripts.compiler).toBe('compactc 0.35');
-    expect(scripts.acceptsRuntime('0.20.0')).toBe(true);
+    expect(scripts.compactRuntimeVersion).toBe('0.21.0');
+    expect(scripts.compiler).toBe('compactc 0.36');
+    expect(scripts.acceptsRuntime('0.21.0')).toBe(true);
+    expect(scripts.acceptsRuntime('0.20.0')).toBe(false);
     expect(scripts.acceptsRuntime('0.19.0')).toBe(false);
     expect(scripts.acceptsRuntime('0.16.0')).toBe(false);
-    expect(scripts.acceptsRuntime('0.20.1')).toBe(false);
+    expect(scripts.acceptsRuntime('0.21.1')).toBe(false);
   });
 });
 
@@ -44,13 +45,13 @@ describe('a contract for another compact runtime', () => {
     const refused = await assertContractRunsOn(contract('0.16.0'), 'undeployed', ROOT, engines).then(() => undefined, (err: unknown) => err);
     expect(refused).toBeInstanceOf(UsageError);
     expect((refused as Error).message).toBe(
-      'counter was compiled by compactc 0.30.0 for compact-runtime 0.16.0, but undeployed runs contracts on compact-runtime 0.20.0.\nRecompile it with compactc 0.35.',
+      'counter was compiled by compactc 0.30.0 for compact-runtime 0.16.0, but undeployed runs contracts on compact-runtime 0.21.0.\nRecompile it with compactc 0.36.',
     );
     expect(classifyError(refused as Error, CONTRACT_CODES).errorCode).toBe('INVALID_ARGS');
   });
 
   it('lets through one compiled for the engine\'s runtime, and one whose compiler recorded none', async () => {
-    await expect(assertContractRunsOn(contract('0.20.0', '0.35.0'), 'undeployed', ROOT, engines)).resolves.toBeUndefined();
+    await expect(assertContractRunsOn(contract('0.21.0', '0.36.0'), 'undeployed', ROOT, engines)).resolves.toBeUndefined();
     await expect(assertContractRunsOn(contract('unknown', 'unknown'), 'undeployed', ROOT, engines)).resolves.toBeUndefined();
   });
 
@@ -62,7 +63,7 @@ describe('a contract for another compact runtime', () => {
       fs.writeFileSync(path.join(managedDir, 'compiler', 'contract-info.json'), JSON.stringify({ 'compiler-version': '0.30.0', 'language-version': '0.22.0', 'runtime-version': '0.16.0', circuits: [], witnesses: [] }));
       const networkConfig = { indexer: 'http://127.0.0.1:1', indexerWS: 'ws://127.0.0.1:1', node: 'ws://127.0.0.1:1', proofServer: 'http://127.0.0.1:1', networkId: 'Undeployed' };
       await expect(runDeploy({ dappDir, network: 'undeployed', root: ROOT, engines, networkConfig, managedDir, contractName: 'counter', servePort: 1 }))
-        .rejects.toThrow('Recompile it with compactc 0.35.');
+        .rejects.toThrow('Recompile it with compactc 0.36.');
       // No script was written into the dApp.
       expect(fs.readdirSync(dappDir).filter((f) => f.endsWith('.mjs'))).toEqual([]);
     } finally {

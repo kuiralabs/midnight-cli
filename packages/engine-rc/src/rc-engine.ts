@@ -78,8 +78,8 @@ const SHARED: Omit<Engine, 'wallet'> = {
       packages: SCRIPT_PACKAGES,
       packageFolder,
       compactRuntimeVersion,
-      // The compiler release whose contracts compact-runtime 0.20 runs (compactc 0.35.0 writes runtime-version 0.20.0).
-      compiler: 'compactc 0.35',
+      // The compiler release whose contracts compact-runtime 0.21 runs (compactc 0.36.0 writes runtime-version 0.21.0).
+      compiler: 'compactc 0.36',
       acceptsRuntime(runtimeVersion) {
         try {
           checkRuntimeVersion(runtimeVersion);

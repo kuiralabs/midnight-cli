@@ -30,7 +30,7 @@ function compiledContract(runtimeVersion: string): void {
   const compiler = path.join(dapp, 'managed', 'counter', 'compiler');
   fs.mkdirSync(compiler, { recursive: true });
   fs.writeFileSync(path.join(compiler, 'contract-info.json'), JSON.stringify({
-    'compiler-version': '0.35.0', 'language-version': '0.27.0', 'runtime-version': runtimeVersion,
+    'compiler-version': '0.36.0', 'language-version': '0.28.0', 'runtime-version': runtimeVersion,
     circuits: [{ name: 'increment', pure: false, proof: true, arguments: [], 'result-type': { 'type-name': 'Tuple', types: [] } }],
     witnesses: [],
   }));
@@ -40,7 +40,7 @@ beforeEach(() => {
   home = fs.realpathSync(fs.mkdtempSync(path.join(tmpdir(), 'mn-contract-lib-')));
   dapp = path.join(home, 'dapp');
   host = createHost({ paths: { stateRoot: path.join(home, '.midnight'), home }, engineLoader: loadInstalledEngine });
-  compiledContract('0.20.0');
+  compiledContract('0.21.0');
 });
 
 afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
@@ -107,7 +107,7 @@ describe('deployContract', () => {
     const { payer, asked } = programPayer(5n);
     const said: unknown[] = [];
     await expect(deployContract(host, { ...ENDPOINTS, request: contractDeployRequest({ dappDir: dapp }), payer, onProgress: (event) => said.push(event) }))
-      .rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('compiled by compactc 0.35.0 for compact-runtime 0.16.0') });
+      .rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('compiled by compactc 0.36.0 for compact-runtime 0.16.0') });
     expect(asked).toEqual([]);
     expect(said).toEqual([]);
   });

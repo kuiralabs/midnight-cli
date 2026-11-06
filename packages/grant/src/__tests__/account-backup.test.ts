@@ -52,8 +52,7 @@ const accountsOf = (home: string) => path.join(home, '.midnight', 'accounts', 'u
 const privateStateIn = async (home: string, dir: string) => {
   const account = await openGrantAccount(NETWORK, dir, () => {}, { root: stateRootIn(home), host, source: source() });
   const providers = accountProviders(account.context, wallet, privateStateLocationOf(dir, () => account.location.password() as string));
-  providers.privateStateProvider.setContractAddress(ACCOUNT);
-  return { account, privateState: providers.privateStateProvider };
+  return { account, privateState: providers.privateStateProvider.forContract(ACCOUNT) };
 };
 
 beforeEach(async () => {

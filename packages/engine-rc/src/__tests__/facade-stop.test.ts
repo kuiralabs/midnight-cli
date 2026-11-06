@@ -3,4 +3,4 @@
 import { resolve } from 'node:path';
 import { facadeStopSuite } from '../../../../test-support/facade-stop-suite.ts';
 
-facadeStopSuite({ set: 'rc', facadeModule: resolve(import.meta.dirname, '..', 'facade.ts') });
+facadeStopSuite({ set: 'rc', facadeModule: resolve(import.meta.dirname, '..', 'facade.ts'), asksNodeForLiveness: true });

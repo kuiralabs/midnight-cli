@@ -4,7 +4,7 @@
 
 import { afterEach, describe, it, expect } from 'vitest';
 import { WebSocketServer } from 'ws';
-import { SyncProgress } from '@midnightntwrk/wallet-sdk';
+import { SyncProgress, IndexerLiveness } from '@midnightntwrk/wallet-sdk';
 import { SyncProgress as UnshieldedSyncProgress } from '@midnightntwrk/wallet-sdk/unshielded/v2';
 import type { FacadeState } from '@midnightntwrk/wallet-sdk/facade';
 import { isFacadeSynced, detectStaleCache } from '../facade.ts';
@@ -23,12 +23,17 @@ function indexed(applied: bigint, highest: bigint, isConnected = true): IndexPro
   });
 }
 
-/** An unshielded wallet that has applied `applied` of `highest` transactions. */
+/**
+ * An unshielded wallet that has applied `applied` of `highest` transactions,
+ * whose indexer the node has found in step with its finalized head: the SDK
+ * counts the wallet complete only with that verdict.
+ */
 function txs(applied: bigint, highest: bigint, isConnected = true): TxProgress {
   return UnshieldedSyncProgress.createSyncProgress({
     appliedId: applied,
     highestTransactionId: highest,
     isConnected,
+    indexerLiveness: IndexerLiveness.InSync({ indexerHeight: 100n, finalizedHeight: 100n }),
   });
 }
 
@@ -48,6 +53,11 @@ describe('isFacadeSynced', () => {
     it('is synced when all three wallets are strictly complete', () => {
       expect(isFacadeSynced(state())).toBe(true);
       expect(isFacadeSynced(state(), 'full')).toBe(true);
+    });
+
+    it('is not synced while no node has checked the unshielded wallet\'s indexer yet', () => {
+      const unchecked = UnshieldedSyncProgress.createSyncProgress({ appliedId: 10n, highestTransactionId: 10n, isConnected: true });
+      expect(isFacadeSynced(state({ unshielded: unchecked }))).toBe(false);
     });
 
     it.each([
@@ -149,57 +159,38 @@ describe('detectStaleCache', () => {
 });
 
 describe('startAndSyncFacade: starting the wallets exactly once', () => {
-  // A wallet started twice runs two sync streams against the same state, and a
-  // restored wallet started with ledger-9 keys only can't read a ledger-8
-  // snapshot. So: fresh → facade.start(seeds); restored → each wallet from its
-  // seed, never facade.start. The SDK objects are stand-ins that record calls;
-  // the sync state uses the SDK's real progress objects.
+  // A wallet started twice runs two sync streams against the same state. From
+  // seeds, facade.start gives each wallet both ledger versions' keys, so a
+  // restored wallet on either side of the fork starts the same way as a fresh
+  // one. The SDK objects are stand-ins that record calls; the sync state uses
+  // the SDK's real progress objects.
   async function startWith(restoredFromCache: boolean) {
     const { vi } = await import('vitest');
     const rx = await import('rxjs');
     const { startAndSyncFacade } = await import('../facade.ts');
     const seeds = { shielded: new Uint8Array([1]), unshielded: new Uint8Array([2]), dust: new Uint8Array([3]) };
-    const calls = {
-      facadeStart: vi.fn(async () => {}),
-      unshieldedStart: vi.fn(async () => {}),
-      pendingStart: vi.fn(async () => {}),
-      shieldedFromSeed: vi.fn(async () => {}),
-      dustFromSeed: vi.fn(async () => {}),
-    };
+    const facadeStart = vi.fn(async () => {});
     const bundle: any = {
-      facade: {
-        start: calls.facadeStart,
-        unshielded: { start: calls.unshieldedStart },
-        pendingTransactionsService: { start: calls.pendingStart },
-        state: () => rx.of(state()),
-      },
+      facade: { start: facadeStart, state: () => rx.of(state()) },
       seeds,
-      seedStartable: { shielded: { startWithSeed: calls.shieldedFromSeed }, dust: { startWithSeed: calls.dustFromSeed } },
       keystore: {},
       restoredFromCache,
     };
     await startAndSyncFacade(bundle, { timeoutMs: 2_000 });
     bundle.keepAlive?.unsubscribe();
-    return { calls, seeds };
+    return { facadeStart, seeds };
   }
 
   it('starts a fresh facade through facade.start(seeds), once', async () => {
-    const { calls, seeds } = await startWith(false);
-    expect(calls.facadeStart).toHaveBeenCalledTimes(1);
-    expect(calls.facadeStart).toHaveBeenCalledWith(seeds);
-    expect(calls.shieldedFromSeed).not.toHaveBeenCalled();
-    expect(calls.dustFromSeed).not.toHaveBeenCalled();
+    const { facadeStart, seeds } = await startWith(false);
+    expect(facadeStart).toHaveBeenCalledTimes(1);
+    expect(facadeStart).toHaveBeenCalledWith(seeds);
   });
 
-  it('starts a restored facade from seeds, once each, and never through facade.start', async () => {
-    const { calls, seeds } = await startWith(true);
-    expect(calls.facadeStart).not.toHaveBeenCalled();
-    expect(calls.shieldedFromSeed).toHaveBeenCalledTimes(1);
-    expect(calls.shieldedFromSeed).toHaveBeenCalledWith(seeds.shielded);
-    expect(calls.dustFromSeed).toHaveBeenCalledTimes(1);
-    expect(calls.dustFromSeed).toHaveBeenCalledWith(seeds.dust);
-    expect(calls.unshieldedStart).toHaveBeenCalledTimes(1);
-    expect(calls.pendingStart).toHaveBeenCalledTimes(1);
+  it('starts a restored facade through facade.start(seeds), once', async () => {
+    const { facadeStart, seeds } = await startWith(true);
+    expect(facadeStart).toHaveBeenCalledTimes(1);
+    expect(facadeStart).toHaveBeenCalledWith(seeds);
   });
 });
 
@@ -235,7 +226,6 @@ describe('startAndSyncFacade: a wallet that has heard nothing yet', () => {
     const bundle: any = {
       facade: { start: async () => {}, state: () => rx.concat(rx.of(state({ shielded: indexed(0n, 0n, false) })), rx.NEVER) },
       seeds: {},
-      seedStartable: {},
       keystore: {},
       restoredFromCache: false,
       indexerWsUrl,
@@ -264,7 +254,7 @@ describe('startAndSyncFacade: a wallet that has heard nothing yet', () => {
     const { CancelledError } = await import('@kuiralabs/midnight-cli-core');
     const bundle: any = {
       facade: { start: async () => {}, state: () => rx.concat(rx.of(state({ shielded: indexed(0n, 0n, false) })), rx.NEVER) },
-      seeds: {}, seedStartable: {}, keystore: {}, restoredFromCache: false, indexerWsUrl: url,
+      seeds: {}, keystore: {}, restoredFromCache: false, indexerWsUrl: url,
     };
     const controller = new AbortController();
     const started = Date.now();

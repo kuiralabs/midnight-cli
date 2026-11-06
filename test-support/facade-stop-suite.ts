@@ -76,7 +76,13 @@ function runProgram(script: string, network: NetworkConfig, stateRoot: string): 
   });
 }
 
-export function facadeStopSuite(engine: { set: string; facadeModule: string }): void {
+/**
+ * `asksNodeForLiveness`: whether the engine's wallets ask the node for its
+ * finalized head while they sync (wallet SDK 2.0's unshielded wallet does, to
+ * check its indexer isn't stale), so a facade that submits nothing still
+ * connects to the node; its sockets must close all the same.
+ */
+export function facadeStopSuite(engine: { set: string; facadeModule: string; asksNodeForLiveness: boolean }): void {
   describe(`the ${engine.set} engine's facade, stopped, leaves nothing that keeps the process up`, () => {
     let dir: string;
     let silent: SilentNetwork;
@@ -104,8 +110,8 @@ export function facadeStopSuite(engine: { set: string; facadeModule: string }): 
       expect(silent.opened.filter((path) => path === '/api/v4/graphql/ws').length).toBeGreaterThan(0);
       expect(ended!.stoppedMs).toBeLessThan(ENDS_WITHIN_MS);
       expect(ended!.exitedMs).toBeLessThan(ENDS_WITHIN_MS);
-      // A facade that submitted nothing never connected to the node.
-      expect(silent.opened).not.toContain('/node');
+      // A facade that submitted nothing connected to the node only to check its indexer's liveness, if its wallets do that.
+      if (!engine.asksNodeForLiveness) expect(silent.opened).not.toContain('/node');
       await silent.allClosed();
       expect(silent.open()).toBe(0);
     });

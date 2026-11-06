@@ -52,7 +52,7 @@ describe('the account package on a local network', () => {
     const { contract, owner } = await accountChainFor(host.engines, 'undeployed');
     const runtime = resolvedPackageFolder(copyOf(contract.ACCOUNT_BUILD), '@midnight-ntwrk/compact-runtime')!;
     expect(JSON.parse(fs.readFileSync(path.join(runtime, 'package.json'), 'utf8')).version).toBe(engine.contracts.scripts.compactRuntimeVersion);
-    expect(engine.contracts.scripts.compactRuntimeVersion).toBe('0.20.0');
+    expect(engine.contracts.scripts.compactRuntimeVersion).toBe('0.21.0');
     expect(contract.ACCOUNT_BUILD_NAME).toBe('Account');
     expect(path.basename(contract.ACCOUNT_BUILD)).toBe('Account');
     expect(contract.supportsCallerPin()).toBe(true);
