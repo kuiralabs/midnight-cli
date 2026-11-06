@@ -8,12 +8,11 @@ import { ProtocolVersion } from '@midnightntwrk/wallet-sdk';
  * the ledger version from this, and a wrong value doesn't degrade gracefully:
  * it makes the wrong ledger read the chain.
  *
- * This build targets ledger-9-native chains (the localnet reports protocol
- * version 2001000). wallet-sdk 2.0 can't sync against today's ledger-8
- * indexers anyway: it needs the 4.4 indexer schema.
- *
- * When preview/preprod fork to ledger 9, their schedule needs the version
- * the hand-over is enacted at. A chain with ledger-8 history doesn't use
- * the v9-native schedule.
+ * Ledger-v9 reads from protocol version 2000000 (the SDK's v9-native fork
+ * version). It serves both kinds of chain mn runs on: a chain born on
+ * ledger 9 (the localnet reports 2001000), and one that forked from ledger 8
+ * (mainnet and the reset Preview: their ledger-8 history carries 1.x
+ * versions, below the boundary, and the fork enacts runtime 2001100, above
+ * it; no block falls between the two).
  */
 export const FORK_SCHEDULE: ProtocolVersion.ForkSchedule = ProtocolVersion.V9NativeForkSchedule;
