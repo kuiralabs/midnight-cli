@@ -5,6 +5,7 @@
 
 import { type Host, CancelledError, throwIfCancelled, type NetworkName, networkTargetOf, type NetworkChoice, progressSteps, type ProgressEvent, untilCancelled, type RawStateValue } from '@kuiralabs/midnight-cli-core';
 import { networkChoiceOf } from '@kuiralabs/midnight-wallet';
+import { assertEndpointsReachable, endpointsOf } from '@kuiralabs/midnight-chain';
 import { findContractInfo } from './inspect.ts';
 import { validateContractAddress } from './validate.ts';
 
@@ -70,6 +71,8 @@ export async function readContractState(host: Host, options: ReadContractStateOp
 
   const steps = progressSteps(onProgress);
   steps.start('Querying contract state...');
+  // The state is read from the indexer: it answers first, or the read fails at once naming it.
+  await assertEndpointsReachable(endpointsOf(networkConfig, { node: false }), { signal });
   try {
     const { info } = findContractInfo(options.scanDir ?? dappDir, options.name);
     const { fields, maps } = await runState({
