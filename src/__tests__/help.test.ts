@@ -211,11 +211,10 @@ describe('help — the lists come from the registry', () => {
     await cliCall(helpCommand, parseArgs(['help', 'test']));
     expect(io.stdout()).toContain([
       '  NO_TEST_CONFIG                 1  No dapp.test.json in the folder the test command ran in.',
-      '  NO_NODE_RUNTIME                1  Contract scripts run under Node.js, and none was found on PATH.',
-      '  CONTRACT_NOT_COMPILED          1  No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json).',
       '  MAINNET_REFUSED                2  The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (no released account build there).',
+      '  SERVE_PORT_IN_USE              1  The port mn serve was to use is taken by a process that can\'t serve this command (another program, or an mn serve for another network, chain or wallet).',
       '  (no error)                     1  A test failed',
-      '  Also: the network, wallet, engine, sync, paying, offers and chain codes, and INVALID_ARGS, CANCELLED, UNKNOWN, UNSUPPORTED_NODE, NO_STATE_ROOT (mn manual lists them all).',
+      '  Also: the network, wallet, engine, sync, paying, offers, chain and contract codes, and INVALID_ARGS, CANCELLED, UNKNOWN, UNSUPPORTED_NODE, NO_STATE_ROOT (mn manual lists them all).',
     ].join('\n'));
   });
 

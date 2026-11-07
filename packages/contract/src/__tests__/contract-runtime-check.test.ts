@@ -5,7 +5,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { UsageError, classifyError, createHost } from '@kuiralabs/midnight-cli-core';
+import { UsageError, classifyError, contractKeysFromSeed, createHost } from '@kuiralabs/midnight-cli-core';
 import { coreCodes } from '@kuiralabs/midnight-cli-core/commands';
 import { contractCodes } from '../commands/contract.codes.ts';
 import { codeRegistry } from '../../../../test-support/core-codes.ts';
@@ -62,7 +62,7 @@ describe('a contract for another compact runtime', () => {
       fs.mkdirSync(path.join(managedDir, 'compiler'), { recursive: true });
       fs.writeFileSync(path.join(managedDir, 'compiler', 'contract-info.json'), JSON.stringify({ 'compiler-version': '0.30.0', 'language-version': '0.22.0', 'runtime-version': '0.16.0', circuits: [], witnesses: [] }));
       const networkConfig = { indexer: 'http://127.0.0.1:1', indexerWS: 'ws://127.0.0.1:1', node: 'ws://127.0.0.1:1', proofServer: 'http://127.0.0.1:1', networkId: 'Undeployed' };
-      await expect(runDeploy({ dappDir, network: 'undeployed', root: ROOT, engines, networkConfig, managedDir, contractName: 'counter', servePort: 1 }))
+      await expect(runDeploy({ dappDir, network: 'undeployed', root: ROOT, engines, networkConfig, managedDir, contractName: 'counter', servePort: 1, contractKeys: contractKeysFromSeed(Buffer.alloc(32, 1)) }))
         .rejects.toThrow('Recompile it with compactc 0.36.');
       // No script was written into the dApp.
       expect(fs.readdirSync(dappDir).filter((f) => f.endsWith('.mjs'))).toEqual([]);

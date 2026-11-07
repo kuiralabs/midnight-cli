@@ -57,8 +57,9 @@ describe('mn manual', () => {
 
   it('lists each set of codes the commands name, with its codes', () => {
     const codes = stripAnsi(buildManual()).split('Sets of codes')[1]!.split('TROUBLESHOOTING')[0]!;
-    expect(codes).toContain('\n    network  AMBIGUOUS_LOCAL_STACKS, BLOCKFROST_PROJECT_ID_REQUIRED, BLOCKFROST_PROJECT_ID_REJECTED, BLOCKFROST_LIMIT_REACHED, ENDPOINT_SHUT_DOWN\n');
-    expect(codes).toContain('\n    chain    UNSUPPORTED_LEDGER, LOCAL_STACK_UNREACHABLE\n');
+    expect(codes).toContain('\n    network   AMBIGUOUS_LOCAL_STACKS, BLOCKFROST_PROJECT_ID_REQUIRED, BLOCKFROST_PROJECT_ID_REJECTED, BLOCKFROST_LIMIT_REACHED, ENDPOINT_SHUT_DOWN\n');
+    expect(codes).toContain('\n    chain     UNSUPPORTED_LEDGER, LOCAL_STACK_UNREACHABLE\n');
+    expect(codes).toContain('\n    contract  CONTRACT_NOT_COMPILED, CONTRACT_INFO_INVALID, NO_NODE_RUNTIME\n');
   });
 
   it('lists the stable error code strings', () => {

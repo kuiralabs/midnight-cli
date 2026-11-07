@@ -57,9 +57,11 @@ proofs. The CLI provides full shielded support:
   address is one of your wallets, it maps to that wallet's full sync;
   otherwise it errors and points you to --wallet <name> --shielded.
 
-  On preview, preprod and stagenet, shielded sync is off by default (no faucet there).
-  Pass --force-shielded to midnight balance or midnight transfer to force
-  the shielded sync on for those networks.
+  On preview, preprod and stagenet the shielded balance is not read by
+  default: the first read takes a while. A wallet can still hold shielded
+  tokens there (contracts mint them, others send them). midnight balance
+  --force-shielded reads it, and midnight transfer --shielded needs
+  --force-shielded there.
 
 Note: there is no self-shielding. Shielded coins come from receiving
 transfers from wallets that already have shielded tokens.
@@ -130,7 +132,7 @@ included), it's used as an address directly.
       text: 'agent-manual',
       section: 'example-commands',
       order: 10,
-      body: `  # Generate wallet (all 3 network addresses + seed)
+      body: `  # Generate wallet (addresses on every network + seed)
   midnight wallet generate alice --json
   # → {"name":"alice","addresses":{...},"activeAddress":"mn_addr_...","activeNetwork":"undeployed","seed":"...","file":"..."}
 
@@ -224,7 +226,7 @@ At step 5 the user is ready to transact.
     { tool: 'midnight_wallet_remove', group: 'wallet-management', order: 50, description: ['Remove a named wallet'] },
     { tool: 'midnight_info', group: 'balance-info', order: 10, description: ['Display wallet metadata'] },
     { tool: 'midnight_balance', group: 'balance-info', order: 20, description: ['Check unshielded + shielded balance'] },
-    { tool: 'midnight_address', group: 'balance-info', order: 30, description: ['Derive address from seed'] },
+    { tool: 'midnight_address', group: 'balance-info', order: 30, description: ['Derive an address from a saved wallet or a seed'] },
     { tool: 'midnight_genesis_address', group: 'balance-info', order: 40, description: ['Genesis wallet address'] },
     { tool: 'midnight_airdrop', group: 'transactions', order: 10, description: ['Fund wallet from genesis (undeployed only)'] },
     { tool: 'midnight_transfer', group: 'transactions', order: 20, description: ['Send NIGHT (two-step — returns pending token)'] },

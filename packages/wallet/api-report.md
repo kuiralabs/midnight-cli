@@ -37,6 +37,7 @@ export type WalletSource = {
 export interface CancelSwapOfferOptions extends PaidCallOptions {
     id: string;
     receiptWaitMs?: number;
+    log?: VerboseLog;
 }
 export declare function cancelSwapOffer(host: Host, options: CancelSwapOfferOptions): Promise<CancelledSwapOffer>;
 export interface CancelledSwapOffer {
@@ -91,6 +92,7 @@ export interface MakeSwapOfferOptions extends PaidCallOptions<SwapNetworkChosen>
     expiresAt: Date;
     now?: Date;
     receiptWaitMs?: number;
+    log?: VerboseLog;
 }
 export interface SwapNetworkChosen {
     readonly kind: 'swap-network';
@@ -128,6 +130,7 @@ export interface TakeSwapOfferOptions extends PaidCallOptions<SwapOfferChecked> 
     agreed: SwapTerms;
     now?: Date;
     receiptWaitMs?: number;
+    log?: VerboseLog;
 }
 export interface TakenSwapOffer {
     readonly network: NetworkName;

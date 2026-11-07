@@ -12,12 +12,13 @@ export const localnetDefinition: CommandDefinition = {
       name: 'tail',
       takesValue: true,
       subcommands: ['logs'],
+      help: ['--tail <n>      With logs: print the last n lines of each service and stop (default 200 with --json)'],
       agent: { type: 'string', description: 'Number of lines to retrieve (default 200)' },
     },
   ],
   help: {
     description: 'Manage a local Midnight network via Docker Compose',
-    usage: 'midnight localnet <up|stop|down|status|logs|clean>',
+    usage: 'midnight localnet <up|stop|down|status|logs|clean> [--tail <n>]',
     flags: [
       'up              Start the local network (node, indexer, proof server)',
       'stop            Stop containers (preserves state for fast restart)',
@@ -26,6 +27,7 @@ export const localnetDefinition: CommandDefinition = {
       'logs            Stream service logs (Ctrl+C to stop)',
       'clean           Remove mn\'s own localnet containers (any others named',
       '                node / indexer / proof-server are left alone and listed)',
+      { flag: 'tail' },
     ],
     examples: [
       'midnight localnet up',
@@ -33,6 +35,7 @@ export const localnetDefinition: CommandDefinition = {
       'midnight localnet stop',
       'midnight localnet down',
       'midnight localnet clean',
+      'midnight localnet logs --tail 50',
     ],
     jsonFields: {
       subcommand: 'up, stop, down, status, or clean',

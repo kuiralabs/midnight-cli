@@ -27,8 +27,11 @@ export const serveDefinition: CommandDefinition = {
       name: 'force-shielded',
       takesValue: false,
       help: [
-        '--force-shielded              Sync the shielded wallet too on preview, preprod and',
-        '                              stagenet (skipped there by default: no shielded faucet)',
+        '--force-shielded              On preview, preprod and stagenet: wait for the shielded',
+        '                              sync before serving. Without it serve is ready once',
+        '                              unshielded and Dust are synced, and shielded keeps',
+        '                              syncing behind it, so shielded balances it reports may',
+        '                              be incomplete until that sync catches up',
       ],
     },
     {
@@ -66,7 +69,11 @@ export const serveDefinition: CommandDefinition = {
       takesValue: true,
       help: ['--port <n>                    Server port (default: 9932)'],
     },
-    { name: 'verbose', takesValue: false },
+    {
+      name: 'verbose',
+      takesValue: false,
+      help: ['--verbose                     Print diagnostic lines about the sync to stderr'],
+    },
     {
       name: 'wallet',
       takesValue: true,
@@ -90,7 +97,7 @@ export const serveDefinition: CommandDefinition = {
   ],
   help: {
     description: 'Start DApp Connector server over WebSocket JSON-RPC',
-    usage: 'midnight serve [--port <n>] [--wallet <name|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all | --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--force-shielded] [--no-auto-approve-reads] [--json]',
+    usage: 'midnight serve [--port <n>] [--wallet <name|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all | --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--force-shielded] [--no-auto-approve-reads] [--verbose] [--json]',
     flags: [
       { flag: 'port' },
       { flag: 'wallet' },
@@ -104,6 +111,7 @@ export const serveDefinition: CommandDefinition = {
       { flag: 'max-pending' },
       { flag: 'force-shielded' },
       { flag: 'no-auto-approve-reads' },
+      { flag: 'verbose' },
     ],
     examples: [
       'midnight serve',

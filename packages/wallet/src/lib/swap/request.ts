@@ -7,6 +7,8 @@ import { readOfferFile, type ReadOffer } from './offers.ts';
 
 /** How long an offer lasts for takers using mn unless the maker says. */
 export const DEFAULT_OFFER_LIFETIME_S = 24 * 60 * 60;
+/** The longest --expires-in: a year. Its coins stay committed until it is taken or cancelled, whatever the expiry. */
+export const MAX_OFFER_LIFETIME_S = 365 * 24 * 60 * 60;
 
 function legOf(args: ParsedArgs, side: 'give' | 'want'): SwapLeg {
   const amount = side === 'give' ? getFlag(args, 'give') : getFlag(args, 'want');
@@ -40,6 +42,7 @@ export interface MakeRequest extends MakeTerms {
 function expiryOf(args: ParsedArgs, now: Date): Date {
   const lifetime = getFlag(args, 'expires-in') ?? String(DEFAULT_OFFER_LIFETIME_S);
   if (!/^[1-9][0-9]*$/.test(lifetime)) throw new UsageError(`--expires-in must be a whole number of seconds above 0, not "${lifetime}"`);
+  if (Number(lifetime) > MAX_OFFER_LIFETIME_S) throw new UsageError(`--expires-in may be at most ${MAX_OFFER_LIFETIME_S} seconds (a year), not ${lifetime}`);
   return new Date(now.getTime() + Number(lifetime) * 1000);
 }
 

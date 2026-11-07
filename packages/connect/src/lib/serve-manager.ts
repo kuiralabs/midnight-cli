@@ -3,14 +3,16 @@
 // commands/serve.ts but returns a handle instead of blocking on a signal.
 // Always runs in approve-all mode.
 
-import { Socket } from 'node:net';
+import { Socket, type AddressInfo } from 'node:net';
 import { resolveWalletPath, unlockWallet, walletAddress, type UnlockHost } from '@kuiralabs/midnight-wallet';
-import { resolveNetwork, applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName, sdkSetOf, type DAppConnectorCallbacks, type OpenedConnector, DEFAULT_SERVE_PORT, type CallSdkWarnings, shieldedSyncEnabled, CancelledError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { resolveNetwork, applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName, sdkSetOf, type DAppConnectorCallbacks, type OpenedConnector, DEFAULT_SERVE_PORT, type CallSdkWarnings, shieldedSyncEnabled, CancelledError, throwIfCancelled, type ContractKeys, contractKeysFromSeed, type RpcHandler } from '@kuiralabs/midnight-cli-core';
 import { createRpcServer, type RpcServer } from './ws-rpc.ts';
 
 /** A running mn serve, and how to stop it. */
 export interface ServeHandle {
   port: number;
+  /** The served wallet's keys for a contract's private state. */
+  contractKeys: ContractKeys;
   stop(): Promise<void>;
 }
 
@@ -68,12 +70,13 @@ export function serveEndpointMismatch(
 /**
  * Why a running serve can't be reused to pay for `wanted`, or undefined if it
  * can. A serve pays from the wallet it was started with, whatever wallet the
- * command asking was given. A serve that doesn't say whose it is (it asks its
- * operator before answering reads) is reused as before: its operator sees and
- * approves each request.
+ * command asking was given; one that doesn't say whose it is (it asks its
+ * operator before answering reads) can't be shown to pay from `wanted`, so it
+ * isn't reused either.
  */
 export function serveWalletMismatch(runningAddress: string | null, wanted: { address: string; name: string }): string | undefined {
-  if (runningAddress === null || runningAddress === wanted.address) return undefined;
+  if (runningAddress === wanted.address) return undefined;
+  if (runningAddress === null) return `it does not say which wallet it pays from (it asks its operator before answering), and this command pays from ${wanted.name} (${wanted.address})`;
   return `it serves the wallet at ${runningAddress}, and this command pays from ${wanted.name} (${wanted.address})`;
 }
 
@@ -94,123 +97,128 @@ export function isPortInUse(port: number): Promise<boolean> {
   });
 }
 
+/** What a serve on a port says when connected to for a network. */
+export type ServeProbe =
+  /** Nothing there answers as mn serve does. */
+  | { kind: 'not-serve' }
+  /** An mn serve that refused the connection: it serves another network (its words). */
+  | { kind: 'refused'; message: string }
+  /** An mn serve on that network: its node and indexer, and its wallet's unshielded address when it says. */
+  | { kind: 'serve'; networkId: string; endpoints: { substrateNodeUri?: string; indexerWsUri?: string } | null; unshieldedAddress: string | null };
+
 /**
- * Round-trip a getConnectionStatus RPC against a serve on `port`. Returns
- * the SDK networkId string (e.g. "Undeployed", "PreProd") on success, or
- * null on any error/timeout/non-RPC response. Used to decide whether a
- * port-in-use is "our" mn serve (reusable) or some other process.
+ * Connects to the serve on `port` for `networkId`, as a dApp does, and asks
+ * it its network, endpoints and wallet. Any answer that isn't JSON-RPC, and
+ * any wait over 2 s for one, is `not-serve`.
  */
-export async function probeServeNetwork(port: number): Promise<string | null> {
-  const result = await probeServeRpc(port, 'getConnectionStatus');
-  const id = (result as { networkId?: unknown } | null)?.networkId;
-  return typeof id === 'string' ? id : null;
-}
-
-/** The node and indexer a serve on `port` reports via getConfiguration, or null. */
-export async function probeServeEndpoints(port: number): Promise<{ substrateNodeUri?: string; indexerWsUri?: string } | null> {
-  const result = await probeServeRpc(port, 'getConfiguration');
-  return result && typeof result === 'object' ? result as { substrateNodeUri?: string; indexerWsUri?: string } : null;
-}
-
-/** The unshielded address of the wallet a serve on `port` pays from, or null when it doesn't say. */
-export async function probeServeWallet(port: number): Promise<string | null> {
-  const result = await probeServeRpc(port, 'getUnshieldedAddress');
-  const address = (result as { unshieldedAddress?: unknown } | null)?.unshieldedAddress;
-  return typeof address === 'string' ? address : null;
-}
-
-/** One JSON-RPC call to a serve on `port`: its `result`, or null on any error/timeout. */
-async function probeServeRpc(port: number, method: string): Promise<unknown | null> {
+export async function probeServe(port: number, networkId: string): Promise<ServeProbe> {
   const WebSocket = (await import('ws')).default;
-  return new Promise<unknown | null>((resolve) => {
+  return new Promise<ServeProbe>((resolve) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-    const timeout = setTimeout(() => { try { ws.close(); } catch {} resolve(null); }, 2000);
-    ws.on('open', () => {
-      ws.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: {} }));
-    });
-    ws.on('message', (data: Buffer) => {
+    let settled = false;
+    const finish = (probe: ServeProbe): void => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
-      try {
-        const msg = JSON.parse(data.toString());
-        ws.close();
-        resolve(msg?.result ?? null);
-      } catch {
-        ws.close();
-        resolve(null);
+      // Destroyed, not closed: a process that answered with something else may keep its side open.
+      try { ws.terminate(); } catch { /* already closed */ }
+      resolve(probe);
+    };
+    const timeout = setTimeout(() => finish({ kind: 'not-serve' }), 2000);
+    const answers = new Map<number, { result?: unknown; error?: { message?: unknown } }>();
+    const ask = (id: number, method: string, params: Record<string, unknown> = {}): void => {
+      ws.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
+    };
+    ws.on('open', () => ask(1, 'connect', { networkId }));
+    ws.on('message', (data: Buffer) => {
+      let msg: { id?: unknown; result?: unknown; error?: { message?: unknown } };
+      try { msg = JSON.parse(data.toString()); } catch { finish({ kind: 'not-serve' }); return; }
+      if (typeof msg?.id !== 'number') return;
+      answers.set(msg.id, msg);
+      if (msg.id === 1) {
+        if (msg.error !== undefined) {
+          finish(typeof msg.error?.message === 'string' ? { kind: 'refused', message: msg.error.message } : { kind: 'not-serve' });
+          return;
+        }
+        ask(2, 'getConnectionStatus');
+        ask(3, 'getConfiguration');
+        ask(4, 'getUnshieldedAddress');
+        return;
       }
+      if (![2, 3, 4].every((id) => answers.has(id))) return;
+      const status = answers.get(2)?.result as { networkId?: unknown } | undefined;
+      if (typeof status?.networkId !== 'string') { finish({ kind: 'not-serve' }); return; }
+      const configuration = answers.get(3)?.result;
+      const address = (answers.get(4)?.result as { unshieldedAddress?: unknown } | undefined)?.unshieldedAddress;
+      finish({
+        kind: 'serve',
+        networkId: status.networkId,
+        endpoints: configuration && typeof configuration === 'object' ? configuration as { substrateNodeUri?: string; indexerWsUri?: string } : null,
+        unshieldedAddress: typeof address === 'string' ? address : null,
+      });
     });
-    ws.on('error', () => { clearTimeout(timeout); resolve(null); });
+    ws.on('error', () => finish({ kind: 'not-serve' }));
   });
 }
 
-/**
- * Ensure a serve is running on the configured port. If one already runs and
- * matches the requested network, reuses it (returned handle's stop() is a
- * no-op so we don't tear down something we didn't start). If a different
- * network's serve is bound, throws with a clear, actionable message —
- * silently reusing the wrong network leads to deeply confusing test failures.
- * A serve for another wallet is refused too: it would pay from that wallet.
- * If nothing is bound, starts a fresh serve.
- *
- * Network comparison is case-insensitive: the running serve reports its
- * network in the lowercase abstractions form ('undeployed') as of the
- * getConnectionStatus fix, but the requestedNetwork may arrive in either
- * form depending on caller. Normalizing both sides keeps the check robust
- * across that change without re-introducing the case-sensitivity bug.
- */
-export async function startServeOrReuse(options: ServeManagerOptions): Promise<ServeHandle> {
-  const port = options.port ?? DEFAULT_SERVE_PORT;
-  const requestedNetwork = (options.network ?? 'undeployed').toLowerCase();
-  const onMessage = options.onMessage ?? (() => {});
+/** The network a serve on `port` serves (connected to for `networkId`), or null when nothing there is an mn serve for it. */
+export async function probeServeNetwork(port: number, networkId: string = 'undeployed'): Promise<string | null> {
+  const probe = await probeServe(port, networkId);
+  return probe.kind === 'serve' ? probe.networkId : null;
+}
 
+/**
+ * Why the serve on `port` can't pay for these options, or undefined when it
+ * can be reused: it must be an mn serve on the requested network and chain
+ * (two local stacks are both `undeployed`, so its node and indexer must match
+ * too), paying from the command's wallet (a serve that doesn't say whose it
+ * is can't be shown to).
+ */
+export async function serveReuseRefusal(port: number, options: ServeManagerOptions): Promise<string | undefined> {
+  const requestedNetwork = (options.network ?? 'undeployed').toLowerCase();
+  const probe = await probeServe(port, requestedNetwork);
+  if (probe.kind === 'not-serve') return `Port ${port} is in use by a process that does not look like mn serve.`;
+  if (probe.kind === 'refused') return `The mn serve on port ${port} can't serve ${requestedNetwork}: ${probe.message}.`;
+  const actualNetwork = probe.networkId.toLowerCase();
+  if (actualNetwork !== requestedNetwork) {
+    return `The mn serve on port ${port} is for network ${actualNetwork}, and this run needs ${requestedNetwork}.`;
+  }
+  const mismatch = probe.endpoints ? serveEndpointMismatch(probe.endpoints, resolveServeTarget(options).networkConfig) : 'its endpoints could not be read';
+  if (mismatch) return `The mn serve on port ${port} is on a different ${actualNetwork} chain: ${mismatch}.`;
+  const wanted = await walletAddress(resolveWalletPath(options.root, options.wallet), actualNetwork as NetworkName, options.root, options.host);
+  const walletMismatch = serveWalletMismatch(probe.unshieldedAddress, { address: wanted, name: options.wallet ?? 'the active wallet' });
+  if (walletMismatch) return `The mn serve on port ${port} can't pay for this command: ${walletMismatch}.`;
+  return undefined;
+}
+
+/** The private-state keys of the options' wallet, derived from its seed (it is unlocked for them). */
+export async function serveWalletContractKeys(options: Pick<ServeManagerOptions, 'root' | 'host' | 'wallet'>): Promise<ContractKeys> {
+  const { seed } = await unlockWallet(resolveWalletPath(options.root, options.wallet), { root: options.root, host: options.host });
+  return contractKeysFromSeed(Buffer.from(seed, 'hex'));
+}
+
+/** The serve on `port`, reused: its stop does nothing, since it isn't ours. */
+export async function reusedServe(port: number, options: ServeManagerOptions): Promise<ServeHandle> {
+  const contractKeys = await serveWalletContractKeys(options);
+  (options.onMessage ?? (() => {}))(`Reusing existing mn serve on port ${port}`);
+  return { port, contractKeys, async stop() { /* not ours to stop */ } };
+}
+
+/**
+ * A serve for the options' network, chain and wallet: the one already on
+ * `port` (the default port when unset) when it can pay for them, else a new
+ * one in this process on a free port the system picks, so commands run at
+ * once never race for a port and never touch a process they didn't start.
+ */
+export async function reuseServeOrStartAnother(options: ServeManagerOptions): Promise<ServeHandle> {
+  const port = options.port ?? DEFAULT_SERVE_PORT;
   throwIfCancelled(options.signal);
   if (await isPortInUse(port)) {
-    const actualSdkId = await probeServeNetwork(port);
-
-    if (!actualSdkId) {
-      throw new Error(
-        `Port ${port} is in use by a process that does not look like mn serve. ` +
-        `Free the port (e.g. \`lsof -nP -iTCP:${port} -sTCP:LISTEN\` then \`kill <pid>\`) and retry.`,
-      );
-    }
-    const actualNetwork = actualSdkId.toLowerCase();
-    if (actualNetwork !== requestedNetwork) {
-      throw new Error(
-        `mn serve is already running on port ${port} for network ${actualNetwork}, ` +
-        `but this run needs ${requestedNetwork}. Stop the wrong-network serve first ` +
-        `(\`pkill -f 'mn serve'\`) and retry.`,
-      );
-    }
-
-    const running = await probeServeEndpoints(port);
-    const mismatch = running ? serveEndpointMismatch(running, resolveServeTarget(options).networkConfig) : 'its endpoints could not be read';
-    if (mismatch) {
-      throw new Error(
-        `mn serve on port ${port} is on a different ${actualNetwork} chain: ${mismatch}. ` +
-        `Stop it first (\`pkill -f 'mn serve'\`) and retry.`,
-      );
-    }
-
-    const runningAddress = await probeServeWallet(port);
-    if (runningAddress !== null) {
-      const wanted = await walletAddress(resolveWalletPath(options.root, options.wallet), actualNetwork as NetworkName, options.root, options.host);
-      const walletMismatch = serveWalletMismatch(runningAddress, { address: wanted, name: options.wallet ?? 'the active wallet' });
-      if (walletMismatch) {
-        throw new Error(
-          `mn serve on port ${port} can't pay for this command: ${walletMismatch}. ` +
-          `Stop it first (\`pkill -f 'mn serve'\`) and retry, or run the command for the wallet it serves.`,
-        );
-      }
-    }
-
-    onMessage(`Reusing existing mn serve on port ${port}`);
-    return {
-      port,
-      async stop() { /* not ours to stop */ },
-    };
+    const refusal = await serveReuseRefusal(port, options);
+    if (refusal === undefined) return reusedServe(port, options);
+    (options.onMessage ?? (() => {}))(`Not reusing port ${port}: ${refusal}`);
   }
-
-  return startServe(options);
+  return startServe({ ...options, port: 0 });
 }
 
 /** A wallet's DApp connector in this process, approving everything, and how to stop it. */
@@ -222,7 +230,7 @@ export type { OpenedConnector } from '@kuiralabs/midnight-cli-core';
  * server in front of it: the wallet synced, its Dust ready. mn serve puts a
  * server in front of it; a command of mn's own calls its handlers directly.
  */
-export async function openConnector(options: ServeManagerOptions): Promise<OpenedConnector> {
+export async function openConnector(options: ServeManagerOptions): Promise<OpenedConnector & { contractKeys: ContractKeys }> {
   const onMessage = options.onMessage ?? (() => {});
   const { signal } = options;
 
@@ -230,6 +238,7 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
   // Load wallet
   const config = await unlockWallet(resolveWalletPath(options.root, options.wallet), { root: options.root, host: options.host });
   const seedBuffer = Buffer.from(config.seed, 'hex');
+  const contractKeys = contractKeysFromSeed(seedBuffer);
 
   const { networkName, networkConfig } = resolveServeTarget(options);
   const address = config.addresses[networkName];
@@ -249,7 +258,7 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
       network: networkName,
       networkConfig,
       address,
-      // As `mn serve` does: skip the slow shielded sync where shielded is unusable (no faucet), unless forced.
+      // As `mn serve` does: don't wait for the slow shielded sync where it is off by default, unless forced (it still syncs in the background).
       syncMode: shieldedSyncEnabled(networkName, options.forceShielded) ? 'full' : 'lite',
       dustWaitMs: options.dustWaitMs,
       signal,
@@ -261,6 +270,7 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
   }
   return {
     connector: opened.connector,
+    contractKeys,
     async stop() {
       stopListening();
       await opened.stop();
@@ -269,23 +279,22 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
 }
 
 /**
- * Start mn serve in-process with --approve-all mode.
+ * Start mn serve in-process with --approve-all mode, on `port` (0: a free
+ * port the system picks). The port is bound before the wallet syncs, so a
+ * port taken meanwhile fails at once, not after the sync; until the wallet is
+ * ready, every request is refused as not ready.
  * Returns a handle with stop() for teardown.
  */
 export async function startServe(options: ServeManagerOptions): Promise<ServeHandle> {
-  const port = options.port ?? DEFAULT_SERVE_PORT;
+  const requestedPort = options.port ?? DEFAULT_SERVE_PORT;
   const onMessage = options.onMessage ?? (() => {});
-  const { connector, stop } = await openConnector(options);
-  if (options.signal?.aborted === true) {
-    await stop();
-    throw new CancelledError();
-  }
 
-  // Start WebSocket server
+  // Filled with the connector's handlers once the wallet is ready.
+  const handlers: Record<string, RpcHandler> = {};
   const server = createRpcServer({
     host: options.host,
-    port,
-    handlers: connector.handlers,
+    port: requestedPort,
+    handlers,
     // It approves every request, for mn's own scripts only: no web page may connect.
     refuseBrowsers: true,
     onConnect: (conn) => {
@@ -293,7 +302,7 @@ export async function startServe(options: ServeManagerOptions): Promise<ServeHan
     },
     onDisconnect: (conn) => {
       onMessage(`disconnected ${conn.id}`);
-      connector.revertPendingTxs(conn.id).catch(() => {});
+      opened?.connector.revertPendingTxs(conn.id).catch(() => {});
     },
     onRequest: (conn, req) => {
       onMessage(`${conn.id} → ${req.method}`);
@@ -310,19 +319,35 @@ export async function startServe(options: ServeManagerOptions): Promise<ServeHan
   try {
     await server.ready;
   } catch (err) {
-    await server.close();
-    await stop();
-    throw new Error(`Could not start mn serve on port ${port}: ${(err as Error).message}`);
+    // A server that never listened never reports closing: close it without waiting.
+    server.close().catch(() => {});
+    throw new Error(`Could not start mn serve on port ${requestedPort}: ${(err as Error).message}`, { cause: err });
   }
+  const port = (server.wss.address() as AddressInfo).port;
+
+  let opened: (OpenedConnector & { contractKeys: ContractKeys }) | undefined;
+  try {
+    opened = await openConnector(options);
+  } catch (err) {
+    await server.close().catch(() => {});
+    throw err;
+  }
+  if (options.signal?.aborted === true) {
+    await server.close().catch(() => {});
+    await opened.stop();
+    throw new CancelledError();
+  }
+  Object.assign(handlers, opened.connector.handlers);
 
   onMessage(`Server ready on ws://localhost:${port}`);
 
-  // Return handle for lifecycle management
+  const ready = opened;
   return {
     port,
+    contractKeys: ready.contractKeys,
     async stop() {
-      server.close();
-      await stop();
+      await server.close().catch(() => {});
+      await ready.stop();
     },
   };
 }

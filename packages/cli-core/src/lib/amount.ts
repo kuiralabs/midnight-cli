@@ -69,10 +69,10 @@ export function nightAmountText(micro: bigint): string {
 }
 
 /**
- * An amount of micro-NIGHT as a command's `--json` output carries it: a JSON
- * number of NIGHT. Exact to the smallest unit up to 2^53 micro-NIGHT (about
- * 9e9 NIGHT); past that, the nearest number.
+ * An amount of micro-NIGHT as a command's `--json` output carries it: a
+ * string of NIGHT, as balances and fees are, exact to the smallest unit
+ * however large.
  */
-export function nightAmountJson(micro: bigint): number {
-  return Number(nightAmountText(micro));
+export function nightAmountJson(micro: bigint): string {
+  return nightAmountText(micro);
 }

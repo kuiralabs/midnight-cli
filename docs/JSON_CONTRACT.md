@@ -31,7 +31,7 @@ field involved.
 ### Network names
 
 ```
-"undeployed" | "preprod" | "preview" | "mainnet"
+"undeployed" | "preprod" | "preview" | "stagenet" | "mainnet"
 ```
 
 These values are stable. Adding a new network (e.g. `mainnet`)
@@ -55,8 +55,8 @@ Path, schema, and permissions are stable:
 
 - Path: `~/.midnight/wallets/<name>.json` (per OS user)
 - Permissions: `0600` on file, `0700` on directory
-- Required fields: `seed`, `mnemonic`, `addresses`, `shieldedAddresses`,
-  `createdAt`
+- Required fields: `addresses`, `createdAt`, and the secrets: `sealed` (the seed, and the mnemonic when there is one, encrypted under mn's passphrase; every wallet mn writes is sealed). A plain-text file an older mn wrote has `seed` (and `mnemonic`) instead of `sealed`; mn still reads it and `midnight wallet protect` seals it.
+- Optional: `shieldedAddresses`
 - `addresses` and `shieldedAddresses` are objects keyed by network name
 
 ### Config file (`~/.midnight/config.json`)
@@ -118,6 +118,7 @@ Stable identifiers used in error messages and structured error objects, with the
 | `UNSUPPORTED_NODE` | 1 | Node.js is older than 22 (22.18 for mn grant). |
 | `NO_NODE_RUNTIME` | 1 | Contract scripts run under Node.js, and none was found on PATH. |
 | `CONTRACT_NOT_COMPILED` | 1 | No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json). |
+| `CONTRACT_INFO_INVALID` | 1 | A compiled contract's contract-info.json is not what the Compact compiler writes (not JSON, or its circuits or witnesses missing or malformed). |
 | `NO_ACCOUNT` | 1 | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. |
 | `CALLER_PIN_UNSUPPORTED` | 2 | A grant request pins the contract that calls the account, and the account on this network (stagenet) has no caller pin; nothing was submitted. |
 | `WRONG_PASSPHRASE` | 2 | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. |
@@ -131,6 +132,8 @@ Stable identifiers used in error messages and structured error objects, with the
 | `MIXED_SDK_LAYOUT` | 1 | mn's packages were installed without each engine's shrinkwrap (bun's installer): an engine's SDK tree isn't the one it was tested with. |
 | `NO_STATE_ROOT` | 1 | The host gave mn no place to keep its state (a program's `createHost` without paths). |
 | `NO_PAYER` | 1 | A command that submits a transaction was called without a payer. |
+| `SERVE_PORT_IN_USE` | 1 | The port mn serve was to use is taken by a process that can't serve this command (another program, or an mn serve for another network, chain or wallet). |
+| `APPROVAL_UNAVAILABLE` | 1 | A request to mn serve needed approval and nobody could be asked: the serve has no terminal and was not started to approve it without asking. |
 | `COMMAND_FAILED` | 1 | A command ended with a non-zero exit code without throwing (an MCP test run whose tests failed); the message carries its result. |
 | `NOT_AN_OFFER` | 2 | The bytes given as a swap offer are not one. |
 | `TERMS_MISMATCH` | 2 | A swap offer's own terms differ from the agreed ones. |
@@ -285,15 +288,11 @@ networks, with the active wallet marked. Shape stable.
 
 ### `mn config get <key>`
 
-Plain stdout: the raw value as a string, no JSON wrapper. `--json`
-not currently supported; if added, output will be `{"key": "...", "value": "..."}`.
+Plain stdout: the raw value as a string, no JSON wrapper. With `--json`: `{"action": "get", "key": "...", "value": "..."}` (`config set` and `config unset` answer the same shape with `"action": "set"` / `"unset"`).
 
 ## MCP tool names
 
-Every tool name shipped in `src/mcp-server.ts` is stable, except the eight
-`midnight_grant_*` tools, which are experimental: their names, parameters
-and results can change in any release until they are declared stable here.
-Current 38 tools:
+Every tool name shipped in `src/mcp-server.ts` is stable, except the eight `midnight_grant_*` tools and the five `midnight_swap_*` tools, which are experimental: their names, parameters and results can change in any release until they are declared stable here. Current 44 tools:
 
 ```
 # Wallet management
@@ -309,6 +308,7 @@ midnight_inspect_cost
 # Transactions
 midnight_airdrop              midnight_transfer
 midnight_dust_register        midnight_dust_status
+midnight_tx_status
 
 # Consent
 midnight_confirm_operation
@@ -328,6 +328,11 @@ midnight_contract_deploy      midnight_contract_call
 
 # Test framework
 midnight_test_create
+
+# Swaps (experimental)
+midnight_swap_make            midnight_swap_inspect
+midnight_swap_take            midnight_swap_cancel
+midnight_swap_list
 
 # Grants (experimental)
 midnight_grant_status         midnight_grant_list

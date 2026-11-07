@@ -56,6 +56,13 @@ describe('a tool\'s schema, generated from its command\'s flags', () => {
     expect(transfer.inputSchema.required).toStrictEqual(['to', 'amount']);
   }, 60_000);
 
+  it('lets midnight_balance read the shielded balance where it is not read by default (force-shielded)', async () => {
+    const { tools } = await client.listTools();
+    const balance = tools.find((tool) => tool.name === 'midnight_balance')!;
+    expect(Object.keys(balance.inputSchema.properties ?? {})).toContain('force-shielded');
+    expect(balance.inputSchema.properties!['force-shielded']).toMatchObject({ type: 'boolean' });
+  }, 60_000);
+
   it('is the one check: a flag of the command outside it is refused, though the old pass-through rule let it through', async () => {
     // --json is a flag every command takes, and the server always sets it.
     const { isError, body } = await call('midnight_genesis_address', { network: 'undeployed', json: true });
@@ -117,6 +124,15 @@ describe('a tool parameter outside the tool\'s schema', () => {
     const derived = await call('midnight_address', { seed: '01'.repeat(32), network: 'undeployed', wallet: 'nobody' });
     expect(derived.isError).toBe(false);
     expect(derived.body).toMatchObject({ network: 'undeployed', index: 0 });
+  }, 60_000);
+
+  it('derives midnight_address from a saved wallet with no seed: the seed is not required, which kept a secret out of the agent\'s context', async () => {
+    const { tools } = await client.listTools();
+    expect(tools.find((t) => t.name === 'midnight_address')!.inputSchema.required ?? []).not.toContain('seed');
+    // No wallet named "nobody": the command looks for the wallet, so the call reached it without a seed.
+    const { isError, body } = await call('midnight_address', { wallet: 'nobody', network: 'undeployed' });
+    expect(isError).toBe(true);
+    expect(body).toMatchObject({ error: true, code: 'WALLET_NOT_FOUND' });
   }, 60_000);
 
   it('is refused on the confirm tool too', async () => {

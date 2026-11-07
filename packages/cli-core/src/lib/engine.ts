@@ -85,6 +85,12 @@ export interface ScriptParts {
   readonly coerceArgFn: string;
   /** Defines resolvePrivateStateSecretKey. */
   readonly privateStateSecretFn: string;
+  /** Defines openPrivateStateStore, which a deploy or call script opens the private-state store with first. */
+  readonly privateStateStoreFn: string;
+  /** The environment variables carrying the private-state secret, the store's password and its account, which never go into a script's text. */
+  readonly privateStateSecretEnv: string;
+  readonly privateStatePasswordEnv: string;
+  readonly privateStateAccountEnv: string;
   /** Where the dApp's witnesses may be, relative to its folder. */
   readonly witnessCandidates: readonly string[];
   /** The environment variables carrying the indexer's URLs, which never go into a script's text. */

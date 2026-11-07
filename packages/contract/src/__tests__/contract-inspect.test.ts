@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import {
+  ContractInfoInvalidError,
   findContractInfo,
   formatCompactType,
   formatCircuitSignature,
@@ -267,6 +268,39 @@ describe('findContractInfo', () => {
     expect(info.circuits[0].name).toBe('foo');
     expect(info.witnesses).toHaveLength(1);
     expect(info.witnesses[0].name).toBe('bar');
+  });
+
+  // Regression: `{}` loaded as a contract with "unknown" versions and no
+  // circuits, and a circuit with no argument list crashed later with a raw TypeError.
+  describe('a contract-info.json no compiler wrote', () => {
+    function writeInfo(dir: string, content: string): void {
+      const compiler = join(dir, 'managed', 'broken', 'compiler');
+      mkdirSync(compiler, { recursive: true });
+      writeFileSync(join(compiler, 'contract-info.json'), content);
+    }
+
+    it('refuses {} as CONTRACT_INFO_INVALID, naming both missing lists', () => {
+      const dir = join(tmpBase, 'empty-object');
+      writeInfo(dir, '{}');
+      const err = (() => { try { findContractInfo(dir); } catch (e) { return e as Error & { code?: string }; } })();
+      expect(err).toBeInstanceOf(ContractInfoInvalidError);
+      expect(err?.code).toBe('CONTRACT_INFO_INVALID');
+      expect(err?.message).toContain('"circuits" is missing; "witnesses" is missing');
+      expect(err?.message).toContain('compact compile');
+    });
+
+    it('names the circuit whose arguments or result type are missing', () => {
+      const dir = join(tmpBase, 'bad-circuit');
+      writeInfo(dir, JSON.stringify({ circuits: [{ name: 'increment', pure: false, proof: true }], witnesses: [] }));
+      expect(() => findContractInfo(dir)).toThrow('circuits[0] (increment) has no "arguments" list; circuits[0] (increment) has no "result-type"');
+    });
+
+    it('refuses a file that is not JSON, or not an object', () => {
+      writeInfo(join(tmpBase, 'not-json'), '{ nope');
+      expect(() => findContractInfo(join(tmpBase, 'not-json'))).toThrow(ContractInfoInvalidError);
+      writeInfo(join(tmpBase, 'array'), '[]');
+      expect(() => findContractInfo(join(tmpBase, 'array'))).toThrow('it is not a JSON object');
+    });
   });
 
   // Cleanup

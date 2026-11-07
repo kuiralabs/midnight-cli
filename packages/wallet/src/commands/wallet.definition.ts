@@ -32,8 +32,8 @@ export const walletDefinition: CommandDefinition = {
       name: 'mnemonic',
       takesValue: true,
       subcommands: ['generate'],
-      help: ['--mnemonic "..."    Restore from BIP-39 mnemonic (24 words)'],
-      agent: { type: 'string', description: 'BIP-39 24 words' },
+      help: ['--mnemonic "..."    Restore from a BIP-39 mnemonic (12 to 24 words; a new wallet gets 24)'],
+      agent: { type: 'string', description: 'A BIP-39 mnemonic to restore from: 12 to 24 words from the English wordlist' },
     },
     {
       name: 'network',
@@ -101,7 +101,7 @@ export const walletDefinition: CommandDefinition = {
       createdAt: 'ISO 8601 creation timestamp (generate, info)',
       file: 'Wallet file path (generate, info)',
       seed: 'Hex-encoded seed (generate, seed; never over MCP)',
-      mnemonic: 'BIP-39 mnemonic, 24 words, when the wallet has one (generate, seed; never over MCP)',
+      mnemonic: 'BIP-39 mnemonic (24 words when generated, as given when restored), when the wallet has one (generate, seed; never over MCP)',
       seedShown: 'Over MCP (generate): that the seed and mnemonic are not returned, and the command that shows them',
       entropy: 'The 32-byte BIP-39 entropy (seed with --entropy)',
       wallets: 'Array of wallet info objects (list)',
@@ -148,7 +148,7 @@ export const walletDefinition: CommandDefinition = {
       },
       {
         name: 'midnight_wallet_list',
-        description: 'List wallets. Default: per-wallet { name, active, network, address, shieldedAddress } scoped to the active network. Pass { full: true } for the 3-network addresses + shieldedAddresses maps.',
+        description: 'List wallets. Default: per-wallet { name, active, network, address, shieldedAddress } scoped to the active network. Pass { full: true } for the addresses + shieldedAddresses maps of every network (undeployed, preprod, preview, stagenet, mainnet).',
         annotations: { readOnlyHint: true, idempotentHint: true },
         params: [
           {

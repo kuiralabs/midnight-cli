@@ -3,6 +3,7 @@
 import type { CommandDefinition } from '@kuiralabs/midnight-cli-core';
 import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
+import { RUNS_CONTRACTS } from '@kuiralabs/midnight-contract/commands';
 import { OPENS_WALLET } from '@kuiralabs/midnight-wallet/commands';
 
 export const devDefinition: CommandDefinition = {
@@ -15,7 +16,7 @@ export const devDefinition: CommandDefinition = {
     flags: [
       '[path]          Project directory (default: cwd)',
       '',
-      'Needs a running ledger-9 stack at the configured endpoints; this build cannot start one (see: midnight help localnet).',
+      'Needs a running ledger-9 stack at the configured endpoints; mn dev does not start one: start it with midnight localnet up (see: midnight help localnet).',
       '',
       'Keystrokes (while running):',
       '  d             Deploy the current compiled artifact (dev-alice on undeployed)',
@@ -31,6 +32,6 @@ export const devDefinition: CommandDefinition = {
   // It provisions wallets itself (airdrop, Dust registration), whose facades' WebSocket handles aren't reliably reclaimed.
   needsWalletSdk: true,
   shell: { payer: true },
-  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'CONTRACT_NOT_COMPILED', 'NO_NODE_RUNTIME', 'NO_PAYER'] },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', RUNS_CONTRACTS, 'NO_PAYER'] },
   load: () => import('./dev.ts'),
 };

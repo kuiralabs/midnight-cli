@@ -85,6 +85,8 @@ export function connectorStub(engine: StubEngine) {
     /** The shielded coins the wallet holds unspent, each with its nullifier, as the SDK's state lists them. */
     shieldedCoins?: { coin: { type: string; value: bigint; nonce: string }; nullifier: string }[];
     dustBalance?: bigint;
+    /** The wallet's Dust coins, as the SDK's state lists them: each one's cap, and when its NIGHT was spent. */
+    dustCoins?: { maxCap: bigint; dtime: Date | undefined }[];
     protocolVersion?: { shielded: bigint; unshielded: bigint; dust: bigint };
     isSynced?: boolean;
   }) {
@@ -106,6 +108,7 @@ export function connectorStub(engine: StubEngine) {
       dust: {
         balance: (_time: Date) => overrides?.dustBalance ?? 1000n,
         availableCoins: [],
+        totalCoins: overrides?.dustCoins ?? [],
         address: WALLET_DUST,
       },
     };

@@ -57,18 +57,16 @@ export async function assertLedgerSupported(
 }
 
 /**
- * No ledger-9 stack answers at the configured endpoints. This build can't
- * start one (`mn localnet` refuses), so the user has to run it and point mn
- * at it.
+ * No ledger-9 stack answers at the configured endpoints: the user starts one
+ * (`mn localnet up`) or points mn at one that runs.
  */
 export class LocalStackUnreachableError extends Error {
   readonly code = 'LOCAL_STACK_UNREACHABLE';
   constructor(component: 'indexer' | 'node', url: string) {
     super(
       `No ledger-9 stack is reachable: the ${component} at ${url} did not answer.\n` +
-      `This build of mn can't start a localnet (no published indexer image runs ledger 9 yet).\n` +
-      `Start a ledger-9 stack (node 2.1.0-rc.2, proof-server 9.0.0-rc.8, a 4.4 indexer) and point mn at it:\n` +
-      `  midnight config set network undeployed, then midnight config set node / indexer-ws / proof-server <url>`,
+      `Start a local ledger-9 stack with: midnight localnet up\n` +
+      `Or point mn at a running one: midnight config set network undeployed, then midnight config set node / indexer-ws / proof-server <url>`,
     );
     this.name = 'LocalStackUnreachableError';
   }

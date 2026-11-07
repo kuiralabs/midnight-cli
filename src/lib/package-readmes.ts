@@ -10,6 +10,7 @@ import { walletCodes } from '@kuiralabs/midnight-wallet/commands';
 import { contractCodes } from '@kuiralabs/midnight-contract/commands';
 import { devCodes } from '@kuiralabs/midnight-dev/commands';
 import { grantCodes } from '@kuiralabs/midnight-grant/commands';
+import { connectCodes } from '@kuiralabs/midnight-connect/commands';
 import { withGeneratedBlock } from './readme-commands.ts';
 
 /** The markers around a package README's table of codes. */
@@ -22,6 +23,7 @@ export const PACKAGE_CODES: Readonly<Record<string, readonly CodeDefinition[]>> 
   chain: chainCodes,
   wallet: walletCodes,
   contract: contractCodes,
+  connect: connectCodes,
   dev: devCodes,
   grant: grantCodes,
 };

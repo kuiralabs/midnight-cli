@@ -114,9 +114,14 @@ describe('parseAmount', () => {
 
 describe('nightAmountText and nightAmountJson: an amount as mn prints it', () => {
   // The words the commands printed when amounts were numbers, String(Number(text)), for amounts a number carried exactly (all parseAmount took then).
-  it.each(['100', '1.5', '0.5', '0.000001', '1.000001', '123.45', '999999999.999999', '4000000000.000001', '8000000000.000011', '7', '0.1'])('%s as written, and as the number --json has always carried', (text) => {
+  // Regression: --json carried the amount as a number, though help says a NIGHT string and balances and fees are strings.
+  it.each(['100', '1.5', '0.5', '0.000001', '1.000001', '123.45', '999999999.999999', '4000000000.000001', '8000000000.000011', '7', '0.1'])('%s as written, and as the string --json carries', (text) => {
     expect(nightAmountText(parseAmount(text))).toBe(String(Number(text)));
-    expect(nightAmountJson(parseAmount(text))).toBe(Number(text));
+    expect(nightAmountJson(parseAmount(text))).toBe(String(Number(text)));
+  });
+
+  it('carries an amount past 2^53 micro-NIGHT exactly in --json', () => {
+    expect(nightAmountJson(parseAmount('9999999999.000001'))).toBe('9999999999.000001');
   });
 
   it('drops trailing zeros and a bare point, as a number did', () => {

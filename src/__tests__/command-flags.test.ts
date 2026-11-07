@@ -37,6 +37,12 @@ describe('assertKnownFlags', () => {
     expect(() => assertKnownFlags(args)).not.toThrow();
   });
 
+  it('accepts --verbose on swap, as on the other commands that open a wallet', () => {
+    for (const subcommand of ['make', 'take', 'cancel', 'inspect', 'list']) {
+      expect(() => assertKnownFlags(parseArgs(['swap', subcommand, '--verbose'])), subcommand).not.toThrow();
+    }
+  });
+
   it('accepts the global flags on every command', () => {
     for (const { name: command } of installedCommands.commands) {
       const args = parseArgs([command, ...installedCommands.globalFlags.map(({ name: f }) => (f.length === 1 ? `-${f}` : `--${f}`))]);

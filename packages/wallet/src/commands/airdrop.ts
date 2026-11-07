@@ -69,7 +69,8 @@ function printAirdrop({ network, txHash, recipient, shielded, receipt }: NightAi
   const receiptFields = receipt ? receiptJson(receipt) : {};
   if (jsonMode) {
     ctx.output.result(shielded
-      ? { txHash, amount: nightAmountJson(amount), shieldedAddress: recipient, network, type: 'shielded', ...receiptFields }
+      // recipient, as a transfer names it; shieldedAddress, its older name here, kept for the consumers that read it.
+      ? { txHash, amount: nightAmountJson(amount), recipient, shieldedAddress: recipient, network, type: 'shielded', ...receiptFields }
       : { txHash, amount: nightAmountJson(amount), recipient, network, ...receiptFields });
     return;
   }

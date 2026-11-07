@@ -3,9 +3,10 @@
 //                       [--approve-all | --approve-fees] [--no-auto-approve-reads] [--json]
 
 import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites, resolveNetwork, applyEndpointOverrides, type DAppConnector, type DAppConnectorCallbacks, OPERATOR_REJECTED_MESSAGE, type PhaseTiming, DEFAULT_SERVE_PORT, shieldedSyncEnabled, parseFeeLimits, describeApprovalPolicy, type CallContext, UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
-import { header, keyValue, divider, formatAddress, toDust, bold, dim, teal, green, red, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
+import { header, divider, formatAddress, bold, dim, teal, green, red, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { resolveWalletPath, unlockWallet } from '@kuiralabs/midnight-wallet';
 import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
+import { serveHeaderLines } from '../lib/serve-header.ts';
 
 export default async function serveCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
@@ -55,17 +56,10 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
   // ── Header ──
 
   ctx.output.stderr('\n' + header('DApp Connector Server') + '\n\n');
-  ctx.output.stderr(keyValue('Network', networkName) + '\n');
-  ctx.output.stderr(keyValue('Address', formatAddress(address, true)) + '\n');
-  ctx.output.stderr(keyValue('Port', String(port)) + '\n');
   const policy = describeApprovalPolicy({ approveAll, approveFees, autoApproveReads }, feeLimits);
-  ctx.output.stderr(keyValue('Auto-approve balancing', { auto: 'yes', 'fee-only': 'fee-only (Dust fee only)', prompt: 'no' }[policy.balancing]) + '\n');
+  for (const line of serveHeaderLines({ network: networkName, address: formatAddress(address, true), port }, policy, feeLimits)) ctx.output.stderr(line + '\n');
   if (noAutoApproveReadsGiven) {
     ctx.output.stderr(dim('  --no-auto-approve-reads has no effect: read methods never prompt, and balancing prompts unless --approve-all or --approve-fees') + '\n');
-  }
-  ctx.output.stderr(keyValue('Auto-approve writes', { auto: 'yes', 'fee-only': 'fee-only (submit of a fee-only balance)', prompt: 'no' }[policy.writes]) + '\n');
-  if (policy.feeLimits) {
-    ctx.output.stderr(keyValue('Fee limits', `max ${toDust(feeLimits.maxFeeSpecks)} DUST per tx, ${feeLimits.maxPending} unsubmitted at once`) + '\n');
   }
   ctx.output.stderr('\n');
 
@@ -84,8 +78,9 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
   // `connector.hasPendingTxs()` check below).
 
   const spinner = ctx.progress.start('Syncing wallet...');
-  // Skip the (slow) shielded sync where shielded is unusable (no faucet on
-  // preview/preprod). dApps there can only do unshielded + dust anyway.
+  // Where shielded is off by default (preview, preprod, stagenet), serve is
+  // ready once unshielded and Dust are synced; the shielded wallet keeps
+  // syncing behind, so its balances may be short until it catches up.
   const syncMode = shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded')) ? 'full' : 'lite';
 
   await (await ctx.host.engines.for(networkName)).wallet.serveWallet({ seed: seedBuffer, root, notice: ctx.host.notice, networkConfig, network: networkName, address, syncMode, signal: ctx.signal, log: ctx.diagnostics.line,

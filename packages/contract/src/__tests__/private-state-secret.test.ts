@@ -4,44 +4,34 @@ import { resolvePrivateStateSecretKey } from '../lib/contract/private-state-secr
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex');
 
 describe('resolvePrivateStateSecretKey', () => {
-  const injected = 'aa'.repeat(32); // 64 hex chars → 32 bytes of 0xaa
-  const cpk = 'bb'.repeat(40); // 80 hex chars (coin pubkey is longer than 32 bytes)
+  const given = 'aa'.repeat(32); // 64 hex chars → 32 bytes of 0xaa
+  const cpk = 'bb'.repeat(32);
 
-  it('uses the injected 64-hex secret exactly, as 32 bytes', () => {
-    const key = resolvePrivateStateSecretKey(injected, undefined);
+  it('uses the given 64-hex secret exactly, as 32 bytes', () => {
+    const key = resolvePrivateStateSecretKey(given, undefined);
     expect(key).toBeInstanceOf(Uint8Array);
-    expect(key.length).toBe(32);
-    expect(hex(key)).toBe(injected);
+    expect(hex(key)).toBe(given);
   });
 
-  it('injected secret wins over the wallet coin public key', () => {
-    const key = resolvePrivateStateSecretKey(injected, cpk);
-    expect(hex(key)).toBe(injected);
+  // Regression: with no secret given the script used the wallet's coin public
+  // key, which is public (part of the shielded address), so anyone could take
+  // over a contract whose owner is public_key(secret_key()).
+  it('never falls back to the coin public key when no secret is given', () => {
+    expect(() => resolvePrivateStateSecretKey(undefined, cpk)).toThrow(/No private-state secret was given/);
+    expect(() => resolvePrivateStateSecretKey('', cpk)).toThrow(/No private-state secret was given/);
   });
 
-  it('derives the first 32 bytes of the coin public key when no secret is injected', () => {
-    const key = resolvePrivateStateSecretKey(undefined, cpk);
-    expect(hex(key)).toBe('bb'.repeat(32)); // first 32 bytes only
+  it('refuses a secret of the wrong length or not hex, instead of choosing another', () => {
+    expect(() => resolvePrivateStateSecretKey('abcd', cpk)).toThrow(/No private-state secret was given/);
+    expect(() => resolvePrivateStateSecretKey('zz'.repeat(32), cpk)).toThrow(/No private-state secret was given/);
   });
 
-  it('ignores a wrong-length injected secret and falls back to the coin public key', () => {
-    const key = resolvePrivateStateSecretKey('abcd', cpk); // 4 hex chars, not 64
-    expect(hex(key)).toBe('bb'.repeat(32));
+  it('uses the coin public key only when asked for the legacy secret', () => {
+    expect(hex(resolvePrivateStateSecretKey('legacy', cpk))).toBe(cpk);
+    expect(() => resolvePrivateStateSecretKey('legacy', undefined)).toThrow(/no coin public key/);
   });
 
-  it('falls back to a random 32-byte key when neither is available', () => {
-    const a = resolvePrivateStateSecretKey(undefined, undefined);
-    const b = resolvePrivateStateSecretKey(undefined, '');
-    expect(a.length).toBe(32);
-    expect(b.length).toBe(32);
-    // Two random draws must not collide (guards against a zero/constant fallback).
-    expect(hex(a)).not.toBe(hex(b));
-    expect(hex(a)).not.toBe('00'.repeat(32));
-  });
-
-  it('is deterministic for the same coin public key (post/takeDown reuse the key)', () => {
-    const a = resolvePrivateStateSecretKey(undefined, cpk);
-    const b = resolvePrivateStateSecretKey(undefined, cpk);
-    expect(hex(a)).toBe(hex(b));
+  it('never makes a random secret up', () => {
+    expect(() => resolvePrivateStateSecretKey(undefined, undefined)).toThrow();
   });
 });

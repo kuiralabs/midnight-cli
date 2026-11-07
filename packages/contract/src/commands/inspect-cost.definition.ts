@@ -14,18 +14,26 @@ export const inspectCostDefinition: CommandDefinition = {
       help: ['--network <name>              Network to read (default: the selected one)'],
       agent: { type: 'string', description: 'Network to read (default: the selected one)' },
     },
-    { name: 'node', takesValue: true },
+    {
+      name: 'node',
+      takesValue: true,
+      help: ['--node <url>                  Accepted as other commands take it; the limits are read from the indexer alone'],
+    },
     {
       name: 'indexer-ws',
       takesValue: true,
       help: ['--indexer-ws <url>            Indexer to read the latest block from'],
     },
-    { name: 'proof-server', takesValue: true },
+    {
+      name: 'proof-server',
+      takesValue: true,
+      help: ['--proof-server <url>          Accepted as other commands take it; unused here'],
+    },
   ],
   help: {
     description: 'Display the chain\'s current block limits, from its latest block\'s ledger parameters',
     usage: 'midnight inspect-cost [--network <name>] [--node <url>] [--indexer-ws <url>] [--proof-server <url>]',
-    flags: [{ flag: 'network' }, { flag: 'indexer-ws' }],
+    flags: [{ flag: 'network' }, { flag: 'indexer-ws' }, { flag: 'node' }, { flag: 'proof-server' }],
     examples: ['midnight inspect-cost', 'midnight inspect-cost --network undeployed --json'],
     jsonFields: {
       network: 'Network the limits were read from',

@@ -3,6 +3,7 @@
 import { type CommandDefinition, NETWORK_PARAM, EXIT_GENERAL_ERROR } from '@kuiralabs/midnight-cli-core';
 import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
+import { RUNS_CONTRACTS } from '@kuiralabs/midnight-contract/commands';
 import { OPENS_WALLET } from '@kuiralabs/midnight-wallet/commands';
 
 export const testDefinition: CommandDefinition = {
@@ -52,6 +53,7 @@ export const testDefinition: CommandDefinition = {
       name: 'goal',
       takesValue: true,
       subcommands: ['create'],
+      help: ['--goal "<text>"               AI scaffolding: the one-line success criterion the suite verifies (create)'],
       agent: { type: 'string', description: 'AI mode: one-line success criterion this suite should verify (e.g. "round goes from 0 to 1 after increment"). Triggers AI scaffolding.' },
     },
     {
@@ -75,6 +77,7 @@ export const testDefinition: CommandDefinition = {
       name: 'no-ai',
       takesValue: false,
       subcommands: ['create'],
+      help: ['--no-ai                       Use the deterministic scaffolder even when the claude CLI is there (create)'],
       agent: { type: 'boolean', description: 'Force deterministic scaffolder even when claude CLI is available.' },
     },
     {
@@ -94,11 +97,17 @@ export const testDefinition: CommandDefinition = {
       ],
       agent: { type: 'string', description: 'Browser strategy only — dev server port (e.g. "4173").' },
     },
-    { name: 'redeploy', takesValue: false, subcommands: ['run'] },
+    {
+      name: 'redeploy',
+      takesValue: false,
+      subcommands: ['run'],
+      help: ['--redeploy                    Deploy the contract again instead of reusing the cached address (run)'],
+    },
     {
       name: 'screen',
       takesValue: true,
       subcommands: ['create'],
+      help: ['--screen <name>               AI scaffolding, browser strategy: the screen component to focus on (create)'],
       agent: { type: 'string', description: 'AI mode + browser strategy: name of the screen component to focus on (e.g. "loan-request-form" or "LoanRequestForm"). Auto-discovered from src/components, src/pages, src/screens.' },
     },
     {
@@ -127,7 +136,7 @@ export const testDefinition: CommandDefinition = {
       agent: { type: 'string', description: 'Browser strategy only — full URL Claude opens (default http://localhost:<port>/).' },
     },
     // Accepted, but test reads none of them (a run resolves endpoints from dapp.test.json's network).
-    { name: 'node', takesValue: true, agent: { notForAgents: 'test reads no endpoint flag: a run takes its network from dapp.test.json' } },
+    { name: 'node', takesValue: true, help: ['--node, --indexer-ws, --proof-server', '                              Accepted but unused: a run takes its network from dapp.test.json'], agent: { notForAgents: 'test reads no endpoint flag: a run takes its network from dapp.test.json' } },
     { name: 'indexer-ws', takesValue: true, agent: { notForAgents: 'test reads no endpoint flag: a run takes its network from dapp.test.json' } },
     { name: 'proof-server', takesValue: true, agent: { notForAgents: 'test reads no endpoint flag: a run takes its network from dapp.test.json' } },
   ],
@@ -151,6 +160,11 @@ export const testDefinition: CommandDefinition = {
       { flag: 'url' },
       { flag: 'browser-mode' },
       { flag: 'force' },
+      { flag: 'goal' },
+      { flag: 'screen' },
+      { flag: 'no-ai' },
+      { flag: 'redeploy' },
+      { flag: 'node' },
       '--json                        Output structured JSON',
     ],
     examples: [
@@ -175,7 +189,7 @@ export const testDefinition: CommandDefinition = {
   needsWalletSdk: true,
   shell: {},
   errors: {
-    codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'CONTRACT_NOT_COMPILED', 'NO_NODE_RUNTIME', 'NO_TEST_CONFIG', 'MAINNET_REFUSED'],
+    codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', RUNS_CONTRACTS, 'SERVE_PORT_IN_USE', 'NO_TEST_CONFIG', 'MAINNET_REFUSED'],
     // `test run` returns it when a test fails, with the results as its JSON (COMMAND_FAILED under MCP).
     outcomes: [{ exitCode: EXIT_GENERAL_ERROR, when: 'A test failed' }],
   },

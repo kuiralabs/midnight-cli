@@ -42,7 +42,6 @@ export const ERROR_CODES = {
   CANCELLED: 'CANCELLED',
   /** The chain is on ledger 8; this build supports ledger 9 only. Recovery: use midnight-wallet-cli 0.5.x for that network. */
   UNSUPPORTED_LEDGER: 'UNSUPPORTED_LEDGER',
-  /** `mn localnet up` can't start a ledger-9 stack on this build. Recovery: run one yourself and point mn at it (endpoint flags or `midnight config set`). */
   /** No ledger-9 stack answers at the configured endpoints. Recovery: start one, or fix the endpoints. */
   LOCAL_STACK_UNREACHABLE: 'LOCAL_STACK_UNREACHABLE',
   /** The command is refused on mainnet (an airdrop, a test suite, mn grant) before anything runs. Recovery: run it on undeployed or a test network. */
@@ -85,6 +84,12 @@ export const ERROR_CODES = {
   NO_PAYER: 'NO_PAYER',
   /** Contract scripts run under Node.js, and none was found on PATH. Recovery: install Node.js 22 or later, or run mn under Node. */
   NO_NODE_RUNTIME: 'NO_NODE_RUNTIME',
+  /** A compiled contract's contract-info.json is not what the Compact compiler writes. Recovery: compile the contract again. */
+  CONTRACT_INFO_INVALID: 'CONTRACT_INFO_INVALID',
+  /** The port mn serve was to use is taken by a process that can't serve the command. Recovery: stop that process (the message says how to find it), or use another port. */
+  SERVE_PORT_IN_USE: 'SERVE_PORT_IN_USE',
+  /** A request to mn serve needed approval and nobody could be asked. Recovery: restart mn serve with --approve-all (or --approve-fees), or run it at a terminal. */
+  APPROVAL_UNAVAILABLE: 'APPROVAL_UNAVAILABLE',
   /** A command ended with a non-zero exit code without throwing (a test run whose tests failed), run where no process exit code can be set (MCP). */
   COMMAND_FAILED: 'COMMAND_FAILED',
   UNKNOWN: 'UNKNOWN',

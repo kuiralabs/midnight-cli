@@ -116,7 +116,7 @@ describe('transferNight', () => {
     const preprod = { ...transfer({ recipient: rcKeys.shieldedAddresses(RECIPIENT_SEED).preprod, shielded: true }), network: 'preprod' as const, onProgress: (event: Said) => said.push(event) };
     const refused = transferNight(host, { wallet: 'alice' }, preprod);
     await expect(refused).rejects.toMatchObject({ code: 'INVALID_ARGS' });
-    await expect(refused).rejects.toThrow('Shielded is unavailable on preprod (no faucet). Use --force-shielded to sync anyway, or --network undeployed.');
+    await expect(refused).rejects.toThrow('Shielded is not read on preprod by default (its first read takes a while), though a wallet can hold shielded tokens there. Pass --force-shielded to read it.');
     expect(host.asked()).toBe(0);
     expect(said).toEqual([]);
     expect(indexer.queries).toEqual([]);

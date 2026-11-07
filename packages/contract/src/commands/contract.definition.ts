@@ -4,6 +4,7 @@ import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTar
 import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
 import { OPENS_WALLET } from '@kuiralabs/midnight-wallet/commands';
+import { RUNS_CONTRACTS } from './contract.codes.ts';
 
 /** The subcommands that reach a chain: inspect reads only the compiled contract (--path, --managed, --name). */
 const ON_CHAIN: readonly string[] = ['deploy', 'call', 'state'];
@@ -62,7 +63,7 @@ export const contractDefinition: CommandDefinition = {
       name: 'network',
       takesValue: true,
       subcommands: ON_CHAIN,
-      help: ['--network <name>              Override network (default: undeployed)'],
+      help: ['--network <name>              Network (default: the one set with config set network, else undeployed)'],
       agent: NETWORK_PARAM,
     },
     {
@@ -74,13 +75,14 @@ export const contractDefinition: CommandDefinition = {
     {
       name: 'secret-key',
       takesValue: true,
-      subcommands: ['deploy'],
+      subcommands: ['deploy', 'call'],
       help: [
-        '--secret-key <64-hex>         Seed a caller-chosen initial private-state secret (deploy). For contracts whose constructor derives its owner from public_key(secret_key()); passed to the deploy subprocess via env, never written to disk',
+        '--secret-key <64-hex>         The private-state secret (deploy, call), for a contract whose owner is public_key(secret_key()). Default: one derived from the wallet\'s seed, the same on every run. It reaches the contract script through its environment, never argv; the private state it seeds is kept in the dApp\'s midnight-level-db folder, encrypted with a key derived from the wallet\'s seed',
+        '--secret-key legacy           (call) The secret an mn before 0.6.0 used by default: the wallet\'s public coin key. Only for calling a contract deployed with that default',
       ],
       agent: {
         type: 'string',
-        description: 'A chosen initial private-state secret, 64 hex chars, for a contract whose constructor derives its owner from public_key(secret_key()); passed to the deploy via env, never written to disk',
+        description: 'The private-state secret, 64 hex chars, for a contract whose owner is public_key(secret_key()); by default one derived from the wallet\'s seed. On call, "legacy" uses the default of an mn before 0.6.0 (the wallet\'s public coin key) for a contract deployed with it. The private state it seeds is kept in the dApp\'s midnight-level-db folder, encrypted with a key from the wallet\'s seed',
       },
     },
     {
@@ -145,18 +147,27 @@ export const contractDefinition: CommandDefinition = {
       'midnight contract deploy --json',
     ],
     jsonFields: {
-      name: 'Contract name',
-      address: 'Deployed contract address (deploy, call)',
+      subcommand: 'deploy, call or state (not inspect)',
+      name: 'Contract name (inspect)',
+      contractName: 'Contract name (deploy, call)',
+      address: 'Contract address (deploy, call, state)',
+      network: 'Network (deploy, call, state)',
+      txHash: 'Hash of the deploy\'s or call\'s transaction (deploy, call)',
+      receipt: 'The transaction once the indexer lists it: block, time, fee, result; null with receiptMissing saying why (deploy, call)',
+      circuit: 'Circuit called (call)',
+      status: 'What the call reported (call)',
+      fields: 'Ledger fields, each a string (state)',
+      maps: 'Ledger maps, each with its size (state)',
+      raw: 'The ledger state undecoded, when the compiled contract is not at hand (state)',
       compilerVersion: 'Compact compiler version (inspect)',
       circuits: 'Array of circuit definitions (inspect)',
       witnesses: 'Array of witness definitions (inspect)',
-      state: 'Contract ledger state (state)',
     },
   },
   intro: { brief: 'Inspect, deploy, call contracts', order: 10 },
   needsWalletSdk: true,
   shell: { payer: true },
-  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'CONTRACT_NOT_COMPILED', 'NO_NODE_RUNTIME', 'NO_PAYER'] },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', RUNS_CONTRACTS, 'NO_PAYER'] },
   load: () => import('./contract.ts'),
   mcp: {
     tools: [

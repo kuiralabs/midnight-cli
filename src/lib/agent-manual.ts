@@ -101,8 +101,8 @@ reaches preprod or mainnet fails with BLOCKFROST_PROJECT_ID_REQUIRED. The projec
 a secret: mn never prints it. Preview and undeployed need none.
 
 LEDGER 9 ONLY: this build of mn speaks ledger 9 only. A chain still on
-ledger 8 (preview and preprod today) is refused up front with an
-error saying so; use midnight-wallet-cli 0.5.x for those. localnet up
+ledger 8 is refused up front with an error saying so (UNSUPPORTED_LEDGER);
+use midnight-wallet-cli 0.5.x for such a chain. localnet up
 starts a ledger-9 stack on undeployed.
 
 STRUCTURED JSON OUTPUT

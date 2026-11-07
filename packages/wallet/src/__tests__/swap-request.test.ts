@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs, UsageError, encodeOfferEnvelope, OfferExpiredError, TermsMismatchError } from '@kuiralabs/midnight-cli-core';
 import { NotAnOfferError } from '@kuiralabs/midnight-cli-core/engine';
-import { DEFAULT_OFFER_LIFETIME_S, prepareMake, prepareTake, termsOf } from '../lib/swap/request.ts';
+import { DEFAULT_OFFER_LIFETIME_S, MAX_OFFER_LIFETIME_S, makeTermsOf, prepareMake, prepareTake, termsOf } from '../lib/swap/request.ts';
 import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from '../../../../test-support/fixtures/swap-offer.ts';
 import { testHost } from '../../../../test-support/test-host.ts';
 import { rcEngine } from '../../../../test-support/rc-engine.ts';
@@ -46,6 +46,15 @@ describe('make', () => {
     expect(prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed']), ROOT, host, NOW).expiresAt).toEqual(new Date(NOW.getTime() + DEFAULT_OFFER_LIFETIME_S * 1000));
     expect(prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed', '--expires-in', '60']), ROOT, host, NOW).expiresAt).toEqual(new Date(NOW.getTime() + 60_000));
     expect(() => prepareMake(parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed', '--expires-in', 'soon']), ROOT, host, NOW)).toThrow('--expires-in must be a whole number of seconds');
+  });
+
+  it('refuses an --expires-in past the longest lifetime as a usage error, before anything is built (a huge one was an Invalid Date after the split was paid)', () => {
+    for (const huge of ['99999999999999999999', String(MAX_OFFER_LIFETIME_S + 1)]) {
+      const args = parseArgs(['swap', 'make', ...TERMS, '--network', 'undeployed', '--expires-in', huge]);
+      expect(() => prepareMake(args, ROOT, host, NOW)).toThrow(UsageError);
+      expect(() => makeTermsOf(args, NOW)).toThrow(`--expires-in may be at most ${MAX_OFFER_LIFETIME_S} seconds`);
+    }
+    expect(makeTermsOf(parseArgs(['swap', 'make', ...TERMS, '--expires-in', String(MAX_OFFER_LIFETIME_S)]), NOW).expiresAt).toEqual(new Date(NOW.getTime() + MAX_OFFER_LIFETIME_S * 1000));
   });
 });
 
