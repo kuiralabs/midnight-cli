@@ -7,6 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
+  type CallToolRequest,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
   type ProgressToken,
@@ -41,6 +42,13 @@ const SKILL_FULL_URI = 'midnight-wallet://skill/full';
 const SKILL_LEGACY_URI = 'midnight-wallet://skill';
 
 const confirmationStore = createConfirmationStore();
+
+// The client is gone once the server's stdin closes: no answer can reach it.
+// Every call still running is cancelled, and the server exits once they have
+// stopped, or after SHUTDOWN_GRACE_MS, whichever is first.
+const SHUTDOWN_GRACE_MS = 2_000;
+const clientGone = new AbortController();
+const callsRunning = new Set<Promise<unknown>>();
 
 // What the host gives the tools' runs, once main() has installed it.
 let host: Host | null = null;
@@ -90,7 +98,14 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: listedTools(installedCommands) }));
 
 // Handle tool calls
-server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+server.setRequestHandler(CallToolRequestSchema, (request, extra) => {
+  const running = callTool(request, extra);
+  callsRunning.add(running);
+  void running.finally(() => callsRunning.delete(running)).catch(() => {});
+  return running;
+});
+
+async function callTool(request: CallToolRequest, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) {
   const { name, arguments: rawParams } = request.params;
   const params = (rawParams ?? {}) as Record<string, unknown>;
   const call = toolCall(request.params._meta?.progressToken, extra);
@@ -144,7 +159,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   }
 
   return executeTool(name, params, call);
-});
+}
 
 /**
  * A tool call's run: it stops when the client cancels the call, and when the
@@ -154,11 +169,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
  */
 function toolCall(progressToken: ProgressToken | undefined, extra: RequestHandlerExtra<ServerRequest, ServerNotification>): CommandRun {
   if (host === null) throw new Error('The MCP server took a call before its host was installed');
-  if (progressToken === undefined) return { signal: extra.signal, payer: servePayer, host };
+  // Cancelled by the client, or when the client goes away.
+  const signal = AbortSignal.any([extra.signal, clientGone.signal]);
+  if (progressToken === undefined) return { signal, payer: servePayer, host };
   let progress = 0;
   let last: string | undefined;
   return {
-    signal: extra.signal,
+    signal,
     payer: servePayer,
     host,
     onProgress: (message) => {
@@ -223,6 +240,17 @@ async function main() {
   await ensureHeapForSync();
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  process.stdin.once('end', () => void shutDownForGoneClient());
+  process.stdin.once('close', () => void shutDownForGoneClient());
+}
+
+/** Cancels every call still running, and exits once they have stopped or the grace has passed. */
+async function shutDownForGoneClient(): Promise<void> {
+  if (clientGone.signal.aborted) return;
+  clientGone.abort();
+  const grace = new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_GRACE_MS).unref());
+  await Promise.race([Promise.allSettled([...callsRunning]), grace]);
+  process.exit(0);
 }
 
 main().catch((err) => {
