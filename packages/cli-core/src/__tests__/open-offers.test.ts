@@ -2,11 +2,11 @@
 // and the check that keeps a later spend from silently cancelling one.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { closeOpenOffers, OfferCoinsInUseError, openOffersFile, readOpenOffers, recordOpenOffer, type OpenOffer } from '../lib/open-offers.ts';
-import { classifyError, ERROR_CODES, EXIT_INVALID_ARGS } from '../lib/exit-codes.ts';
+import { closeOpenOffers, OfferCoinsInUseError, OfferRecordUnreadableError, openOffersFile, readOpenOffers, recordOpenOffer, type OpenOffer } from '../lib/open-offers.ts';
+import { classifyError, ERROR_CODES, EXIT_GENERAL_ERROR, EXIT_INVALID_ARGS } from '../lib/exit-codes.ts';
 import { assertSpendsNoOfferCoin } from '../lib/open-offers.ts';
 import { CORE_CODES } from '../../../../test-support/core-codes.ts';
 
@@ -55,5 +55,38 @@ describe('open offers', () => {
     expect(err.message).toBe(`This would spend coins held by an open swap offer (${'a1'.repeat(8)}…), cancelling it. Cancel it first, or wait until it is taken.`);
     expect(classifyError(err, CORE_CODES)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.OFFER_COINS_IN_USE });
     expect(() => assertSpendsNoOfferCoin(open, ['aa11'], ['a1'.repeat(16)])).not.toThrow();
+  });
+});
+
+// Regression: a record mn could not read failed as UNKNOWN with the raw JSON
+// parse error, naming no file.
+describe('an open-offers record mn cannot read', () => {
+  const written = (text: string): string => {
+    const file = openOffersFile(root, 'undeployed', WALLET);
+    mkdirSync(join(root, 'swap-offers', 'undeployed'), { recursive: true });
+    writeFileSync(file, text);
+    return file;
+  };
+
+  it.each([
+    ['cut short', '{"offers": [ {"id": '],
+    ['not an object', '[]'],
+    ['offers not a list', '{"offers": 3}'],
+    ['an offer without its terms', '{"offers": [{"id": "a1", "nullifiers": [], "madeAt": "2026-11-02T10:00:00.000Z", "expiresAt": "2026-11-03T10:00:00.000Z"}]}'],
+    ['an amount that is not a number', '{"offers": [{"id": "a1", "terms": {"give": {"token": "01", "amount": "ten"}, "want": {"token": "02", "amount": "7"}}, "nullifiers": [], "madeAt": "2026-11-02T10:00:00.000Z", "expiresAt": "2026-11-03T10:00:00.000Z"}]}'],
+    ['a date that is not one', '{"offers": [{"id": "a1", "terms": {"give": {"token": "01", "amount": "10"}, "want": {"token": "02", "amount": "7"}}, "nullifiers": [], "madeAt": "yesterday", "expiresAt": "2026-11-03T10:00:00.000Z"}]}'],
+  ])('%s: refused with its own code, naming the file and what to do', (_case, text) => {
+    const file = written(text);
+    const refused = (() => { try { readOpenOffers(root, 'undeployed', WALLET); } catch (e) { return e; } })();
+    expect(refused).toBeInstanceOf(OfferRecordUnreadableError);
+    expect((refused as OfferRecordUnreadableError).file).toBe(file);
+    expect((refused as Error).message).toContain(file);
+    expect((refused as Error).message).toMatch(/move it aside/);
+    expect(classifyError(refused as Error, CORE_CODES)).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: 'OFFER_RECORD_UNREADABLE' });
+  });
+
+  it('reads an empty list as no offers', () => {
+    written('{"offers": []}');
+    expect(readOpenOffers(root, 'undeployed', WALLET)).toEqual([]);
   });
 });

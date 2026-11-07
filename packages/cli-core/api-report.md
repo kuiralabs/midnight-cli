@@ -694,6 +694,11 @@ export declare class OfferCoinsInUseError extends Error {
     readonly offerIds: string[];
     constructor(offerIds: string[]);
 }
+export declare class OfferRecordUnreadableError extends Error {
+    readonly code = "OFFER_RECORD_UNREADABLE";
+    readonly file: string;
+    constructor(file: string, detail: string);
+}
 export interface OpenOffer {
     id: string;
     terms: SwapTerms;
@@ -1114,6 +1119,13 @@ export declare const coreCodes: readonly [
         readonly order: 350;
         readonly summary: "A swap offer is past the expiry its maker set.";
         readonly recovery: "Ask the maker for a new one.";
+    },
+    {
+        readonly code: "OFFER_RECORD_UNREADABLE";
+        readonly exitCode: 1;
+        readonly order: 365;
+        readonly summary: "mn's record of a wallet's open swap offers (`~/.midnight/swap-offers/<network>/<address>.json`) can't be read: not JSON, or not the shape mn writes.";
+        readonly recovery: "Show the message: it names the file. Ask the user to restore it, or to move it aside (mn then forgets those offers). Don't retry until they have.";
     },
     {
         readonly code: "OFFER_COINS_IN_USE";

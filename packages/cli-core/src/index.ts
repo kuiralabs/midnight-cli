@@ -95,7 +95,7 @@ export {
   assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope,
   type OfferEnvelope, OfferExpiredError
 } from './lib/offer-envelope.ts';
-export { closeOpenOffers, OfferCoinsInUseError, type OpenOffer, readOpenOffers, recordOpenOffer } from './lib/open-offers.ts';
+export { closeOpenOffers, OfferCoinsInUseError, OfferRecordUnreadableError, type OpenOffer, readOpenOffers, recordOpenOffer } from './lib/open-offers.ts';
 export {
   type ConnectOptions, NoPayerError, type Payer, payerFor, type PayingTarget, resolvePayingTarget,
   type ServedWallet

@@ -51,6 +51,7 @@ export const coreCodes = defineCodes([
   { code: 'NOT_AN_OFFER', exitCode: EXIT_INVALID_ARGS, order: 330, summary: 'The bytes given as a swap offer are not one.', recovery: 'Ask the maker for the offer again.' },
   { code: 'TERMS_MISMATCH', exitCode: EXIT_INVALID_ARGS, order: 340, summary: "A swap offer's own terms differ from the agreed ones.", recovery: "Don't take it; agree the terms again with the maker." },
   { code: 'OFFER_EXPIRED', exitCode: EXIT_INVALID_ARGS, order: 350, summary: 'A swap offer is past the expiry its maker set.', recovery: 'Ask the maker for a new one.' },
+  { code: 'OFFER_RECORD_UNREADABLE', exitCode: EXIT_GENERAL_ERROR, order: 365, summary: "mn's record of a wallet's open swap offers (`~/.midnight/swap-offers/<network>/<address>.json`) can't be read: not JSON, or not the shape mn writes.", recovery: 'Show the message: it names the file. Ask the user to restore it, or to move it aside (mn then forgets those offers). Don\'t retry until they have.' },
   { code: 'OFFER_COINS_IN_USE', exitCode: EXIT_INVALID_ARGS, order: 360, summary: "A spend would use coins an open swap offer of this wallet's holds, cancelling it.", recovery: 'Cancel the offer first (`mn swap cancel`), or wait until it is taken.' },
 ]);
 
@@ -67,7 +68,7 @@ export const LOADS_ENGINE = defineCodeSet('engine', ['OTHER_SDK_SET', 'MIXED_SDK
 export const ENGINE_SYNC = defineCodeSet('sync', ['NETWORK_ERROR', 'SYNC_TIMEOUT', 'STALE_CACHE']);
 
 /** Paying for a transaction: the node's refusals, the proof, the Dust for the fee, the NIGHT, coins an open swap offer holds. */
-export const PAYS = defineCodeSet('paying', ['TX_REJECTED', 'STALE_UTXO', 'INVALID_DUST_PROOF', 'PROOF_TIMEOUT', 'PROOF_FAILURE', 'DUST_REQUIRED', 'DUST_GENERATING', 'INSUFFICIENT_BALANCE', 'OFFER_COINS_IN_USE']);
+export const PAYS = defineCodeSet('paying', ['TX_REJECTED', 'STALE_UTXO', 'INVALID_DUST_PROOF', 'PROOF_TIMEOUT', 'PROOF_FAILURE', 'DUST_REQUIRED', 'DUST_GENERATING', 'INSUFFICIENT_BALANCE', 'OFFER_COINS_IN_USE', 'OFFER_RECORD_UNREADABLE']);
 
 /** Reading a swap offer's bytes and terms. */
 export const READS_OFFERS = defineCodeSet('offers', ['NOT_AN_OFFER', 'TERMS_MISMATCH']);
