@@ -6,7 +6,8 @@
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DIR_MODE, FILE_MODE } from './constants.ts';
+import { FILE_MODE } from './constants.ts';
+import { ensureOwnerOnlyDir } from './owner-only.ts';
 
 const TEMPORARY_ID_BYTES = 8;
 
@@ -22,7 +23,7 @@ export class FileExistsError extends Error {
 /** Writes `value` to `file` as JSON, durably. With `exclusive`, refuses a file that exists. */
 export function writeJsonDurably(file: string, value: unknown, { exclusive = false }: { exclusive?: boolean } = {}): void {
   const dir = path.dirname(file);
-  fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
+  ensureOwnerOnlyDir(dir);
   if (exclusive && fs.existsSync(file)) throw new FileExistsError(file);
   const temporary = `${file}.${process.pid}.${randomBytes(TEMPORARY_ID_BYTES).toString('hex')}.tmp`;
   try {

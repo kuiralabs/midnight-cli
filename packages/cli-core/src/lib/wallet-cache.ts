@@ -1,11 +1,12 @@
 // Wallet state cache — persist serialized wallet state to disk for fast restore.
 // On subsequent runs, the SDK restores from checkpoint and only syncs delta.
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, readdirSync, renameSync } from 'node:fs';
+import { existsSync, writeFileSync, readFileSync, unlinkSync, readdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 
-import { CACHE_VERSION, CACHE_DIR_NAME, DIR_MODE, FILE_MODE } from './constants.ts';
+import { CACHE_VERSION, CACHE_DIR_NAME, FILE_MODE } from './constants.ts';
+import { ensureOwnerOnlyDir } from './owner-only.ts';
 import { assertValidNetworkName, defaultSdkSetOf, sdkSetOfNetwork } from './network.ts';
 
 export interface WalletCacheData {
@@ -158,10 +159,8 @@ export async function saveWalletCache(
   const path = getCachePath(address, network, root);
   const dir = dirname(path);
 
-  // Ensure directory exists
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true, mode: DIR_MODE });
-  }
+  ensureOwnerOnlyDir(cacheRootDir(root));
+  ensureOwnerOnlyDir(dir);
 
   // Atomic write: temp file + rename
   const tmpPath = path + `.tmp.${randomBytes(4).toString('hex')}`;

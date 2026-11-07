@@ -116,6 +116,9 @@ export interface CliConfig {
     'indexer-ws'?: string;
     wallet?: string;
 }
+export declare class CorruptConfigError extends UsageError {
+    constructor(configPath: string, reason: string);
+}
 export declare function getConfigValue(key: string, configDir: string, scope?: NetworkName): string;
 export declare function getEndpointOverridesForNetwork(config: CliConfig, networkName: NetworkName): NetworkEndpointOverrides;
 export declare function loadCliConfig(configDir: string): CliConfig;
@@ -296,6 +299,8 @@ export declare function assertValidWalletName(name: string): void;
 export declare class InvalidWalletNameError extends UsageError {
     constructor(name: string, where?: string, fix?: string);
 }
+export declare function ensureOwnerOnlyDir(dir: string): void;
+export declare function narrowToOwnerOnly(file: string): void;
 export declare function formatWait(ms: number): string;
 export declare function dustShortError(have: bigint, needed: bigint, waitMs: number | null): DustRequiredError;
 export declare const OWN_COMMAND_DUST_WAIT_MS: number;

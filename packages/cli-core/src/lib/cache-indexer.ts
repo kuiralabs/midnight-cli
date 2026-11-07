@@ -11,9 +11,10 @@
 // directory is checked against the indexer in use; state from another one is
 // removed, and the sync starts from the beginning.
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DIR_MODE, FILE_MODE } from './constants.ts';
+import { FILE_MODE } from './constants.ts';
+import { ensureOwnerOnlyDir } from './owner-only.ts';
 import { cacheRootDir, networkCacheFolder } from './wallet-cache.ts';
 
 const MARKER = 'indexer.host';
@@ -65,7 +66,8 @@ export function bindCachesToIndexer(network: string, indexerUrl: string, root: s
     }
   }
 
-  mkdirSync(dir, { recursive: true, mode: DIR_MODE });
+  ensureOwnerOnlyDir(cacheRootDir(root));
+  ensureOwnerOnlyDir(dir);
   writeFileSync(marker, current + '\n', { mode: FILE_MODE });
   return removed > 0 ? { previous, current, removed } : undefined;
 }

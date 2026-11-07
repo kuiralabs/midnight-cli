@@ -1,11 +1,24 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { DEFAULT_CONFIG_FILENAME, DIR_MODE, FILE_MODE, WALLETS_DIR_NAME } from './constants.ts';
+import { DEFAULT_CONFIG_FILENAME, FILE_MODE, WALLETS_DIR_NAME } from './constants.ts';
+import { ensureOwnerOnlyDir, narrowToOwnerOnly } from './owner-only.ts';
 import { assertValidWalletName } from './wallet-name.ts';
 import { blockfrostNetworks, checkProjectId, maskProjectId, networkOfProjectId } from './blockfrost.ts';
 import { InvalidNetworkError, type NetworkName, NetworkNotNamedError, SDK_SETS, getValidNetworkNames, isNamedOnlyNetwork, isValidNetworkName } from './network.ts';
 import type { SdkSet } from './engine.ts';
 import { UsageError } from './errors.ts';
+
+/** mn's config file can't be read as one: mn neither guesses its settings nor writes over it. */
+export class CorruptConfigError extends UsageError {
+  constructor(configPath: string, reason: string) {
+    super(
+      `mn can't read its config file ${configPath}: ${reason}.\n`
+      + `Fix it by hand, or move it aside to start again from the defaults (mn won't write over it): mv ${configPath} ${configPath}.bad`,
+    );
+    this.name = 'CorruptConfigError';
+    Object.setPrototypeOf(this, CorruptConfigError.prototype);
+  }
+}
 
 /** Endpoint overrides for one network. Keys mirror the flag/config names. */
 export interface NetworkEndpointOverrides {
@@ -89,11 +102,7 @@ function getConfigPath(configDir: string): string {
   return path.join(configDir, DEFAULT_CONFIG_FILENAME);
 }
 
-function ensureConfigDir(configDir: string): void {
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true, mode: DIR_MODE });
-  }
-}
+
 
 /**
  * Load CLI config from ~/.midnight/config.json.
@@ -106,18 +115,24 @@ export function loadCliConfig(configDir: string): CliConfig {
     return { ...DEFAULT_CLI_CONFIG };
   }
 
+  // A file that can't be read is refused, never taken as the defaults: a command
+  // would then run on the default network and endpoints, and the next `config
+  // set` would write the defaults over it.
   let content: string;
   try {
     content = fs.readFileSync(configPath, 'utf-8');
-  } catch {
-    return { ...DEFAULT_CLI_CONFIG };
+  } catch (error) {
+    throw new CorruptConfigError(configPath, error instanceof Error ? error.message : String(error));
   }
 
   let parsed: Partial<CliConfig>;
   try {
     parsed = JSON.parse(content);
-  } catch {
-    return { ...DEFAULT_CLI_CONFIG };
+  } catch (error) {
+    throw new CorruptConfigError(configPath, error instanceof Error ? error.message : String(error));
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new CorruptConfigError(configPath, 'it is not a JSON object');
   }
 
   // A network a command must name itself (mainnet) is never the saved one,
@@ -203,9 +218,11 @@ export function getBlockfrostProjectId(config: CliConfig, networkName: NetworkNa
  * Creates the directory if it doesn't exist.
  */
 export function saveCliConfig(config: CliConfig, configDir: string): void {
-  ensureConfigDir(configDir);
+  ensureOwnerOnlyDir(configDir);
   const configPath = getConfigPath(configDir);
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', { mode: FILE_MODE });
+  // It can hold a Blockfrost project id: a file an earlier mn left readable to others is narrowed.
+  narrowToOwnerOnly(configPath);
 }
 
 /**

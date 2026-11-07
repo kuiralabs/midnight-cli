@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, assertValidWalletName, isValidWalletName, InvalidWalletNameError, DEFAULT_CONFIG_FILENAME, UsageError, getValidNetworkNames, type NetworkName, loadCliConfig, saveCliConfig, type EngineKeys, type HostEngines, isSealedSecret, openSecret, sealSecret, FileExistsError, writeJsonDurably, defineHostSlot, type Host, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, narrowToOwnerOnly, isValidNetworkName, clearWalletCache, assertValidWalletName, isValidWalletName, InvalidWalletNameError, DEFAULT_CONFIG_FILENAME, UsageError, getValidNetworkNames, type NetworkName, loadCliConfig, saveCliConfig, type EngineKeys, type HostEngines, isSealedSecret, openSecret, sealSecret, FileExistsError, writeJsonDurably, defineHostSlot, type Host, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import { getWalletsDir } from './wallet-paths.ts';
 import { type PassphraseHost, type PassphraseSource, unlockPassphrase } from './passphrase.ts';
 
@@ -45,6 +45,12 @@ export interface WalletInfo {
   file: string;
 }
 
+/** Writes a wallet file's JSON in place, narrowing a file an earlier mn left readable to others to owner-only. */
+function writeWalletFile(file: string, value: unknown): void {
+  fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { mode: FILE_MODE });
+  narrowToOwnerOnly(file);
+}
+
 /**
  * Save shielded address for a specific network to an existing wallet file.
  * Reads the file, updates the shieldedAddresses map for that network, writes back.
@@ -68,7 +74,7 @@ export function saveShieldedAddress(
     if (raw.shieldedAddress && raw.shieldedAddress === shieldedAddress) {
       delete raw.shieldedAddress;
     }
-    fs.writeFileSync(resolvedPath, JSON.stringify(raw, null, 2) + '\n', { mode: FILE_MODE });
+    writeWalletFile(resolvedPath, raw);
   } catch { /* best-effort */ }
 }
 
@@ -310,8 +316,21 @@ export function assertWalletRemovable(root: string, name: string): string {
   return walletPath;
 }
 
+/**
+ * Removes the named wallet (see assertWalletRemovable), and its sync cache on
+ * every network, named by the addresses its file keeps.
+ */
 export function removeWallet(root: string, name: string): void {
-  fs.unlinkSync(assertWalletRemovable(root, name));
+  const file = assertWalletRemovable(root, name);
+  let addresses: Record<string, unknown> = {};
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf-8')) as { addresses?: unknown };
+    if (raw.addresses !== null && typeof raw.addresses === 'object') addresses = raw.addresses as Record<string, unknown>;
+  } catch { /* not readable as a wallet: there is no cache named by it to find */ }
+  fs.unlinkSync(file);
+  for (const [network, address] of Object.entries(addresses)) {
+    if (isValidNetworkName(network) && typeof address === 'string') clearWalletCache(address, network, root);
+  }
 }
 
 /** Throws, with how to make one, when there is no wallet file at `resolvedPath`. */
@@ -405,7 +424,7 @@ export async function loadWalletConfig(walletPath: string, engines: HostEngines)
       migrated.shieldedAddresses = shieldedAddresses;
       delete migrated.shieldedAddress;
     }
-    fs.writeFileSync(resolvedPath, JSON.stringify(migrated, null, 2) + '\n', { mode: FILE_MODE });
+    writeWalletFile(resolvedPath, migrated);
 
     return config;
   }
@@ -428,7 +447,7 @@ export async function loadWalletConfig(walletPath: string, engines: HostEngines)
   if (completed) {
     config.addresses = completed.addresses;
     try {
-      fs.writeFileSync(resolvedPath, JSON.stringify({ ...raw, addresses: completed.addresses }, null, 2) + '\n', { mode: FILE_MODE });
+      writeWalletFile(resolvedPath, { ...raw, addresses: completed.addresses });
       raw.addresses = completed.addresses;
     } catch { /* best-effort */ }
   }
@@ -448,7 +467,7 @@ export async function loadWalletConfig(walletPath: string, engines: HostEngines)
     try {
       const updated = { ...raw, shieldedAddresses };
       delete updated.shieldedAddress;
-      fs.writeFileSync(resolvedPath, JSON.stringify(updated, null, 2) + '\n', { mode: FILE_MODE });
+      writeWalletFile(resolvedPath, updated);
     } catch { /* best-effort */ }
   }
 

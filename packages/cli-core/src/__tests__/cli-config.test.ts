@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { loadCliConfig, saveCliConfig, getConfigValue, setConfigValue, unsetConfigValue, getValidConfigKeys, getBlockfrostProjectId, getSdkSetOverride } from '../lib/cli-config.ts';
+import { CorruptConfigError, loadCliConfig, saveCliConfig, getConfigValue, setConfigValue, unsetConfigValue, getValidConfigKeys, getBlockfrostProjectId, getSdkSetOverride } from '../lib/cli-config.ts';
 import { NetworkNotNamedError, sdkSetOfNetwork } from '../lib/network.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { getCachePath, networkCacheFolder, walletCacheFileName } from '../lib/wallet-cache.ts';
@@ -51,16 +51,25 @@ describe('loadCliConfig', () => {
     expect(config.network).toBe('undeployed');
   });
 
-  it('falls back to default for corrupted JSON', () => {
-    fs.writeFileSync(path.join(TEST_DIR, 'config.json'), '{broken json!!');
-    const config = loadCliConfig(TEST_DIR);
-    expect(config.network).toBe('undeployed');
+  // A file it can't read used to be taken as the defaults (another network, no
+  // endpoints), and the next config set wrote the defaults over it.
+  it.each([
+    ['corrupted JSON', '{broken json!!'],
+    ['an empty file', ''],
+    ['JSON that is not an object', '["undeployed"]'],
+  ])('refuses %s, saying how to fix it, as a usage error', (_what, content) => {
+    fs.writeFileSync(path.join(TEST_DIR, 'config.json'), content);
+    expect(() => loadCliConfig(TEST_DIR)).toThrow(CorruptConfigError);
+    expect(() => loadCliConfig(TEST_DIR)).toThrow(/can't read its config file .*move it aside/s);
+    expect(() => loadCliConfig(TEST_DIR)).toThrow(expect.objectContaining({ code: 'INVALID_ARGS' }));
   });
 
-  it('falls back to default for empty file', () => {
-    fs.writeFileSync(path.join(TEST_DIR, 'config.json'), '');
-    const config = loadCliConfig(TEST_DIR);
-    expect(config.network).toBe('undeployed');
+  it('never writes over a file it can\'t read', () => {
+    const file = path.join(TEST_DIR, 'config.json');
+    fs.writeFileSync(file, '{broken json!!');
+    expect(() => setConfigValue('network', 'preview', TEST_DIR)).toThrow(CorruptConfigError);
+    expect(() => unsetConfigValue('node', TEST_DIR)).toThrow(CorruptConfigError);
+    expect(fs.readFileSync(file, 'utf8')).toBe('{broken json!!');
   });
 
   it('falls back to default when network field is missing from JSON', () => {
@@ -690,5 +699,20 @@ describe('the SDK set a network runs on', () => {
     expect(networkCacheFolder('undeployed', root)).toBe('undeployed');
     expect(sdkSetOfNetwork('stagenet', root)).toBe('beta');
     expect(networkCacheFolder('stagenet', root)).toBe('stagenet');
+  });
+});
+
+// config.json can hold a Blockfrost project id. A folder or file an earlier mn
+// left readable to others is narrowed to its owner when mn next writes it.
+describe('the config file\'s permissions', () => {
+  it('narrows an existing 0755 folder and 0644 file to 0700 and 0600 on save', () => {
+    const root = path.join(TEST_DIR, 'wide');
+    fs.mkdirSync(root, { mode: 0o755 });
+    fs.chmodSync(root, 0o755);
+    fs.writeFileSync(path.join(root, 'config.json'), JSON.stringify({ network: 'undeployed' }), { mode: 0o644 });
+    fs.chmodSync(path.join(root, 'config.json'), 0o644);
+    setConfigValue('network', 'preview', root);
+    expect(fs.statSync(root).mode & 0o777).toBe(0o700);
+    expect(fs.statSync(path.join(root, 'config.json')).mode & 0o777).toBe(0o600);
   });
 });

@@ -8,7 +8,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DIR_MODE, FILE_MODE, throwIfCancelled, UsageError, isSealedSecret, openSecret, sealSecret, type Prompter, defineHostSlot, type Host, PASSPHRASE_ENV, WrongPassphraseError } from '@kuiralabs/midnight-cli-core';
+import { ensureOwnerOnlyDir, FILE_MODE, throwIfCancelled, UsageError, isSealedSecret, openSecret, sealSecret, type Prompter, defineHostSlot, type Host, PASSPHRASE_ENV, WrongPassphraseError } from '@kuiralabs/midnight-cli-core';
 import { getDefaultWalletPath, getWalletsDir } from './wallet-paths.ts';
 
 /** The variable a non-interactive run sets the passphrase in (named in settings.ts). */
@@ -70,7 +70,7 @@ export function isPassphraseSet(root: string): boolean {
 export function establishPassphrase(root: string, passphrase: string): void {
   const file = keystorePath(root);
   if (fs.existsSync(file)) throw new UsageError(`mn's passphrase is already set (${file}).`);
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: DIR_MODE });
+  ensureOwnerOnlyDir(path.dirname(file));
   // `wx`: never over a check another process wrote meanwhile.
   fs.writeFileSync(file, JSON.stringify({ check: sealSecret(CHECK_VALUE, passphrase, 'keystore-check') }, null, 2) + '\n', { mode: FILE_MODE, flag: 'wx' });
 }

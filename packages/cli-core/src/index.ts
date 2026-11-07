@@ -27,7 +27,7 @@ export {
   type CommandOutcome, createCallContext, runHandler, SecondResultError
 } from './lib/call-context.ts';
 export {
-  type CliConfig, getConfigValue, getEndpointOverridesForNetwork, loadCliConfig, saveCliConfig,
+  type CliConfig, CorruptConfigError, getConfigValue, getEndpointOverridesForNetwork, loadCliConfig, saveCliConfig,
   setConfigValue
 } from './lib/cli-config.ts';
 export {
@@ -51,6 +51,7 @@ export {
 } from './lib/constants.ts';
 export { FileExistsError, readJsonIfPresent, writeJsonDurably } from './lib/durable-file.ts';
 export { assertValidWalletName, InvalidWalletNameError } from './lib/wallet-name.ts';
+export { ensureOwnerOnlyDir, narrowToOwnerOnly } from './lib/owner-only.ts';
 export { formatWait } from './lib/duration.ts';
 export { dustShortError, OWN_COMMAND_DUST_WAIT_MS } from './lib/dust-wait.ts';
 export {

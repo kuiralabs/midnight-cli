@@ -4,7 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE, loadCliConfig, saveCliConfig } from '@kuiralabs/midnight-cli-core';
+import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, ensureOwnerOnlyDir, loadCliConfig, saveCliConfig } from '@kuiralabs/midnight-cli-core';
 /** The wallets folder under the state root `root`. */
 export function getWalletsDir(root: string): string {
   return path.join(root, WALLETS_DIR_NAME);
@@ -15,18 +15,10 @@ export function getDefaultWalletPath(root: string): string {
   return path.join(root, DEFAULT_WALLET_FILENAME);
 }
 
-function ensureMidnightDir(root: string): void {
-  if (!fs.existsSync(root)) {
-    fs.mkdirSync(root, { recursive: true, mode: DIR_MODE });
-  }
-}
-
+/** Makes the state root and its wallets folder owner-only, narrowing either where an earlier mn left it wider. */
 export function ensureWalletsDir(root: string): void {
-  ensureMidnightDir(root);
-  const dir = getWalletsDir(root);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
-  }
+  ensureOwnerOnlyDir(root);
+  ensureOwnerOnlyDir(getWalletsDir(root));
 }
 
 /**
