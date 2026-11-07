@@ -33,6 +33,7 @@ Each error carries a `code`, and `classifyError(err, registry)` gives its code a
 |------|------|-----------------|------------|
 | `NO_ACCOUNT` | 1 | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. | Offer `midnight_grant_deploy()`, after telling the user how its owner key is kept (see the allowance flow). |
 | `CALLER_PIN_UNSUPPORTED` | 2 | A grant request pins the contract that calls the account, and the account on this network (stagenet) has no caller pin; nothing was submitted. | Tell the user; ask the agent for a grant request that names no calling contract, or issue it on undeployed. |
+| `ACCOUNT_KEYS_UNAVAILABLE` | 1 | A proving key of the account contract couldn't be had: the installed account build's keys are not published (HTTP 404), or fetching them failed. Nothing was submitted. | Show the message: it names the key and the build. Not published: tell the user mn grant needs an mn release whose account keys are published; don't retry. A failed fetch: retry once. |
 <!-- codes: end -->
 
 ## Mounting its commands

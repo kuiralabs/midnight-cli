@@ -59,3 +59,22 @@ export class NoAccountError extends Error {
     Object.setPrototypeOf(this, NoAccountError.prototype);
   }
 }
+
+/**
+ * A proving key of the account contract couldn't be had: the installed
+ * account build's keys are not published where the account package fetches
+ * them (for a contract compiled with a compiler whose keys no release
+ * carries yet), or the fetch failed.
+ */
+export class AccountKeysUnavailableError extends Error {
+  readonly code = 'ACCOUNT_KEYS_UNAVAILABLE';
+  /** The key's file in the build, as `keys/<circuit>.verifier`. */
+  readonly file: string;
+
+  constructor(file: string, message: string) {
+    super(message);
+    this.name = 'AccountKeysUnavailableError';
+    this.file = file;
+    Object.setPrototypeOf(this, AccountKeysUnavailableError.prototype);
+  }
+}

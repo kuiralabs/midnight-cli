@@ -13,7 +13,7 @@ import { existsSync } from 'node:fs';
 import { type ParsedArgs, hasFlag, getFlag, DustRequiredError, UsageError, type CallContext, payerFor, throwIfCancelled, withTransportCode, NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core';
 import { dim, header, keyValue, formatNight, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { accountChainFor } from '../lib/grant/account-chain.ts';
-import { type GrantAccount, openGrantAccount, ownerDeviceOf } from '../lib/grant/account.ts';
+import { accountKeysFailureOf, type GrantAccount, openGrantAccount, ownerDeviceOf } from '../lib/grant/account.ts';
 import { deployShortOfDustNote } from '../lib/grant/deploy-cost.ts';
 import { type OwnerCommandOutput, grantRequestOf, grantsOf, issue, issuePreview, revoke, revokeAll, statusOf } from '../lib/grant/owner-commands.ts';
 import { prepareGrant } from '../lib/grant/prepare.ts';
@@ -309,6 +309,9 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
     if (request.subcommand === 'deploy' && funds !== undefined && err instanceof Error && isShortOfDust(err)) {
       throw new DustRequiredError(`${err.message}\n\n${deployShortOfDustNote(funds.dustBalance)}`, { cause: err });
     }
+    // A proving key of the account contract it couldn't fetch: named, with the build's.
+    const keys = accountKeysFailureOf(err, owned.chain);
+    if (keys !== undefined) throw keys;
     // The account package reaches the indexer and the proof server itself, past the engine: a connection it couldn't make is a network error.
     throw withTransportCode(err);
   }

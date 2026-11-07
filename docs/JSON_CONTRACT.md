@@ -121,6 +121,7 @@ Stable identifiers used in error messages and structured error objects, with the
 | `CONTRACT_INFO_INVALID` | 1 | A compiled contract's contract-info.json is not what the Compact compiler writes (not JSON, or its circuits or witnesses missing or malformed). |
 | `NO_ACCOUNT` | 1 | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. |
 | `CALLER_PIN_UNSUPPORTED` | 2 | A grant request pins the contract that calls the account, and the account on this network (stagenet) has no caller pin; nothing was submitted. |
+| `ACCOUNT_KEYS_UNAVAILABLE` | 1 | A proving key of the account contract couldn't be had: the installed account build's keys are not published (HTTP 404), or fetching them failed. Nothing was submitted. |
 | `WRONG_PASSPHRASE` | 2 | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. |
 | `PASSPHRASE_REQUIRED` | 2 | A tool needed a secret (a wallet's seed, an account's owner key) and no passphrase could be had: `MN_PASSPHRASE` is unset and there is no terminal to ask at (the MCP server has none). |
 | `BLOCKFROST_PROJECT_ID_REQUIRED` | 4 | The network (preprod or mainnet) is served by Blockfrost and no project id is set for it. |
