@@ -14,7 +14,7 @@ export {
 export { nightAmountJson, nightAmountText, nightToMicro, parseAmount } from './lib/amount.ts';
 export { type ApprovalPolicy, describeApprovalPolicy } from './lib/approval.ts';
 export {
-  FULL_FLAG, getFlag, hasFlag, isMinimalMode, MINIMAL_FLAG, parseArgs, type ParsedArgs,
+  FULL_FLAG, getFlag, getFlagValues, hasFlag, isMinimalMode, MINIMAL_FLAG, parseArgs, type ParsedArgs,
   rejectNoCacheForWrites, requireFlag
 } from './lib/argv.ts';
 export {

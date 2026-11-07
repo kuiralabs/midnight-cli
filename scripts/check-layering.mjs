@@ -100,7 +100,7 @@ const HOMES = [
   ['contract', /^lib\/chain-params\.ts$/],
 
   ['connect', /^commands\/serve(\.definition)?\.ts$/],
-  ['connect', /^lib\/(dapp-connector|ws-rpc|sign-recipe|serve-manager|serve-payer|serve-header|serve-on-port)\.ts$/],
+  ['connect', /^lib\/(dapp-connector|ws-rpc|sign-recipe|serve-manager|serve-payer|serve-header|serve-on-port|allowed-origins)\.ts$/],
 
   ['dev', /^commands\/(dev|test|localnet)(\.definition)?\.ts$/],
   ['dev', /^lib\/localnet\.ts$/],

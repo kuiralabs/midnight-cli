@@ -7,7 +7,7 @@ import { resolveWalletPath, unlockWallet } from '@kuiralabs/midnight-wallet';
 import { assertLedger9StackReachable, assertLedgerSupported } from '@kuiralabs/midnight-chain';
 
 import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallbacks } from './types.ts';
-import { startServeOrReuse } from '@kuiralabs/midnight-connect';
+import { originOfPage, startServeOrReuse } from '@kuiralabs/midnight-connect';
 import { startBuild } from './build-manager.ts';
 
 /** A prep step failed: the step's own error is its cause, and its code (DUST_REQUIRED, …) is this one's. */
@@ -168,6 +168,9 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
   callbacks.onMessage(`Airdropped ${amount} NIGHT`);
 }
 
+/** The port a dApp's page is served on when dapp.test.json names none (Vite's preview). */
+const DEFAULT_DAPP_PORT = 4173;
+
 const DUST_WAIT_TIMEOUT_MS = 90_000; // 90s for dust to become available after registration
 
 async function stepDust(config: DappTestConfig, ctx: PrepContext, callbacks: PrepCallbacks): Promise<void> {
@@ -222,11 +225,27 @@ async function stepMnServe(config: DappTestConfig, ctx: PrepContext, callbacks: 
     dustWaitMs: OWN_COMMAND_DUST_WAIT_MS,
     sdkWarnings: ctx.sdkWarnings,
     signal: ctx.signal,
+    // The dApp's page connects from the browser the test drives; every other page is refused.
+    allowedOrigins: dappPageOrigins(config),
   });
 
   ctx.serveHandle = handle;
   ctx.addCleanup(async () => handle.stop());
   callbacks.onMessage(`mn serve ready on port ${handle.port}`);
+}
+
+/** The URL the dApp's page is served on during a test, from dapp.test.json. */
+function dappPageUrl(config: DappTestConfig): string {
+  return config.url ?? `http://localhost:${config.port ?? DEFAULT_DAPP_PORT}/`;
+}
+
+/**
+ * The browser origins the test's serve lets connect: the dApp page's, when
+ * the test has one (it builds and serves the page, or names its URL), else
+ * none.
+ */
+export function dappPageOrigins(config: DappTestConfig): string[] {
+  return config.prep.includes('build-and-serve') || config.url !== undefined ? [originOfPage(dappPageUrl(config))] : [];
 }
 
 async function stepBuildAndServe(config: DappTestConfig, dappDir: string, ctx: PrepContext, callbacks: PrepCallbacks): Promise<void> {
@@ -235,8 +254,8 @@ async function stepBuildAndServe(config: DappTestConfig, dappDir: string, ctx: P
     return;
   }
 
-  const port = config.port ?? 4173;
-  const url = config.url ?? `http://localhost:${port}/`;
+  const port = config.port ?? DEFAULT_DAPP_PORT;
+  const url = dappPageUrl(config);
   const logFile = join(dappDir, 'tests', 'results', `build_${Date.now()}.log`);
 
   const handle = await startBuild({

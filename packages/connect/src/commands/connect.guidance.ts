@@ -22,13 +22,19 @@ export const connectGuidance: PackageGuidance = {
       body: `DAPP CONNECTOR
 ──────────────
 
-  midnight serve [--port 9932] [--approve-all | --approve-fees] [--network name] [--force-shielded]
+  midnight serve [--port 9932] [--approve-all | --approve-fees] [--allow-origin <origin>]... [--network name] [--force-shielded]
 
 Starts a WebSocket JSON-RPC server implementing the Midnight
 ConnectedAPI interface (same as the Lace browser wallet). Any DApp
 can connect to it — no browser extension needed.
 
   - Port default: 9932, localhost only
+  - Browser pages are refused unless their origin is allowed: a page
+    connects only with --allow-origin <its origin> (e.g.
+    --allow-origin http://localhost:5173; repeat for more). Node scripts
+    send no Origin and always connect. A refused page gets HTTP 403, and
+    serve prints the origin it refused. --approve-all with an allowed
+    origin prints a warning: any script on that page can spend and sign
   - Shielded wallet on preview, preprod and stagenet: serve is ready
     without waiting for the shielded sync, which goes on behind it, so
     shielded balances it reports may be incomplete until it catches up.

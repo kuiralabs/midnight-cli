@@ -98,7 +98,7 @@ describe('the accepted flags match the code', () => {
   // though it works; a registry entry no code reads would be accepted and
   // silently ignored (the bug this guards against). Derive each command's
   // flags from its source and require equality.
-  const LITERAL_READ = /(?:getFlag|hasFlag|requireFlag)\(\s*\w+\s*,\s*['"]([a-z0-9-]+)['"]/g;
+  const LITERAL_READ = /(?:getFlagValues|getFlag|hasFlag|requireFlag)\(\s*\w+\s*,\s*['"]([a-z0-9-]+)['"]/g;
   // Shared helpers that read flags on the command's behalf.
   const HELPER_FLAGS: Record<string, string[]> = {
     // resolveNetwork also takes each endpoint from its flag before config.

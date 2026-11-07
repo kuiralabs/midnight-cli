@@ -1,6 +1,7 @@
 // JSON-RPC 2.0 over WebSocket server
 // Transport layer for the DApp Connector — dispatches RPC calls to handler functions
 
+import type { IncomingMessage } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { defineHostSlot, type Host, type APIError, type RpcHandler, type RpcHandlerContext, createApiError } from '@kuiralabs/midnight-cli-core';
 
@@ -148,11 +149,16 @@ export interface RpcServerOptions {
   port: number;
   handlers: Record<string, RpcHandler>;
   /**
-   * Refuse every connection that carries an Origin header, which browsers
-   * always send: for a server only mn's own Node scripts may use, such as the
-   * approve-all wallet a deploy serves, so no web page can reach it.
+   * The browser origins (`http://localhost:5173`, as a browser sends them)
+   * that may connect. A browser sends an Origin header on every WebSocket
+   * connection, naming the page that opened it, and a Node script sends none:
+   * a connection whose Origin isn't listed is refused with HTTP 403, so a web
+   * page can reach the wallet only when its origin was allowed. None by
+   * default.
    */
-  refuseBrowsers?: boolean;
+  allowedOrigins?: readonly string[];
+  /** Called with the origin of each browser connection refused because its origin isn't allowed. */
+  onOriginRefused?: (origin: string) => void;
   /** Called when a new WebSocket connection is established */
   onConnect?: (connection: RpcConnection) => void;
   /** Called when a connection is closed */
@@ -214,15 +220,23 @@ function parseRequest(data: string): JsonRpcRequest {
 const CONNECTIONS = defineHostSlot('ws-rpc.connections', () => ({ count: 0 }));
 
 export function createRpcServer(options: RpcServerOptions): RpcServer {
-  const { host, port, handlers, onConnect, onDisconnect, onRequest, onResponse, refuseBrowsers = false } = options;
+  const { host, port, handlers, onConnect, onDisconnect, onRequest, onResponse, onOriginRefused } = options;
+  const allowedOrigins = new Set(options.allowedOrigins ?? []);
   const connections = new Map<string, RpcConnection>();
 
-  // Bind to loopback only — prevents remote machines on the network from connecting.
-  // Browser DApps on localhost can still connect via ws://localhost:<port>.
+  // Bind to loopback only — prevents remote machines on the network from
+  // connecting. Loopback alone doesn't keep web pages out: any page the user
+  // opens can open ws://localhost:<port>, so a browser's connection is
+  // accepted only from an allowed origin.
   const wss = new WebSocketServer({
     port,
     host: '127.0.0.1',
-    ...(refuseBrowsers ? { verifyClient: (info: { origin?: string }) => !info.origin } : {}),
+    verifyClient: (info: { req: IncomingMessage }, accept: (ok: boolean, code?: number, message?: string) => void) => {
+      const origin = info.req.headers.origin;
+      if (origin === undefined || allowedOrigins.has(origin)) { accept(true); return; }
+      onOriginRefused?.(origin);
+      accept(false, 403, `Origin ${origin} is not allowed: start mn serve with --allow-origin ${origin} to let this page connect`);
+    },
   });
   const ready = new Promise<void>((resolve, reject) => {
     wss.once('listening', () => resolve());

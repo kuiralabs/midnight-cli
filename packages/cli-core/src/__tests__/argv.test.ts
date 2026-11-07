@@ -1,5 +1,5 @@
 import { UsageError } from '../lib/errors.ts';
-import { parseArgs, getFlag, hasFlag, isVerbose, requireFlag, type ParsedArgs } from '../lib/argv.ts';
+import { parseArgs, getFlag, getFlagValues, hasFlag, isVerbose, requireFlag, type ParsedArgs } from '../lib/argv.ts';
 import { describe, it, expect } from 'vitest';
 
 describe('parseArgs', () => {
@@ -197,5 +197,25 @@ describe('parseArgs: --flag=value', () => {
     const args = parseArgs(['x', '--network=', 'preview']);
     expect(args.flags).toStrictEqual({ network: '' });
     expect(args.subcommand).toBe('preview');
+  });
+});
+
+// A flag that may be given more than once, such as mn serve's --allow-origin.
+describe('getFlagValues', () => {
+  it('reads every value of a repeated flag, in order, in each form', () => {
+    const args = parseArgs(['serve', '--allow-origin', 'http://a:1', '--json', '--allow-origin=http://b:2']);
+    expect(getFlagValues(args, 'allow-origin')).toEqual(['http://a:1', 'http://b:2']);
+    expect(getFlag(args, 'allow-origin')).toBe('http://b:2');
+  });
+
+  it('reads one value, or none for a flag not given', () => {
+    const args = parseArgs(['serve', '--allow-origin', 'http://a:1']);
+    expect(getFlagValues(args, 'allow-origin')).toEqual(['http://a:1']);
+    expect(getFlagValues(args, 'port')).toEqual([]);
+    expect(args.repeated).toBeUndefined();
+  });
+
+  it('refuses a repeat given no value', () => {
+    expect(() => getFlagValues(parseArgs(['serve', '--allow-origin', 'http://a:1', '--allow-origin']), 'allow-origin')).toThrow(UsageError);
   });
 });

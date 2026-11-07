@@ -150,11 +150,11 @@ describe('the commands that need the wallet SDK (heap re-exec and forced exit)',
 
 describe('the accepted flags', () => {
   it('a flag takes a value exactly when the code reads one for it', () => {
-    // getFlag/requireFlag read a value, hasFlag a bare switch, wherever in src/ a flag is read.
+    // getFlag/getFlagValues/requireFlag read a value, hasFlag a bare switch, wherever in src/ a flag is read.
     const kinds = new Map<string, Set<boolean>>();
     // src/ and the workspace packages, tests left out.
     for (const path of sourceFiles()) {
-      for (const m of readFileSync(path, 'utf8').matchAll(/(getFlag|requireFlag|hasFlag)\(\s*\w+\s*,\s*['"]([a-z0-9-]+)['"]/g)) {
+      for (const m of readFileSync(path, 'utf8').matchAll(/(getFlagValues|getFlag|requireFlag|hasFlag)\(\s*\w+\s*,\s*['"]([a-z0-9-]+)['"]/g)) {
         kinds.set(m[2]!, (kinds.get(m[2]!) ?? new Set()).add(m[1] !== 'hasFlag'));
       }
     }

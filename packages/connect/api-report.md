@@ -27,6 +27,7 @@ export interface ServeManagerOptions {
     sdkWarnings: CallSdkWarnings;
     forceShielded?: boolean;
     signal?: AbortSignal;
+    allowedOrigins?: readonly string[];
 }
 export type ServeProbe = {
     kind: 'not-serve';
@@ -50,6 +51,7 @@ export declare class ServeNotReusableError extends Error {
     constructor(port: number, reason: string);
 }
 export declare function startServeOrReuse(options: ServeManagerOptions): Promise<ServeHandle>;
+export declare function originOfPage(pageUrl: string): string;
 export declare function createRpcServer(options: RpcServerOptions): RpcServer;
 export interface JsonRpcRequest {
     jsonrpc: '2.0';
@@ -76,7 +78,8 @@ export interface RpcServerOptions {
     host: Pick<Host, 'notice' | 'slot'>;
     port: number;
     handlers: Record<string, RpcHandler>;
-    refuseBrowsers?: boolean;
+    allowedOrigins?: readonly string[];
+    onOriginRefused?: (origin: string) => void;
     onConnect?: (connection: RpcConnection) => void;
     onDisconnect?: (connection: RpcConnection) => void;
     onRequest?: (connection: RpcConnection, request: JsonRpcRequest) => void;

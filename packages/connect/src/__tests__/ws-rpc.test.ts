@@ -120,33 +120,54 @@ describe('ws-rpc', () => {
       expect(ws.readyState).toBe(WebSocket.OPEN);
     });
 
-    it('with refuseBrowsers, refuses a connection carrying an Origin (any web page) and accepts mn\'s own scripts', async () => {
+    /** How a socket opened from a page at `origin` ends: 'open', or the HTTP status it was refused with. */
+    async function openFrom(port: number, origin: string): Promise<{ outcome: number | 'open'; body: string; ws: WebSocket }> {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`, { origin });
+      ws.on('error', () => { /* a refused socket errors when terminated */ });
+      return new Promise((resolve) => {
+        ws.once('unexpected-response', (_req, res) => {
+          let body = '';
+          res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+          res.on('end', () => resolve({ outcome: res.statusCode ?? 0, body, ws }));
+        });
+        ws.once('open', () => resolve({ outcome: 'open', body: '', ws }));
+      });
+    }
+
+    // Regression: mn serve accepted a connection from any web page the user
+    // opened, so under --approve-all a page could spend and sign.
+    it('refuses a connection from a browser page (an Origin) by default, saying how to allow it, and accepts mn\'s own scripts', async () => {
       const port = nextPort();
-      server = serve({ host, port, handlers: {}, refuseBrowsers: true });
+      const refusedOrigins: string[] = [];
+      server = serve({ host, port, handlers: {}, onOriginRefused: (origin) => refusedOrigins.push(origin) });
       await server.ready;
 
-      const fromPage = new WebSocket(`ws://127.0.0.1:${port}`, { origin: 'https://evil.example' });
-      const refused = await new Promise<number | string>((resolve) => {
-        fromPage.once('unexpected-response', (_req, res) => resolve(res.statusCode ?? 0));
-        fromPage.once('open', () => resolve('open'));
-        fromPage.once('error', () => resolve('error'));
-      });
-      fromPage.terminate();
-      expect(refused).toBe(401);
+      const fromPage = await openFrom(port, 'https://evil.example');
+      fromPage.ws.terminate();
+      expect(fromPage.outcome).toBe(403);
+      expect(fromPage.body).toContain('--allow-origin https://evil.example');
+      expect(refusedOrigins).toEqual(['https://evil.example']);
+      expect(server.connections.size).toBe(0);
 
       const fromScript = await connectClient(port);
       clients.push(fromScript);
       expect(fromScript.readyState).toBe(WebSocket.OPEN);
     });
 
-    it('without refuseBrowsers, a browser dApp with an Origin still connects (plain mn serve)', async () => {
+    it('accepts a browser page only from an allowed origin', async () => {
       const port = nextPort();
-      server = serve({ host, port, handlers: {} });
+      server = serve({ host, port, handlers: {}, allowedOrigins: ['http://localhost:5173'] });
       await server.ready;
-      const fromPage = new WebSocket(`ws://127.0.0.1:${port}`, { origin: 'http://localhost:5173' });
-      await new Promise((resolve, reject) => { fromPage.once('open', resolve); fromPage.once('error', reject); });
-      clients.push(fromPage);
-      expect(fromPage.readyState).toBe(WebSocket.OPEN);
+
+      const allowed = await openFrom(port, 'http://localhost:5173');
+      clients.push(allowed.ws);
+      expect(allowed.outcome).toBe('open');
+
+      for (const other of ['http://localhost:5174', 'http://127.0.0.1:5173', 'https://localhost:5173', 'null']) {
+        const refused = await openFrom(port, other);
+        refused.ws.terminate();
+        expect(refused.outcome, other).toBe(403);
+      }
     });
 
     it('dispatches method calls to handlers', async () => {

@@ -80,9 +80,10 @@ describe('startServeOrReuse against a running serve', () => {
   beforeEach(() => { emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-serve-root-')); });
   afterEach(() => fs.rmSync(emptyRoot, { recursive: true, force: true }));
 
-  async function fakeServe(configuration: Record<string, string>, unshieldedAddress?: string) {
+  async function fakeServe(configuration: Record<string, string>, unshieldedAddress?: string, allowedOrigins: string[] = []) {
     const { WebSocketServer } = await import('ws');
-    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+    // As mn serve does: a browser page connects only from an allowed origin.
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1', verifyClient: ({ origin }: { origin?: string }) => origin === undefined || allowedOrigins.includes(origin) });
     await new Promise<void>((r) => wss.once('listening', () => r()));
     wss.on('connection', (ws) => ws.on('message', (data) => {
       const req = JSON.parse(data.toString());
@@ -212,6 +213,30 @@ describe('startServeOrReuse against a running serve', () => {
       try {
         await expect(startServeOrReuse({ root: stateRootIn(home), host, port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested, wallet: 'two' }))
           .rejects.toThrow('it does not say which wallet it pays from');
+      } finally {
+        await serve.close();
+      }
+    });
+
+    // A browser test's dApp page connects to the serve from its own origin:
+    // a running serve that refuses that origin would fail the test in the browser.
+    it('refuses a serve that does not let the dApp page\'s origin connect, saying how to restart it', async () => {
+      const { startServeOrReuse } = await import('../lib/serve-on-port.ts');
+      const serve = await fakeServe(sameChain, rcKeys.unshieldedAddresses(TWO).undeployed);
+      try {
+        await expect(startServeOrReuse({ root: stateRootIn(home), host, port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested, wallet: 'two', allowedOrigins: ['http://localhost:4173'] }))
+          .rejects.toThrow(`The mn serve on port ${serve.port} refuses connections from http://localhost:4173, where the dApp's page is served: restart it with --allow-origin http://localhost:4173.`);
+      } finally {
+        await serve.close();
+      }
+    });
+
+    it('reuses a serve that lets the dApp page\'s origin connect', async () => {
+      const { startServeOrReuse } = await import('../lib/serve-on-port.ts');
+      const serve = await fakeServe(sameChain, rcKeys.unshieldedAddresses(TWO).undeployed, ['http://localhost:4173']);
+      try {
+        const handle = await startServeOrReuse({ root: stateRootIn(home), host, port: serve.port, network: 'undeployed', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: requested, wallet: 'two', allowedOrigins: ['http://localhost:4173'] });
+        expect(handle.port).toBe(serve.port);
       } finally {
         await serve.close();
       }

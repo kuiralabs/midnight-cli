@@ -8,6 +8,12 @@ export interface ParsedArgs {
   subcommand: string | undefined;
   positionals: string[];
   flags: Record<string, string | true>;
+  /**
+   * Every value of a flag given more than once, in order (`flags` holds the
+   * last). Only flags that repeat are here, and only when one does: read
+   * them with getFlagValues.
+   */
+  repeated?: Record<string, Array<string | true>>;
 }
 
 /** A token that starts like a flag but is a value: a negative number such as -5 (refused later as an amount, not taken for a flag). */
@@ -22,6 +28,11 @@ export function parseArgs(argv?: string[]): ParsedArgs {
   const args = argv ?? process.argv.slice(2);
   const positionals: string[] = [];
   const flags: Record<string, string | true> = {};
+  const given: Record<string, Array<string | true>> = {};
+  const setFlag = (key: string, value: string | true): void => {
+    flags[key] = value;
+    (given[key] ??= []).push(value);
+  };
 
   let i = 0;
   while (i < args.length) {
@@ -30,16 +41,16 @@ export function parseArgs(argv?: string[]): ParsedArgs {
     if (arg.startsWith('--') && arg.includes('=')) {
       // --key=value: the value is everything after the first '=' (it may hold '=' itself, or be empty).
       const at = arg.indexOf('=');
-      flags[arg.slice(2, at)] = arg.slice(at + 1);
+      setFlag(arg.slice(2, at), arg.slice(at + 1));
       i += 1;
     } else if (arg.startsWith('--')) {
       const key = arg.slice(2);
       const next = args[i + 1];
       if (next !== undefined && isValueToken(next)) {
-        flags[key] = next;
+        setFlag(key, next);
         i += 2;
       } else {
-        flags[key] = true;
+        setFlag(key, true);
         i += 1;
       }
     } else if (!isValueToken(arg) && arg.length === 2) {
@@ -47,10 +58,10 @@ export function parseArgs(argv?: string[]): ParsedArgs {
       const key = arg.slice(1);
       const next = args[i + 1];
       if (next !== undefined && isValueToken(next)) {
-        flags[key] = next;
+        setFlag(key, next);
         i += 2;
       } else {
-        flags[key] = true;
+        setFlag(key, true);
         i += 1;
       }
     } else {
@@ -59,11 +70,13 @@ export function parseArgs(argv?: string[]): ParsedArgs {
     }
   }
 
+  const repeats = Object.entries(given).filter(([, values]) => values.length > 1);
   return {
     command: positionals[0],
     subcommand: positionals[1],
     positionals: positionals.slice(2),
     flags,
+    ...(repeats.length > 0 ? { repeated: Object.fromEntries(repeats) } : {}),
   };
 }
 
@@ -78,6 +91,19 @@ export function getFlag(args: ParsedArgs, name: string): string | undefined {
   if (value === undefined) return undefined;
   if (value === true) throw new UsageError(`--${name} needs a value, e.g. --${name} <value>`);
   return value;
+}
+
+/**
+ * Every value given for a flag that may be repeated (`--allow-origin a
+ * --allow-origin b`), in order; none when it is absent. A flag given with no
+ * value is a usage error, as getFlag has it.
+ */
+export function getFlagValues(args: ParsedArgs, name: string): string[] {
+  const values = args.repeated?.[name] ?? (args.flags[name] === undefined ? [] : [args.flags[name]!]);
+  return values.map((value) => {
+    if (value === true) throw new UsageError(`--${name} needs a value, e.g. --${name} <value>`);
+    return value;
+  });
 }
 
 /**

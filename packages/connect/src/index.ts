@@ -9,4 +9,5 @@
 export { servePayer, servePayerAt } from './lib/serve-payer.ts';
 export { probeServe, probeServeNetwork, reuseServeOrStartAnother, type ServeHandle, type ServeManagerOptions, type ServeProbe, serveWalletContractKeys } from './lib/serve-manager.ts';
 export { ServeNotReusableError, startServeOrReuse } from './lib/serve-on-port.ts';
+export { originOfPage } from './lib/allowed-origins.ts';
 export { createRpcServer, type JsonRpcRequest, type RpcConnection, type RpcServer, type RpcServerOptions } from './lib/ws-rpc.ts';

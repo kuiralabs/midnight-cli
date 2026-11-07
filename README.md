@@ -45,7 +45,7 @@ Install the prerelease with npm 11 or older (or run it with `npx`; with npm 12, 
 | `midnight dust <register\|status\|export> [--wallet <name\|file>] [--seed <hex> (export only)] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--no-cache (status only)]` | Register UTXOs for dust (fee token) generation, check status, or export a restorable snapshot |
 | `midnight config <get\|set\|unset> <key> [value] [--network <name>]` | Manage persistent config (default network, endpoints, etc.) |
 | `midnight cache clear [--network <name>] [--wallet <name\|file>]` | Manage wallet state cache (clear cached sync data) |
-| `midnight serve [--port <n>] [--wallet <name\|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all \| --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--force-shielded] [--no-auto-approve-reads] [--verbose] [--json]` | Start DApp Connector server over WebSocket JSON-RPC |
+| `midnight serve [--port <n>] [--wallet <name\|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all \| --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--allow-origin <origin>]... [--force-shielded] [--no-auto-approve-reads] [--verbose] [--json]` | Start DApp Connector server over WebSocket JSON-RPC |
 | `midnight test <create\|run\|list\|results> [options]` | Generate and run E2E test suites for Midnight dApps |
 | `midnight dev [path]` | Iteration loop for Compact contract development (localnet + compile-on-save + one-key deploy) |
 | `midnight contract <inspect\|deploy\|call\|state> [options]` | Inspect, deploy, call, and query Midnight smart contracts |
@@ -164,7 +164,12 @@ midnight serve --approve-all
 
 # Or act as a fee wallet for an agent (see below)
 midnight serve --approve-fees
+
+# Let a dApp's page in a browser connect (its origin: scheme, host and port)
+midnight serve --allow-origin http://localhost:5173
 ```
+
+A web page can open a WebSocket to `localhost` as easily as your dApp can, so `mn serve` refuses every connection from a browser page (one that carries an `Origin` header) unless its origin is allowed with `--allow-origin <origin>`; repeat the flag for more pages. Node scripts send no `Origin` and always connect. A refused page gets HTTP 403, and `mn serve` prints the origin it refused. Allowing an origin with `--approve-all` prints a warning: any script that page runs can then spend from the wallet and have it sign without asking, so allow only pages you control. `mn test run` allows the page of the dApp under test (`url`, or `http://localhost:<port>` from `dapp.test.json`) on the serve it starts, and reuses a running serve only if that serve allows it.
 
 Read methods never prompt. Every write prompts in the terminal (and is rejected without one), balancing included: `balanceUnsealedTransaction` / `balanceSealedTransaction` reserve the wallet's coins, sign, and return a finished transaction the dApp could submit through any node itself.
 

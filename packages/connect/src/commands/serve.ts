@@ -1,13 +1,14 @@
 // serve command — start DApp Connector server over WebSocket JSON-RPC
 // Usage: midnight serve [--port 9932] [--wallet path] [--network name]
-//                       [--approve-all | --approve-fees] [--no-auto-approve-reads] [--json]
+//                       [--approve-all | --approve-fees] [--allow-origin <origin>]... [--no-auto-approve-reads] [--json]
 
-import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites, resolveNetwork, applyEndpointOverrides, type DAppConnector, type DAppConnectorCallbacks, OPERATOR_REJECTED_MESSAGE, type PhaseTiming, DEFAULT_SERVE_PORT, shieldedSyncEnabled, parseFeeLimits, describeApprovalPolicy, type CallContext, UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
-import { header, divider, formatAddress, bold, dim, teal, green, red, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
+import { type ParsedArgs, getFlag, getFlagValues, hasFlag, rejectNoCacheForWrites, resolveNetwork, applyEndpointOverrides, type DAppConnector, type DAppConnectorCallbacks, OPERATOR_REJECTED_MESSAGE, type PhaseTiming, DEFAULT_SERVE_PORT, shieldedSyncEnabled, parseFeeLimits, describeApprovalPolicy, type CallContext, UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { header, divider, formatAddress, bold, dim, teal, green, red, yellow, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { resolveWalletPath, unlockWallet } from '@kuiralabs/midnight-wallet';
 import { assertEndpointsReachable, endpointsOf } from '@kuiralabs/midnight-chain';
 import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
-import { serveHeaderLines } from '../lib/serve-header.ts';
+import { approveAllBrowserWarning, serveHeaderLines } from '../lib/serve-header.ts';
+import { parseAllowedOrigins } from '../lib/allowed-origins.ts';
 
 export default async function serveCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
@@ -31,6 +32,8 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
     throw new UsageError('--max-fee and --max-pending only apply with --approve-fees.');
   }
   const feeLimits = parseFeeLimits(maxFeeFlag, maxPendingFlag);
+  // Browser pages connect only from these origins: a page the user merely opens must not reach the wallet.
+  const allowedOrigins = parseAllowedOrigins(getFlagValues(args, 'allow-origin'));
   // Read methods never prompt, and balancing prompts unless --approve-all or
   // --approve-fees, so --no-auto-approve-reads (which made balancing prompt
   // before that was the default) has nothing left to do.
@@ -62,7 +65,9 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
 
   ctx.output.stderr('\n' + header('DApp Connector Server') + '\n\n');
   const policy = describeApprovalPolicy({ approveAll, approveFees, autoApproveReads }, feeLimits);
-  for (const line of serveHeaderLines({ network: networkName, address: formatAddress(address, true), port }, policy, feeLimits)) ctx.output.stderr(line + '\n');
+  for (const line of serveHeaderLines({ network: networkName, address: formatAddress(address, true), port, allowedOrigins }, policy, feeLimits)) ctx.output.stderr(line + '\n');
+  const browserWarning = approveAllBrowserWarning(policy, allowedOrigins);
+  if (browserWarning !== undefined) ctx.output.stderr('\n  ' + yellow(browserWarning) + '\n');
   if (noAutoApproveReadsGiven) {
     ctx.output.stderr(dim('  --no-auto-approve-reads has no effect: read methods never prompt, and balancing prompts unless --approve-all or --approve-fees') + '\n');
   }
@@ -164,6 +169,10 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
       host: ctx.host,
       port,
       handlers: connector.handlers,
+      allowedOrigins,
+      onOriginRefused: (origin) => {
+        ctx.output.stderr(dim(`  [${timestamp()}] `) + red('refused') + dim(` a connection from ${origin}: not an allowed origin (start mn serve with --allow-origin ${origin} to let that page connect)`) + '\n');
+      },
       onConnect: (conn) => {
         ctx.output.stderr(dim(`  [${timestamp()}] `) + green('connected') + dim(` ${conn.id}`) + '\n');
       },
@@ -235,6 +244,8 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
         address,
         status: 'listening',
         approval: policy,
+        allowedOrigins,
+        ...(browserWarning !== undefined ? { warning: browserWarning } : {}),
       });
     }
 

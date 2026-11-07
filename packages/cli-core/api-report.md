@@ -50,6 +50,7 @@ export interface ApprovalPolicy {
 export declare function describeApprovalPolicy(options: Omit<ApprovalOptions, 'prompter' | 'notice'>, feeLimits: FeeLimits): ApprovalPolicy;
 export declare const FULL_FLAG = "_full";
 export declare function getFlag(args: ParsedArgs, name: string): string | undefined;
+export declare function getFlagValues(args: ParsedArgs, name: string): string[];
 export declare function hasFlag(args: ParsedArgs, name: string): boolean;
 export declare function isMinimalMode(args: ParsedArgs): boolean;
 export declare const MINIMAL_FLAG = "_minimal";
@@ -59,6 +60,7 @@ export interface ParsedArgs {
     subcommand: string | undefined;
     positionals: string[];
     flags: Record<string, string | true>;
+    repeated?: Record<string, Array<string | true>>;
 }
 export declare function rejectNoCacheForWrites(args: ParsedArgs): void;
 export declare function requireFlag(args: ParsedArgs, name: string, description: string): string;

@@ -15,6 +15,15 @@ export const serveDefinition: CommandDefinition = {
       help: ['--approve-all                 Auto-approve all requests (reads + writes)'],
     },
     {
+      name: 'allow-origin',
+      takesValue: true,
+      help: [
+        '--allow-origin <origin>       Let a browser page from this origin connect, e.g.',
+        '                              http://localhost:5173 (repeat for more). Without it,',
+        '                              every connection from a browser page is refused',
+      ],
+    },
+    {
       name: 'approve-fees',
       takesValue: false,
       help: [
@@ -97,7 +106,7 @@ export const serveDefinition: CommandDefinition = {
   ],
   help: {
     description: 'Start DApp Connector server over WebSocket JSON-RPC',
-    usage: 'midnight serve [--port <n>] [--wallet <name|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all | --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--force-shielded] [--no-auto-approve-reads] [--verbose] [--json]',
+    usage: 'midnight serve [--port <n>] [--wallet <name|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all | --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--allow-origin <origin>]... [--force-shielded] [--no-auto-approve-reads] [--verbose] [--json]',
     flags: [
       { flag: 'port' },
       { flag: 'wallet' },
@@ -109,6 +118,7 @@ export const serveDefinition: CommandDefinition = {
       { flag: 'approve-fees' },
       { flag: 'max-fee' },
       { flag: 'max-pending' },
+      { flag: 'allow-origin' },
       { flag: 'force-shielded' },
       { flag: 'no-auto-approve-reads' },
       { flag: 'verbose' },
@@ -118,12 +128,16 @@ export const serveDefinition: CommandDefinition = {
       'midnight serve --port 8080',
       'midnight serve --approve-all',
       'midnight serve --approve-fees',
+      'midnight serve --allow-origin http://localhost:5173',
     ],
     jsonFields: {
       port: 'Server port number',
       network: 'Network name',
       address: 'Wallet address (bech32m)',
       status: 'Server status (listening)',
+      approval: 'What it approves without asking: reads, balancing, writes (and feeLimits under --approve-fees)',
+      allowedOrigins: 'Browser origins whose pages may connect (empty: every browser page is refused)',
+      warning: 'Present when --approve-all lets browser pages connect: what that exposes',
     },
   },
   intro: { brief: 'DApp Connector server', order: 16 },

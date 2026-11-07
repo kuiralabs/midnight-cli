@@ -35,6 +35,14 @@ export interface ServeManagerOptions {
   forceShielded?: boolean;
   /** Cancels the start: what was started is stopped, and the start fails with CancelledError. */
   signal?: AbortSignal;
+  /**
+   * Browser origins whose pages may connect to a serve this starts (a dApp
+   * under test), as a browser sends them (`http://localhost:4173`). None by
+   * default: the serve approves every request, so only mn's own scripts, which
+   * send no Origin, connect. A running serve is reused only when it lets each
+   * of these connect.
+   */
+  allowedOrigins?: readonly string[];
 }
 
 /** The network and endpoints a serve for these options must use. */
@@ -161,6 +169,30 @@ export async function probeServe(port: number, networkId: string): Promise<Serve
   });
 }
 
+/**
+ * Whether the server on `port` accepts a WebSocket connection from a page at
+ * `origin`, as a browser opens one (with that Origin header). False when it
+ * refuses it, or doesn't answer within 2 s.
+ */
+export async function serveAcceptsOrigin(port: number, origin: string): Promise<boolean> {
+  const WebSocket = (await import('ws')).default;
+  return new Promise<boolean>((resolve) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`, { origin });
+    let settled = false;
+    const finish = (accepted: boolean): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      try { ws.terminate(); } catch { /* already closed */ }
+      resolve(accepted);
+    };
+    const timeout = setTimeout(() => finish(false), 2000);
+    ws.on('open', () => finish(true));
+    ws.on('unexpected-response', () => finish(false));
+    ws.on('error', () => finish(false));
+  });
+}
+
 /** The network a serve on `port` serves (connected to for `networkId`), or null when nothing there is an mn serve for it. */
 export async function probeServeNetwork(port: number, networkId: string = 'undeployed'): Promise<string | null> {
   const probe = await probeServe(port, networkId);
@@ -172,7 +204,8 @@ export async function probeServeNetwork(port: number, networkId: string = 'undep
  * can be reused: it must be an mn serve on the requested network and chain
  * (two local stacks are both `undeployed`, so its node and indexer must match
  * too), paying from the command's wallet (a serve that doesn't say whose it
- * is can't be shown to).
+ * is can't be shown to), and accepting connections from each of the options'
+ * allowed origins.
  */
 export async function serveReuseRefusal(port: number, options: ServeManagerOptions): Promise<string | undefined> {
   const requestedNetwork = (options.network ?? 'undeployed').toLowerCase();
@@ -188,6 +221,11 @@ export async function serveReuseRefusal(port: number, options: ServeManagerOptio
   const wanted = await walletAddress(resolveWalletPath(options.root, options.wallet), actualNetwork as NetworkName, options.root, options.host);
   const walletMismatch = serveWalletMismatch(probe.unshieldedAddress, { address: wanted, name: options.wallet ?? 'the active wallet' });
   if (walletMismatch) return `The mn serve on port ${port} can't pay for this command: ${walletMismatch}.`;
+  for (const origin of options.allowedOrigins ?? []) {
+    if (!(await serveAcceptsOrigin(port, origin))) {
+      return `The mn serve on port ${port} refuses connections from ${origin}, where the dApp's page is served: restart it with --allow-origin ${origin}.`;
+    }
+  }
   return undefined;
 }
 
@@ -295,8 +333,9 @@ export async function startServe(options: ServeManagerOptions): Promise<ServeHan
     host: options.host,
     port: requestedPort,
     handlers,
-    // It approves every request, for mn's own scripts only: no web page may connect.
-    refuseBrowsers: true,
+    // It approves every request: no web page may connect but the ones the caller allowed.
+    allowedOrigins: options.allowedOrigins,
+    onOriginRefused: (origin) => onMessage(`refused a connection from ${origin}: that origin is not allowed`),
     onConnect: (conn) => {
       onMessage(`connected ${conn.id}`);
     },
