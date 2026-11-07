@@ -60,10 +60,11 @@ describe('parseAmount: exact amounts only (NIGHT has 6 decimals)', () => {
   });
 
   // A JS number carries 2^53 (about 9.007e15 micro-NIGHT, 9.007e9 NIGHT) exactly; the digits are read as an integer instead.
+  // (Up to the whole supply, 24e9 NIGHT: more is refused.)
   it.each([
-    ['24000000000.000001', 24_000_000_000_000_001n],
+    ['23999999999.999999', 23_999_999_999_999_999n],
     ['9007199254.740993', 9_007_199_254_740_993n],
-    ['123456789012345678.123456', 123_456_789_012_345_678_123_456n],
+    ['12345678901.123457', 12_345_678_901_123_457n],
   ] as const)('accepts %j, above what a number carries, as exactly %s micro-NIGHT', (input, micro) => {
     expect(parseAmount(input)).toBe(micro);
     expect(nightAmountText(parseAmount(input))).toBe(input);
@@ -136,5 +137,18 @@ describe('sync timeout constants', () => {
 
   it('remote timeout is 120 seconds', () => {
     expect(SYNC_ATTEMPT_REMOTE_TIMEOUT_MS).toBe(120_000);
+  });
+});
+
+// An amount past the whole supply passed validation, and failed only once a
+// wallet had synced (or, for an airdrop, at the chain).
+describe('parseAmount and the NIGHT supply', () => {
+  it('takes the whole supply, 24 billion NIGHT', () => {
+    expect(parseAmount('24000000000')).toBe(24_000_000_000n * 1_000_000n);
+  });
+
+  it.each(['24000000000.000001', '1000000000000'])('refuses %s as more than all the NIGHT there is', (amount) => {
+    expect(() => parseAmount(amount)).toThrow(UsageError);
+    expect(() => parseAmount(amount)).toThrow('more than all the NIGHT there is (24000000000)');
   });
 });
