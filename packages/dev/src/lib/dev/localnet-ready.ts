@@ -1,7 +1,7 @@
-// Ensures a ledger-9 network is reachable for `mn dev`. This build can't
-// start a localnet (no published ledger-9 indexer image), so it requires a
-// running stack at the endpoints `undeployed` resolves to (saved config, or
-// the single local stack docker shows).
+// Ensures a ledger-9 network is reachable for `mn dev`. It does not start a
+// localnet (`mn localnet up` does): it requires a running stack at the
+// endpoints `undeployed` resolves to (saved config, or the single local stack
+// docker shows).
 
 import { resolveNetwork, type NetworkSettings } from '@kuiralabs/midnight-cli-core';
 import { assertLedger9StackReachable } from '@kuiralabs/midnight-chain';

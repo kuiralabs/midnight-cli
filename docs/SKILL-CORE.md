@@ -2,7 +2,7 @@
 
 You have access to the `midnight-wallet-cli` MCP server. This is the **core** skill — intent routing and non-negotiable safety rules. Fetch `midnight-wallet://skill/full` on demand for canonical multi-step flows, error-recovery recipes, concept primers (NIGHT, DUST, shielded vs unshielded), network selection, and deeper context.
 
-**Ledger 9 only.** This build refuses a chain still on ledger 8 (preview and preprod today; those stay on `midnight-wallet-cli` 0.5.x). The user runs a ledger-9 stack and points mn at it; details in `/full`.
+**Ledger 9 only.** This build refuses a chain still on ledger 8 (such a chain stays on `midnight-wallet-cli` 0.5.x). The user runs a ledger-9 stack and points mn at it; details in `/full`.
 
 ## Intent routing (natural language → tool)
 

@@ -2,7 +2,7 @@
 
 You have access to the `midnight-wallet-cli` MCP server. This document teaches you how to use it well. Read it once at the start of a session; use it as reference throughout.
 
-> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 (preview and preprod today) is refused up front with an error saying so: tell the user to use `midnight-wallet-cli` 0.5.x for it, don't retry. `midnight_localnet_up()` starts a ledger-9 stack for `undeployed` on the default ports (node 9944, indexer 8088, proof server 6300); another stack is reached by setting its URLs with `midnight_config_set` (keys `node`, `indexer-ws`, `proof-server`) or passing `--node` / `--indexer-ws` / `--proof-server` on the CLI.
+> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 is refused up front with an error saying so: tell the user to use `midnight-wallet-cli` 0.5.x for it, don't retry. `midnight_localnet_up()` starts a ledger-9 stack for `undeployed` on the default ports (node 9944, indexer 8088, proof server 6300); another stack is reached by setting its URLs with `midnight_config_set` (keys `node`, `indexer-ws`, `proof-server`) or passing `--node` / `--indexer-ws` / `--proof-server` on the CLI.
 
 ## What you can do with this CLI
 
@@ -26,9 +26,9 @@ Most commands are MCP tools (`tools/list` shows each, and what it takes). These 
 - **No self-shielding** — a wallet cannot move its own funds from unshielded to shielded. To get shielded NIGHT, receive a shielded transfer from a wallet that already has some (genesis wallet has 250M shielded NIGHT on localnet).
 - **Networks**
   - `undeployed` — local network (`midnight_localnet_up()` starts it). Use this for dev iteration.
-  - `preprod` — public testnet (ledger 8 today, so refused by this build). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod and mainnet need a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware.
-  - `preview` — public preview testnet (ledger 8 today, so refused by this build). Same first-sync trade-off as preprod.
-  - `stagenet` — Sig Network's testnet, on the beta SDK set (mn loads its beta engine for it). No shielded faucet, so shielded sync is off by default; NIGHT from https://faucet.stagenet.shielded.tools. Its proof server must match its node (`midnightntwrk/proof-server:9.0.0-rc.5_experimental`). Grant is refused there for now.
+  - `preprod` — public testnet (refused by this build while it is on ledger 8). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod and mainnet need a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware. Its shielded balance is not read by default (the first read takes a while), though a wallet can hold shielded tokens there (contracts mint them): pass `force-shielded` to `midnight_balance`, and to `midnight_transfer` with `shielded`.
+  - `preview` — public preview testnet (ledger 9). Same first-sync trade-off and shielded default as preprod.
+  - `stagenet` — Sig Network's testnet, on the beta SDK set (mn loads its beta engine for it). No shielded faucet; as on preview and preprod, the shielded balance is not read by default (the first read takes a while), and `force-shielded` reads it; NIGHT from https://faucet.stagenet.shielded.tools. Its proof server must match its node (`midnightntwrk/proof-server:9.0.0-rc.5_experimental`). Grant is refused there for now.
   - `mainnet` — Midnight Mainnet: real value. Reached only through Blockfrost with the user's mainnet project id (it starts with `nightmainnet`); the proof server is the user's local one. No faucet. Used only when named on each call (`network: "mainnet"`, or `--network mainnet`): it can't be the saved network, and a call without a network never reaches it. `midnight_airdrop`, the test tools and the grant tools are refused there with `MAINNET_REFUSED`.
 - **Proof server** — local HTTP service that generates ZK proofs for transactions. Default port 6300. Version must match the network's ledger version or writes fail with "Custom error 170".
 
@@ -163,6 +163,7 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 | `UNSUPPORTED_NODE` | Node.js is older than 22 (22.18 for mn grant). | Ask the user to install a current Node.js. |
 | `NO_NODE_RUNTIME` | Contract scripts run under Node.js, and none was found on PATH. | Ask the user to install Node.js 22 or later, or to run mn under Node. |
 | `CONTRACT_NOT_COMPILED` | No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json). | Ask the user to compile the contract (compact compile), or pass the dApp folder (path) or the managed folder (managed). |
+| `CONTRACT_INFO_INVALID` | A compiled contract's contract-info.json is not what the Compact compiler writes (not JSON, or its circuits or witnesses missing or malformed). | The message names what is wrong: ask the user to compile the contract again (compact compile). |
 | `NO_ACCOUNT` | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. | Offer `midnight_grant_deploy()`, after telling the user how its owner key is kept (see the allowance flow). |
 | `CALLER_PIN_UNSUPPORTED` | A grant request pins the contract that calls the account, and the account on this network (stagenet) has no caller pin; nothing was submitted. | Tell the user; ask the agent for a grant request that names no calling contract, or issue it on undeployed. |
 | `WRONG_PASSPHRASE` | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. | Ask the user to correct `MN_PASSPHRASE` in the MCP server's environment. Nothing was changed. |
@@ -176,6 +177,8 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 | `MIXED_SDK_LAYOUT` | mn's packages were installed without each engine's shrinkwrap (bun's installer): an engine's SDK tree isn't the one it was tested with. | Ask the user to install mn with npm. |
 | `NO_STATE_ROOT` | The host gave mn no place to keep its state (a program's `createHost` without paths). | Give the host its paths (`createHost({ paths })`). |
 | `NO_PAYER` | A command that submits a transaction was called without a payer. | Give the call a payer. |
+| `SERVE_PORT_IN_USE` | The port mn serve was to use is taken by a process that can't serve this command (another program, or an mn serve for another network, chain or wallet). | The message names the port and how to find the process on it: ask the user to stop that process, or run on another port. |
+| `APPROVAL_UNAVAILABLE` | A request to mn serve needed approval and nobody could be asked: the serve has no terminal and was not started to approve it without asking. | Ask the user to restart mn serve with --approve-all (or --approve-fees for a wallet that only pays an agent's Dust fee), or to run it at a terminal. |
 | `COMMAND_FAILED` | A command ended with a non-zero exit code without throwing (an MCP test run whose tests failed); the message carries its result. | Read the command's result in the message. |
 | `NOT_AN_OFFER` | The bytes given as a swap offer are not one. | Ask the maker for the offer again. |
 | `TERMS_MISMATCH` | A swap offer's own terms differ from the agreed ones. | Don't take it; agree the terms again with the maker. |
@@ -195,6 +198,7 @@ A tool's description ends with the codes it can fail with: its own, and sets of 
 | paying | `TX_REJECTED`, `STALE_UTXO`, `INVALID_DUST_PROOF`, `PROOF_TIMEOUT`, `PROOF_FAILURE`, `DUST_REQUIRED`, `DUST_GENERATING`, `INSUFFICIENT_BALANCE`, `OFFER_COINS_IN_USE` |
 | offers | `NOT_AN_OFFER`, `TERMS_MISMATCH` |
 | chain | `UNSUPPORTED_LEDGER`, `LOCAL_STACK_UNREACHABLE` |
+| contract | `CONTRACT_NOT_COMPILED`, `CONTRACT_INFO_INVALID`, `NO_NODE_RUNTIME` |
 
 ## When to use which network
 

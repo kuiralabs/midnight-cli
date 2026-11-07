@@ -37,7 +37,7 @@ const SERVER_PIECES: readonly GuidancePiece[] = [
 
 You have access to the \`midnight-wallet-cli\` MCP server. This is the **core** skill — intent routing and non-negotiable safety rules. Fetch \`midnight-wallet://skill/full\` on demand for canonical multi-step flows, error-recovery recipes, concept primers (NIGHT, DUST, shielded vs unshielded), network selection, and deeper context.
 
-**Ledger 9 only.** This build refuses a chain still on ledger 8 (preview and preprod today; those stay on \`midnight-wallet-cli\` 0.5.x). The user runs a ledger-9 stack and points mn at it; details in \`/full\`.
+**Ledger 9 only.** This build refuses a chain still on ledger 8 (such a chain stays on \`midnight-wallet-cli\` 0.5.x). The user runs a ledger-9 stack and points mn at it; details in \`/full\`.
 
 `,
     },
@@ -92,7 +92,7 @@ You have access to the \`midnight-wallet-cli\` MCP server. This is the **core** 
 
 You have access to the \`midnight-wallet-cli\` MCP server. This document teaches you how to use it well. Read it once at the start of a session; use it as reference throughout.
 
-> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 (preview and preprod today) is refused up front with an error saying so: tell the user to use \`midnight-wallet-cli\` 0.5.x for it, don't retry. \`midnight_localnet_up()\` starts a ledger-9 stack for \`undeployed\` on the default ports (node 9944, indexer 8088, proof server 6300); another stack is reached by setting its URLs with \`midnight_config_set\` (keys \`node\`, \`indexer-ws\`, \`proof-server\`) or passing \`--node\` / \`--indexer-ws\` / \`--proof-server\` on the CLI.
+> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 is refused up front with an error saying so: tell the user to use \`midnight-wallet-cli\` 0.5.x for it, don't retry. \`midnight_localnet_up()\` starts a ledger-9 stack for \`undeployed\` on the default ports (node 9944, indexer 8088, proof server 6300); another stack is reached by setting its URLs with \`midnight_config_set\` (keys \`node\`, \`indexer-ws\`, \`proof-server\`) or passing \`--node\` / \`--indexer-ws\` / \`--proof-server\` on the CLI.
 
 `,
     },
@@ -119,9 +119,9 @@ Act on the user's behalf on Midnight, through what the installed packages bring:
 - **No self-shielding** — a wallet cannot move its own funds from unshielded to shielded. To get shielded NIGHT, receive a shielded transfer from a wallet that already has some (genesis wallet has 250M shielded NIGHT on localnet).
 - **Networks**
   - \`undeployed\` — local network (\`midnight_localnet_up()\` starts it). Use this for dev iteration.
-  - \`preprod\` — public testnet (ledger 8 today, so refused by this build). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod and mainnet need a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware.
-  - \`preview\` — public preview testnet (ledger 8 today, so refused by this build). Same first-sync trade-off as preprod.
-  - \`stagenet\` — Sig Network's testnet, on the beta SDK set (mn loads its beta engine for it). No shielded faucet, so shielded sync is off by default; NIGHT from https://faucet.stagenet.shielded.tools. Its proof server must match its node (\`midnightntwrk/proof-server:9.0.0-rc.5_experimental\`). Grant is refused there for now.
+  - \`preprod\` — public testnet (refused by this build while it is on ledger 8). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod and mainnet need a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware. Its shielded balance is not read by default (the first read takes a while), though a wallet can hold shielded tokens there (contracts mint them): pass \`force-shielded\` to \`midnight_balance\`, and to \`midnight_transfer\` with \`shielded\`.
+  - \`preview\` — public preview testnet (ledger 9). Same first-sync trade-off and shielded default as preprod.
+  - \`stagenet\` — Sig Network's testnet, on the beta SDK set (mn loads its beta engine for it). No shielded faucet; as on preview and preprod, the shielded balance is not read by default (the first read takes a while), and \`force-shielded\` reads it; NIGHT from https://faucet.stagenet.shielded.tools. Its proof server must match its node (\`midnightntwrk/proof-server:9.0.0-rc.5_experimental\`). Grant is refused there for now.
   - \`mainnet\` — Midnight Mainnet: real value. Reached only through Blockfrost with the user's mainnet project id (it starts with \`nightmainnet\`); the proof server is the user's local one. No faucet. Used only when named on each call (\`network: "mainnet"\`, or \`--network mainnet\`): it can't be the saved network, and a call without a network never reaches it. \`midnight_airdrop\`, the test tools and the grant tools are refused there with \`MAINNET_REFUSED\`.
 - **Proof server** — local HTTP service that generates ZK proofs for transactions. Default port 6300. Version must match the network's ledger version or writes fail with "Custom error 170".
 

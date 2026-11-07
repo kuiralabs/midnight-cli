@@ -13,7 +13,7 @@ A standalone CLI wallet for the Midnight blockchain. Manage wallets, check balan
 Built for two audiences: **beginners** starting their first Midnight project (a local chain + funded wallets + contract deploy in minutes), and **AI agents** (Cursor, Claude Code, any MCP client) using the same primitives via a built-in MCP server.
 
 > [!IMPORTANT]
-> **0.6.0 (prerelease, `npm install -g midnight-wallet-cli@next`) is ledger-9 only.** It is built on wallet-sdk 2.0.0, ledger-v9 1.0.0, midnight-js 5.0.0 and compact-runtime 0.21.0 (contracts compiled with Compact 0.36 / language 0.28). `stagenet` runs on the beta set instead (wallet-sdk 5.0 beta split packages, ledger-v9 1.0.0-rc.3, midnight-js 5.0.0-beta.6, compact-runtime 0.18.0-rc.1, contracts compiled with compactc 0.33), which mn loads for that network alone. It refuses any chain still on ledger 8, which today includes `preview` and `preprod`: stay on 0.5.x (`npm install -g midnight-wallet-cli@latest`) for those.
+> **0.6.0 (prerelease, `npm install -g midnight-wallet-cli@next`) is ledger-9 only.** It is built on wallet-sdk 2.0.0, ledger-v9 1.0.0, midnight-js 5.0.0 and compact-runtime 0.21.0 (contracts compiled with Compact 0.36 / language 0.28). `stagenet` runs on the beta set instead (wallet-sdk 5.0 beta split packages, ledger-v9 1.0.0-rc.3, midnight-js 5.0.0-beta.6, compact-runtime 0.18.0-rc.1, contracts compiled with compactc 0.33), which mn loads for that network alone. It refuses any chain still on ledger 8 up front (`UNSUPPORTED_LEDGER`): stay on 0.5.x (`npm install -g midnight-wallet-cli@latest`) for such a chain. `preview` and `mainnet` run ledger 9.
 >
 > `midnight localnet up` starts a ledger-9 stack (node 2.1.0-rc.4, indexer 4.4.0-rc.6, proof server 9.0.0). To use another ledger-9 stack instead: on the default ports (node 9944, indexer 8088, proof server 6300) `--network undeployed` reaches it with no configuration. On other ports pass `--node`, `--indexer-ws` and `--proof-server` per command, or save them once with `midnight config set node <url>`, `midnight config set indexer-ws <url>` and `midnight config set proof-server <url>`.
 
@@ -36,23 +36,23 @@ Install the prerelease with npm 11 or older (or run it with `npx`; with npm 12, 
 | `midnight wallet <generate\|list\|use\|info\|remove\|seed\|protect> [args]` | Manage named wallets (generate, list, use, info, remove, seed, protect) |
 | `midnight generate [--network <name>] [--seed <hex>] [--mnemonic "..."] [--output <file>] [--force]` | (Deprecated — use "midnight wallet generate <name>" instead) |
 | `midnight info [--wallet <name\|file>]` | Display wallet address, network, creation date (no secrets shown) |
-| `midnight balance [address] [--network <name>] [--indexer-ws <url>]` | Check unshielded + shielded balance (full wallet sync) |
-| `midnight address --seed <hex> [--network <name>] [--index <n>]` | Derive and display an unshielded address from a seed |
+| `midnight balance [address] [--wallet <name\|file> \| --seed <hex>] [--shielded] [--force-shielded] [--network <name>] [--no-cache] [--node <url>] [--indexer-ws <url>] [--proof-server <url>] [--verbose]` | Check a wallet's unshielded + shielded balance, or an address's unshielded balance |
+| `midnight address (--seed <hex> \| --wallet <name>) [--network <name>] [--index <n>]` | Derive and display an unshielded address from a seed or a saved wallet (one of --seed, MN_SEED or --wallet is needed) |
 | `midnight genesis-address [--network <name>]` | Display the genesis wallet address (seed 0x01) for a network |
 | `midnight inspect-cost [--network <name>] [--node <url>] [--indexer-ws <url>] [--proof-server <url>]` | Display the chain's current block limits, from its latest block's ledger parameters |
-| `midnight airdrop <amount> [--shielded] [--wallet <name\|file\|address>]` | Fund a wallet from the genesis wallet (undeployed network only) |
-| `midnight transfer <to> <amount> [--shielded] [--wallet <name\|file>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>]` | Send NIGHT tokens to another address (unshielded or --shielded) |
+| `midnight airdrop <amount> [--shielded] [--wallet <name\|file\|address>] [--network <name>] [--node <url>] [--indexer-ws <url>] [--proof-server <url>] [--verbose]` | Fund a wallet from the genesis wallet (undeployed network only) |
+| `midnight transfer <to> <amount> [--shielded [--force-shielded]] [--wallet <name\|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--verbose]` | Send NIGHT tokens to another address (unshielded or --shielded) |
 | `midnight dust <register\|status\|export> [--wallet <name\|file>] [--seed <hex> (export only)] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--no-cache (status only)]` | Register UTXOs for dust (fee token) generation, check status, or export a restorable snapshot |
 | `midnight config <get\|set\|unset> <key> [value] [--network <name>]` | Manage persistent config (default network, endpoints, etc.) |
 | `midnight cache clear [--network <name>] [--wallet <name\|file>]` | Manage wallet state cache (clear cached sync data) |
-| `midnight serve [--port <n>] [--wallet <name\|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all \| --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--force-shielded] [--no-auto-approve-reads] [--json]` | Start DApp Connector server over WebSocket JSON-RPC |
+| `midnight serve [--port <n>] [--wallet <name\|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all \| --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--force-shielded] [--no-auto-approve-reads] [--verbose] [--json]` | Start DApp Connector server over WebSocket JSON-RPC |
 | `midnight test <create\|run\|list\|results> [options]` | Generate and run E2E test suites for Midnight dApps |
 | `midnight dev [path]` | Iteration loop for Compact contract development (localnet + compile-on-save + one-key deploy) |
 | `midnight contract <inspect\|deploy\|call\|state> [options]` | Inspect, deploy, call, and query Midnight smart contracts |
 | `midnight swap <make\|inspect\|take\|cancel\|list> [options]` | Private swaps of shielded tokens, through offer files (experimental) |
 | `midnight tx status <hash or identifier> [options]` | What became of a transaction: its block, time, fee and result |
 | `midnight grant <deploy\|deposit\|status\|list\|issue\|revoke\|revoke-all\|export\|import\|device> [options]` | This wallet's account, and the grants that let an agent spend from it (experimental) |
-| `midnight localnet <up\|stop\|down\|status\|logs\|clean>` | Manage a local Midnight network via Docker Compose |
+| `midnight localnet <up\|stop\|down\|status\|logs\|clean> [--tail <n>]` | Manage a local Midnight network via Docker Compose |
 | `midnight help [command]` | Show usage for all commands or a specific command |
 | `midnight manual [--no-pager] [--raw] [--json]` | Full reference manual (long form, paged through $PAGER) |
 <!-- commands: end -->
@@ -80,7 +80,7 @@ midnight transfer mn_addr_undeployed1... 100
 
 ### Preprod / Preview (testnet)
 
-Both run ledger 8 today, so this build refuses them; use 0.5.x there. Once a network moves to ledger 9 the flow is:
+Preview runs ledger 9. This build refuses a chain still on ledger 8 (use 0.5.x there), so preprod works with it once it runs ledger 9. The flow:
 
 ```bash
 # 1. Create a wallet and set the network
@@ -110,9 +110,9 @@ midnight transfer mn_addr_preprod1... 100
 | Network | Description |
 |---------|-------------|
 | `undeployed` | Local network (`midnight localnet up` starts it) |
-| `preprod` | Midnight pre-production testnet (ledger 8 today: refused by this build, use 0.5.x). Its indexer and node are served by Blockfrost: needs a project id |
-| `preview` | Midnight preview testnet (ledger 8 today: refused by this build, use 0.5.x) |
-| `stagenet` | Sig Network's testnet, on the beta SDK set: mn runs it through its beta engine, picked by the network. NIGHT from https://faucet.stagenet.shielded.tools; no shielded faucet, so shielded sync is off by default. Its proof server must match its node (`midnightntwrk/proof-server:9.0.0-rc.5_experimental`). `mn grant` is refused there for now |
+| `preprod` | Midnight pre-production testnet (refused by this build while it is on ledger 8; use 0.5.x there). Its indexer and node are served by Blockfrost: needs a project id |
+| `preview` | Midnight preview testnet (ledger 9) |
+| `stagenet` | Sig Network's testnet, on the beta SDK set: mn runs it through its beta engine, picked by the network. NIGHT from https://faucet.stagenet.shielded.tools; no shielded faucet. As on preview and preprod, the shielded balance is not read by default (the first read takes a while): `--force-shielded` reads it. Its proof server must match its node (`midnightntwrk/proof-server:9.0.0-rc.5_experimental`). `mn grant` is refused there for now |
 | `mainnet` | Midnight Mainnet (ledger 9, on the rc SDK set). Reached only through Blockfrost, with a mainnet project id (it starts with `nightmainnet`); the proof server is your local one. No faucet. Real value: it must be named on every command with `--network mainnet` (it can't be the saved network), and `airdrop`, `mn test` and `mn grant` are refused there with `MAINNET_REFUSED`. Its addresses have no network segment: `mn_addr1…`, `mn_shield-addr1…` |
 
 Wallets are network-agnostic — one seed derives addresses for all five networks. Use `--network <name>` on any command, or persist a test network with `midnight config set network preview` (mainnet is never persisted).
@@ -139,7 +139,7 @@ midnight config set blockfrost-project-id <project id>   # or: export BLOCKFROST
 ```
 
 - Project ids are per network: a preprod id starts with `nightpreprod`, a mainnet id with `nightmainnet`. mn files each under its own network and never sends one to the other network.
-- Without one, a command that reaches preprod stops with `BLOCKFROST_PROJECT_ID_REQUIRED` and these instructions. A refused id is `BLOCKFROST_PROJECT_ID_REJECTED`. Requests count against your Blockfrost plan. (On this ledger-9 build preprod is then refused as a ledger-8 chain, until it forks.)
+- Without one, a command that reaches preprod stops with `BLOCKFROST_PROJECT_ID_REQUIRED` and these instructions. A refused id is `BLOCKFROST_PROJECT_ID_REJECTED`. Requests count against your Blockfrost plan. (While preprod is on ledger 8, this ledger-9 build then refuses it with `UNSUPPORTED_LEDGER`.)
 - The project id is a secret. mn keeps it in `~/.midnight/config.json` (mode 0600), shows it masked in `config get`, and hides it in everything it prints, errors and `--verbose` logs included.
 - `mn serve` gives a connected dApp the wallet's indexer and node URLs (the DApp connector's `getConfiguration`), and on preprod those carry your project id: connect only dApps you trust with it.
 - An old `indexer-ws` setting that points at `indexer.preprod.midnight.network` fails with `ENDPOINT_SHUT_DOWN`: remove it with `midnight config unset indexer-ws --network preprod`.
@@ -289,7 +289,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 
 ### Available MCP Tools
 
-Once connected, your AI agent gets access to 38 tools:
+Once connected, your AI agent gets access to 44 tools:
 
 | Tool | Description |
 |------|-------------|
@@ -300,7 +300,7 @@ Once connected, your AI agent gets access to 38 tools:
 | `midnight_wallet_remove` | Remove a wallet |
 | `midnight_info` | Show wallet info (no secrets) |
 | `midnight_balance` | Check NIGHT balance (slim by default) |
-| `midnight_address` | Derive address from seed |
+| `midnight_address` | Derive an address from a saved wallet or a seed |
 | `midnight_genesis_address` | Show genesis wallet address |
 | `midnight_inspect_cost` | Show block cost limits |
 | `midnight_airdrop` | Fund wallet from genesis |
@@ -308,6 +308,7 @@ Once connected, your AI agent gets access to 38 tools:
 | `midnight_confirm_operation` | Execute a previously-returned pending operation (transfer/contract confirmation flow) |
 | `midnight_dust_register` | Register UTXOs for dust generation |
 | `midnight_dust_status` | Check dust status (slim by default) |
+| `midnight_tx_status` | What became of a transaction, by its hash: its block, time, fee and result |
 | `midnight_config_get` | Read config value |
 | `midnight_config_set` | Write config value |
 | `midnight_config_unset` | Remove config value |
@@ -323,6 +324,11 @@ Once connected, your AI agent gets access to 38 tools:
 | `midnight_contract_deploy` | Deploy a compiled contract (returns pending token; confirm with `midnight_confirm_operation`) |
 | `midnight_contract_call` | Call a circuit on a deployed contract (returns pending token; auto-coerces numbers/`"123n"` strings to BigInt and `[0–255]` arrays to Uint8Array) |
 | `midnight_test_create` | Generate a CLI or browser test scaffold from the compiled contract |
+| `midnight_swap_make` | Experimental. Make a swap offer of one shielded token for another, written to an offer file (returns pending token) |
+| `midnight_swap_inspect` | Experimental. What a swap offer file offers, whether it is still live, and its expiry |
+| `midnight_swap_take` | Experimental. Take a swap offer at the agreed terms (returns pending token) |
+| `midnight_swap_cancel` | Experimental. Cancel an open swap offer of the wallet's by spending its coins back (returns pending token) |
+| `midnight_swap_list` | Experimental. The wallet's open swap offers, each with whether it expired or was taken |
 | `midnight_grant_status` | Experimental. The wallet's account: address, owner key, what it holds, number of grants |
 | `midnight_grant_list` | Experimental. Every grant on the account, with its limits and whether it is live |
 | `midnight_grant_request` | Experimental. What issuing from an agent's grant request link would grant (who spends, who they can pay, the limits); issues nothing |

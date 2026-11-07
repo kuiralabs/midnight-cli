@@ -82,8 +82,8 @@ export function buildManual(): string {
   out.push(`    JSON via --json for use with AI agents and scripts. An MCP`);
   out.push(`    server ships with the package.`);
   out.push('');
-  out.push(`    ${bold('Ledger 9 only.')} This build refuses a chain still on ledger 8`);
-  out.push(`    (preview and preprod today); use midnight-wallet-cli 0.5.x there.`);
+  out.push(`    ${bold('Ledger 9 only.')} This build refuses a chain still on ledger 8;`);
+  out.push(`    use midnight-wallet-cli 0.5.x for such a chain.`);
   out.push('');
   out.push(`${bold('INSTALLATION')}`);
   out.push(`    ${dim('$')} ${dim('npm install -g midnight-wallet-cli@next')}   ${dim('# this ledger-9 prerelease')}`);

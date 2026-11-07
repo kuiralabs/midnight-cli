@@ -13,13 +13,15 @@ export const transferDefinition: CommandDefinition = {
       name: 'force-shielded',
       takesValue: false,
       help: [
-        '--force-shielded    Allow --shielded on preview/preprod (blocked by default — no faucet there)',
+        '--force-shielded    Allow --shielded on preview, preprod and stagenet, where the shielded',
+        '                    wallet is not synced by default (the first sync takes a while)',
       ],
-      agent: { type: 'boolean', description: 'With shielded: allow it on preview/preprod (blocked there by default)' },
+      agent: { type: 'boolean', description: 'With shielded: allow it on preview, preprod and stagenet, where the shielded wallet is not synced by default (the first sync takes a while)' },
     },
     {
       name: 'network',
       takesValue: true,
+      help: ['--network <name>    Network to send on (default: the selected one)'],
       agent: { ...NETWORK_PARAM, description: 'Network to send on (default: the selected one)' },
     },
     {
@@ -37,6 +39,7 @@ export const transferDefinition: CommandDefinition = {
     {
       name: 'verbose',
       takesValue: false,
+      help: ['--verbose           Print diagnostic lines about the sync to stderr'],
       // Its lines go to the server's stderr, which no agent reads.
       agent: { notForAgents: 'diagnostics for a person at a terminal' },
     },
@@ -67,16 +70,18 @@ export const transferDefinition: CommandDefinition = {
   ],
   help: {
     description: 'Send NIGHT tokens to another address (unshielded or --shielded)',
-    usage: 'midnight transfer <to> <amount> [--shielded] [--wallet <name|file>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>]',
+    usage: 'midnight transfer <to> <amount> [--shielded [--force-shielded]] [--wallet <name|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--verbose]',
     flags: [
       '<to>                Recipient bech32m address (unshielded or shielded)',
       '<amount>            Amount in NIGHT to send',
       { flag: 'shielded' },
       { flag: 'force-shielded' },
       { flag: 'wallet' },
+      { flag: 'network' },
       { flag: 'proof-server' },
       { flag: 'node' },
       { flag: 'indexer-ws' },
+      { flag: 'verbose' },
     ],
     examples: [
       'midnight transfer mn_addr_undeployed1... 100',

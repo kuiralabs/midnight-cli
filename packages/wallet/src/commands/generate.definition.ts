@@ -16,7 +16,7 @@ export const generateDefinition: CommandDefinition = {
     {
       name: 'mnemonic',
       takesValue: true,
-      help: ['--mnemonic "..."    Restore from BIP-39 mnemonic (24 words)'],
+      help: ['--mnemonic "..."    Restore from a BIP-39 mnemonic (12 to 24 words; a new wallet gets 24)'],
     },
     {
       name: 'network',
@@ -52,7 +52,7 @@ export const generateDefinition: CommandDefinition = {
       activeAddress: 'Unshielded address on the active network (bech32m)',
       activeNetwork: 'The active network',
       seed: 'Hex-encoded seed (32-byte raw, or 64-byte if mnemonic-derived)',
-      mnemonic: 'BIP-39 mnemonic (24 words, only if generated or provided)',
+      mnemonic: 'BIP-39 mnemonic (24 words when generated; as given when restored)',
       file: 'Path where wallet file was saved',
       createdAt: 'ISO 8601 creation timestamp',
     },
