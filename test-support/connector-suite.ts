@@ -1538,6 +1538,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
         expect(err.code).toBe('PermissionRejected');
         expect(err.mnCode).toBe('APPROVAL_UNAVAILABLE');
         expect(submit).not.toHaveBeenCalled();
+        // The refusal leaves the transaction the agent's: it still submits it, fee-only, unreverted.
+        submit.mockResolvedValue('agent-hash');
+        await expect(connector.handlers.submitTransaction({ tx: balanced.tx }, ctx('agent'))).resolves.toEqual({ txHash: 'agent-hash' });
+        expect(connector.hasPendingTxs()).toBe(false);
       });
 
       it('rejects submitting a transaction this server balanced, but not fee-only', async () => {
@@ -1846,6 +1850,75 @@ export function connectorSuite(engine: ConnectorEngine): void {
         } finally {
           vi.useRealTimers();
         }
+      });
+
+      // Regression: closing the socket while its transaction was being
+      // submitted freed that transaction's coins, so the next transaction
+      // spent them too and the node refused it.
+      it('does not revert a transaction whose submit is in flight when its connection closes, nor after it is submitted', async () => {
+        const revertFn = vi.fn().mockResolvedValue(undefined);
+        process.stderr.write = (() => true) as any;
+        let landed!: (hash: string) => void;
+        const submitting = new Promise<string>((resolve) => { landed = resolve; });
+        const submit = vi.fn(() => submitting);
+        const bundle = createBundleStub({ finalizeRecipe: () => Promise.resolve(sealedTx(4)), submitTransaction: submit });
+        (bundle.facade as any).revert = revertFn;
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        const built = await connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx('c1')) as { tx: string };
+        const submitted = connector.handlers.submitTransaction({ tx: built.tx }, ctx('c1'));
+        await vi.waitFor(() => expect(submit).toHaveBeenCalled());
+
+        await connector.revertPendingTxs('c1');
+        expect(revertFn).not.toHaveBeenCalled();
+        // Its coins are still pending in the wallet: a shutdown must not save it as if none were.
+        expect(connector.hasPendingTxs()).toBe(true);
+
+        landed('hash-in-flight');
+        await expect(submitted).resolves.toEqual({ txHash: 'hash-in-flight' });
+        await connector.revertPendingTxs('c1');
+        expect(revertFn).not.toHaveBeenCalled();
+        expect(connector.hasPendingTxs()).toBe(false);
+      });
+
+      it('reverts a transaction whose submit fails after its connection closed', async () => {
+        const revertFn = vi.fn().mockResolvedValue(undefined);
+        process.stderr.write = (() => true) as any;
+        let refused!: (err: Error) => void;
+        const submitting = new Promise<string>((_resolve, reject) => { refused = reject; });
+        const finalized = sealedTx(4);
+        const submit = vi.fn(() => submitting);
+        const bundle = createBundleStub({ finalizeRecipe: () => Promise.resolve(finalized), submitTransaction: submit });
+        (bundle.facade as any).revert = revertFn;
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        const built = await connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx('c1')) as { tx: string };
+        const submitted = connector.handlers.submitTransaction({ tx: built.tx }, ctx('c1')).catch((e: Error) => e);
+        await vi.waitFor(() => expect(submit).toHaveBeenCalled());
+        await connector.revertPendingTxs('c1');
+
+        refused(new Error('1010: Invalid Transaction: Custom error: 115'));
+        expect(await submitted).toBeInstanceOf(Error);
+        expect(revertFn).toHaveBeenCalledTimes(1);
+        expect(revertFn).toHaveBeenCalledWith(finalized);
+        expect(connector.hasPendingTxs()).toBe(false);
+      });
+
+      // Regression: a transaction built on one connection and submitted on
+      // another was reverted when the first one closed.
+      it('lets another connection take a transaction over: submitted there, it is not reverted when the connection that built it closes', async () => {
+        const revertFn = vi.fn().mockResolvedValue(undefined);
+        process.stderr.write = (() => true) as any;
+        const bundle = createBundleStub({ finalizeRecipe: () => Promise.resolve(sealedTx(6)), submitTransaction: () => Promise.resolve('hash-b') });
+        (bundle.facade as any).revert = revertFn;
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        const built = await connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx('a')) as { tx: string };
+        await connector.handlers.submitTransaction({ tx: built.tx }, ctx('b'));
+
+        await connector.revertPendingTxs('a');
+        expect(revertFn).not.toHaveBeenCalled();
+        expect(connector.hasPendingTxs()).toBe(false);
       });
 
       it('submitTransaction rejection reverts and untracks', async () => {

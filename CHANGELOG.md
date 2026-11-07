@@ -27,6 +27,7 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 
 ### Fixed
 
+- **mn serve no longer frees the coins of a transaction it is submitting.** Closing the socket while `submitTransaction` was in flight reverted the transaction, so the next one spent the same coin and the node refused it (1010/196); and a transaction built on one connection and submitted on another was reverted when the first closed. A submit now takes the transaction over from whichever connection built it: it is reverted only if the node refuses it, and a submit refused by the operator from another connection leaves it with the one that built it. Shutdown counts a submit in flight as pending, so the wallet state isn't saved without its coins.
 - **mn serve's answer to a method that returns nothing** (`hintUsage`) carries `"result": null`; it was `{"jsonrpc":"2.0","id":1}`, neither result nor error, which JSON-RPC 2.0 forbids. The transport answers this way for every method.
 - **A `contract-info.json` the compiler didn't write** (not JSON, `{}`, a circuit or witness missing its arguments or result type) is refused with `CONTRACT_INFO_INVALID` naming what is missing, instead of a raw TypeError, or a contract with no circuits.
 - **mn serve's header** reads `Auto-approve balancing:  no`, its values lined up, not `Auto-approve balancing:no`.

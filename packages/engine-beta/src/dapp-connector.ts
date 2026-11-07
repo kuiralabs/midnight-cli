@@ -282,6 +282,28 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     return held;
   }
 
+  /**
+   * Transactions being submitted, by hex: no connection holds them any more,
+   * so a disconnect or the abandon timer never reverts them (their coins are
+   * spent once the node takes them); the submit reverts one the node refuses.
+   */
+  const submittingTxs = new Map<string, { finalized: ledger.FinalizedTransaction }>();
+
+  /**
+   * Takes a transaction out of whichever connection holds it, for its submit:
+   * the one that built it may close, or another connection may submit it.
+   * Undefined when none holds it (built elsewhere, or already being submitted).
+   */
+  function claimPendingTx(txHex: string): { owner: string; finalized: ledger.FinalizedTransaction; feeOnly: boolean } | undefined {
+    for (const [owner, txMap] of pendingTxsByConnection) {
+      const entry = txMap.get(txHex);
+      if (entry === undefined) continue;
+      untrackPendingTx(owner, txHex);
+      return { owner, finalized: entry.finalized, feeOnly: entry.feeOnly };
+    }
+    return undefined;
+  }
+
   /** Revert and clean up all pending transactions for a connection (disconnect). */
   async function revertPendingTxs(connectionId: string): Promise<void> {
     const txMap = pendingTxsByConnection.get(connectionId);
@@ -963,21 +985,33 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
       const tracker = makeTracker('submitTransaction', context);
 
+      // This submit takes the transaction over from the connection that built
+      // it (this one or another): closing that one no longer reverts it.
+      const claimed = claimPendingTx(txHex);
+      if (claimed !== undefined) submittingTxs.set(txHex, claimed);
+      // Releases the coins of a transaction this submit took over and won't send.
+      const release = async (): Promise<void> => {
+        if (claimed === undefined) return;
+        submittingTxs.delete(txHex);
+        try { await facade.revert(claimed.finalized); } catch { /* best-effort */ }
+      };
+
       // Submit is the irreversible action: prompt, unless under --approve-fees
       // it is a transaction this connection had balanced fee-only.
       const feeOnly = approvalOptions.approveFees === true
-        && pendingTxsByConnection.get(context.connectionId)?.get(txHex)?.feeOnly === true;
+        && claimed?.owner === context.connectionId && claimed.feeOnly;
       tracker.start('approve');
       try {
         await requireApproval('submitTransaction', inspectTxHex(txHex, 'sealed'), context, feeOnly);
       } catch (err) {
-        // Rejection — revert to release dust coins from pending.
-        const txMap = pendingTxsByConnection.get(context.connectionId);
-        const entry = txMap?.get(txHex);
-        if (entry) {
-          try { await facade.revert(entry.finalized); } catch { /* best-effort */ }
+        // Refused: a transaction this connection built is reverted, to release
+        // its coins; one another connection built goes back to it unsent.
+        if (claimed !== undefined && claimed.owner !== context.connectionId) {
+          submittingTxs.delete(txHex);
+          trackPendingTx(claimed.owner, txHex, claimed.finalized, claimed.feeOnly);
+        } else {
+          await release();
         }
-        untrackPendingTx(context.connectionId, txHex);
         throw err;
       }
 
@@ -988,20 +1022,15 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
         // Bounded: against a node that went away the SDK's submit never returns.
         const txHash = await submitWithin(facade.submitTransaction(sealedTx), { node: networkConfig.node });
         tracker.complete();
-        // Tx submitted successfully — untrack (coins are now spent, not pending)
-        untrackPendingTx(context.connectionId, txHex);
+        // Submitted: its coins are spent, not pending.
+        submittingTxs.delete(txHex);
         context.metadata.phases = tracker.getTimings();
         // Return txHash for server logging (onResponse can read it from result)
         return { txHash };
       } catch (submitErr: unknown) {
         tracker.complete();
         // Revert pending tx to release locked dust coins
-        const txMap = pendingTxsByConnection.get(context.connectionId);
-        const entry = txMap?.get(txHex);
-        if (entry) {
-          try { await facade.revert(entry.finalized); } catch { /* best-effort */ }
-        }
-        untrackPendingTx(context.connectionId, txHex);
+        await release();
         // Re-throw with full detail so the RPC layer can forward it
         const detail = extractErrorDetail(submitErr);
         const enriched = new Error(`Transaction submission failed: ${detail}`);
@@ -1116,6 +1145,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
   }
 
   function hasPendingTxs(): boolean {
+    if (submittingTxs.size > 0) return true;
     for (const [, txMap] of pendingTxsByConnection) {
       if (txMap.size > 0) return true;
     }
