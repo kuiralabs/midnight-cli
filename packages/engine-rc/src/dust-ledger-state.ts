@@ -14,10 +14,12 @@ import * as ledgerV9 from '@midnightntwrk/ledger-v9';
 import { dustVariantConfigurations } from '@midnightntwrk/wallet-sdk/dust';
 import { CoreWallet as V2CoreWallet } from '@midnightntwrk/wallet-sdk/dust/v2';
 import { INITIAL_NIGHT_DUST_RATIO, INITIAL_GENERATION_DECAY_RATE, INITIAL_DUST_GRACE_PERIOD_SECONDS } from '@kuiralabs/midnight-cli-core/engine';
-import { FORK_SCHEDULE } from './fork-schedule.ts';
+import { ledgerOfProtocolVersion, type LedgerVersion } from './fork-schedule.ts';
+
+export { ledgerOfProtocolVersion };
 
 /** The ledger a Dust state or event belongs to. */
-export type DustLedger = 8 | 9;
+export type DustLedger = LedgerVersion;
 
 /** A Dust local state, tagged with the ledger whose library reads it. */
 export type DustLedgerState =
@@ -33,16 +35,6 @@ export interface DustKeys {
 /** A wallet's Dust secret keys for both ledgers, from its derived Dust seed. */
 export function dustKeysFromSeed(dustSeed: Uint8Array): DustKeys {
   return { v8: ledgerV8.DustSecretKey.fromSeed(dustSeed), v9: ledgerV9.DustSecretKey.fromSeed(dustSeed) };
-}
-
-/**
- * The ledger of a protocol version, by the fork schedule the facade's Dust
- * wallet runs on: ledger 8 below `forks.v9`, ledger 9 from it. The SDK's
- * ledger-8 variant owns exactly that range, and hands over at the first event
- * (or chain tip) reported at or above it.
- */
-export function ledgerOfProtocolVersion(protocolVersion: bigint | number): DustLedger {
-  return BigInt(protocolVersion) < FORK_SCHEDULE.v9 ? 8 : 9;
 }
 
 /** An empty Dust state of `ledger`, on the ledger's initial Dust parameters. */

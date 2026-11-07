@@ -1,58 +1,43 @@
 // Direct-from-indexer shielded (zswap) balance reader.
 //
 // Bypasses the shielded-wallet SDK facade (minutes-to-hours + 16GB OOM on cold
-// hosted syncs). Subscribes to `zswapLedgerEvents(id)` ourselves, deserializes
-// each raw hex event via `ledger.Event.deserialize`, and replays them into a
-// `ZswapLocalState` with `replayEventsWithChanges(secretKeys, events)` — which
-// reconciles BOTH received and spent coins locally using the full secret keys
-// (the collapsed `connect`/`shieldedTransactions` session is encryption-only and
-// cannot see spends, so it is not used). Reads the NIGHT balance off the coin
-// set. Mirrors the dust-direct reader's checkpoint/resume shape.
+// hosted syncs). Subscribes to `zswapLedgerEvents(id)` ourselves and folds the
+// raw events into a `ZswapLocalState` (shielded-event-fold.ts: ledger-8 events
+// with ledger 8, crossing to ledger 9 at the fork as the SDK's shielded wallet
+// does) with `replayEventsWithChanges`, which reconciles BOTH received and
+// spent coins locally using the full secret keys (the collapsed
+// `connect`/`shieldedTransactions` session is encryption-only and cannot see
+// spends, so it is not used). Reads the balances off the coin set. Mirrors the
+// dust-direct reader's checkpoint/resume shape.
 //
 // The batched replay keeps the working set bounded (~155MB even on preview),
 // unlike the SDK's cold sync.
 
-import * as ledger from '@midnightntwrk/ledger-v9';
-
 import { subscribeGraphqlWs } from '@kuiralabs/midnight-chain';
+import { ShieldedEventFold, type RawZswapEvent, type ShieldedFoldResult } from './shielded-event-fold.ts';
+import { type ShieldedKeys, type ShieldedLedgerState } from './shielded-ledger-state.ts';
 
+// The protocol version tells the fold which ledger reads each event.
 const SUBSCRIPTION_QUERY = `
   subscription ZswapLedgerEvents($id: Int) {
     zswapLedgerEvents(id: $id) {
       id
       raw
       maxId
+      protocolVersion
     }
   }
 `;
 
-interface RawZswapEvent {
-  id: number;
-  raw: string;
-  maxId: number;
-}
-
-export interface ShieldedDirectResult {
-  /** Native (NIGHT) shielded balance in atomic units. */
-  balance: bigint;
-  /** Number of spendable NIGHT coins tracked. */
-  availableCoins: number;
-  /** Shielded tokens other than NIGHT, by raw type, with their balances. */
-  tokens: ReadonlyMap<string, bigint>;
-  /** Events applied in this run. */
-  eventCount: number;
-  /** Final ZswapLocalState — callers serialize this for caching. */
-  state: ledger.ZswapLocalState;
-  /** Id of the last event applied in this run. -1 if none arrived. */
-  lastAppliedEventId: number;
-  /**
-   * True iff the sync stopped before catching up to the indexer's tip (timeout
-   * or abort). The returned state + lastAppliedEventId are still valid — persist
-   * them and re-call to resume from the checkpoint. False means we caught up to
-   * the chain head (or there were no events to apply).
-   */
-  partial: boolean;
-}
+/**
+ * What a direct read returns. `state` is ledger 9 once the chain's zswap
+ * timeline (or tip) is past the fork; a read that stopped before the fork
+ * holds a ledger-8 state, which the next read resumes. `lastAppliedEventId` is
+ * -1 if no event arrived; `partial` is true iff the sync stopped before
+ * catching up to the indexer's tip (timeout or abort), and the state + cursor
+ * are still valid to persist and resume from.
+ */
+export type ShieldedDirectResult = ShieldedFoldResult;
 
 export interface ShieldedDirectOptions {
   /** Called with (eventsApplied, maxIdSeen) whenever a new event arrives. */
@@ -63,7 +48,7 @@ export interface ShieldedDirectOptions {
    * doesn't lose 50k events of work. Keep the callback cheap (a file write is
    * fine, network is not).
    */
-  onCheckpoint?: (state: ledger.ZswapLocalState, lastAppliedEventId: number) => void;
+  onCheckpoint?: (state: ShieldedLedgerState, lastAppliedEventId: number) => void;
   /**
    * Soft ceiling for the whole subscription. On expiry the call resolves with
    * `partial: true` and whatever state has been applied — never throws away
@@ -81,38 +66,26 @@ export interface ShieldedDirectOptions {
   /** Abort the subscription mid-flight. */
   signal?: AbortSignal;
   /** Resume from this cached state instead of building fresh. */
-  initialState?: ledger.ZswapLocalState;
+  initialState?: ShieldedLedgerState;
   /** Subscribe starting at this event id (inclusive). Default: 0. */
   startFromId?: number;
-}
-
-/** Sum a state's spendable coins: NIGHT apart, and every other token by its raw type. */
-function balancesOf(state: ledger.ZswapLocalState): { balance: bigint; count: number; tokens: Map<string, bigint> } {
-  // Shielded NIGHT coins carry the unshielded raw token type (matches balance.ts / facade).
-  const night = ledger.unshieldedToken().raw;
-  let balance = 0n;
-  let count = 0;
-  const tokens = new Map<string, bigint>();
-  for (const coin of state.coins) {
-    if (coin.type === night) {
-      balance += coin.value;
-      count++;
-    } else {
-      tokens.set(coin.type, (tokens.get(coin.type) ?? 0n) + coin.value);
-    }
-  }
-  return { balance, count, tokens: new Map([...tokens].sort(([a], [b]) => a.localeCompare(b))) };
+  /**
+   * The chain tip's protocol version, read before the subscription opens;
+   * null or absent when unknown. A caught-up read on a chain past the fork
+   * ends on ledger 9 even with no ledger-9 zswap event yet.
+   */
+  chainProtocolVersion?: bigint | null;
 }
 
 /**
- * Subscribe to zswap ledger events from `startFromId`, deserialize, replay into a
- * `ZswapLocalState` with the full secret keys (reconciling receives AND spends),
- * and return the balances plus the state + resume cursor.
+ * Subscribe to zswap ledger events from `startFromId`, fold them into the
+ * wallet's shielded state with its secret keys (reconciling receives AND
+ * spends), and return the balances plus the state + resume cursor.
  *
  * "Caught up" is detected when the latest `id` received equals `maxId`.
  */
 export function readShieldedBalanceDirect(
-  secretKeys: ledger.ZswapSecretKeys,
+  keys: ShieldedKeys,
   indexerWS: string,
   options: ShieldedDirectOptions = {},
 ): Promise<ShieldedDirectResult> {
@@ -125,30 +98,13 @@ export function readShieldedBalanceDirect(
     signal,
     initialState,
     startFromId = 0,
+    chainProtocolVersion,
   } = options;
 
-  // Apply events in chunks so the final step is cheap, the event loop can breathe
-  // between WASM calls, and the working set stays bounded on large chains.
-  const CHUNK_SIZE = 500;
-
-  let state = initialState ?? new ledger.ZswapLocalState();
-  const pending: ledger.Event[] = [];
-  let eventsAppliedCount = 0;
-  let lastEventId = startFromId - 1;
-  let maxIdSeen = -1;
-
-  // Apply events in chunks so the final step is cheap, the event loop can breathe
-  // between WASM calls, and the working set stays bounded on large chains.
-  // Checkpoint after each chunk so a timeout/abort/crash doesn't lose the work.
-  const flushPending = () => {
-    if (pending.length === 0) return;
-    state = state.replayEventsWithChanges(secretKeys, pending).state;
-    eventsAppliedCount += pending.length;
-    pending.length = 0;
-    if (onCheckpoint && lastEventId >= 0) {
-      try { onCheckpoint(state, lastEventId); } catch { /* best-effort */ }
-    }
-  };
+  // Events are applied in chunks so the final step is cheap, the event loop can
+  // breathe between WASM calls, and the working set stays bounded on large
+  // chains; each chunk is checkpointed so a timeout/abort doesn't lose the work.
+  const fold = new ShieldedEventFold({ keys, initialState, startFromId, onCheckpoint });
 
   return subscribeGraphqlWs<ShieldedDirectResult>(indexerWS, {
     query: SUBSCRIPTION_QUERY,
@@ -162,39 +118,14 @@ export function readShieldedBalanceDirect(
     onNext: (data) => {
       const evt = (data as { zswapLedgerEvents?: RawZswapEvent } | undefined)?.zswapLedgerEvents;
       if (!evt) return false;
-      let event: ledger.Event;
-      try {
-        event = ledger.Event.deserialize(new Uint8Array(Buffer.from(evt.raw, 'hex')));
-      } catch (err) {
-        throw new Error(`Failed to deserialize zswap event ${evt.id}: ${(err as Error).message}`);
-      }
-      pending.push(event);
-      // Update lastEventId BEFORE flushing so the checkpoint cursor matches the
-      // events actually applied (resuming at cursor+1 must not re-apply).
-      lastEventId = evt.id;
-      if (evt.maxId > maxIdSeen) maxIdSeen = evt.maxId;
-      if (pending.length >= CHUNK_SIZE) {
-        try { flushPending(); } catch (err) {
-          throw new Error(`Failed applying zswap events: ${(err as Error).message}`);
-        }
-      }
-      onProgress?.(eventsAppliedCount + pending.length, maxIdSeen);
+      fold.push(evt);
+      onProgress?.(fold.eventsSeen, fold.maxIdSeen);
       // Caught up when we've received the final event in the current stream.
-      return lastEventId >= maxIdSeen;
+      return fold.caughtUp;
     },
     buildResult: (partial) => {
       try {
-        flushPending();
-        const { balance, count, tokens } = balancesOf(state);
-        return {
-          balance,
-          availableCoins: count,
-          tokens,
-          eventCount: eventsAppliedCount,
-          state,
-          lastAppliedEventId: lastEventId,
-          partial,
-        };
+        return fold.finish({ partial, chainProtocolVersion });
       } catch (err) {
         throw new Error(`Failed to build shielded state: ${(err as Error).message}`);
       }

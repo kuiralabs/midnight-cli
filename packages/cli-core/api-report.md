@@ -1356,6 +1356,7 @@ export interface ShieldedCachedOptions {
     timeoutMs?: number;
     forceFresh?: boolean;
     chainId?: string;
+    chainProtocolVersion?: bigint | null;
     root: string;
 }
 export interface ShieldedTransferParams extends WalletSyncHooks {

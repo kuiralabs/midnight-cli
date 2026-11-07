@@ -173,6 +173,12 @@ export interface ShieldedCachedOptions {
   forceFresh?: boolean;
   /** Current chain genesis hash — stored on save and checked on load (chain-reset guard). */
   chainId?: string;
+  /**
+   * The chain tip's protocol version, read before the events; null or absent
+   * when unknown. On a chain that forked from ledger 8, a read caught up past
+   * the fork ends on ledger 9 even when no zswap event after the fork exists yet.
+   */
+  chainProtocolVersion?: bigint | null;
   /** The state root the cache lives under. */
   root: string;
 }

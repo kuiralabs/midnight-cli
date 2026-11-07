@@ -4,7 +4,7 @@
 // shielded faucet (or when asked).
 
 import { type Host, throwIfCancelled, UsageError, detectNetworkFromAddress, isNamedOnlyNetwork, NetworkNotNamedError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core';
-import { assertLedgerSupported, fetchProtocolVersion, getChainGenesisHash } from '@kuiralabs/midnight-chain';
+import { checkLedgerSupported, fetchProtocolVersion, getChainGenesisHash } from '@kuiralabs/midnight-chain';
 import { saveShieldedAddress } from '../wallet-config.ts';
 import { seedOf, type WalletSource } from '../seed-resolver.ts';
 import { createEtaEstimator, formatSyncStatus } from '../sync-eta.ts';
@@ -155,13 +155,16 @@ export async function readWalletBalance(host: Host, source: WalletSource, option
       // keys (receives and spends) into a cache: ~50-70 s the first time on a
       // hosted network, incremental after. The chain id drops the cache when
       // the chain was reset.
-      await assertLedgerSupported(network, networkConfig, fetchProtocolVersion, signal);
+      // The tip's version also tells the reader when a read caught up on a forked chain is past its fork.
+      const chainProtocolVersion = await fetchProtocolVersion(networkConfig.indexer, signal);
+      checkLedgerSupported(network, chainProtocolVersion);
       // Null when the node can't say (the cache check is then skipped); a cancelled call stops here.
       const chainId = (await getChainGenesisHash(networkConfig.node, signal)) ?? undefined;
       const shieldedResult = await engine.readers.shieldedBalance(wallet.seed, network, networkConfig.indexerWS, {
         root,
         forceFresh,
         chainId,
+        chainProtocolVersion,
         signal,
         onProgress: (applied, highest) => steps.update(formatSyncStatus(eta.sample({ applied, highest, t: Date.now() }), 'Syncing shielded')),
       });

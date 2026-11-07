@@ -16,3 +16,16 @@ import { ProtocolVersion } from '@midnightntwrk/wallet-sdk';
  * it; no block falls between the two).
  */
 export const FORK_SCHEDULE: ProtocolVersion.ForkSchedule = ProtocolVersion.V9NativeForkSchedule;
+
+/** The ledger a local state or an indexer event belongs to, on a chain that forked from ledger 8 to ledger 9. */
+export type LedgerVersion = 8 | 9;
+
+/**
+ * The ledger of a protocol version, by the fork schedule the facade's wallets
+ * run on: ledger 8 below `forks.v9`, ledger 9 from it. The SDK's ledger-8
+ * variants own exactly that range, and hand over at the first event (or chain
+ * tip) reported at or above it.
+ */
+export function ledgerOfProtocolVersion(protocolVersion: bigint | number): LedgerVersion {
+  return BigInt(protocolVersion) < FORK_SCHEDULE.v9 ? 8 : 9;
+}

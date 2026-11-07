@@ -1,6 +1,6 @@
 // Cache for the indexer-direct shielded (zswap) reader.
 //
-// Persists a serialized `ZswapLocalState` + the last event id we applied to
+// Persists a serialized `ZswapLocalState` (ledger 8 or 9) + the last event id we applied to
 // disk, keyed by (network, shielded coin public key). On next run we restore the
 // state and resume the subscription from `lastAppliedEventId + 1` — delta-sync
 // instead of re-reading the full zswap event history (which is ~50-70s cold on
@@ -18,12 +18,20 @@ import { randomBytes } from 'node:crypto';
 import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { deriveShieldedSeed } from './derivation.ts';
-import { readShieldedBalanceDirect, type ShieldedDirectOptions } from './shielded-direct.ts';
+import { readShieldedBalanceDirect } from './shielded-direct.ts';
+import { type LedgerVersion } from './fork-schedule.ts';
+import {
+  deserializeShieldedLedgerState, serializeShieldedLedgerState, shieldedKeysFromSeed, type ShieldedLedgerState,
+} from './shielded-ledger-state.ts';
 import { fetchEventTip, isCursorBeyondTip } from '@kuiralabs/midnight-chain';
 
 // v2: ledger-9 states replace ledger-8 ones. Dev-preset localnets share a genesis
 // hash, so the chain-id guard can't keep a ledger-8 cache off a ledger-9 chain.
-const SHIELDED_CACHE_VERSION = 2;
+// v3: `ledgerVersion` names the state's ledger: a chain that forked from ledger 8
+// has a ledger-8 state until its sync passes the fork. Both ledgers serialize a
+// zswap local state under the same `zswap-local-state` codec, so the bytes can't
+// tell; the entry has to. Older entries are re-synced once.
+const SHIELDED_CACHE_VERSION = 3;
 
 interface ShieldedCacheFile {
   version: number;
@@ -33,11 +41,13 @@ interface ShieldedCacheFile {
   /** Genesis block hash — invalidates the cache on chain reset. Optional for back-compat. */
   chainId?: string;
   timestamp: string;
-  zswapState: string; // hex-encoded ZswapLocalState.serialize()
+  zswapState: string; // hex-encoded ZswapLocalState.serialize() of `ledgerVersion`
+  /** The ledger whose library reads `zswapState`. */
+  ledgerVersion: LedgerVersion;
 }
 
 export interface ShieldedCacheEntry {
-  state: ledger.ZswapLocalState;
+  state: ShieldedLedgerState;
   lastAppliedEventId: number;
 }
 
@@ -74,9 +84,10 @@ export function loadShieldedCache(
     if (parsed.coinPublicKeyHex !== pubkeyHex) return null;
     if (typeof parsed.lastAppliedEventId !== 'number') return null;
     if (typeof parsed.zswapState !== 'string') return null;
+    if (parsed.ledgerVersion !== 8 && parsed.ledgerVersion !== 9) return null;
     if (expectedChainId && parsed.chainId && parsed.chainId !== expectedChainId) return null;
 
-    const state = ledger.ZswapLocalState.deserialize(new Uint8Array(Buffer.from(parsed.zswapState, 'hex')));
+    const state = deserializeShieldedLedgerState(parsed.ledgerVersion, new Uint8Array(Buffer.from(parsed.zswapState, 'hex')));
     return { state, lastAppliedEventId: parsed.lastAppliedEventId };
   } catch {
     return null;
@@ -84,12 +95,12 @@ export function loadShieldedCache(
 }
 
 /**
- * Serialize a ZswapLocalState + lastAppliedEventId to disk atomically.
+ * Serialize a zswap state + lastAppliedEventId to disk atomically.
  */
 export function saveShieldedCache(
   network: string,
   pubkeyHex: string,
-  state: ledger.ZswapLocalState,
+  state: ShieldedLedgerState,
   lastAppliedEventId: number,
   root: string,
   chainId?: string,
@@ -100,7 +111,8 @@ export function saveShieldedCache(
     coinPublicKeyHex: pubkeyHex,
     lastAppliedEventId,
     timestamp: new Date().toISOString(),
-    zswapState: Buffer.from(state.serialize()).toString('hex'),
+    zswapState: Buffer.from(serializeShieldedLedgerState(state)).toString('hex'),
+    ledgerVersion: state.ledgerVersion,
     ...(chainId ? { chainId } : {}),
   };
 
@@ -137,8 +149,9 @@ export async function readShieldedBalanceCached(
   indexerWS: string,
   options: ShieldedCachedOptions,
 ): Promise<ShieldedBalanceResult> {
-  const secretKeys = ledger.ZswapSecretKeys.fromSeed(deriveShieldedSeed(seedBuffer));
-  const pubkeyHex = secretKeys.coinPublicKey;
+  const keys = shieldedKeysFromSeed(deriveShieldedSeed(seedBuffer));
+  // The same key on both ledgers; the ledger-9 one names the cache entry.
+  const pubkeyHex = keys.v9.coinPublicKey;
 
   // State resumed from another indexer's event ids would replay the wrong events.
   bindCachesToIndexer(network, indexerWS, options.root);
@@ -150,9 +163,10 @@ export async function readShieldedBalanceCached(
   }
   const startFromId = cached ? cached.lastAppliedEventId + 1 : 0;
 
-  const result = await readShieldedBalanceDirect(secretKeys, indexerWS, {
+  const result = await readShieldedBalanceDirect(keys, indexerWS, {
     initialState: cached?.state,
     startFromId,
+    chainProtocolVersion: options.chainProtocolVersion,
     onProgress: options.onProgress,
     signal: options.signal,
     timeoutMs: options.timeoutMs,
@@ -164,10 +178,13 @@ export async function readShieldedBalanceCached(
   });
 
   // Only write if we advanced or this is a first sync. If we had a cache and zero
-  // new events arrived, leave the on-disk file untouched.
+  // new events arrived, leave the on-disk file untouched. A first sync that
+  // applied nothing is kept only when it is complete (an empty zswap timeline):
+  // cut short, its state is the tip's ledger 9 at cursor -1, while a forked
+  // chain's timeline starts with ledger-8 events, which the next read would refuse.
   if (result.lastAppliedEventId >= 0) {
     saveShieldedCache(network, pubkeyHex, result.state, result.lastAppliedEventId, options.root, options.chainId);
-  } else if (!cached) {
+  } else if (!cached && !result.partial) {
     saveShieldedCache(network, pubkeyHex, result.state, -1, options.root, options.chainId);
   }
 
