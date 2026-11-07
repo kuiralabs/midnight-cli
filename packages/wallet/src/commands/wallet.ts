@@ -2,7 +2,7 @@
 // Subcommands: generate, list, use, info, remove
 
 import * as fs from 'fs';
-import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, UsageError, CancelledError, throwIfCancelled, resolveNetworkName, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, MINIMAL_FLAG, UsageError, CancelledError, throwIfCancelled, resolveNetworkName, type CallContext } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, divider, formatAddress, bold, yellow, dim, green, teal } from '@kuiralabs/midnight-cli-core/ui';
 import { mnemonicToEntropy } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
@@ -96,12 +96,18 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
       shieldedAddresses,
       activeAddress,
       activeNetwork: networkName,
-      seed: seedBuffer.toString('hex'),
       file: savedPath,
       createdAt: created.createdAt,
       active: true,
     };
-    if (mnemonic) result.mnemonic = mnemonic;
+    // An MCP call (it carries MINIMAL_FLAG) never gets the secrets: they would land in the agent's context.
+    // There is no tool that reveals a seed; the person reads it at a terminal.
+    if (hasFlag(args, MINIMAL_FLAG)) {
+      result.seedShown = `No: the seed and mnemonic are not returned here. To see them, run at a terminal: midnight wallet seed ${name}`;
+    } else {
+      result.seed = seedBuffer.toString('hex');
+      if (mnemonic) result.mnemonic = mnemonic;
+    }
     ctx.output.result(result);
     return;
   }

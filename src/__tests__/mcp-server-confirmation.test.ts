@@ -267,3 +267,19 @@ describe('an agent\'s mistakes', () => {
     expect(refused).toMatchObject({ error: true, code: 'INVALID_ARGS', message: expect.stringContaining('Contract "nope" not found') });
   });
 });
+
+// The seed and mnemonic stay out of the agent's context: there is no tool that
+// reveals a seed, and generating one used to return both.
+describe('midnight_wallet_generate', () => {
+  it('returns no seed or mnemonic, says how the user sees them, and says it makes the wallet active', async () => {
+    const made = await call('midnight_wallet_generate', { name: 'erin' });
+    expect(made.error, String(made.message)).toBeUndefined();
+    expect(made).not.toHaveProperty('seed');
+    expect(made).not.toHaveProperty('mnemonic');
+    expect(JSON.stringify(made)).not.toMatch(/\b[0-9a-f]{64,}\b/);
+    expect(made).toMatchObject({ name: 'erin', active: true, seedShown: expect.stringContaining('midnight wallet seed erin') });
+    const { tools } = await client.listTools();
+    expect(tools.find((tool) => tool.name === 'midnight_wallet_generate')?.description).toContain('make it the active wallet');
+    await call('midnight_wallet_use', { name: 'alice' });
+  }, 60_000);
+});
