@@ -6,7 +6,7 @@
 
 import { spawn } from 'node:child_process';
 import { type ParsedArgs, hasFlag, getFlag, type CallContext, type CallOutput } from '@kuiralabs/midnight-cli-core';
-import { bold, dim, teal, yellow, white } from '@kuiralabs/midnight-cli-core/ui';
+import { bold, dim, teal, yellow, white, isColorEnabled } from '@kuiralabs/midnight-cli-core/ui';
 import { helpSpecs, type CommandSpec } from './help.ts';
 import { PKG_NAME, PKG_VERSION, PKG_REPOSITORY_URL } from '../lib/pkg.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
@@ -263,9 +263,14 @@ export function buildManual(): string {
 }
 
 // Tiny color helpers for the exit-code table where we want green/yellow on
-// the digit but no other color.
-function green(s: string): string { return `\x1b[32m${s}\x1b[0m`; }
-function yellowText(s: string): string { return `\x1b[33m${s}\x1b[0m`; }
+// the digit but no other color; plain text where colour is off.
+function green(s: string): string { return isColorEnabled() ? `\x1b[32m${s}\x1b[0m` : s; }
+function yellowText(s: string): string { return isColorEnabled() ? `\x1b[33m${s}\x1b[0m` : s; }
+
+/** The manual as plain text: no ANSI escape codes. */
+function plainManual(): string {
+  return buildManual().replace(/\x1b\[[0-9;]*m/g, '');
+}
 
 /** Pipe `text` through a pager when stdout is a TTY. Honors $PAGER. */
 async function pageOrPrint(output: CallOutput, text: string, usePager: boolean): Promise<void> {
@@ -298,19 +303,19 @@ async function pageOrPrint(output: CallOutput, text: string, usePager: boolean):
 export default async function manualCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const usePager = !hasFlag(args, 'no-pager');
 
-  // --json: emit a structured object so agents can ingest the manual.
+  // --json: emit a structured object so agents can ingest the manual, as plain text.
   if (hasFlag(args, 'json')) {
     ctx.output.result({
       name: PKG_NAME,
       version: PKG_VERSION,
-      manual: buildManual(),
+      manual: plainManual(),
     });
     return;
   }
 
   // --raw: skip ANSI, useful for piping to a file.
   if (hasFlag(args, 'raw')) {
-    ctx.output.stdout(buildManual().replace(/\x1b\[[0-9;]*m/g, ''));
+    ctx.output.stdout(plainManual());
     return;
   }
 

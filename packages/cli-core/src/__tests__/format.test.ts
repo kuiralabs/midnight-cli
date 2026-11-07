@@ -203,9 +203,11 @@ describe('formatAddress', () => {
 
   it('applies teal coloring when colors enabled', () => {
     delete process.env.NO_COLOR;
+    process.env.FORCE_COLOR = '1';
     const result = formatAddress('test_addr');
     expect(result).toContain('\x1b[');
     expect(result).toContain('test_addr');
+    delete process.env.FORCE_COLOR;
     process.env.NO_COLOR = '';
   });
 });

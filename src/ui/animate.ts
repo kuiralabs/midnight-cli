@@ -30,11 +30,13 @@ function writeLine(text: string): void {
 // `opts.animated` defaults to true. Pass false to render the final frame
 // statically (still respects colors). Used by `mn help` to play the
 // cinematic intro once per shell session and just print on follow-up calls.
+// `opts.write` is where it draws (stderr when not given; help gives stdout).
 export async function animateMaterialize(
   signal?: AbortSignal,
   sideContent?: string[],
-  opts?: { animated?: boolean },
+  opts?: { animated?: boolean; write?: (text: string) => void },
 ): Promise<void> {
+  const write = opts?.write ?? ((text: string) => { process.stderr.write(text); });
   const totalFrames = 20;
   const logoLines = MIDNIGHT_LOGO.split('\n');
   const logoLineCount = logoLines.length;
@@ -55,9 +57,9 @@ export async function animateMaterialize(
         ? bold(white(rightRaw))
         : rightRaw;
       if (colored) {
-        process.stderr.write(leftRaw ? white(leftRaw) + `\x1b[${rightCol}G` + right + '\n' : `\x1b[${rightCol}G` + right + '\n');
+        write(leftRaw ? white(leftRaw) + `\x1b[${rightCol}G` + right + '\n' : `\x1b[${rightCol}G` + right + '\n');
       } else {
-        process.stderr.write(left + right + '\n');
+        write(left + right + '\n');
       }
     }
     return;
@@ -69,15 +71,15 @@ export async function animateMaterialize(
       const left = j < frameLogoLines.length ? white(frameLogoLines[j]!) : '';
       const right = rightLines[j] ?? '';
       if (right) {
-        process.stderr.write(left + `\x1b[${rightCol}G` + right + '\x1b[K\n');
+        write(left + `\x1b[${rightCol}G` + right + '\x1b[K\n');
       } else {
-        process.stderr.write(left + '\x1b[K\n');
+        write(left + '\x1b[K\n');
       }
     }
   }
 
   function moveUp() {
-    process.stderr.write(`\x1b[${totalHeight}A`);
+    write(`\x1b[${totalHeight}A`);
   }
 
   // Phase 1: Materialize logo (right side blank)

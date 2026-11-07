@@ -7,7 +7,7 @@ import { parseArgs, hasFlag, assertKnownFlags, type CommandOutcome, classifyErro
 import { errorMessage, usageMessage, createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui';
 import { installedCommands } from './lib/installed-commands.ts';
 import { commandNeedsWalletSdk, dispatchCommand, processOutput } from './lib/command-dispatch.ts';
-import { PKG_VERSION } from './lib/pkg.ts';
+import { PKG_NAME, PKG_VERSION } from './lib/pkg.ts';
 import { migrateOldWallet } from '@kuiralabs/midnight-wallet';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
@@ -23,9 +23,9 @@ if (process.argv.includes('--mcp')) {
 const args = parseArgs();
 const jsonMode = hasFlag(args, 'json');
 
-// Global --version / -v handling
+// Global --version / -v handling: the version, or with --json the version as JSON.
 if (hasFlag(args, 'version') || hasFlag(args, 'v')) {
-  process.stdout.write(PKG_VERSION + '\n');
+  process.stdout.write((jsonMode ? JSON.stringify({ name: PKG_NAME, version: PKG_VERSION }) : PKG_VERSION) + '\n');
   process.exit(0);
 }
 

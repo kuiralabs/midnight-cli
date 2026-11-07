@@ -34,3 +34,10 @@ describe('--version flag', () => {
     expect(output).toBe(version);
   }, SPAWN_TIMEOUT_MS);
 });
+
+describe('--version --json', () => {
+  it('prints the version as one line of JSON', () => {
+    const { version } = require('../../package.json');
+    expect(JSON.parse(run(['--version', '--json']))).toEqual({ name: 'midnight-wallet-cli', version });
+  }, SPAWN_TIMEOUT_MS);
+});

@@ -1,7 +1,8 @@
 // help command — show usage for all commands or a specific command
-// Horizontal layout: logo on left, commands on right (all on stderr)
+// Horizontal layout: logo on left, commands on right; all help is on stdout
 // Agent-friendly: plain text when piped (non-TTY)
-// JSON mode: outputs capability manifest for agent self-discovery
+// JSON mode: outputs capability manifest for agent self-discovery (with
+// --agent, the agent manual too)
 // Every list of commands it shows comes from the command registry, and the
 // agent manual from the installed packages' guidance.
 
@@ -47,13 +48,13 @@ function buildRightColumn(): string[] {
 
 // Plain text output for non-TTY / agent-friendly
 function printPlainHelp(output: CallOutput): void {
-  output.stderr('\nCommands:\n\n');
+  output.stdout('\nCommands:\n\n');
   for (const [name, brief] of introBriefs(installedCommands)) {
-    output.stderr(`  ${name.padEnd(18)}${brief}\n`);
+    output.stdout(`  ${name.padEnd(18)}${brief}\n`);
   }
-  output.stderr('\n  Usage: midnight <command> (or: mn <command>)\n');
-  output.stderr('  --json flag available on all commands\n');
-  output.stderr('  midnight help --agent   AI & MCP reference\n\n');
+  output.stdout('\n  Usage: midnight <command> (or: mn <command>)\n');
+  output.stdout('  --json flag available on all commands\n');
+  output.stdout('  midnight help --agent   AI & MCP reference\n\n');
 }
 
 function printCommandHelp(output: CallOutput, spec: CommandSpec): void {
@@ -83,7 +84,8 @@ function printCommandHelp(output: CallOutput, spec: CommandSpec): void {
   output.stdout('\n');
 }
 
-function outputJsonManifest(ctx: CallContext): void {
+/** The capability manifest: every command's, or only `only`'s; with `agentManual`, the agent manual beside it. */
+function outputJsonManifest(ctx: CallContext, only: CommandSpec | undefined, agentManualText?: string): void {
   const manifest = {
     cli: {
       name: PKG_NAME,
@@ -92,7 +94,7 @@ function outputJsonManifest(ctx: CallContext): void {
       bin: ['midnight', 'mn'],
     },
     globalFlags: installedCommands.globalFlagsHelp.map(flag => ({ name: flag.name, description: flag.description })),
-    commands: helpSpecs().map(spec => ({
+    commands: (only === undefined ? helpSpecs() : [only]).map(spec => ({
       name: spec.name,
       description: spec.description,
       usage: spec.usage,
@@ -103,6 +105,7 @@ function outputJsonManifest(ctx: CallContext): void {
       errorSets: spec.errorSets,
       exitCodes: spec.exitCodes,
     })),
+    ...(agentManualText === undefined ? {} : { agentManual: agentManualText }),
   };
 
   ctx.output.result(manifest);
@@ -113,37 +116,46 @@ function printAgentManual(output: CallOutput): void {
   output.stdout(agentManual(installedCommands));
 }
 
+/** The help of the command named `name`; a UsageError naming the installed ones when there is none. */
+function specNamed(name: string): CommandSpec {
+  const specs = helpSpecs();
+  const spec = specs.find(s => s.name === name);
+  if (!spec) {
+    throw new UsageError(
+      `Unknown command: "${name}"\n` +
+      `Available commands: ${specs.map(s => s.name).join(', ')}`
+    );
+  }
+  return spec;
+}
+
 export default async function helpCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
+  // Specific command help: wallet help <command>. An unknown one is a usage
+  // error whatever else is asked, --json included.
+  const targetCommand = args.subcommand;
+  const spec = targetCommand === undefined ? undefined : specNamed(targetCommand);
+  const jsonMode = hasFlag(args, 'json');
+
   // Agent manual: comprehensive reference for AI agents
   if (hasFlag(args, 'agent')) {
-    printAgentManual(ctx.output);
+    if (jsonMode) outputJsonManifest(ctx, spec, agentManual(installedCommands));
+    else printAgentManual(ctx.output);
     return;
   }
 
   // JSON mode: output capability manifest
-  if (hasFlag(args, 'json')) {
-    outputJsonManifest(ctx);
+  if (jsonMode) {
+    outputJsonManifest(ctx, spec);
     return;
   }
 
-  // Specific command help: wallet help <command>
-  const targetCommand = args.subcommand;
-
-  if (targetCommand) {
-    const specs = helpSpecs();
-    const spec = specs.find(s => s.name === targetCommand);
-    if (!spec) {
-      throw new UsageError(
-        `Unknown command: "${targetCommand}"\n` +
-        `Available commands: ${specs.map(s => s.name).join(', ')}`
-      );
-    }
+  if (spec) {
     printCommandHelp(ctx.output, spec);
     return;
   }
 
   // General help: horizontal layout (logo + commands side by side)
-  if (!process.stderr.isTTY) {
+  if (!process.stdout.isTTY) {
     // Agent-friendly: plain text, no animation, no ANSI
     printPlainHelp(ctx.output);
     return;
@@ -159,7 +171,7 @@ export default async function helpCommand(args: ParsedArgs, ctx: CallContext): P
   const seen = hasShownIntroThisSession();
   const animated = forceIntro || (!skipIntro && !seen);
 
-  await animateMaterialize(undefined, rightColumn, { animated });
+  await animateMaterialize(undefined, rightColumn, { animated, write: ctx.output.stdout });
   if (animated) markIntroShown();
 }
 

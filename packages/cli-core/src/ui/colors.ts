@@ -1,5 +1,7 @@
 // ANSI 256-color palette for Midnight CLI
-// Respects NO_COLOR env var (https://no-color.org/)
+// Colour only at a terminal: on when stdout and stderr are both TTYs, so no
+// escape code reaches a pipe or a file. NO_COLOR (https://no-color.org/)
+// turns it off; FORCE_COLOR (other than 0 or false) turns it on anyway.
 
 const ESC = '\x1b[';
 const RESET = '\x1b[0m';
@@ -15,7 +17,10 @@ export const GREEN_CODE = 40;
 export const YELLOW_CODE = 226;
 
 export function isColorEnabled(): boolean {
-  return !('NO_COLOR' in process.env);
+  if ('NO_COLOR' in process.env) return false;
+  const force = process.env.FORCE_COLOR;
+  if (force !== undefined) return force !== '0' && force !== 'false';
+  return process.stdout.isTTY === true && process.stderr.isTTY === true;
 }
 
 // Low-level ANSI helpers
