@@ -43,7 +43,7 @@ Install the prerelease with npm 11 or older (or run it with `npx`; with npm 12, 
 | `midnight airdrop <amount> [--shielded] [--wallet <name\|file\|address>] [--network <name>] [--node <url>] [--indexer-ws <url>] [--proof-server <url>] [--verbose]` | Fund a wallet from the genesis wallet (undeployed network only) |
 | `midnight transfer <to> <amount> [--shielded [--force-shielded]] [--wallet <name\|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--verbose]` | Send NIGHT tokens to another address (unshielded or --shielded) |
 | `midnight dust <register\|status\|export> [--wallet <name\|file>] [--seed <hex> (export only)] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--no-cache (status only)]` | Register UTXOs for dust (fee token) generation, check status, or export a restorable snapshot |
-| `midnight config <get\|set\|unset> <key> [value] [--network <name>]` | Manage persistent config (default network, endpoints, etc.) |
+| `midnight config get [key] [--network <name>] \| midnight config <set\|unset> <key> [value] [--network <name>]` | Manage persistent config (default network, endpoints, etc.) |
 | `midnight cache clear [--network <name>] [--wallet <name\|file>]` | Manage wallet state cache (clear cached sync data) |
 | `midnight serve [--port <n>] [--wallet <name\|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all \| --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--allow-origin <origin>]... [--force-shielded] [--no-auto-approve-reads] [--verbose] [--json]` | Start DApp Connector server over WebSocket JSON-RPC |
 | `midnight test <create\|run\|list\|results> [options]` | Generate and run E2E test suites for Midnight dApps |

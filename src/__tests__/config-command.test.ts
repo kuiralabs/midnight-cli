@@ -53,10 +53,37 @@ describe('config command — error handling', () => {
     await expect(cliCall(configCommand, args)).rejects.toThrow('Usage:');
   });
 
-  it('throws when key is missing for get', async () => {
-    const args = parseArgs(['config', 'get']);
-    await expect(cliCall(configCommand, args)).rejects.toThrow('Missing config key');
-    await expect(cliCall(configCommand, args)).rejects.toThrow('Valid keys:');
+  // Was a usage error: `config get` alone now lists the config.
+  it('lists every value for get with no key, the project id masked as get shows it', async () => {
+    await cliCall(configCommand, parseArgs(['config', 'set', 'blockfrost-project-id', 'nightpreprodAbCdEfGhIjKlMnOpQrStUvWxYz012']));
+    await cliCall(configCommand, parseArgs(['config', 'set', 'node', 'ws://127.0.0.1:29944']));
+    io.clearStdout();
+    await cliCall(configCommand, parseArgs(['config', 'get']));
+    const listed = io.stdout();
+    expect(listed).not.toContain('nightpreprodAbCdEfGhIjKlMnOpQrStUvWxYz012');
+    expect(listed.trim().split('\n').map((line) => line.split(/\s{2,}/))).toEqual([
+      ['network', 'undeployed'],
+      ['proof-server', '(not set)'],
+      ['node', 'ws://127.0.0.1:29944'],
+      ['indexer-ws', '(not set)'],
+      ['wallet', '(not set)'],
+      ['blockfrost-project-id', expect.stringMatching(/^nightpreprod.*\(preprod\)$/)],
+      ['sdk-set', '(not set)'],
+    ]);
+    // Each as `config get <key>` shows it.
+    io.clearStdout();
+    await cliCall(configCommand, parseArgs(['config', 'get', 'blockfrost-project-id']));
+    expect(listed).toContain(io.stdout().trim());
+  });
+
+  it('lists the values in JSON, and only a network\'s with --network', async () => {
+    await cliCall(configCommand, parseArgs(['config', 'set', 'node', 'ws://n.example', '--network', 'preview']));
+    io.clearStdout();
+    await cliCall(configCommand, parseArgs(['config', 'get', '--json']));
+    expect(JSON.parse(io.stdout())).toMatchObject({ action: 'get', values: { network: 'undeployed', node: '(not set)', wallet: '(not set)' } });
+    io.clearStdout();
+    await cliCall(configCommand, parseArgs(['config', 'get', '--network', 'preview', '--json']));
+    expect(JSON.parse(io.stdout())).toEqual({ action: 'get', network: 'preview', values: { 'proof-server': '(not set)', node: 'ws://n.example', 'indexer-ws': '(not set)', 'blockfrost-project-id': '(not set)', 'sdk-set': '(not set)' } });
   });
 
   it('throws when key is missing for set', async () => {

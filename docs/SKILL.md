@@ -202,6 +202,7 @@ A tool's description ends with the codes it can fail with: its own, and sets of 
 | offers | `NOT_AN_OFFER`, `TERMS_MISMATCH` |
 | chain | `UNSUPPORTED_LEDGER`, `LOCAL_STACK_UNREACHABLE` |
 | contract | `CONTRACT_NOT_COMPILED`, `CONTRACT_INFO_INVALID`, `NO_NODE_RUNTIME` |
+| account | `NO_ACCOUNT`, `ACCOUNT_KEYS_UNAVAILABLE` |
 
 ## When to use which network
 

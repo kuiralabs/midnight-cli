@@ -1,9 +1,16 @@
 // The `swap` command, described once.
 
-import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget } from '@kuiralabs/midnight-cli-core';
+import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget, UsageError } from '@kuiralabs/midnight-cli-core';
 import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { OPENS_WALLET } from './wallet.codes.ts';
+
+/** Where `swap make` writes the offer file for these parameters, as an absolute path: `out` from the working directory, else offer-<id>.json there. */
+function offerFileTarget(params: Readonly<Record<string, unknown>>): string {
+  return typeof params.out === 'string' && params.out !== '' ? resolve(params.out) : join(process.cwd(), 'offer-<id>.json');
+}
 
 /** The terms a swap request states, as the maker gives and wants them. */
 function describeTerms(params: Readonly<Record<string, unknown>>): string {
@@ -177,11 +184,14 @@ export const swapDefinition: CommandDefinition = {
         confirmation: {
           describe: (params) => {
             const { network, wallet } = confirmationTarget(params);
-            return `Offer ${describeTerms(params)} from wallet ${wallet} on ${network}, splitting a coin first (a fee in Dust) when none is worth exactly the amount given; that coin stays committed until the offer is taken`;
+            return `Offer ${describeTerms(params)} from wallet ${wallet} on ${network}, splitting a coin first (a fee in Dust) when none is worth exactly the amount given; that coin stays committed until the offer is taken. The offer file is written to ${offerFileTarget(params)}`;
           },
-          async check(_params, call) {
+          async check(params, call) {
             const { prepareMake } = await import('../lib/swap/request.ts');
             prepareMake(call.argv(), call.host.paths().stateRoot, call.host, new Date());
+            // As the command refuses it, before a token is given: an offer file is never written over another.
+            const target = offerFileTarget(params);
+            if (typeof params.out === 'string' && existsSync(target)) throw new UsageError(`${target} already exists; an offer file is never written over another`);
           },
         },
         order: 40,

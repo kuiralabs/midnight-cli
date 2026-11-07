@@ -225,6 +225,30 @@ describe('midnight_wallet_generate with force', () => {
   });
 });
 
+// Regression: what the user confirmed for swap_make didn't say where the offer file would be written.
+describe('midnight_swap_make', () => {
+  const terms = { give: '10', 'give-token': 'aa'.repeat(32), want: '7', 'want-token': 'bb'.repeat(32), wallet: 'alice', network: 'undeployed', ...ENDPOINTS };
+
+  it('names where the offer file is written: out as an absolute path, else offer-<id>.json in the server\'s folder', async () => {
+    const out = path.join(home, 'offers', 'mine.json');
+    const named = await call('midnight_swap_make', { ...terms, out });
+    expect(named.error, String(named.message)).toBeUndefined();
+    expect(named.description).toBe(`Offer 10 of token ${'aa'.repeat(32)} for 7 of token ${'bb'.repeat(32)} from wallet alice on undeployed, splitting a coin first (a fee in Dust) when none is worth exactly the amount given; that coin stays committed until the offer is taken. The offer file is written to ${out}${VIA}`);
+    const relative = await call('midnight_swap_make', { ...terms, out: 'mine.json' });
+    expect(relative.description).toContain(`The offer file is written to ${path.join(REPO, 'mine.json')}${VIA}`);
+    const unnamed = await call('midnight_swap_make', terms);
+    expect(unnamed.description).toContain(`The offer file is written to ${path.join(REPO, 'offer-<id>.json')}${VIA}`);
+  });
+
+  it('refuses an out that exists before any token is given', async () => {
+    const out = path.join(home, 'taken.json');
+    fs.writeFileSync(out, '{}');
+    const refused = await call('midnight_swap_make', { ...terms, out });
+    expect(refused).toMatchObject({ error: true, code: 'INVALID_ARGS', message: `${out} already exists; an offer file is never written over another` });
+    expect(refused.token).toBeUndefined();
+  });
+});
+
 // Regression: a token ran as whatever wallet was active when it was
 // confirmed, so switching the active wallet between the two steps spent from
 // a wallet the user never confirmed.

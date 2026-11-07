@@ -393,6 +393,16 @@ function assertScopeApplies(canonical: string, scope: NetworkName | undefined): 
   }
 }
 
+/**
+ * Every config value as `getConfigValue` shows it (the Blockfrost project id
+ * masked), key by key. With `scope`, only the keys a network scopes
+ * (endpoints, the project id, the SDK set), for that network.
+ */
+export function listConfigValues(configDir: string, scope?: NetworkName): Record<string, string> {
+  const keys = VALID_CONFIG_KEYS.filter((key) => scope === undefined || ENDPOINT_KEYS.has(key) || key === PROJECT_ID_KEY || key === SDK_SET_KEY);
+  return Object.fromEntries(keys.map((key) => [key, getConfigValue(key, configDir, scope)]));
+}
+
 export function getValidConfigKeys(): readonly string[] {
   return VALID_CONFIG_KEYS;
 }

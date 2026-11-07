@@ -20,9 +20,9 @@ export const configDefinition: CommandDefinition = {
   ],
   help: {
     description: 'Manage persistent config (default network, endpoints, etc.)',
-    usage: 'midnight config <get|set|unset> <key> [value] [--network <name>]',
+    usage: 'midnight config get [key] [--network <name>] | midnight config <set|unset> <key> [value] [--network <name>]',
     flags: [
-      'get <key>           Read a config value',
+      'get [key]           Read a config value; with no key, every value',
       'set <key> <value>   Write a config value',
       'unset <key>         Reset a config value to its default',
       '',
@@ -49,6 +49,7 @@ export const configDefinition: CommandDefinition = {
       'own caches, so a switch never reads the other set\'s state.',
     ],
     examples: [
+      'midnight config get',
       'midnight config get network',
       'midnight config set network preprod',
       'midnight config set wallet alice',
@@ -60,7 +61,7 @@ export const configDefinition: CommandDefinition = {
       'midnight config set sdk-set beta --network undeployed',
       'midnight config unset proof-server',
     ],
-    jsonFields: { action: 'get, set, or unset', key: 'Config key name', value: 'Config value' },
+    jsonFields: { action: 'get, set, or unset', key: 'Config key name', value: 'Config value', values: 'get with no key: every key and its value, the project id masked (with --network, only the keys a network scopes)', network: 'get with no key and --network: the network the values are for' },
   },
   intro: { brief: 'Manage CLI config', order: 13 },
   needsWalletSdk: false,
@@ -73,8 +74,7 @@ export const configDefinition: CommandDefinition = {
         name: 'midnight_config_get',
         description: 'Read config.',
         annotations: { readOnlyHint: true, idempotentHint: true },
-        params: [{ name: 'key', schema: { type: 'string' } }, { flag: 'network' }],
-        required: ['key'],
+        params: [{ name: 'key', schema: { type: 'string', description: 'The key to read; leave it out to read every value' } }, { flag: 'network' }],
         argv: { subcommand: 'get', positionals: ['key'], flags: ['network'] },
         order: 15,
       },
