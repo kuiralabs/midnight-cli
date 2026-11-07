@@ -1,8 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { DEFAULT_CONFIG_FILENAME, DIR_MODE, FILE_MODE, isValidWalletName } from './constants.ts';
+import { DEFAULT_CONFIG_FILENAME, DIR_MODE, FILE_MODE, WALLETS_DIR_NAME } from './constants.ts';
+import { assertValidWalletName } from './wallet-name.ts';
 import { blockfrostNetworks, checkProjectId, maskProjectId, networkOfProjectId } from './blockfrost.ts';
-import { type NetworkName, NetworkNotNamedError, SDK_SETS, getValidNetworkNames, isNamedOnlyNetwork, isValidNetworkName } from './network.ts';
+import { InvalidNetworkError, type NetworkName, NetworkNotNamedError, SDK_SETS, getValidNetworkNames, isNamedOnlyNetwork, isValidNetworkName } from './network.ts';
 import type { SdkSet } from './engine.ts';
 import { UsageError } from './errors.ts';
 
@@ -68,8 +69,20 @@ function resolveConfigKey(key: string): string {
 
 const ENDPOINT_KEYS: ReadonlySet<string> = new Set(['proof-server', 'node', 'indexer-ws']);
 
-function isValidUrl(value: string): boolean {
-  return /^(https?|wss?):\/\/\S+/.test(value);
+/** The URL schemes each endpoint is reached by: the node and the indexer's subscriptions over WebSocket, the proof server over HTTP. */
+const ENDPOINT_SCHEMES: Readonly<Record<keyof NetworkEndpointOverrides, readonly string[]>> = {
+  node: ['ws', 'wss'],
+  'indexer-ws': ['ws', 'wss'],
+  'proof-server': ['http', 'https'],
+};
+
+/** Refuses, as a usage error, a value for an endpoint key that is not a URL of a scheme that endpoint is reached by. */
+function assertEndpointUrl(key: keyof NetworkEndpointOverrides, value: string): void {
+  const schemes = ENDPOINT_SCHEMES[key];
+  const scheme = /^([a-z]+):\/\/\S+$/.exec(value)?.[1];
+  if (scheme === undefined || !schemes.includes(scheme)) {
+    throw new UsageError(`Invalid URL for "${key}": "${value}"\nMust start with ${schemes.map((s) => `${s}://`).join(' or ')}`);
+  }
 }
 
 function getConfigPath(configDir: string): string {
@@ -222,7 +235,7 @@ export function getConfigValue(key: string, configDir: string, scope?: NetworkNa
     return typeof value === 'string' ? value : '(not set)';
   }
 
-  throw new Error(
+  throw new UsageError(
     `Unknown config key: "${key}"\nValid keys: ${VALID_CONFIG_KEYS.join(', ')}`
   );
 }
@@ -263,19 +276,16 @@ export function setConfigValue(key: string, value: string, configDir: string, sc
   assertScopeApplies(canonical, scope);
 
   if (canonical === 'network') {
-    if (!isValidNetworkName(value)) {
-      throw new Error(
-        `Invalid network: "${value}"\nValid networks: ${getValidNetworkNames().join(', ')}`
-      );
-    }
+    // The saved network can't be one a command must name (mainnet), so the networks offered leave it out.
+    if (!isValidNetworkName(value)) throw new InvalidNetworkError(value, getValidNetworkNames().filter((name) => !isNamedOnlyNetwork(name)));
     if (isNamedOnlyNetwork(value)) throw new NetworkNotNamedError(value, 'it can\'t be the saved network, which was left as it was');
     migrateFlatEndpointsToScope(config, config.network);
     config.network = value;
   } else if (canonical === 'wallet') {
-    if (!isValidWalletName(value)) {
-      throw new Error(
-        `Invalid wallet name: "${value}"\nWallet name must be a simple name (no path separators, .json suffix, or special characters).`
-      );
+    assertValidWalletName(value);
+    // Refused like `midnight wallet use`: an active wallet with no file fails every command that opens it.
+    if (!fs.existsSync(path.join(configDir, WALLETS_DIR_NAME, `${value}.json`))) {
+      throw new UsageError(`Wallet "${value}" not found.\nRun "midnight wallet list" to see available wallets.`);
     }
     config.wallet = value;
   } else if (canonical === PROJECT_ID_KEY) {
@@ -288,11 +298,7 @@ export function setConfigValue(key: string, value: string, configDir: string, sc
     const target = scope ?? config.network;
     config.networks = { ...(config.networks ?? {}), [target]: { ...(config.networks?.[target] ?? {}), [SDK_SET_KEY]: value } };
   } else if (ENDPOINT_KEYS.has(canonical)) {
-    if (!isValidUrl(value)) {
-      throw new Error(
-        `Invalid URL for "${key}": "${value}"\nMust start with http://, https://, ws://, or wss://`
-      );
-    }
+    assertEndpointUrl(canonical as keyof NetworkEndpointOverrides, value);
     const k = canonical as keyof NetworkEndpointOverrides;
     const target = scope ?? config.network;
     const scoped: NetworkSettings = { ...(config.networks?.[target] ?? {}) };
@@ -301,7 +307,7 @@ export function setConfigValue(key: string, value: string, configDir: string, sc
     // A legacy flat key applies to the selected network only.
     if (target === config.network) delete config[k];
   } else {
-    throw new Error(
+    throw new UsageError(
       `Unknown config key: "${key}"\nValid keys: ${VALID_CONFIG_KEYS.join(', ')}`
     );
   }
@@ -355,7 +361,7 @@ export function unsetConfigValue(key: string, configDir: string, scope?: Network
       }
     }
   } else {
-    throw new Error(
+    throw new UsageError(
       `Unknown config key: "${key}"\nValid keys: ${VALID_CONFIG_KEYS.join(', ')}`
     );
   }

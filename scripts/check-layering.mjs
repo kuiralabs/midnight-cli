@@ -77,7 +77,7 @@ const HOMES = [
   // The SDK engines: each is the only code that imports its SDK set.
   ['engine', /^engine\//],
 
-  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|verbose|error-trim|command-flags|run-command|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|error-codes|wallet-cache|cache-indexer|reader-cache-files|connector-api|dust-wait|fee-limits|tx-serde|sign-data|approval|dust-balancing-plan|dust-registration-plan|shielded-policy|mainnet-refusal|wallet-session|sdk-layout|swap-offer|offer-envelope|open-offers|coin-picker|host|transport-failure|progress|network-target)\.ts$/],
+  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|verbose|error-trim|command-flags|run-command|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|error-codes|wallet-cache|cache-indexer|reader-cache-files|connector-api|dust-wait|fee-limits|tx-serde|sign-data|approval|dust-balancing-plan|dust-registration-plan|shielded-policy|mainnet-refusal|wallet-session|sdk-layout|swap-offer|offer-envelope|open-offers|coin-picker|host|transport-failure|progress|network-target|wallet-name|owner-only)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
   // What a host calls on its own process: the SDK rejection guard, the sync heap advice.
   ['core', /^process\//],

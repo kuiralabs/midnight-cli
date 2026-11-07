@@ -269,6 +269,7 @@ export interface RpcHandlerContext {
 }
 export declare const BALANCE_CHECK_TIMEOUT_MS = 60000;
 export declare const DASHBOARD_BASE_URL = "https://midnight-comp-tracker.vercel.app";
+export declare const DEFAULT_CONFIG_FILENAME = "config.json";
 export declare const DEFAULT_SERVE_PORT = 9932;
 export declare const DEFAULT_WALLET_FILENAME = "wallet.json";
 export declare const DEFAULT_WALLET_NAME = "default";
@@ -277,6 +278,7 @@ export declare const FILE_MODE = 384;
 export declare const GENESIS_SEED = "0000000000000000000000000000000000000000000000000000000000000001";
 export declare function isValidWalletName(name: string): boolean;
 export declare const LOCALNET_DIR_NAME = "localnet";
+export declare const MAX_WALLET_NAME_LENGTH = 64;
 export declare const MIDNIGHT_DIR = ".midnight";
 export declare const NATIVE_TOKEN_TYPE = "0000000000000000000000000000000000000000000000000000000000000000";
 export declare const SYNC_HEAP_MIN_GAIN_MB = 512;
@@ -290,6 +292,10 @@ export declare function readJsonIfPresent<T>(file: string): T | undefined;
 export declare function writeJsonDurably(file: string, value: unknown, { exclusive }?: {
     exclusive?: boolean;
 }): void;
+export declare function assertValidWalletName(name: string): void;
+export declare class InvalidWalletNameError extends UsageError {
+    constructor(name: string, where?: string, fix?: string);
+}
 export declare function formatWait(ms: number): string;
 export declare function dustShortError(have: bigint, needed: bigint, waitMs: number | null): DustRequiredError;
 export declare const OWN_COMMAND_DUST_WAIT_MS: number;

@@ -15,7 +15,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { servePayer } from '@kuiralabs/midnight-connect';
-import { classifyError, asReported, trimAgentMessage, needsConfirmation, type CommandRun, type Host } from '@kuiralabs/midnight-cli-core';
+import { classifyError, asReported, trimAgentMessage, needsConfirmation, type CommandRun, type Host, UsageError } from '@kuiralabs/midnight-cli-core';
 import { withServerAdvice } from './lib/mcp/server-advice.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { createConfirmationStore } from './lib/mcp/confirmation.ts';
@@ -114,7 +114,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const token = typeof params.token === 'string' ? params.token : '';
     const pending = confirmationStore.redeem(token);
     if (!pending) {
-      return errorResponse(new Error('Unknown or expired confirmation token. The first-step tool call may need to be re-issued.'), call);
+      return errorResponse(new UsageError('Unknown or expired confirmation token. Call the first-step tool again for a new token.'), call);
     }
     return executeTool(pending.tool, pending.args, call);
   }

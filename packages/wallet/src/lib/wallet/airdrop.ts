@@ -63,7 +63,7 @@ export async function airdropNight(host: Host, options: AirdropNightOptions): Pr
 
   refuseOnMainnet(network, 'Airdrop', 'mainnet has no faucet and no genesis wallet to fund from', 'Fund a mainnet wallet by transferring NIGHT to it from another wallet.');
   if (network !== 'undeployed') {
-    throw new Error(
+    throw new UsageError(
       `Airdrop is only available on the "undeployed" network (local devnet).\n` +
       `Current network: "${network}"\n` +
       `On preprod/preview, use a faucet or transfer from another wallet.`
@@ -164,7 +164,7 @@ async function addressDestination(address: string, engines: HostEngines, network
   // The inverse mismatch (a shielded address, not asked for shielded) never
   // reaches here: airdropNight infers shielded from the prefix.
   if (shielded && !looksShielded) {
-    throw new Error(
+    throw new UsageError(
       `--shielded was passed but --wallet is an unshielded address.\n` +
       `Pass a shielded address (mn_shield-addr_...) or drop --shielded.\n` +
       `Got: ${address}`
@@ -174,7 +174,7 @@ async function addressDestination(address: string, engines: HostEngines, network
   const expectedPrefix = addressPrefix(shielded ? 'shielded' : 'unshielded', network);
 
   if (!address.startsWith(expectedPrefix)) {
-    throw new Error(
+    throw new UsageError(
       `Address does not match network "${network}".\n` +
       `Expected prefix: ${expectedPrefix}\n` +
       `Got: ${address}`
@@ -185,7 +185,7 @@ async function addressDestination(address: string, engines: HostEngines, network
     try {
       (await engines.for(network)).keys.assertAddress(address, 'shielded', network);
     } catch (err: any) {
-      throw new Error(`Invalid shielded address: ${err.message}`);
+      throw new UsageError(`Invalid shielded address: ${err.message}`);
     }
   }
   return address;

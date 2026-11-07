@@ -12,6 +12,9 @@ const TEST_DIR = path.join(os.tmpdir(), `midnight-cli-config-test-${process.pid}
 
 beforeEach(() => {
   fs.mkdirSync(TEST_DIR, { recursive: true });
+  // The wallets the tests make active: config set wallet takes only a wallet that exists.
+  fs.mkdirSync(path.join(TEST_DIR, 'wallets'));
+  for (const name of ['alice', 'bob']) fs.writeFileSync(path.join(TEST_DIR, 'wallets', `${name}.json`), '{}');
 });
 
 afterEach(() => {
@@ -251,6 +254,16 @@ describe('wallet config key', () => {
 
   it('rejects whitespace-only wallet name', () => {
     expect(() => setConfigValue('wallet', '   ', TEST_DIR)).toThrow('Invalid wallet name');
+  });
+
+  it('refuses a wallet with no file, as wallet use does, leaving the one set', () => {
+    setConfigValue('wallet', 'alice', TEST_DIR);
+    expect(() => setConfigValue('wallet', 'nope', TEST_DIR)).toThrow('Wallet "nope" not found');
+    expect(getConfigValue('wallet', TEST_DIR)).toBe('alice');
+  });
+
+  it('refuses a name longer than a wallet name may be', () => {
+    expect(() => setConfigValue('wallet', 'x'.repeat(65), TEST_DIR)).toThrow('at most 64');
   });
 
   it('returns (not set) when wallet is not configured', () => {

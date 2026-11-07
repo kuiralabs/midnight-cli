@@ -71,7 +71,7 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
   }
 
   if (fs.existsSync(targetPath) && !hasFlag(args, 'force')) {
-    throw new Error(
+    throw new UsageError(
       `Wallet "${name}" already exists: ${targetPath}\n` +
       `Use --force to overwrite.`
     );

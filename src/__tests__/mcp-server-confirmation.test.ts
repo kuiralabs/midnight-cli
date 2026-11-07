@@ -221,6 +221,7 @@ describe('midnight_wallet_generate with force', () => {
 
     expect(refused.pending).toBeUndefined();
     expect(String(refused.message)).toContain('Wallet "bob" already exists');
+    expect(refused.code).toBe('INVALID_ARGS');
   });
 });
 
@@ -241,6 +242,7 @@ describe('midnight_wallet_remove', () => {
 
     expect(refused.pending).toBeUndefined();
     expect(String(refused.message)).toContain('Cannot remove the active wallet "alice"');
+    expect(refused.code).toBe('INVALID_ARGS');
     expect(fs.existsSync(walletFile('alice'))).toBe(true);
   });
 
@@ -250,5 +252,18 @@ describe('midnight_wallet_remove', () => {
 
     expect(done).toMatchObject({ wallet: 'bob', removed: true });
     expect(fs.existsSync(walletFile('bob'))).toBe(false);
+  });
+});
+
+// Mistakes in what the agent passed are INVALID_ARGS, as on the command line, not UNKNOWN.
+describe('an agent\'s mistakes', () => {
+  it('a confirmation token that was never given', async () => {
+    const refused = await call('midnight_confirm_operation', { token: 'not-a-token' });
+    expect(refused).toMatchObject({ error: true, code: 'INVALID_ARGS', message: expect.stringContaining('Unknown or expired confirmation token') });
+  });
+
+  it('a contract name the project does not have', async () => {
+    const refused = await call('midnight_contract_inspect', { path: dappDir, name: 'nope' });
+    expect(refused).toMatchObject({ error: true, code: 'INVALID_ARGS', message: expect.stringContaining('Contract "nope" not found') });
   });
 });

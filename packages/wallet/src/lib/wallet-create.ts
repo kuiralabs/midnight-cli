@@ -6,7 +6,7 @@
 import * as path from 'path';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { type Engine, isValidWalletName, UsageError } from '@kuiralabs/midnight-cli-core';
+import { type Engine, assertValidWalletName, UsageError } from '@kuiralabs/midnight-cli-core';
 import { writeSealedWallet, setActiveWallet, type WalletPublic } from './wallet-config.ts';
 import { getWalletsDir } from './wallet-paths.ts';
 
@@ -28,11 +28,7 @@ export interface CreatedWallet {
 
 /** Where the wallet called `name` is kept under the state root `root`. */
 export function walletFilePath(root: string, name: string): string {
-  if (!isValidWalletName(name)) {
-    throw new Error(
-      `Invalid wallet name: "${name}"\nWallet name must be a simple name (no path separators, .json suffix, or special characters).`
-    );
-  }
+  assertValidWalletName(name);
   return path.join(getWalletsDir(root), `${name}.json`);
 }
 

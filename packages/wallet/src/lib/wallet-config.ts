@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, isValidWalletName, getValidNetworkNames, type NetworkName, loadCliConfig, saveCliConfig, type EngineKeys, type HostEngines, isSealedSecret, openSecret, sealSecret, FileExistsError, writeJsonDurably, defineHostSlot, type Host, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, assertValidWalletName, isValidWalletName, InvalidWalletNameError, DEFAULT_CONFIG_FILENAME, UsageError, getValidNetworkNames, type NetworkName, loadCliConfig, saveCliConfig, type EngineKeys, type HostEngines, isSealedSecret, openSecret, sealSecret, FileExistsError, writeJsonDurably, defineHostSlot, type Host, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import { getWalletsDir } from './wallet-paths.ts';
 import { type PassphraseHost, type PassphraseSource, unlockPassphrase } from './passphrase.ts';
 
@@ -136,32 +136,33 @@ export function resolveWalletPath(root: string, nameOrPath?: string): string {
     if (looksLikePath(nameOrPath)) {
       return path.resolve(nameOrPath);
     }
+    assertValidWalletName(nameOrPath);
     return path.join(getWalletsDir(root), `${nameOrPath}.json`);
   }
 
   // No flag provided — check config for active wallet
-  const config = loadCliConfig(root);
-  const activeWallet = config.wallet ?? DEFAULT_WALLET_NAME;
-  return path.join(getWalletsDir(root), `${activeWallet}.json`);
+  return path.join(getWalletsDir(root), `${getActiveWalletName(root)}.json`);
 }
 
 /**
- * Get the active wallet name from the config under the state root `root` (or default).
+ * Get the active wallet name from the config under the state root `root` (or
+ * default). A name the config holds is checked like one given on the command
+ * line: written there by hand, `"../../x"` would name a file anywhere.
  */
 export function getActiveWalletName(root: string): string {
   const config = loadCliConfig(root);
-  return config.wallet ?? DEFAULT_WALLET_NAME;
+  if (config.wallet === undefined) return DEFAULT_WALLET_NAME;
+  if (!isValidWalletName(config.wallet)) {
+    throw new InvalidWalletNameError(config.wallet, `The active wallet in ${path.join(root, DEFAULT_CONFIG_FILENAME)}`, 'Choose a wallet with: midnight wallet use <name>');
+  }
+  return config.wallet;
 }
 
 /**
  * Set the active wallet in the config under the state root `root`.
  */
 export function setActiveWallet(root: string, name: string): void {
-  if (!isValidWalletName(name)) {
-    throw new Error(
-      `Invalid wallet name: "${name}"\nWallet name must be a simple name (no path separators, .json suffix, or special characters).`
-    );
-  }
+  assertValidWalletName(name);
   const walletPath = path.join(getWalletsDir(root), `${name}.json`);
   if (!fs.existsSync(walletPath)) {
     throw new WalletNotFoundError(
@@ -280,11 +281,7 @@ export async function findWalletByAddress(
  * it is neither the active wallet nor the only one. Returns its file.
  */
 export function assertWalletRemovable(root: string, name: string): string {
-  if (!isValidWalletName(name)) {
-    throw new Error(
-      `Invalid wallet name: "${name}"\nWallet name must be a simple name (no path separators, .json suffix, or special characters).`
-    );
-  }
+  assertValidWalletName(name);
   const walletsDir = getWalletsDir(root);
   const walletPath = path.join(walletsDir, `${name}.json`);
 
@@ -296,7 +293,7 @@ export function assertWalletRemovable(root: string, name: string): string {
 
   const activeName = getActiveWalletName(root);
   if (name === activeName) {
-    throw new Error(
+    throw new UsageError(
       `Cannot remove the active wallet "${name}".\n` +
       `Switch to another wallet first: midnight wallet use <other-wallet>`
     );
@@ -304,7 +301,7 @@ export function assertWalletRemovable(root: string, name: string): string {
 
   const remaining = fs.readdirSync(walletsDir).filter(f => f.endsWith('.json'));
   if (remaining.length <= 1) {
-    throw new Error(
+    throw new UsageError(
       `Cannot remove "${name}" — it is the only wallet.\n` +
       `Create another wallet first: midnight wallet generate <name>`
     );
@@ -350,12 +347,12 @@ export async function loadWalletConfig(walletPath: string, engines: HostEngines)
   try {
     raw = JSON.parse(content);
   } catch {
-    throw new Error(`Invalid JSON in wallet file: ${resolvedPath}`);
+    throw new UsageError(`Invalid JSON in wallet file: ${resolvedPath}`);
   }
 
   if (isSealedSecret(raw.sealed)) {
     if (!raw.addresses || typeof raw.addresses !== 'object' || typeof raw.createdAt !== 'string') {
-      throw new Error(`Wallet file is missing required fields (addresses, createdAt): ${resolvedPath}`);
+      throw new UsageError(`Wallet file is missing required fields (addresses, createdAt): ${resolvedPath}`);
     }
     const sealedConfig: WalletConfig = { addresses: raw.addresses, createdAt: raw.createdAt, isSealed: true };
     if (raw.shieldedAddresses && typeof raw.shieldedAddresses === 'object') sealedConfig.shieldedAddresses = raw.shieldedAddresses;
@@ -371,7 +368,7 @@ export async function loadWalletConfig(walletPath: string, engines: HostEngines)
     }
     const missing = requiredOld.filter((f) => !raw[f]);
     if (missing.length > 0) {
-      throw new Error(
+      throw new UsageError(
         `Wallet file is missing required fields (${missing.join(', ')}): ${resolvedPath}`
       );
     }

@@ -5,15 +5,19 @@ import { type ParsedArgs, getFlag, hasFlag, resolveNetworkName, type CallContext
 import { keyValue, divider, formatAddress, dim } from '@kuiralabs/midnight-cli-core/ui';
 import { resolveSeed } from '../lib/seed-resolver.ts';
 
+/** The highest unhardened HD key index. */
+const MAX_KEY_INDEX = 2 ** 31 - 1;
+
 export default async function addressCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // `address` is a seed-derivation tool with no active-wallet notion → requireExplicit.
   const root = ctx.config.paths.stateRoot;
   const seedBuffer = await resolveSeed(args, root, ctx.host, { requireExplicit: true, label: 'address' });
 
   const indexStr = getFlag(args, 'index');
-  const keyIndex = indexStr !== undefined ? parseInt(indexStr, 10) : 0;
-  if (isNaN(keyIndex) || keyIndex < 0 || !Number.isInteger(Number(indexStr ?? '0'))) {
-    throw new UsageError('Key index must be a non-negative integer');
+  // An HD key index is below 2^31: the indexes above are hardened ones, which the SDK refuses.
+  const keyIndex = indexStr === undefined ? 0 : /^\d+$/.test(indexStr) ? Number(indexStr) : Number.NaN;
+  if (!Number.isSafeInteger(keyIndex) || keyIndex > MAX_KEY_INDEX) {
+    throw new UsageError(`Key index must be a non-negative integer, at most ${MAX_KEY_INDEX}`);
   }
 
   const networkName = resolveNetworkName({ args, configDir: root });

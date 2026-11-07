@@ -3,6 +3,7 @@
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
+import { UsageError } from '@kuiralabs/midnight-cli-core';
 
 // ── Types ──
 
@@ -94,7 +95,7 @@ export function findContractInfo(startDir: string, contractName?: string): { inf
     let chosen: string;
     if (contractName) {
       if (!present.includes(contractName)) {
-        throw new Error(
+        throw new UsageError(
           `Contract "${contractName}" not found in ${managedDir}\n` +
           `Available: ${present.join(', ')}`
         );

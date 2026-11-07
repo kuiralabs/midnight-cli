@@ -37,7 +37,7 @@ export default async function generateCommand(args: ParsedArgs, ctx: CallContext
     : getDefaultWalletPath(root);
 
   if (fs.existsSync(targetPath) && !hasFlag(args, 'force')) {
-    throw new Error(
+    throw new UsageError(
       `Wallet file already exists: ${targetPath}\n` +
       `Use --force to overwrite, or --output <file> to save to a different path.`
     );
