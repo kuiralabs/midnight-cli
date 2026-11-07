@@ -81,6 +81,13 @@ export function createSdkWarningRouter(): SdkWarningRouter {
 export interface SdkWarningCalls {
   /** Runs one call, its warnings given to `run`. */
   run<T>(run: (warnings: CallSdkWarnings) => Promise<T>): Promise<T>;
+  /**
+   * The warnings of the call running where this is asked, when the runner
+   * knows (the process guard does, by the identity it gives each call);
+   * undefined outside any call, where the identity was lost, or when the
+   * runner can't tell.
+   */
+  current?(): CallSdkWarnings | undefined;
 }
 
 /**

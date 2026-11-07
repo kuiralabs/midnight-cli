@@ -11,7 +11,7 @@
 // (runCommand, lib/run-command.ts); the MCP server builds one per request
 // (captureCommand, the same module).
 
-import { isVerbose, type ParsedArgs } from './argv.ts';
+import { hasFlag, isVerbose, type ParsedArgs } from './argv.ts';
 import { CancelledError } from './errors.ts';
 import { resolveNetworkName } from './resolve-network.ts';
 import type { Payer } from './payer.ts';
@@ -72,6 +72,13 @@ export interface CallContext<Protector = unknown> {
   readonly payer?: Payer;
   /** What `wallet protect` seals besides the wallets, when its caller gives them. */
   readonly protectors?: readonly Protector[];
+  /**
+   * A notice for the person about this call (a fallback taken, something
+   * moved, a note on what was asked): a line on stderr; with --json, one of
+   * the result's `warnings` instead. The host's notices given while the call
+   * runs are its warnings too.
+   */
+  warn(message: string): void;
 }
 
 /** What a handler may return: the exit code its call ends with, which the shell sets. */
@@ -130,20 +137,49 @@ export interface CallParts<Protector = unknown> {
   readonly protectors?: readonly Protector[];
 }
 
+/** A notice as a JSON warning: its words, without colour or the indent it is shown with. */
+const warningText = (line: string): string => line.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim();
+
 /** The context of one call, from what its runner gives. */
 export function createCallContext<Protector = unknown>(parts: CallParts<Protector>): CallContext<Protector> {
-  return {
+  // With --json, the call's notices are its result's warnings; without, they are shown on stderr as they come.
+  const jsonMode = hasFlag(parts.args, 'json');
+  const warnings: string[] = [];
+  const keep = (line: string): void => {
+    const text = warningText(line);
+    if (text !== '') warnings.push(text);
+  };
+  const output = callOutput(parts.output);
+  // A diagnostic line (--verbose) goes through the host's notices but is no warning.
+  let writingDiagnostic = false;
+  const diagnosticSink = (line: string): void => {
+    writingDiagnostic = true;
+    try { parts.host.notice(line); } finally { writingDiagnostic = false; }
+  };
+  const ctx: CallContext<Protector> = {
     signal: parts.signal,
-    output: callOutput(parts.output),
+    output: {
+      // The warnings given before the result go with it, present only when there are some.
+      result: (data) => output.result(warnings.length === 0 ? data : { ...data, warnings: [...warnings] }),
+      stdout: output.stdout,
+      stderr: output.stderr,
+    },
     // A command's spinners draw through the call's stderr: mn's is the process's, a program's is its own.
     progress: createProgress(parts.onProgress, (text) => parts.output.stderr(text)),
-    diagnostics: callDiagnostics(isVerbose(parts.args), parts.host.notice),
+    diagnostics: callDiagnostics(isVerbose(parts.args), diagnosticSink),
     sdkWarnings: parts.sdkWarnings ?? createSdkWarningRouter().openCall().warnings,
     config: { settings: parts.host.settings(), paths: parts.host.paths() },
     host: parts.host,
     ...(parts.payer === undefined ? {} : { payer: parts.payer }),
     ...(parts.protectors === undefined ? {} : { protectors: parts.protectors }),
+    warn(message) {
+      if (jsonMode) keep(message);
+      else parts.output.stderr(message.endsWith('\n') ? message : `${message}\n`);
+    },
   };
+  // With --json, the host's notices while the call runs are kept as its warnings.
+  if (jsonMode) parts.host.collectNotices(ctx.sdkWarnings, (line) => { if (!writingDiagnostic) keep(line); });
+  return ctx;
 }
 
 /** Runs `handler` for the call; a call already cancelled never starts. */

@@ -153,6 +153,8 @@ Hooks and parsers may rely on substring matching against these.
 Each entry shows the canonical shape. Fields marked **alias** are
 backward-compatibility mirrors of another field in the same object.
 
+Every result may carry `warnings`: an array of strings, the notices the command would print on stderr without `--json` (for example that Dust on a hosted network was read in WASM, without the native sidecar, and why; or that a contract's private-state store was moved), without colour or indent, in the order they were given. It is present only when there is at least one, and only on a result, not on an error. MCP tool results carry it the same way.
+
 ### `mn balance <address> --json`
 
 ```jsonc
@@ -291,7 +293,7 @@ networks, with the active wallet marked. Shape stable.
 
 ### `mn config get <key>`
 
-Plain stdout: the raw value as a string, no JSON wrapper. With `--json`: `{"action": "get", "key": "...", "value": "..."}` (`config set` and `config unset` answer the same shape with `"action": "set"` / `"unset"`).
+Plain stdout: the raw value as a string, no JSON wrapper. With `--json`: `{"action": "get", "key": "...", "value": "..."}` (`config set` and `config unset` answer the same shape with `"action": "set"` / `"unset"`). `mn config get` with no key: one `key  value` line per key; with `--json`, `{"action": "get", "values": {"network": "...", ...}}` (and `"network"` with `--network`, which lists only the keys a network scopes). The Blockfrost project id is masked in both.
 
 ## MCP tool names
 

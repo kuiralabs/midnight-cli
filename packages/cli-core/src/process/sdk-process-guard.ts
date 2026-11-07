@@ -31,7 +31,7 @@
 // one call listening, or to none.
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { createSdkWarningRouter, sdkTransientWarning, type SdkWarningCalls, type SdkWarningListener } from '../lib/sdk-warnings.ts';
+import { createSdkWarningRouter, sdkTransientWarning, type CallSdkWarnings, type SdkWarningCalls, type SdkWarningListener } from '../lib/sdk-warnings.ts';
 
 export interface SdkProcessGuardOptions {
   /** While a call listens, hand the SDK's Wallet.* console.error traces to it and drop polkadot-js's RPC-CORE lines. Off by default: the console is left alone. */
@@ -124,11 +124,18 @@ export function installSdkProcessGuard(options: SdkProcessGuardOptions = {}): Sd
     console.log = patchedLog;
   }
 
+  // Each running call's warnings, by its identity: which call a line raised now belongs to.
+  const running = new Map<number, CallSdkWarnings>();
   return {
     calls: {
       run: (run) => {
         const call = router.openCall();
-        return runningCall.run(call.id, () => run(call.warnings));
+        running.set(call.id, call.warnings);
+        return runningCall.run(call.id, () => run(call.warnings)).finally(() => running.delete(call.id));
+      },
+      current: () => {
+        const id = runningCall.getStore();
+        return id === undefined ? undefined : running.get(id);
       },
     },
     uninstall() {

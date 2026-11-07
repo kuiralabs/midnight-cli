@@ -102,6 +102,7 @@ export interface CallContext<Protector = unknown> {
     readonly host: Host;
     readonly payer?: Payer;
     readonly protectors?: readonly Protector[];
+    warn(message: string): void;
 }
 export declare function callDiagnostics(verbose: boolean, write: (line: string) => void): CallDiagnostics;
 export interface CallOutput {
@@ -581,6 +582,7 @@ export interface Host {
     settings(): Settings;
     paths(): HostPaths;
     notice(line: string): void;
+    collectNotices(call: CallSdkWarnings, collect: (line: string) => void): void;
     readonly prompter: Prompter | null;
     readonly sdkWarnings: SdkWarningCalls;
     readonly engines: HostEngines;
@@ -796,6 +798,7 @@ export declare function sdkTransientWarning(value: unknown): {
 } | null;
 export interface SdkWarningCalls {
     run<T>(run: (warnings: CallSdkWarnings) => Promise<T>): Promise<T>;
+    current?(): CallSdkWarnings | undefined;
 }
 export declare function withCallSdkWarnings<T>(calls: SdkWarningCalls, given: CallSdkWarnings | undefined, work: (warnings: CallSdkWarnings) => Promise<T>): Promise<T>;
 export declare const PASSPHRASE_ENV = "MN_PASSPHRASE";

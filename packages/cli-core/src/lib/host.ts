@@ -11,7 +11,7 @@ import type { HostPaths } from './state-root.ts';
 import { NoStateRootError } from './state-root.ts';
 import { settingsFromEnvironment, type Settings } from './settings.ts';
 import type { Prompter } from './prompter.ts';
-import { createSdkWarningRouter, sdkWarningCallsOn, type SdkWarningCalls } from './sdk-warnings.ts';
+import { createSdkWarningRouter, sdkWarningCallsOn, type CallSdkWarnings, type SdkWarningCalls } from './sdk-warnings.ts';
 import { claimSdkSet, OtherSdkSetError, sdkSetOf, type Engine, type EngineLoader, type HostEngines, type SdkSet } from './engine.ts';
 import type { NetworkName } from './network.ts';
 
@@ -31,8 +31,15 @@ export interface Host {
   settings(): Settings;
   /** The state root and the user's home. Throws NoStateRootError when the host gave none. */
   paths(): HostPaths;
-  /** One line for the person, already formatted; dropped when the host takes none. */
+  /** One line for the person, already formatted; dropped when the host takes none. Also given to the call it came from, when that call collects them (collectNotices). */
   notice(line: string): void;
+  /**
+   * Gives the notices of the call whose SDK warnings are `call` to `collect`
+   * as well, while it runs: a --json call keeps them as its warnings. The call
+   * a notice comes from is the one the host's `sdkWarnings` runner says runs
+   * there (the process guard knows); a notice it can't place is not collected.
+   */
+  collectNotices(call: CallSdkWarnings, collect: (line: string) => void): void;
   /** Who answers questions (a passphrase, an approval); null when nobody can. */
   readonly prompter: Prompter | null;
   /** Where the SDK's warnings go, per call. */
@@ -69,13 +76,20 @@ export function createHost(options: HostOptions = {}): Host {
   const slots = new Map<HostSlot<unknown>, unknown>();
   const { paths, settings, notice, prompter = null } = options;
   const sdkWarnings = options.sdkWarnings ?? sdkWarningCallsOn(createSdkWarningRouter());
+  // The calls that collect their notices, by their SDK warnings: gone with the call.
+  const collectors = new WeakMap<CallSdkWarnings, (line: string) => void>();
   const host: Host = {
     settings: () => (settings === undefined ? UNSET : read(settings)),
     paths: () => {
       if (paths === undefined) throw new NoStateRootError();
       return read(paths);
     },
-    notice: (line) => notice?.(line),
+    notice: (line) => {
+      const call = sdkWarnings.current?.();
+      if (call !== undefined) collectors.get(call)?.(line);
+      notice?.(line);
+    },
+    collectNotices: (call, collect) => { collectors.set(call, collect); },
     prompter,
     sdkWarnings,
     engines: hostEngines(() => host, options.engineLoader),

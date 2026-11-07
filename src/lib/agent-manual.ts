@@ -112,6 +112,10 @@ Every command supports --json. When passed:
   - stdout receives a single line of JSON
   - stderr is fully suppressed (no spinners, no formatting)
   - Errors: {"error":true,"code":"...","message":"...","exitCode":N}
+  - "warnings": the notices the command would print on stderr without
+    --json (a hosted Dust read done in WASM, a store moved, ...), one
+    string each, in the order given; present only when there are some.
+    MCP tool results carry it too
 
 Usage: midnight <command> [args] --json
 
