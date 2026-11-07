@@ -132,6 +132,34 @@ export class NoSuchOfferError extends UsageError {
   }
 }
 
+/** The shortest prefix of an offer's id that names it. */
+export const OFFER_ID_MIN_PREFIX = 8;
+
+/**
+ * The wallet's open offer on `network` that `id` names (the whole id, or a
+ * prefix of OFFER_ID_MIN_PREFIX hex characters at least), from mn's record
+ * under the state root `root` alone: no wallet opens. Refuses an id that is
+ * not hex or too short, and one that names no open offer, or more than one.
+ */
+export function findOpenOffer(root: string, network: NetworkName, walletAddress: string, id: string): OpenOffer {
+  if (!/^[0-9a-fA-F]+$/.test(id) || id.length > 64) throw new UsageError(`An offer's id is hex, 64 characters at most (midnight swap list shows them), not "${id.length > 64 ? id.slice(0, 64) + '…' : id}"`);
+  if (id.length < OFFER_ID_MIN_PREFIX) throw new UsageError(`Give at least ${OFFER_ID_MIN_PREFIX} characters of the offer's id, not ${id.length}: midnight swap list shows them`);
+  const wanted = id.toLowerCase();
+  const matches = readOpenOffers(root, network, walletAddress).filter((o) => o.id.startsWith(wanted));
+  if (matches.length === 0) throw new NoSuchOfferError(id);
+  if (matches.length > 1) throw new UsageError(`${id} names ${matches.length} open offers: give more of the id`);
+  return matches[0]!;
+}
+
+/** The offer is one of the taking wallet's own open offers: taking it would swap the wallet's coins with itself. */
+export class OwnOfferError extends UsageError {
+  constructor(id: string) {
+    super(`The offer ${id.slice(0, 16)}… is this wallet's own open offer: a wallet can't take its own offer. Take it with another wallet (--wallet), or withdraw it with midnight swap cancel ${id.slice(0, 16)}.`);
+    this.name = 'OwnOfferError';
+    Object.setPrototypeOf(this, OwnOfferError.prototype);
+  }
+}
+
 /** What cancelling did: the cancel's transaction, if one was needed, and the offers found already taken. */
 export interface CancelOutcome {
   txHash: string | undefined;
@@ -146,11 +174,7 @@ export interface CancelOutcome {
  * only closed.
  */
 export async function cancelOffer(session: WalletSession, root: string, networkConfig: NetworkConfig, walletAddress: string, id: string, signal?: AbortSignal): Promise<CancelOutcome> {
-  const wanted = id.toLowerCase();
-  const matches = readOpenOffers(root, session.network, walletAddress).filter((o) => wanted.length >= 8 && o.id.startsWith(wanted));
-  if (matches.length === 0) throw new NoSuchOfferError(id);
-  if (matches.length > 1) throw new UsageError(`${id} names ${matches.length} open offers: give more of the id`);
-  const offer = matches[0]!;
+  const offer = findOpenOffer(root, session.network, walletAddress, id);
   const spends = await spendsOf(networkConfig, offer.nullifiers, { signal });
   if (spends.length > 0) {
     closeOpenOffers(root, session.network, walletAddress, [offer.id]);

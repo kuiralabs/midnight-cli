@@ -8,7 +8,7 @@
 // using mn refuses an expired offer, and only the maker cancelling it makes
 // that binding on chain.
 
-import type { NetworkName } from './network.ts';
+import { getValidNetworkNames, type NetworkName } from './network.ts';
 import { NotAnOfferError, type OfferContents, type SwapLeg, type SwapTerms } from './swap-offer.ts';
 
 /** What the envelope's `kind` says, so a file is known for an offer at a glance. */
@@ -72,10 +72,16 @@ export function decodeOfferEnvelope(text: string): OfferEnvelope {
     return { token, amount: BigInt(amount) };
   };
   const terms = (raw.terms ?? {}) as { give?: unknown; want?: unknown };
+  const network = text_('network', raw.network);
+  if (!getValidNetworkNames().includes(network)) {
+    // Quoted, and cut short: the value is whatever the file says, and goes into a message.
+    const shown = JSON.stringify(network.length > 32 ? network.slice(0, 32) + '…' : network);
+    throw new NotAnOfferError(`the offer file names a network mn does not know (${shown}): it reads offers for ${getValidNetworkNames().join(', ')}`);
+  }
   const expiresAt = new Date(text_('expiry', raw.expiresAt));
   if (Number.isNaN(expiresAt.getTime())) throw new NotAnOfferError('the offer file\'s expiry is not a date');
   return {
-    network: text_('network', raw.network) as NetworkName,
+    network: network as NetworkName,
     id: text_('id', raw.id),
     terms: { give: leg('give', terms.give), want: leg('want', terms.want) },
     expiresAt,

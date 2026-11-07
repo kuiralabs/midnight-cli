@@ -27,7 +27,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
   const walletFlag = getFlag(args, 'wallet');
   const now = new Date();
   const call = { ...networkChoiceFromArgs(args), signal: ctx.signal };
-  const paid = { ...call, wallet: walletFlag, sdkWarnings: ctx.sdkWarnings };
+  const paid = { ...call, wallet: walletFlag, sdkWarnings: ctx.sdkWarnings, log: ctx.diagnostics.line };
 
   switch (args.subcommand) {
     case 'make': {

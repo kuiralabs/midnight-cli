@@ -185,6 +185,17 @@ describe('takeSwapOffer', () => {
     expect(said).toEqual([]);
   });
 
+  it('refuses the wallet\'s own open offer as INVALID_ARGS, before the wallet opens or anything is said', async () => {
+    alice();
+    recordOpenOffer(root, 'undeployed', ADDRESS, { ...openOffer(OFFER.id, OFFER.nullifiers[0]!), terms: OFFER.terms });
+    const { payer, asked } = programPayer();
+    const said: unknown[] = [];
+    await expect(takeSwapOffer(host, { ...on(), offer: offerText(), agreed: TERMS, now: NOW, payer, wallet: 'alice', onProgress: (event) => said.push(event) }))
+      .rejects.toMatchObject({ code: 'INVALID_ARGS', name: 'OwnOfferError', message: expect.stringContaining('midnight swap cancel') });
+    expect(asked).toEqual([]);
+    expect(said).toEqual([]);
+  });
+
   it('cancelled already: CancelledError, and nothing asked of the payer or said', async () => {
     const { payer, asked } = programPayer();
     const said: unknown[] = [];
@@ -206,7 +217,15 @@ describe('makeSwapOffer', () => {
 
   it('refuses a wallet mn has no file for with WALLET_NOT_FOUND, before the payer is asked', async () => {
     const { payer, asked } = programPayer();
-    await expect(makeSwapOffer(host, { ...on(), terms: TERMS, expiresAt: NOW, payer, wallet: 'nobody' })).rejects.toMatchObject({ code: 'WALLET_NOT_FOUND' });
+    await expect(makeSwapOffer(host, { ...on(), terms: TERMS, expiresAt: new Date(NOW.getTime() + 60_000), now: NOW, payer, wallet: 'nobody' })).rejects.toMatchObject({ code: 'WALLET_NOT_FOUND' });
+    expect(asked).toEqual([]);
+  });
+
+  it('refuses an expiry that is not a date, or not after now, as INVALID_ARGS, before the payer is asked', async () => {
+    alice();
+    const { payer, asked } = programPayer();
+    await expect(makeSwapOffer(host, { ...on(), terms: TERMS, expiresAt: new Date(Number.NaN), now: NOW, payer })).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('not a date') });
+    await expect(makeSwapOffer(host, { ...on(), terms: TERMS, expiresAt: NOW, now: NOW, payer })).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('already passed') });
     expect(asked).toEqual([]);
   });
 
@@ -222,14 +241,14 @@ describe('makeSwapOffer', () => {
 
 describe('makeSwapOffer with a wallet that opens', () => {
   /** A program's payer whose session is its own: it records each call, holds a free coin of exactly the amount from the start when `holdsAtFirst`, otherwise once it has submitted (the split), and makes the real offer. */
-  function sessionPayer(holdsAtFirst: boolean) {
+  function sessionPayer(holdsAtFirst: boolean, shieldedHeld: bigint = 1_000n) {
     const calls: string[] = [];
     let holds = holdsAtFirst;
     const unused = async (): Promise<never> => { throw new Error('not used by swap make'); };
     const session: WalletSession = {
       network: 'undeployed',
       addresses: unused,
-      balances: unused,
+      balances: async () => { calls.push('balances'); return { unshielded: {}, shielded: { [OFFER_GIVE]: shieldedHeld }, dust: 0n }; },
       balanceTransaction: unused,
       swap: unused,
       makeOffer: async (give, want) => { calls.push(`makeOffer ${give.amount} ${want.amount}`); return SWAP_OFFER_HEX; },
@@ -251,7 +270,7 @@ describe('makeSwapOffer with a wallet that opens', () => {
     const { payer, calls } = sessionPayer(false);
     const said: unknown[] = [];
     const made = await makeSwapOffer(host, { ...on(), terms: TERMS, expiresAt: new Date(NOW.getTime() + 60_000), now: NOW, payer, receiptWaitMs: 0, onProgress: (event) => said.push(event) });
-    expect(calls).toEqual(['holdsFreeCoin 10', 'splitCoin 10', 'submit split-tx', 'holdsFreeCoin 10', 'makeOffer 10 7', 'close']);
+    expect(calls).toEqual(['holdsFreeCoin 10', 'balances', 'splitCoin 10', 'submit split-tx', 'holdsFreeCoin 10', 'makeOffer 10 7', 'close']);
     expect(made.split).toEqual({ txHash: 'ab'.repeat(32) });
     expect(made.id).toBe(OFFER.id);
     expect(said).toContainEqual({ kind: 'done', message: 'Coin split' });
@@ -265,14 +284,55 @@ describe('makeSwapOffer with a wallet that opens', () => {
     expect(calls).toEqual(['holdsFreeCoin 10', 'makeOffer 10 7', 'close']);
     expect(made.split).toBeUndefined();
   });
+
+  it('holding less of the token than the offer gives, refuses with INSUFFICIENT_BALANCE before any split (not OFFER_COINS_IN_USE: cancelling can\'t help)', async () => {
+    alice();
+    const { payer, calls } = sessionPayer(false, 9n);
+    await expect(makeSwapOffer(host, { ...on(), terms: TERMS, expiresAt: new Date(NOW.getTime() + 60_000), now: NOW, payer, receiptWaitMs: 0 }))
+      .rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE', message: expect.stringContaining('holds 9') });
+    expect(calls).toEqual(['holdsFreeCoin 10', 'balances', 'close']);
+    expect(readOpenOffers(root, 'undeployed', ADDRESS)).toEqual([]);
+  });
+
+  it('says what the wallet holds against what the offer gives on its log (--verbose)', async () => {
+    alice();
+    const { payer } = sessionPayer(false, 9n);
+    const lines: string[] = [];
+    await expect(makeSwapOffer(host, { ...on(), terms: TERMS, expiresAt: new Date(NOW.getTime() + 60_000), now: NOW, payer, log: (phase, message) => lines.push(`${phase}: ${message}`) })).rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE' });
+    expect(lines).toEqual([`swap: make: wallet holds 9 of ${OFFER_GIVE}, the offer gives 10`]);
+  });
 });
 
 describe('cancelSwapOffer', () => {
   it('opens the payer\'s wallet with its shielded side synced, for the wallet named', async () => {
     alice();
+    recordOpenOffer(root, 'undeployed', ADDRESS, { ...openOffer(OFFER.id, OFFER.nullifiers[0]!), terms: OFFER.terms });
     const { payer, asked } = programPayer();
     await expect(cancelSwapOffer(host, { ...on(), id: OFFER.id.slice(0, 8), payer, wallet: 'alice' })).rejects.toThrow('no wallet here');
     expect(asked.map(({ wallet, options }) => [wallet, options])).toEqual([['alice', { shielded: true }]]);
+  });
+
+  it.each([
+    ['an id shorter than 8 characters', 'a1a1', 'at least 8'],
+    ['an id that is not hex', 'zz'.repeat(8), 'hex'],
+    ['an id no open offer of the wallet\'s has', 'a2'.repeat(8), 'no open offer'],
+  ])('refuses %s as INVALID_ARGS before the payer is asked (no wallet sync)', async (_case, id, reason) => {
+    alice();
+    recordOpenOffer(root, 'undeployed', ADDRESS, openOffer('a1'.repeat(32), 'b1'.repeat(32)));
+    const { payer, asked } = programPayer();
+    const said: unknown[] = [];
+    await expect(cancelSwapOffer(host, { ...on(), id, payer, onProgress: (event) => said.push(event) })).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining(reason) });
+    expect(asked).toEqual([]);
+    expect(said).toEqual([]);
+  });
+
+  it('refuses an id that names two open offers as INVALID_ARGS before the payer is asked', async () => {
+    alice();
+    recordOpenOffer(root, 'undeployed', ADDRESS, openOffer('a1'.repeat(16) + 'c1'.repeat(16), 'b1'.repeat(32)));
+    recordOpenOffer(root, 'undeployed', ADDRESS, openOffer('a1'.repeat(16) + 'c2'.repeat(16), 'b2'.repeat(32)));
+    const { payer, asked } = programPayer();
+    await expect(cancelSwapOffer(host, { ...on(), id: 'a1'.repeat(8), payer })).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('names 2 open offers') });
+    expect(asked).toEqual([]);
   });
 
   it('cancelled already: CancelledError, and nothing asked of the payer or said', async () => {

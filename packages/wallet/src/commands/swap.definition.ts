@@ -76,6 +76,13 @@ export const swapDefinition: CommandDefinition = {
       agent: { type: 'string' },
     },
     {
+      name: 'verbose',
+      takesValue: false,
+      help: ['--verbose                     Diagnostic lines on stderr (make, take, cancel)'],
+      // Its lines go to stderr, which no agent reads.
+      agent: { notForAgents: 'diagnostics for a person at a terminal' },
+    },
+    {
       name: 'node',
       takesValue: true,
       help: ['--node <url>                  Node RPC endpoint'],
@@ -117,6 +124,7 @@ export const swapDefinition: CommandDefinition = {
       { flag: 'node' },
       { flag: 'indexer-ws' },
       { flag: 'proof-server' },
+      { flag: 'verbose' },
       '--json                        Output structured JSON',
     ],
     examples: [

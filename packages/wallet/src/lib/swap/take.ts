@@ -3,13 +3,15 @@
 // the terms are the agreed ones, the expiry hasn't passed), the wallet adds
 // its half once the offer is found live, and the swap is submitted.
 
-import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, checkTerms, type SwapTerms, assertOfferUnexpired } from '@kuiralabs/midnight-cli-core';
+import { existsSync } from 'node:fs';
+import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, checkTerms, type SwapTerms, assertOfferUnexpired, readOpenOffers, type VerboseLog } from '@kuiralabs/midnight-cli-core';
 import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
 import type { PaidCallOptions } from '../wallet/paid-call.ts';
 import { receiptOfSubmitted } from '../wallet/submit-steps.ts';
-import { readOfferFile, takeOffer } from './offers.ts';
-import { withSwapSession } from './swap-session.ts';
+import { OwnOfferError, readOfferFile, takeOffer } from './offers.ts';
+import { offerWalletAddress, withSwapSession } from './swap-session.ts';
+import { resolveWalletPath } from '../wallet-config.ts';
 
 /** The offer is checked as far as it can be without the chain: the wallet opens next. */
 export interface SwapOfferChecked {
@@ -29,6 +31,8 @@ export interface TakeSwapOfferOptions extends PaidCallOptions<SwapOfferChecked> 
   now?: Date;
   /** How long to wait for the indexer to list the swap, in milliseconds: RECEIPT_WAIT_MS when not given; 0 does not wait. */
   receiptWaitMs?: number;
+  /** Diagnostic lines, as --verbose shows them. */
+  log?: VerboseLog;
 }
 
 /** A swap submitted. */
@@ -45,7 +49,9 @@ export interface TakenSwapOffer {
 /**
  * Takes the offer with the payer's wallet: refuses an offer for another
  * network, one whose bytes say otherwise, other terms than `agreed` and an
- * expired one before the wallet opens, then one whose coins are spent; adds
+ * expired one, and one of the wallet's own open offers (by mn's record of
+ * them, for a wallet mn has a file for) before the wallet opens, then one
+ * whose coins are spent; adds
  * the wallet's half and the fee, submits the swap, and waits for the indexer
  * to list it.
  */
@@ -60,6 +66,12 @@ export async function takeSwapOffer(host: Host, options: TakeSwapOfferOptions): 
   checkTerms(offer.contents.terms, agreed);
   assertOfferUnexpired(offer.envelope, now);
   const { id } = offer.envelope;
+  // A wallet that is mn's own keeps a record of the offers it made: taking one would swap its coins with itself.
+  if (existsSync(resolveWalletPath(target.root, options.wallet))) {
+    const address = await offerWalletAddress(host, target.root, options.wallet, network);
+    if (readOpenOffers(target.root, network, address).some((own) => own.id === id)) throw new OwnOfferError(id);
+  }
+  options.log?.('swap', `take: offer ${id}, maker gives ${offer.contents.terms.give.amount} of ${offer.contents.terms.give.token}, wants ${offer.contents.terms.want.amount} of ${offer.contents.terms.want.token}`);
   onProgress?.({ kind: 'offer-checked', network, id, terms: offer.contents.terms });
 
   return withCallSdkWarnings(host.sdkWarnings, options.sdkWarnings, (sdkWarnings) => withSwapSession(target, options, sdkWarnings, async (session) => {
