@@ -14,7 +14,7 @@
 // ledger-9 fold at the fork, and its result is the same ledger-9 state.
 
 use std::collections::BTreeSet;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -347,11 +347,38 @@ fn checkpoint_of(state: &DustLocalState<Db>, last_id: i64, owned: &BTreeSet<u64>
 fn write_checkpoint(out: &str, state: &DustLocalState<Db>, last_id: i64, owned: &BTreeSet<u64>, frontier: u64, events_applied: u64, partial: bool, before_fork: bool) -> Checkpoint {
     let cp = checkpoint_of(state, last_id, owned, frontier, events_applied, partial, before_fork);
     let json = serde_json::to_string(&cp).expect("serialize checkpoint");
-    // atomic write: tmp + rename
-    let tmp = format!("{out}.tmp");
-    std::fs::write(&tmp, &json).unwrap_or_else(|e| die(&format!("write checkpoint: {e}")));
-    std::fs::rename(&tmp, out).unwrap_or_else(|e| die(&format!("rename checkpoint: {e}")));
+    write_private_file(out, json.as_bytes()).unwrap_or_else(|e| die(&format!("write checkpoint {out}: {e}")));
     cp
+}
+
+/// Temp files this process has made, so two writes in one process never share a name.
+static TEMP_FILES_MADE: AtomicU64 = AtomicU64::new(0);
+
+/// Write `bytes` to `path` atomically, readable by its owner only (0600, as the
+/// CLI's other Dust caches: the state holds the wallet's coins). A temp file of
+/// its own beside `path`, named for this process and this write, then a rename
+/// over `path`: a reader sees the old file or the new one, never part of one,
+/// and two runs writing the same checkpoint never write into each other's temp.
+fn write_private_file(path: &str, bytes: &[u8]) -> std::io::Result<()> {
+    let n = TEMP_FILES_MADE.fetch_add(1, Ordering::Relaxed);
+    let tmp = format!("{path}.{}.{n}.tmp", std::process::id());
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let written = options.open(&tmp).and_then(|mut file| {
+        use std::io::Write;
+        file.write_all(bytes)?;
+        file.sync_all()
+    });
+    let renamed = written.and_then(|()| std::fs::rename(&tmp, path));
+    if renamed.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    renamed
 }
 
 fn main() {
@@ -481,6 +508,49 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A new empty directory under the system's temp directory.
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("dust-sync-{name}-{}-{}", std::process::id(), TEMP_FILES_MADE.fetch_add(1, Ordering::Relaxed)));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_checkpoint_is_written_readable_by_its_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_dir("mode");
+        let out = dir.join("dust-native-key.json");
+        // An earlier checkpoint left world-readable is replaced by a private one.
+        std::fs::write(&out, "old").unwrap();
+        std::fs::set_permissions(&out, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        write_private_file(out.to_str().unwrap(), b"{\"ledger\":9}").unwrap();
+
+        assert_eq!(std::fs::metadata(&out).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(std::fs::read_to_string(&out).unwrap(), "{\"ledger\":9}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_checkpoint_write_leaves_no_temp_file_and_never_reuses_one() {
+        let dir = temp_dir("tmp");
+        let out = dir.join("dust-native-key.json");
+        let out = out.to_str().unwrap();
+        // A temp file another run is still writing, at the name the sidecar once always used.
+        std::fs::write(format!("{out}.tmp"), "another run's").unwrap();
+
+        write_private_file(out, b"first").unwrap();
+        write_private_file(out, b"second").unwrap();
+
+        assert_eq!(std::fs::read_to_string(out).unwrap(), "second");
+        let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+        names.sort();
+        assert_eq!(names, vec!["dust-native-key.json".to_string(), "dust-native-key.json.tmp".to_string()]);
+        assert_eq!(std::fs::read_to_string(format!("{out}.tmp")).unwrap(), "another run's");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn http_from_ws_derives_endpoint() {
