@@ -1921,6 +1921,47 @@ export function connectorSuite(engine: ConnectorEngine): void {
         expect(connector.hasPendingTxs()).toBe(false);
       });
 
+      // Regression: a makeTransfer whose coins another request's transaction
+      // held until it landed was refused with the SDK's bare "Insufficient funds".
+      it('says coins are held by the server\'s other pending transactions when the SDK finds too few free ones', async () => {
+        process.stderr.write = (() => true) as any;
+        const shortage = () => Object.assign(new Error('Insufficient funds'), { _tag: 'Wallet.InsufficientFunds' });
+        const transfer = vi.fn().mockRejectedValue(shortage());
+        const bundle = createBundleStub({ finalizeRecipe: () => Promise.resolve(sealedTx(9)), transferTransaction: transfer });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+        const desired = { desiredOutputs: [{ kind: 'unshielded', type: '00'.repeat(32), value: '1', recipient: UNSHIELDED_RECIPIENT }] };
+
+        // None pending: the shortage is the wallet's, said as the SDK said it.
+        const alone: any = await connector.handlers.makeTransfer(desired, ctx('c2')).catch((e: any) => e);
+        expect(alone.message).toBe('Insufficient funds');
+
+        await connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx('c1'));
+        const err: any = await connector.handlers.makeTransfer(desired, ctx('c2')).catch((e: any) => e);
+        expect(err.code).toBe('InsufficientFunds');
+        expect(err.mnCode).toBe('INSUFFICIENT_BALANCE');
+        expect(err.message).toBe("The wallet's free coins don't cover this: 1 other transaction built through this server holds coins until it is on chain or released (another request's, being built, not yet submitted or being submitted). Retry once it has landed; if it still fails, the wallet holds too little.");
+      });
+
+      it('counts another request\'s transaction still being built as holding coins', async () => {
+        process.stderr.write = (() => true) as any;
+        let built!: (recipe: unknown) => void;
+        const transfer = vi.fn()
+          .mockImplementationOnce(() => new Promise((resolve) => { built = resolve; }))
+          .mockRejectedValueOnce(Object.assign(new Error('Insufficient funds'), { _tag: 'Wallet.InsufficientFunds' }));
+        const bundle = createBundleStub({ finalizeRecipe: () => Promise.resolve(sealedTx(9)), transferTransaction: transfer });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+        const desired = { desiredOutputs: [{ kind: 'unshielded', type: '00'.repeat(32), value: '1', recipient: UNSHIELDED_RECIPIENT }] };
+
+        const first = connector.handlers.makeTransfer(desired, ctx('c1'));
+        await vi.waitFor(() => expect(transfer).toHaveBeenCalledTimes(1));
+        const err: any = await connector.handlers.makeTransfer(desired, ctx('c2')).catch((e: any) => e);
+        expect(err.code).toBe('InsufficientFunds');
+        expect(err.message).toContain('1 other transaction built through this server holds coins');
+
+        built({ type: 'RECIPE' });
+        await expect(first).resolves.toEqual({ tx: expect.any(String) });
+      });
+
       it('submitTransaction rejection reverts and untracks', async () => {
         const revertFn = vi.fn().mockResolvedValue(undefined);
         const origIsTTY = process.stdin.isTTY;

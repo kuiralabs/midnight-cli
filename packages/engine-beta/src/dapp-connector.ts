@@ -2,7 +2,7 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap } from '@kuiralabs/midnight-cli-core/engine';
+import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap } from '@kuiralabs/midnight-cli-core/engine';
 import { type NoticeSink, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE } from '@kuiralabs/midnight-cli-core';
 import { dim, roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
@@ -548,16 +548,19 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
       tracker.start('building');
       const balanceOptions = { ttl, tokenKindsToBalance };
-      let recipe: any;
-      if (stage === 'unsealed') {
-        const unsealedTx = dappTx as DAppTransaction['Unbound'];
-        recipe = await withDustRetry(() => facade.balanceUnboundTransaction(unsealedTx, secretKeys, balanceOptions));
-      } else {
-        const sealedTx = dappTx as DAppTransaction['Finalized'];
-        recipe = await withDustRetry(() => facade.balanceFinalizedTransaction(sealedTx, secretKeys, balanceOptions));
-      }
-      const { hex, finalized } = await processRecipe(recipe, tracker);
-      trackPendingTx(context.connectionId, hex, finalized, feeOnly);
+      const hex = await building(async () => {
+        let recipe: any;
+        if (stage === 'unsealed') {
+          const unsealedTx = dappTx as DAppTransaction['Unbound'];
+          recipe = await withDustRetry(() => facade.balanceUnboundTransaction(unsealedTx, secretKeys, balanceOptions));
+        } else {
+          const sealedTx = dappTx as DAppTransaction['Finalized'];
+          recipe = await withDustRetry(() => facade.balanceFinalizedTransaction(sealedTx, secretKeys, balanceOptions));
+        }
+        const { hex, finalized } = await processRecipe(recipe, tracker);
+        trackPendingTx(context.connectionId, hex, finalized, feeOnly);
+        return hex;
+      });
       context.metadata.phases = tracker.getTimings();
       return { tx: hex };
     } finally {
@@ -817,6 +820,38 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
    * `dustWaitMs`, refused at once with that time when it doesn't. Otherwise a
    * coin may come free or grow, and a few short waits find out.
    */
+  /** Builds of this wallet's coins into a transaction running now: from the SDK picking its coins until it is tracked as pending, those coins are held. */
+  let buildsInFlight = 0;
+
+  /**
+   * Runs a build of a transaction from this wallet's coins (pick, sign,
+   * prove, track as pending), counted while it runs. The SDK's shortage of
+   * free coins (not of Dust) while other transactions this server built or is
+   * building hold coins until they land is said so, since another request,
+   * not the wallet's balance, is the likely cause.
+   */
+  async function building<T>(build: () => Promise<T>): Promise<T> {
+    buildsInFlight++;
+    try {
+      return await build();
+    } catch (err) {
+      throw heldByOthersOr(err);
+    } finally {
+      buildsInFlight--;
+    }
+  }
+
+  /** The SDK's shortage of free coins, while other transactions of this server's hold coins, as an error saying so; any other failure as it is. Called from within a build, which isn't counted. */
+  function heldByOthersOr(err: unknown): unknown {
+    const holding = pendingCount() + submittingTxs.size + buildsInFlight - 1;
+    if (holding <= 0 || !isSdkInsufficientFundsError(err)) return err;
+    const them = holding === 1 ? '1 other transaction built through this server holds coins until it is on chain or released' : `${holding} other transactions built through this server hold coins until they are on chain or released`;
+    return createApiError('InsufficientFunds',
+      `The wallet's free coins don't cover this: ${them} (another request's, being built, not yet submitted or being submitted). `
+      + `Retry once ${holding === 1 ? 'it has' : 'they have'} landed; if it still fails, the wallet holds too little.`,
+      'INSUFFICIENT_BALANCE');
+  }
+
   async function withDustRetry<T>(fn: () => Promise<T>): Promise<T> {
     let waitedForGrowthMs = 0;
     let attempt = 1;
@@ -966,12 +1001,15 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
       tracker.start('building');
       const payFees = (params.options as any)?.payFees ?? true;
-      const recipe = await withDustRetry(() => facade.transferTransaction(combinedTransfers, secretKeys, {
-        ttl: createTtl(),
-        payFees,
-      }));
-      const { hex, finalized } = await processRecipe(recipe, tracker);
-      trackPendingTx(context.connectionId, hex, finalized);
+      const hex = await building(async () => {
+        const recipe = await withDustRetry(() => facade.transferTransaction(combinedTransfers, secretKeys, {
+          ttl: createTtl(),
+          payFees,
+        }));
+        const { hex, finalized } = await processRecipe(recipe, tracker);
+        trackPendingTx(context.connectionId, hex, finalized);
+        return hex;
+      });
       context.metadata.phases = tracker.getTimings();
       return { tx: hex };
     },
@@ -1064,12 +1102,15 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
       tracker.start('building');
 
-      const recipe = await withDustRetry(() => facade.initSwap(swapInputs, combinedOutputs, secretKeys, {
-        ttl: createTtl(),
-        payFees: intentOptions.payFees ?? true,
-      }));
-      const { hex, finalized } = await processRecipe(recipe, tracker);
-      trackPendingTx(context.connectionId, hex, finalized);
+      const hex = await building(async () => {
+        const recipe = await withDustRetry(() => facade.initSwap(swapInputs, combinedOutputs, secretKeys, {
+          ttl: createTtl(),
+          payFees: intentOptions.payFees ?? true,
+        }));
+        const { hex, finalized } = await processRecipe(recipe, tracker);
+        trackPendingTx(context.connectionId, hex, finalized);
+        return hex;
+      });
       context.metadata.phases = tracker.getTimings();
       return { tx: hex };
     },
