@@ -27,6 +27,7 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 
 ### Fixed
 
+- **Progress written to a file or a pipe is plain lines.** Off a terminal, a step's progress still carried carriage returns and the erase-line code `ESC[K` (colour was already off): a program's log, or `mn … 2> file`, now gets one line per step as it ends (`✓ Wallet synced`), with no escape code.
 - **`mn test run`'s `cache-clear` step clears only the caches of the wallets the run uses**: the active wallet's and, on a local network, the genesis wallet's (the airdrop pays from it). It cleared every wallet's sync cache for the network, so each of them synced from the start again.
 - **`config get` with no key lists the whole config**, each value as `config get <key>` shows it (the Blockfrost project id masked); with `--network`, the values that network scopes; `--json` gives them as `values`. It was a usage error. `midnight_config_get` takes no key for the same.
 - **The text an MCP client confirms for `midnight_swap_make` says where the offer file is written**: `out` as an absolute path (resolved from the MCP server's folder), or `offer-<id>.json` there. An `out` that exists is refused before a token is given, as the command refuses it.

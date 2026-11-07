@@ -9,13 +9,20 @@ import { captureOutput, type CapturedOutput } from '../../../../test-support/cap
 let io: CapturedOutput;
 const originalNoColor = process.env.NO_COLOR;
 
+const originalIsTTY = process.stderr.isTTY;
+/** Whether the tests' stderr is a terminal. */
+const stderrIsTerminal = (tty: boolean): void => { Object.defineProperty(process.stderr, 'isTTY', { value: tty, configurable: true }); };
+
 beforeEach(() => {
   process.env.NO_COLOR = '1';
+  // At a terminal, unless a test says otherwise.
+  stderrIsTerminal(true);
   io = captureOutput();
 });
 
 afterEach(() => {
   io.restore();
+  stderrIsTerminal(originalIsTTY);
   if (originalNoColor === undefined) delete process.env.NO_COLOR;
   else process.env.NO_COLOR = originalNoColor;
 });
@@ -66,5 +73,21 @@ describe('spinnerReporter', () => {
     reporter.report({ kind: 'done', message: 'late' });
     expect(io.stderr()).toBe('');
     expect(reported).toEqual([]);
+  });
+
+  // Regression: written to a file, each step carried "\r" and the erase-line code "\x1b[K".
+  it('not at a terminal, writes each step as one plain line when it ends, and no escape code', () => {
+    stderrIsTerminal(false);
+    const reported: string[] = [];
+    const reporter = spinnerReporter(createProgress((message) => reported.push(message)), false);
+
+    reporter.report({ kind: 'start', message: 'Checking unshielded...' });
+    reporter.report({ kind: 'update', message: 'Checking unshielded... 50%' });
+    reporter.report({ kind: 'done', message: 'Unshielded ready' });
+    reporter.report({ kind: 'start', message: 'Syncing shielded...' });
+    reporter.fail('Failed');
+
+    expect(io.stderr()).toBe('✓ Unshielded ready\n✗ Failed\n');
+    expect(reported).toEqual(['Checking unshielded...', 'Checking unshielded... 50%', 'Unshielded ready', 'Syncing shielded...']);
   });
 });

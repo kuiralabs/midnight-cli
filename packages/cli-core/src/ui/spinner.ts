@@ -122,6 +122,41 @@ export function start(message: string, report: ProgressReport = reportNowhere, o
   };
   say(message);
 
+  // Not at a terminal (a file or a pipe): whole lines only, no carriage
+  // return or erase-line code, and each step once, as it ends.
+  if (process.stderr.isTTY !== true) {
+    let currentMessage = message;
+    const spinner: Spinner = {
+      update(msg: string) {
+        currentMessage = msg;
+        say(msg);
+      },
+      stop(finalMessage?: string) {
+        if (stopped) return;
+        stopped = true;
+        onEnd(spinner);
+        say(finalMessage);
+        write(`✓ ${finalMessage ?? currentMessage}\n`);
+      },
+      fail(finalMessage?: string) {
+        if (stopped) return;
+        stopped = true;
+        onEnd(spinner);
+        write(`✗ ${finalMessage ?? currentMessage}\n`);
+      },
+      log(line: string) {
+        say(line);
+        write(`${line}\n`);
+      },
+      clear() {
+        if (stopped) return;
+        stopped = true;
+        onEnd(spinner);
+      },
+    };
+    return spinner;
+  }
+
   if (!isColorEnabled()) {
     let currentMessage = message;
     write(`⠋ ${currentMessage}`);
