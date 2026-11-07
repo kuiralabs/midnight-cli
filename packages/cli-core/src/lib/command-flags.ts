@@ -15,8 +15,9 @@ type FlagRegistry = Pick<CommandRegistry, 'find' | 'globalFlags'>;
 
 /** Flags on the command line that the command doesn't accept, in the order given. */
 export function findUnknownFlags(args: ParsedArgs, registry: FlagRegistry): string[] {
-  const definition = args.command === undefined ? undefined : registry.find(args.command);
-  if (definition === undefined) return []; // unknown or missing command: the dispatcher reports it
+  // No command is help (`mn` alone shows it), so its flags are help's.
+  const definition = registry.find(args.command ?? 'help');
+  if (definition === undefined) return []; // unknown command: the dispatcher reports it
   const accepted = new Set([...registry.globalFlags, ...definition.flags].map((flag) => flag.name));
   return Object.keys(args.flags).filter((f) => !accepted.has(f));
 }
@@ -44,6 +45,12 @@ const shown = (flag: string): string => (flag.length === 1 ? `-${flag}` : `--${f
 /** Throw a UsageError naming every flag the command doesn't accept, or else every one its subcommand doesn't read. */
 export function assertKnownFlags(args: ParsedArgs, registry: FlagRegistry): void {
   const unknown = findUnknownFlags(args, registry);
+  if (unknown.length > 0 && args.command === undefined) {
+    throw new UsageError(
+      `Unknown flag${unknown.length > 1 ? 's' : ''}: ${unknown.map(shown).join(', ')}\n` +
+      'Run "midnight help" for the commands and the flags every command accepts.',
+    );
+  }
   if (unknown.length > 0) {
     throw new UsageError(
       `Unknown flag${unknown.length > 1 ? 's' : ''} for "midnight ${args.command}": ${unknown.map(shown).join(', ')}\n` +

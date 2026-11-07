@@ -47,6 +47,19 @@ describe('the unknown-flag refusal, through the shell', () => {
     expect(JSON.parse(run.stdout)).toMatchObject({ error: true, code: 'INVALID_ARGS', message: expect.stringContaining('--seed (only for export)') });
   });
 
+  // `mn -x` showed the help and exited 0, as if nothing were wrong.
+  it('refuses an unknown flag with no command, exit 2', () => {
+    const run = mn('-x', '--json');
+    expect(run.status).toBe(2);
+    expect(JSON.parse(run.stdout)).toMatchObject({ error: true, code: 'INVALID_ARGS', message: expect.stringContaining('Unknown flag: -x') });
+  });
+
+  it('takes a flag written --flag=value', () => {
+    const run = mn('info', '--network=undeployed', '--json');
+    expect(run.status).toBe(3);
+    expect(JSON.parse(run.stdout)).toMatchObject({ error: true, code: 'WALLET_NOT_FOUND' });
+  });
+
   it('runs the command when its flags are known: here it finds no wallet', () => {
     const run = mn('info', '--network', 'undeployed', '--json');
     expect(run.status).toBe(3);
