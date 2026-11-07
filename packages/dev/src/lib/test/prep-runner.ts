@@ -2,8 +2,8 @@
 
 import { join } from 'node:path';
 
-import { clearWalletCache, resolveNetwork, type NetworkConfig, type NetworkName, OWN_COMMAND_DUST_WAIT_MS, DustRequiredError, InsufficientBalanceError, throwIfCancelled, sdkSetOf, nightToMicro } from '@kuiralabs/midnight-cli-core';
-import { resolveWalletPath, unlockWallet } from '@kuiralabs/midnight-wallet';
+import { clearWalletCache, GENESIS_SEED, resolveNetwork, type NetworkConfig, type NetworkName, OWN_COMMAND_DUST_WAIT_MS, DustRequiredError, InsufficientBalanceError, throwIfCancelled, sdkSetOf, nightToMicro } from '@kuiralabs/midnight-cli-core';
+import { resolveWalletPath, unlockWallet, walletAddress } from '@kuiralabs/midnight-wallet';
 import { assertLedger9StackReachable, assertLedgerSupported } from '@kuiralabs/midnight-chain';
 
 import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallbacks } from './types.ts';
@@ -67,7 +67,7 @@ async function runStep(
   callbacks: PrepCallbacks,
 ): Promise<void> {
   if (step === 'cache-clear') {
-    return stepCacheClear(config, ctx.root);
+    return stepCacheClear(config, ctx);
   }
   if (step === 'localnet-up') {
     return stepLocalnetUp(config, ctx, callbacks);
@@ -91,11 +91,20 @@ async function runStep(
 
 // ── Step implementations ──
 
-async function stepCacheClear(config: DappTestConfig, root: string): Promise<void> {
+/**
+ * Clears the sync caches of the wallets the run uses on its network: the
+ * active wallet (its balance, Dust and serve) and, on a local network, the
+ * genesis wallet the airdrop pays from. After a localnet restart their cached
+ * state is stale; no other wallet's cache is touched (clearing them all made
+ * every wallet of the network sync from the start again).
+ */
+async function stepCacheClear(config: DappTestConfig, ctx: PrepContext): Promise<void> {
   const network = config.network ?? 'undeployed';
-  // Clear ALL wallet caches for this network — not just the active wallet.
-  // After a localnet restart, every wallet (including genesis) has stale state.
-  clearWalletCache(undefined, network, root);
+  clearWalletCache(await walletAddress(resolveWalletPath(ctx.root), network, ctx.root, ctx.host), network, ctx.root);
+  if (network === 'undeployed') {
+    const { keys } = await ctx.host.engines.load(sdkSetOf(network, ctx.root));
+    clearWalletCache(keys.unshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), network), network, ctx.root);
+  }
 }
 
 async function stepLocalnetUp(config: DappTestConfig, ctx: PrepContext, callbacks: PrepCallbacks): Promise<void> {
