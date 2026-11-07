@@ -5,7 +5,7 @@ import * as os from 'os';
 import { loadCliConfig, saveCliConfig, getConfigValue, setConfigValue, unsetConfigValue, getValidConfigKeys, getBlockfrostProjectId, getSdkSetOverride } from '../lib/cli-config.ts';
 import { NetworkNotNamedError, sdkSetOfNetwork } from '../lib/network.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
-import { getCachePath, networkCacheFolder } from '../lib/wallet-cache.ts';
+import { getCachePath, networkCacheFolder, walletCacheFileName } from '../lib/wallet-cache.ts';
 import { getDustCachePath } from '../lib/reader-cache-files.ts';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-cli-config-test-${process.pid}`);
@@ -664,12 +664,12 @@ describe('the SDK set a network runs on', () => {
   it('is the table\'s until config gives the network another, and the caches follow it to a folder of the set\'s own', () => {
     expect(sdkSetOfNetwork('undeployed', root)).toBe('rc');
     expect(networkCacheFolder('undeployed', root)).toBe('undeployed');
-    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)).toBe(path.join(root, 'cache', 'undeployed', 'mn_addr_undeployed1a.json'));
+    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)).toBe(path.join(root, 'cache', 'undeployed', walletCacheFileName('mn_addr_undeployed1abcdefghijklmnopqrst')));
 
     setConfigValue('sdk-set', 'beta', root, 'undeployed');
     expect(sdkSetOfNetwork('undeployed', root)).toBe('beta');
     expect(networkCacheFolder('undeployed', root)).toBe('undeployed.beta');
-    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)).toBe(path.join(root, 'cache', 'undeployed.beta', 'mn_addr_undeployed1a.json'));
+    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)).toBe(path.join(root, 'cache', 'undeployed.beta', walletCacheFileName('mn_addr_undeployed1abcdefghijklmnopqrst')));
     expect(getDustCachePath('undeployed', 'ab'.repeat(32), root)).toBe(path.join(root, 'cache', 'undeployed.beta', `dust-${'ab'.repeat(10)}.json`));
 
     // Back on the network's own set, the caches it kept there are the ones read.

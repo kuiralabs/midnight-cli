@@ -1502,6 +1502,7 @@ export declare function saveWalletCache(address: string, network: string, facade
         serializeState(): Promise<string>;
     };
 }, root: string, chainId?: string): Promise<void>;
+export declare function walletCacheFileName(address: string): string;
 export declare function validateWalletCacheChainId(network: string, currentChainId: string | null, root: string): string[];
 export interface WalletCacheData {
     shielded: string;
