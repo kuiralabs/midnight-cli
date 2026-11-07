@@ -10,6 +10,7 @@ import type { Spinner } from '../ui/spinner.ts';
 import type { CallSdkWarnings } from './sdk-warnings.ts';
 import type { WalletSession } from './wallet-session.ts';
 import type { Host } from './host.ts';
+import type { ContractKeys } from './contract-keys.ts';
 
 /** The network a command acts on, with its endpoints resolved, and the host it runs in. */
 export interface PayingTarget {
@@ -35,6 +36,8 @@ export function resolvePayingTarget(args: ParsedArgs, command: string, subcomman
 /** A wallet served over the DApp connector's WebSocket, for a script in another process to pay through. */
 export interface ServedWallet {
   port: number;
+  /** The served wallet's keys for a contract's private state (derived from its seed): a script keeps that wallet's private state with them. */
+  contractKeys: ContractKeys;
   /** Stops what was started for the command; a server that was running already is left running. */
   stop: () => Promise<void>;
 }

@@ -12,7 +12,7 @@ export {
   listedNames, manualCodeRow, type PackageGuidance, sectionsWithAdded, skillCodeRow, type ToolsTableRow, wrapWords
 } from './lib/agent-guidance.ts';
 export { nightAmountJson, nightAmountText, nightToMicro, parseAmount } from './lib/amount.ts';
-export { describeApprovalPolicy } from './lib/approval.ts';
+export { type ApprovalPolicy, describeApprovalPolicy } from './lib/approval.ts';
 export {
   FULL_FLAG, getFlag, hasFlag, isMinimalMode, MINIMAL_FLAG, parseArgs, type ParsedArgs,
   rejectNoCacheForWrites, requireFlag
@@ -40,7 +40,7 @@ export {
 } from './lib/command-definition.ts';
 export { assertKnownFlags, findMisplacedFlags, findUnknownFlags } from './lib/command-flags.ts';
 export {
-  type APIError, createApiError, type ErrorCode, OPERATOR_REJECTED_MESSAGE, type RpcHandler,
+  type APIError, createApiError, type ErrorCode, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE, type RpcHandler,
   type RpcHandlerContext
 } from './lib/connector-api.ts';
 export {
@@ -72,7 +72,7 @@ export {
   classifyError, ERROR_CODES, EXIT_CANCELLED, EXIT_GENERAL_ERROR, EXIT_INSUFFICIENT_BALANCE,
   EXIT_INVALID_ARGS, EXIT_NETWORK_ERROR, EXIT_TX_REJECTED, EXIT_WALLET_NOT_FOUND, humanizeNetworkError
 } from './lib/exit-codes.ts';
-export { parseFeeLimits } from './lib/fee-limits.ts';
+export { type FeeLimits, parseFeeLimits } from './lib/fee-limits.ts';
 export { createHost, defineHostSlot, type Host, type HostOptions } from './lib/host.ts';
 export { writeJsonError, writeJsonResult } from './lib/json-output.ts';
 export {
@@ -112,6 +112,7 @@ export {
 } from './lib/sdk-warnings.ts';
 export { PASSPHRASE_ENV, type Settings, settingsFromEnvironment } from './lib/settings.ts';
 export { shieldedDisabledReason, shieldedSyncEnabled } from './lib/shielded-policy.ts';
+export { type ContractKeys, contractKeysFromSeed } from './lib/contract-keys.ts';
 export { sleep, untilCancelled } from './lib/sleep.ts';
 export { NoStateRootError } from './lib/state-root.ts';
 export { checkTerms, type OfferContents, type SwapLeg, type SwapTerms, TermsMismatchError } from './lib/swap-offer.ts';

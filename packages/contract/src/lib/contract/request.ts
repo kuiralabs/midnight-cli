@@ -9,13 +9,14 @@ import { type ParsedArgs, getFlag, requireFlag, UsageError } from '@kuiralabs/mi
 import { findContractInfo, type ContractInfo } from './inspect.ts';
 import { findWitnessFile, buildMissingWitnessError } from './witness-discovery.ts';
 import { validateCallRequest, validateContractAddress } from './validate.ts';
+import { LEGACY_SECRET_KEY } from './private-state-secret.ts';
 
 export interface ContractDeployRequest {
   /** The dApp's root: the runner loads witnesses.js and keeps its level-db cache there. */
   dappDir: string;
   info: ContractInfo;
   constructorArgs: unknown[];
-  /** --secret-key: seeds the contract's initial private state (32-byte hex). The deploy script gets it via env, never on disk. */
+  /** --secret-key: seeds the contract's initial private state (32-byte hex) instead of the wallet's own secret. The script gets it through its environment. */
   privateStateSecretKey?: string;
 }
 
@@ -25,6 +26,8 @@ export interface ContractCallRequest {
   address: string;
   circuit: string;
   callArgs: unknown[];
+  /** --secret-key: the private-state secret the contract was deployed with, when not the wallet's own: 32-byte hex, or `legacy` (the default of an mn before 0.6.0). */
+  privateStateSecretKey?: string;
 }
 
 /** Where a contract is: its dApp, and the compiled contract in it. */
@@ -56,11 +59,12 @@ export function contractDeployRequest(location: ContractLocation & { args?: unkn
   }
 
   // For a contract whose constructor derives its owner from a witness
-  // (owner = public_key(secret_key())); without it the owner comes from the deploy wallet.
+  // (owner = public_key(secret_key())); without it the secret is the wallet's own, from its seed.
   const privateStateSecretKey = location.secretKey;
-  if (privateStateSecretKey !== undefined && !/^[0-9a-fA-F]{64}$/.test(privateStateSecretKey)) {
-    throw new UsageError('--secret-key must be 32 bytes of hex (64 chars)');
+  if (privateStateSecretKey === LEGACY_SECRET_KEY) {
+    throw new UsageError(`--secret-key ${LEGACY_SECRET_KEY} is for calling a contract deployed by an mn before 0.6.0: it makes the wallet's public coin key the owner's secret, so a new contract must not be deployed with it`);
   }
+  assertSecretKey(privateStateSecretKey, false);
 
   return { dappDir, info, constructorArgs: location.args ?? [], privateStateSecretKey };
 }
@@ -70,13 +74,22 @@ export function contractDeployRequest(location: ContractLocation & { args?: unkn
  * characters), compiled at `location`, given `args` in order. Refuses a
  * circuit the contract can't call and a count of arguments it doesn't take.
  */
-export function contractCallRequest(location: ContractLocation & { address: string; circuit: string; args?: unknown[] }): ContractCallRequest {
+export function contractCallRequest(location: ContractLocation & { address: string; circuit: string; args?: unknown[]; secretKey?: string }): ContractCallRequest {
   const { dappDir, address, circuit } = location;
   const { info } = findContractInfo(location.managedDir ?? dappDir, location.name);
   const callArgs = location.args ?? [];
   validateContractAddress(address);
   validateCallRequest(info, circuit, callArgs);
-  return { dappDir, info, address, circuit, callArgs };
+  assertSecretKey(location.secretKey, true);
+  return { dappDir, info, address, circuit, callArgs, ...(location.secretKey === undefined ? {} : { privateStateSecretKey: location.secretKey }) };
+}
+
+/** Refuses a --secret-key that is not 32 bytes of hex (or, where `legacyAllowed`, `legacy`). */
+function assertSecretKey(secretKey: string | undefined, legacyAllowed: boolean): void {
+  if (secretKey === undefined || /^[0-9a-fA-F]{64}$/.test(secretKey) || (legacyAllowed && secretKey === LEGACY_SECRET_KEY)) return;
+  throw new UsageError(legacyAllowed
+    ? `--secret-key must be 32 bytes of hex (64 chars), or "${LEGACY_SECRET_KEY}" for a contract deployed by an mn before 0.6.0 without one`
+    : '--secret-key must be 32 bytes of hex (64 chars)');
 }
 
 /**
@@ -112,7 +125,7 @@ export function resolveContractDeployRequest(args: ParsedArgs, cwd: string): Con
   });
 }
 
-/** `call --address <hex> --circuit <name> [--args <json>]` for the contract found from --managed/--path, else `cwd`. */
+/** `call --address <hex> --circuit <name> [--args <json>] [--secret-key <hex|legacy>]` for the contract found from --managed/--path, else `cwd`. */
 export function resolveContractCallRequest(args: ParsedArgs, cwd: string): ContractCallRequest {
   const address = requireFlag(args, 'address', 'contract address');
   const circuit = requireFlag(args, 'circuit', 'circuit name');
@@ -123,6 +136,7 @@ export function resolveContractCallRequest(args: ParsedArgs, cwd: string): Contr
     address,
     circuit,
     args: parseArgsJson(getFlag(args, 'args')),
+    secretKey: getFlag(args, 'secret-key'),
   });
 }
 

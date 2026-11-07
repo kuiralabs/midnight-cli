@@ -7,6 +7,8 @@
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core';
 import type { ScriptParts } from '@kuiralabs/midnight-cli-core/engine';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -35,6 +37,11 @@ const TEST_PARTS: ScriptParts = {
   rpcClientCode: () => '',
   coerceArgFn: '',
   privateStateSecretFn: '',
+  // The store opener is the contract runner's (tested there): here it keeps the wallet's own account.
+  privateStateStoreFn: 'const openPrivateStateStore = async (_deps, options) => ({ accountId: options.accountId });',
+  privateStateSecretEnv: 'MN_TEST_PRIVATE_STATE_SECRET',
+  privateStatePasswordEnv: 'MN_TEST_PRIVATE_STATE_PASSWORD',
+  privateStateAccountEnv: 'MN_TEST_PRIVATE_STATE_ACCOUNT',
   witnessCandidates: [],
   indexerUrlEnv: 'MN_TEST_INDEXER_URL',
   indexerWsUrlEnv: 'MN_TEST_INDEXER_WS_URL',
@@ -187,16 +194,20 @@ describe('generated providers object', () => {
     const { walletProvider, midnightProvider } = await evalWalletProviders(rpcCall);
     const fn = new AsyncFunction(
       'MANAGED_DIR', 'walletProvider', 'midnightProvider',
-      'NodeZkConfigProvider', 'httpClientProofProvider', 'indexerPublicDataProvider', 'levelPrivateStateProvider',
+      'NodeZkConfigProvider', 'httpClientProofProvider', 'indexerPublicDataProvider', 'levelPrivateStateProvider', 'mnFs', 'mnPath',
       `${providerSetupCode(NETWORK, 'counterPrivateState')}\nreturn providers;`,
     );
-    // The generated code reads the indexer's URLs from its environment, as the script's process is given them.
-    const environment = indexerEnvironment(NETWORK);
+    // The generated code reads the indexer's URLs and the private-state store's password and account from its environment, as the script's process is given them.
+    const environment = {
+      ...indexerEnvironment(NETWORK),
+      [TEST_PARTS.privateStatePasswordEnv]: 'Mn-abc-def-123-456',
+      [TEST_PARTS.privateStateAccountEnv]: 'mn-test-account',
+    };
     Object.assign(process.env, environment);
     try {
       const providers = await fn(
         dir, walletProvider, midnightProvider,
-        NodeZkConfigProvider, httpClientProofProvider, indexerPublicDataProvider, levelPrivateStateProvider,
+        NodeZkConfigProvider, httpClientProofProvider, indexerPublicDataProvider, levelPrivateStateProvider, fs, path,
       );
       try {
         expect(() => assertProvidersSupportEra(CURRENT_LEDGER_ERA, providers)).not.toThrow();

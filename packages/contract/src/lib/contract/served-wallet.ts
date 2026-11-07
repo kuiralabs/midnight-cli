@@ -2,7 +2,7 @@
 // can pay, serve it through the payer, run the script against it with a
 // progress line, and stop serving whatever happens.
 
-import { type Payer, type PayingTarget, type CallSdkWarnings, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { type Payer, type PayingTarget, type CallSdkWarnings, type ServedWallet, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 
 export interface ServedWalletParams {
@@ -28,7 +28,7 @@ export interface ServedRunLabels {
 export async function withServedWallet<T>(
   { target, wallet, payer, progress, sdkWarnings, signal }: ServedWalletParams,
   labels: ServedRunLabels,
-  run: (servePort: number, spinner: Spinner) => Promise<T>,
+  run: (served: Pick<ServedWallet, 'port' | 'contractKeys'>, spinner: Spinner) => Promise<T>,
 ): Promise<T> {
   // Before anything is served: the payer's wallet has NIGHT and Dust to pay with.
   await payer.assertCanPay(target, wallet, progress('Checking wallet...'), signal);
@@ -37,7 +37,7 @@ export async function withServedWallet<T>(
   const spinner = progress(labels.running);
   try {
     throwIfCancelled(signal);
-    const result = await run(serve.port, spinner);
+    const result = await run(serve, spinner);
     spinner.stop(labels.done);
     return result;
   } catch (err) {

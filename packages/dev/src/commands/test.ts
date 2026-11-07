@@ -2,7 +2,7 @@
 // Usage: midnight test <run|list|results> [options]
 // Discovers dapp.test.json in the current directory and executes test suites.
 
-import { isValidNetworkName, type NetworkName, type ParsedArgs, getFlag, hasFlag, CancelledError, refuseOnMainnet, throwIfCancelled, UsageError, type CallContext, type CallOutput, type CallProgress, type CommandOutcome } from '@kuiralabs/midnight-cli-core';
+import { isValidNetworkName, type NetworkName, type ParsedArgs, getFlag, hasFlag, CancelledError, refuseOnMainnet, throwIfCancelled, UsageError, type CallContext, type CallOutput, type CallProgress, type CommandOutcome, type ContractKeys } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, divider, bold, dim, green, red, teal, yellow, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { StringDecoder } from 'node:string_decoder';
 import { join } from 'node:path';
@@ -559,6 +559,11 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
         // Use the serve port from the prep context if available, otherwise default
         const { DEFAULT_SERVE_PORT } = await import('@kuiralabs/midnight-cli-core');
         const servePort = prep.serveHandle?.port ?? DEFAULT_SERVE_PORT;
+        // The keys of the wallet that serve pays from: the active wallet, as the prep step serves it.
+        let contractKeys: Promise<ContractKeys> | undefined;
+        const contractKeysOf = (): Promise<ContractKeys> => contractKeys ??= prep.serveHandle !== undefined
+          ? Promise.resolve(prep.serveHandle.contractKeys)
+          : import('@kuiralabs/midnight-connect').then(({ serveWalletContractKeys }) => serveWalletContractKeys({ root: ctx.config.paths.stateRoot, host: ctx.host }));
 
         const redeployFlag = hasFlag(args, 'redeploy');
 
@@ -572,6 +577,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
           suiteName: suite.name,
           networkConfig,
           servePort,
+          contractKeys: contractKeysOf,
           redeploy: redeployFlag,
           onActionStart: (action) => {
             currentAction = action;

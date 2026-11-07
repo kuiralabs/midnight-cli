@@ -3,6 +3,7 @@
 
 import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, withCallSdkWarnings } from '@kuiralabs/midnight-cli-core';
 import { networkChoiceOf, stepSpinner, type PaidCallOptions } from '@kuiralabs/midnight-wallet';
+import { receiptOf, type Receipt } from '@kuiralabs/midnight-chain';
 import { withServedWallet } from './served-wallet.ts';
 import { assertContractRunsOn, type ContractChecked } from './runtime-check.ts';
 import type { ContractCallRequest } from './request.ts';
@@ -20,6 +21,10 @@ export interface CalledCircuit {
   readonly address: string;
   /** What the call script reports of the transaction (the SDK's status, e.g. "SucceedEntirely"). */
   readonly status: string;
+  /** The hash of the call's transaction (undefined when the script did not report one). */
+  readonly txHash?: string;
+  /** The transaction once the indexer lists it, or why it is missing; absent with no txHash. */
+  readonly receipt?: Receipt;
 }
 
 /**
@@ -31,7 +36,7 @@ export interface CalledCircuit {
  */
 export async function callContract(host: Host, options: CallContractOptions): Promise<CalledCircuit> {
   const { request, payer, wallet, signal, onProgress } = options;
-  const { dappDir, info, address, circuit, callArgs } = request;
+  const { dappDir, info, address, circuit, callArgs, privateStateSecretKey } = request;
   throwIfCancelled(signal);
   const target = networkTargetOf(host, networkChoiceOf(options));
   const { network } = target;
@@ -40,7 +45,7 @@ export async function callContract(host: Host, options: CallContractOptions): Pr
   const { runCall } = await import('./runner.ts');
 
   return withCallSdkWarnings(host.sdkWarnings, options.sdkWarnings, (sdkWarnings) =>
-    withServedWallet({ target, wallet, payer, progress: (message) => stepSpinner(onProgress, message), sdkWarnings, signal }, { running: `Calling ${circuit}...`, done: `${circuit} called`, failed: 'Call failed' }, async (servePort, spinner) => {
+    withServedWallet({ target, wallet, payer, progress: (message) => stepSpinner(onProgress, message), sdkWarnings, signal }, { running: `Calling ${circuit}...`, done: `${circuit} called`, failed: 'Call failed' }, async (served, spinner) => {
       const result = await runCall({
         dappDir,
         network,
@@ -52,10 +57,13 @@ export async function callContract(host: Host, options: CallContractOptions): Pr
         contractAddress: address,
         circuit,
         args: callArgs,
-        servePort,
+        servePort: served.port,
+        contractKeys: served.contractKeys,
+        privateStateSecretKey,
         onMessage: (msg) => spinner.update(msg),
         signal,
       });
-      return { network, contractName: info.name, circuit, address, status: result.status };
+      const receipt = result.txHash === undefined ? undefined : await receiptOf(target.networkConfig.indexer, result.txHash, signal);
+      return { network, contractName: info.name, circuit, address, status: result.status, ...(result.txHash === undefined ? {} : { txHash: result.txHash, receipt }) };
     }));
 }

@@ -22,7 +22,7 @@ function compiledContract(name: string, witnesses: { name: string }[] = []): voi
       { name: 'increment', pure: false, proof: true, arguments: [], 'result-type': { 'type-name': 'Tuple', types: [] } },
       { name: 'add', pure: false, proof: true, arguments: [{ name: 'x', type: UINT }, { name: 'y', type: UINT }], 'result-type': UINT },
     ],
-    witnesses: witnesses.map((w) => ({ ...w, arguments: [], 'result-type': UINT })),
+    witnesses: witnesses.map((w) => ({ ...w, arguments: [], 'result type': UINT })),
   }));
 }
 
@@ -106,6 +106,27 @@ describe('the plain builders', () => {
     expect(() => contractCallRequest({ dappDir: dir, address: 'deadbeef', circuit: 'increment' })).toThrow(UsageError);
     expect(() => contractCallRequest({ dappDir: dir, address: ADDRESS, circuit: 'decrement' })).toThrow('counter has no circuit "decrement"');
     expect(() => contractCallRequest({ dappDir: dir, address: ADDRESS, circuit: 'add', args: [1] })).toThrow('add takes 2 arguments (x, y); --args gave 1.');
+  });
+});
+
+describe('--secret-key', () => {
+  const key = 'ab'.repeat(32);
+
+  it('reaches a call too, for a contract deployed with one: its owner\'s secret', () => {
+    expect(call('--address', ADDRESS, '--circuit', 'increment', '--secret-key', key).privateStateSecretKey).toBe(key);
+    expect(call('--address', ADDRESS, '--circuit', 'increment').privateStateSecretKey).toBeUndefined();
+  });
+
+  it('takes legacy on a call, for a contract an mn before 0.6.0 deployed with its default', () => {
+    expect(call('--address', ADDRESS, '--circuit', 'increment', '--secret-key', 'legacy').privateStateSecretKey).toBe('legacy');
+  });
+
+  // The legacy secret is the wallet's public coin key: a contract deployed with it can be taken over.
+  it('refuses legacy on a deploy, and anything but 32 bytes of hex on either', () => {
+    expect(() => deploy('--secret-key', 'legacy')).toThrow(UsageError);
+    expect(() => deploy('--secret-key', 'legacy')).toThrow(/must not be deployed with it/);
+    expect(() => deploy('--secret-key', 'abcd')).toThrow('--secret-key must be 32 bytes of hex (64 chars)');
+    expect(() => call('--address', ADDRESS, '--circuit', 'increment', '--secret-key', 'abcd')).toThrow(UsageError);
   });
 });
 

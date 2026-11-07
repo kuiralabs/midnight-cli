@@ -5,7 +5,7 @@
 // the rc engine's own (packages/engine-rc/src/__tests__/contract-scripts.test.ts).
 
 import { describe, it, expect } from 'vitest';
-import { CancelledError, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
+import { CancelledError, contractKeysFromSeed, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
 import type { CallScript, DeployScript, StateScript } from '@kuiralabs/midnight-cli-core/engine';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -84,7 +84,7 @@ describe('a cancelled run', () => {
     const dappDir = mkdtempSync(join(tmpdir(), 'mn-cancelled-run-'));
     const root = mkdtempSync(join(tmpdir(), 'mn-cancelled-run-root-'));
     try {
-      const common = { dappDir, network: 'undeployed' as const, root, engines: testHost().engines, networkConfig: NETWORK, managedDir: join(dappDir, 'managed', 'counter'), contractName: 'counter', signal: AbortSignal.abort() };
+      const common = { dappDir, network: 'undeployed' as const, root, engines: testHost().engines, networkConfig: NETWORK, managedDir: join(dappDir, 'managed', 'counter'), contractName: 'counter', signal: AbortSignal.abort(), contractKeys: contractKeysFromSeed(Buffer.alloc(32, 1)) };
       await expect(runDeploy({ ...common, servePort: 9932 })).rejects.toBeInstanceOf(CancelledError);
       await expect(runCall({ ...common, servePort: 9932, contractAddress: 'ab'.repeat(32), circuit: 'increment' })).rejects.toBeInstanceOf(CancelledError);
       await expect(runState({ ...common, contractAddress: 'ab'.repeat(32) })).rejects.toBeInstanceOf(CancelledError);
@@ -93,5 +93,24 @@ describe('a cancelled run', () => {
       rmSync(dappDir, { recursive: true, force: true });
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+// Regression: under tsx the inlined functions' text called esbuild's __name
+// helper (an inner named arrow function), which the generated script lacks:
+// every deploy failed with "__name is not defined".
+describe('the functions the runner inlines into a script', () => {
+  it('run on their own, in a context with nothing of this module\'s', async () => {
+    const { runInNewContext } = await import('node:vm');
+    const secret = runInNewContext(`${SCRIPT_PARTS.privateStateSecretFn}\nresolvePrivateStateSecretKey('ab'.repeat(32), undefined);`, { Uint8Array, parseInt });
+    expect(Buffer.from(secret).toString('hex')).toBe('ab'.repeat(32));
+    for (const fn of [SCRIPT_PARTS.privateStateSecretFn, SCRIPT_PARTS.privateStateStoreFn, SCRIPT_PARTS.coerceArgFn]) {
+      expect(fn).not.toContain('__name');
+      // A function given a name inside them is what keepNames wraps (vitest's transform doesn't, tsx's and bun's do).
+      expect(fn.match(/(?:(?:const|let|var)\s+[\w$]+\s*=|[\w$]+\s*:)\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>/g)).toBeNull();
+      expect(fn.match(/(?:(?:const|let|var)\s+[\w$]+\s*=|[\w$]+\s*:)\s*(?:async\s+)?function\b/g)).toBeNull();
+    }
+    const store = runInNewContext(`${SCRIPT_PARTS.privateStateStoreFn}\nopenPrivateStateStore`, { JSON, String, Array, Error });
+    await expect(store({}, { dir: '/x', storeName: 's', password: undefined, accountId: undefined })).rejects.toThrow(/MN_PRIVATE_STATE_PASSWORD/);
   });
 });

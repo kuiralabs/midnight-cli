@@ -3,7 +3,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import type { TestAction, DappTestConfig } from './types.ts';
-import type { NetworkConfig, NetworkName, HostEngines } from '@kuiralabs/midnight-cli-core';
+import type { ContractKeys, NetworkConfig, NetworkName, HostEngines } from '@kuiralabs/midnight-cli-core';
 import { runDeploy, runCall, runState, type StateResult, findContractInfo, type ContractInfo, contractExists } from '@kuiralabs/midnight-contract';
 import { analyzeWitnessDependencies } from './circuit-witness-deps.ts';
 import { findContractSourcePath } from './ai-scaffold.ts';
@@ -39,6 +39,8 @@ export interface ActionsRunnerOptions {
   suiteName: string;
   networkConfig: NetworkConfig;
   servePort: number;
+  /** The private-state keys of the wallet the serve on `servePort` pays from: asked for by the first deploy or call. */
+  contractKeys: () => Promise<ContractKeys>;
   redeploy?: boolean;
   onActionStart?: (action: TestAction) => void;
   onActionComplete?: (action: TestAction, result: ActionResult) => void;
@@ -50,7 +52,7 @@ export interface ActionsRunnerOptions {
  * Deploy address flows to subsequent call/state actions automatically.
  */
 export async function runActions(options: ActionsRunnerOptions): Promise<ActionResult[]> {
-  const { root, engines, actions, config, dappDir, suiteName, networkConfig, servePort, redeploy, onActionStart, onActionComplete, onMessage } = options;
+  const { root, engines, actions, config, dappDir, suiteName, networkConfig, servePort, contractKeys, redeploy, onActionStart, onActionComplete, onMessage } = options;
   const results: ActionResult[] = [];
 
   // Load cached contract address (test replay). The address is only as good
@@ -113,6 +115,7 @@ export async function runActions(options: ActionsRunnerOptions): Promise<ActionR
         managedDir: info.managedDir,
         contractName: info.name,
         servePort,
+        contractKeys,
         contractAddress,
         witnessDeps,
         onMessage,
@@ -165,6 +168,7 @@ interface ExecutionContext {
   managedDir: string;
   contractName: string;
   servePort: number;
+  contractKeys: () => Promise<ContractKeys>;
   contractAddress?: string;
   /** Map of circuit → witnesses it transitively calls. Empty when the
    *  contract source wasn't findable; pre-flight is then a no-op. */
@@ -209,6 +213,7 @@ async function executeDeploy(action: TestAction, ctx: ExecutionContext): Promise
     managedDir: ctx.managedDir,
     contractName: ctx.contractName,
     servePort: ctx.servePort,
+    contractKeys: await ctx.contractKeys(),
     onMessage: ctx.onMessage,
   });
 
@@ -281,6 +286,7 @@ async function executeCall(action: TestAction, ctx: ExecutionContext): Promise<A
     circuit: action.circuit,
     args,
     servePort: ctx.servePort,
+    contractKeys: await ctx.contractKeys(),
     onMessage: ctx.onMessage,
   });
 

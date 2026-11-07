@@ -32,14 +32,14 @@ const MIDNIGHT_JS_WRAPS_IT = `
 
 /** What the runner rejects with when a script's call to mn serve fails with what `failure` throws (`wrapped`: through midnight-js's provider wrapper, as a deploy or call meets it). */
 export async function scriptFailureAtServe(failure: () => unknown, { wrapped = false }: { wrapped?: boolean } = {}): Promise<Error> {
-  const server = createRpcServer({ host: createHost(), port: 0, refuseBrowsers: true, handlers: { balanceUnsealedTransaction: async () => { throw failure(); } } });
+  const server = createRpcServer({ host: createHost(), port: 0, refuseBrowsers: true, handlers: { connect: async () => ({ networkId: 'undeployed' }), balanceUnsealedTransaction: async () => { throw failure(); } } });
   const dir = mkdtempSync(join(tmpdir(), 'mn-script-wire-'));
   try {
     await server.ready;
     const { port } = server.wss.address() as AddressInfo;
     const wsModule = pathToFileURL(createRequire(import.meta.url).resolve('ws')).href;
     const script = SCRIPT_PRELUDE + rpcClientCode(port, wsModule) + `
-await rpcConnect();
+await rpcConnect('undeployed');
 await rpcCall('balanceUnsealedTransaction', { tx: 'ab' })${wrapped ? MIDNIGHT_JS_WRAPS_IT : ''};
 `;
     return await executeScript({ dir, script, overlaySdk: false, packages: { packages: [], packageFolder: () => null, set: 'rc' } }).then(

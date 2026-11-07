@@ -122,7 +122,7 @@ function loadContractInfo(infoPath: string, managedDir: string, siblings: string
   try {
     raw = JSON.parse(readFileSync(infoPath, 'utf-8'));
   } catch (err) {
-    throw new Error(`Failed to parse ${infoPath}: ${(err as Error).message}`);
+    throw new ContractInfoInvalidError(infoPath, [`it is not JSON (${(err as Error).message})`]);
   }
 
   const info = parseContractInfo(raw, infoPath, managedDir, siblings);
@@ -133,7 +133,7 @@ function loadContractInfo(infoPath: string, managedDir: string, siblings: string
 
 function parseContractInfo(raw: unknown, path: string, managedDir: string, siblings: string[]): ContractInfo {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    throw new Error(`${path}: must be a JSON object`);
+    throw new ContractInfoInvalidError(path, ['it is not a JSON object']);
   }
 
   const obj = raw as Record<string, unknown>;
@@ -145,11 +145,12 @@ function parseContractInfo(raw: unknown, path: string, managedDir: string, sibli
   const languageVersion = typeof obj['language-version'] === 'string' ? (obj['language-version'] as string) : 'unknown';
   const runtimeVersion = typeof obj['runtime-version'] === 'string' ? (obj['runtime-version'] as string) : 'unknown';
 
-  // circuits/witnesses default to [] when absent so an essentially-empty
-  // contract still loads cleanly. A real "this file is corrupt" surfaces
-  // earlier in JSON.parse.
-  const circuits = Array.isArray(obj.circuits) ? (obj.circuits as CircuitInfo[]) : [];
-  const witnesses = Array.isArray(obj.witnesses) ? (obj.witnesses as WitnessInfo[]) : [];
+  // Every compiler writes both lists, empty or not: without them the file is
+  // no compiler's, and reading it on would fail later with a raw TypeError.
+  const problems = [...listProblems(obj, 'circuits', circuitProblems), ...listProblems(obj, 'witnesses', witnessProblems)];
+  if (problems.length > 0) throw new ContractInfoInvalidError(path, problems);
+  const circuits = obj.circuits as CircuitInfo[];
+  const witnesses = obj.witnesses as WitnessInfo[];
 
   // Derive contract name from the managed directory name
   const name = basename(managedDir);
@@ -264,6 +265,49 @@ export function toJsonOutput(info: ContractInfo): Record<string, unknown> {
       returnType: formatCompactType(w['result type']),
     })),
   };
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** What is wrong with the list `key` of a contract-info.json, each entry checked by `entryProblems`. */
+function listProblems(obj: Record<string, unknown>, key: string, entryProblems: (entry: unknown) => string[]): string[] {
+  const list = obj[key];
+  if (!Array.isArray(list)) return [list === undefined ? `"${key}" is missing` : `"${key}" is not a list`];
+  return list.flatMap((entry, i) => entryProblems(entry).map((problem) => `${key}[${i}]${problem}`));
+}
+
+/** What an argument list lacks: a name and a type for each argument. */
+function argumentProblems(args: unknown): string[] {
+  if (!Array.isArray(args)) return [' has no "arguments" list'];
+  return args.flatMap((arg, i) => isObject(arg) && typeof arg.name === 'string' && isObject(arg.type) && typeof arg.type['type-name'] === 'string'
+    ? []
+    : [` argument ${i} has no name and type`]);
+}
+
+function circuitProblems(entry: unknown): string[] {
+  if (!isObject(entry) || typeof entry.name !== 'string') return [' has no "name"'];
+  return [
+    ...argumentProblems(entry.arguments),
+    ...(isObject(entry['result-type']) ? [] : [' has no "result-type"']),
+  ].map((problem) => ` (${entry.name})${problem}`);
+}
+
+function witnessProblems(entry: unknown): string[] {
+  if (!isObject(entry) || typeof entry.name !== 'string') return [' has no "name"'];
+  return [
+    ...argumentProblems(entry.arguments),
+    ...(isObject(entry['result type']) ? [] : [' has no "result type"']),
+  ].map((problem) => ` (${entry.name})${problem}`);
+}
+
+/** A contract-info.json that is not what the Compact compiler writes: what is wrong with it. */
+export class ContractInfoInvalidError extends Error {
+  readonly code = 'CONTRACT_INFO_INVALID';
+  constructor(readonly path: string, readonly problems: readonly string[]) {
+    super(`${path} is not a contract-info.json the Compact compiler wrote: ${problems.join('; ')}. Compile the contract again (compact compile).`);
+    this.name = 'ContractInfoInvalidError';
+    Object.setPrototypeOf(this, ContractInfoInvalidError.prototype);
+  }
 }
 
 /** No compiled contract (managed/<name>/compiler/contract-info.json) where one was looked for. */

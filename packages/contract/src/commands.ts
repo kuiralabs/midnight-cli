@@ -2,7 +2,7 @@
 // commands, contract's codes and its agent guidance, for the shell that
 // installs them.
 
-export { contractCodes } from './commands/contract.codes.ts';
+export { contractCodes, RUNS_CONTRACTS } from './commands/contract.codes.ts';
 export { contractDefinition } from './commands/contract.definition.ts';
 export { contractGuidance } from './commands/contract.guidance.ts';
 export { contractCommands } from './commands/contract.package.ts';

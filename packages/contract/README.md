@@ -35,6 +35,7 @@ Each error carries a `code`, and `classifyError(err, registry)` gives its code a
 |------|------|-----------------|------------|
 | `NO_NODE_RUNTIME` | 1 | Contract scripts run under Node.js, and none was found on PATH. | Ask the user to install Node.js 22 or later, or to run mn under Node. |
 | `CONTRACT_NOT_COMPILED` | 1 | No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json). | Ask the user to compile the contract (compact compile), or pass the dApp folder (path) or the managed folder (managed). |
+| `CONTRACT_INFO_INVALID` | 1 | A compiled contract's contract-info.json is not what the Compact compiler writes (not JSON, or its circuits or witnesses missing or malformed). | The message names what is wrong: ask the user to compile the contract again (compact compile). |
 <!-- codes: end -->
 
 ## Mounting its commands

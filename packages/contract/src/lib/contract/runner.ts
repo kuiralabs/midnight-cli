@@ -11,12 +11,13 @@ import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdir
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { assertEndpointUsable, type NetworkConfig, type NetworkName, sdkSetOf, type EngineContractScripts, type HostEngines, type ScriptParts, CancelledError, throwIfCancelled, isTransportFailure } from '@kuiralabs/midnight-cli-core';
+import { assertEndpointUsable, type ContractKeys, type NetworkConfig, type NetworkName, sdkSetOf, type EngineContractScripts, type HostEngines, type ScriptParts, CancelledError, throwIfCancelled, isTransportFailure } from '@kuiralabs/midnight-cli-core';
 import { findContractInfo } from './inspect.ts';
 import { assertContractRunsOn } from './runtime-check.ts';
 import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
 import { coerceArg } from './arg-coerce.ts';
 import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
+import { openPrivateStateStore } from './private-state-store.ts';
 
 // The generated deploy/call script imports SDK packages by bare specifier
 // (`@midnight-ntwrk/midnight-js-contracts`, `ws`, etc.); without help, Node
@@ -38,6 +39,16 @@ export interface RunnerOptions {
   managedDir: string;
   contractName: string;
   servePort: number;
+  /** The keys of the wallet mn serve pays from on `servePort` (its ServedWallet's): the script keeps that wallet's private state with them. */
+  contractKeys: ContractKeys;
+  /**
+   * The secret seeded into the contract's initial private state, when not the
+   * wallet's own (`contractKeys.privateStateSecret`): 32 bytes of hex (a
+   * contract whose constructor reads its owner from a witness), or `legacy`
+   * (the wallet's coin public key, mn's default before 0.6.0). It reaches the
+   * script through its environment, never its argv or text.
+   */
+  privateStateSecretKey?: string;
   onMessage?: (msg: string) => void;
   /** Cancels the run: the script's process is stopped. */
   signal?: AbortSignal;
@@ -45,13 +56,6 @@ export interface RunnerOptions {
 
 export interface DeployOptions extends RunnerOptions {
   privateStateKey?: string;
-  /**
-   * 32-byte hex secret seeded into the contract's initial private state (for a
-   * contract whose constructor reads its owner from a witness). Passed to the
-   * deploy subprocess via env (MN_PRIVATE_STATE_SECRET), never argv or the
-   * on-disk script, so the private key is not written to disk.
-   */
-  privateStateSecretKey?: string;
   /**
    * Constructor arguments passed to the contract's `Constructor` (the WASM
    * function the SDK invokes during `deployContract`). Forwarded to
@@ -87,11 +91,19 @@ export interface StateOptions {
 
 export interface DeployResult {
   contractAddress: string;
+  /** The hash of the deploy's transaction; absent from a script that did not report it. */
+  txHash?: string;
+  /** One of its identifiers. */
+  txId?: string;
 }
 
 export interface CallResult {
   status: string;
   circuit: string;
+  /** The hash of the call's transaction; absent from a script that did not report it. */
+  txHash?: string;
+  /** One of its identifiers. */
+  txId?: string;
 }
 
 export interface StateResult {
@@ -104,6 +116,21 @@ export interface StateResult {
 // and the script is a file in the dApp's directory until the run ends.
 const INDEXER_URL_ENV = 'MN_INDEXER_URL';
 const INDEXER_WS_URL_ENV = 'MN_INDEXER_WS_URL';
+
+// The wallet's private-state secret, store password and store account reach a
+// deploy or call script through its environment too, never its text or argv.
+const PRIVATE_STATE_SECRET_ENV = 'MN_PRIVATE_STATE_SECRET';
+const PRIVATE_STATE_PASSWORD_ENV = 'MN_PRIVATE_STATE_PASSWORD';
+const PRIVATE_STATE_ACCOUNT_ENV = 'MN_PRIVATE_STATE_ACCOUNT';
+
+/** What a deploy or call script keeps the wallet's private state with: the secret it seeds, and the store's password and account. */
+export function privateStateEnvironment({ contractKeys, privateStateSecretKey }: Pick<RunnerOptions, 'contractKeys' | 'privateStateSecretKey'>): Record<string, string> {
+  return {
+    [PRIVATE_STATE_SECRET_ENV]: privateStateSecretKey ?? contractKeys.privateStateSecret,
+    [PRIVATE_STATE_PASSWORD_ENV]: contractKeys.storagePassword,
+    [PRIVATE_STATE_ACCOUNT_ENV]: contractKeys.storageAccountId,
+  };
+}
 
 export function indexerEnvironment(networkConfig: NetworkConfig): Record<string, string> {
   assertEndpointUsable(networkConfig.indexer);
@@ -135,13 +162,8 @@ export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
   const engine = await options.engines.load(sdkSetOf(options.network, options.root));
   const scripts = { ...engine.contracts.scripts, set: engine.set };
   const script = scripts.deploy(options, SCRIPT_PARTS);
-  // The private-state secret goes to the subprocess via env (never the on-disk
-  // script) so a caller-chosen owner is not written to the filesystem.
-  const extraEnv = {
-    ...indexerEnvironment(options.networkConfig),
-    ...(options.privateStateSecretKey ? { MN_PRIVATE_STATE_SECRET: options.privateStateSecretKey } : {}),
-  };
-  const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: extraEnv, signal: options.signal });
+  const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options) };
+  const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env, signal: options.signal });
   try {
     return JSON.parse(result) as DeployResult;
   } catch {
@@ -156,7 +178,8 @@ export async function runCall(options: CallOptions): Promise<CallResult> {
   const engine = await options.engines.load(sdkSetOf(options.network, options.root));
   const scripts = { ...engine.contracts.scripts, set: engine.set };
   const script = scripts.call(options, SCRIPT_PARTS);
-  const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal });
+  const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options) };
+  const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env, signal: options.signal });
   try {
     return JSON.parse(result) as CallResult;
   } catch {
@@ -175,13 +198,16 @@ const RPC_URL = 'ws://127.0.0.1:${servePort}';
 let rpcId = 0;
 let rpcWs;
 
-async function rpcConnect() {
-  return new Promise((resolve, reject) => {
+// Opens the socket, then connects to the wallet for networkId, as the DApp
+// connector API has a dApp do before any other call.
+async function rpcConnect(networkId) {
+  await new Promise((resolve, reject) => {
     rpcWs = new WebSocket(RPC_URL);
     rpcWs.on('open', () => resolve(rpcWs));
     rpcWs.on('error', (err) => reject(new Error('Cannot connect to mn serve at ' + RPC_URL + ': ' + err.message, { cause: err })));
     setTimeout(() => reject(new Error('Timeout connecting to mn serve at ' + RPC_URL)), 5000);
   });
+  await rpcCall('connect', { networkId });
 }
 
 function rpcCall(method, params = {}) {
@@ -250,6 +276,9 @@ const ARG_COERCE_FN = `\nconst coerceArg = (${coerceArg.toString()});\n`;
 // .toString()-inlining trick as ARG_COERCE_FN, so the script's
 // makeInitialPrivateState and the test suite share one implementation).
 const PRIVATE_STATE_SECRET_FN = `\nconst resolvePrivateStateSecretKey = (${resolvePrivateStateSecretKey.toString()});\n`;
+
+// openPrivateStateStore serialized for the generated script, the same way.
+const PRIVATE_STATE_STORE_FN = `\nconst openPrivateStateStore = (${openPrivateStateStore.toString()});\n`;
 
 /** Marks the line a generated script reports its failure on, so mn can tell it from progress and warnings. */
 export const SCRIPT_ERROR_MARKER = '__MN_ERROR__';
@@ -330,6 +359,10 @@ export const SCRIPT_PARTS: ScriptParts = {
   rpcClientCode,
   coerceArgFn: ARG_COERCE_FN,
   privateStateSecretFn: PRIVATE_STATE_SECRET_FN,
+  privateStateStoreFn: PRIVATE_STATE_STORE_FN,
+  privateStateSecretEnv: PRIVATE_STATE_SECRET_ENV,
+  privateStatePasswordEnv: PRIVATE_STATE_PASSWORD_ENV,
+  privateStateAccountEnv: PRIVATE_STATE_ACCOUNT_ENV,
   witnessCandidates: WITNESS_FILE_CANDIDATES,
   indexerUrlEnv: INDEXER_URL_ENV,
   indexerWsUrlEnv: INDEXER_WS_URL_ENV,

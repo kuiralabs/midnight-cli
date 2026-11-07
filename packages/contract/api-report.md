@@ -14,6 +14,8 @@ export interface CalledCircuit {
     readonly circuit: string;
     readonly address: string;
     readonly status: string;
+    readonly txHash?: string;
+    readonly receipt?: Receipt;
 }
 export declare function callContract(host: Host, options: CallContractOptions): Promise<CalledCircuit>;
 export interface DeployContractOptions extends PaidCallOptions<ContractChecked> {
@@ -23,6 +25,8 @@ export interface DeployedContract {
     readonly network: NetworkName;
     readonly contractName: string;
     readonly address: string;
+    readonly txHash?: string;
+    readonly receipt?: Receipt;
 }
 export declare function deployContract(host: Host, options: DeployContractOptions): Promise<DeployedContract>;
 export declare function contractExists(indexerUrl: string, address: string, timeoutMs?: number): Promise<boolean | undefined>;
@@ -53,6 +57,12 @@ export interface ContractInfo {
     witnesses: WitnessInfo[];
     siblings: string[];
 }
+export declare class ContractInfoInvalidError extends Error {
+    readonly path: string;
+    readonly problems: readonly string[];
+    readonly code = "CONTRACT_INFO_INVALID";
+    constructor(path: string, problems: readonly string[]);
+}
 export declare class ContractNotCompiledError extends Error {
     readonly code = "CONTRACT_NOT_COMPILED";
     constructor(message: string);
@@ -77,11 +87,13 @@ export interface ContractCallRequest {
     address: string;
     circuit: string;
     callArgs: unknown[];
+    privateStateSecretKey?: string;
 }
 export declare function contractCallRequest(location: ContractLocation & {
     address: string;
     circuit: string;
     args?: unknown[];
+    secretKey?: string;
 }): ContractCallRequest;
 export interface ContractDeployRequest {
     dappDir: string;
@@ -107,6 +119,8 @@ export interface CallOptions extends RunnerOptions {
 export interface CallResult {
     status: string;
     circuit: string;
+    txHash?: string;
+    txId?: string;
 }
 export declare class ContractScriptError extends Error {
     readonly code: string | undefined;
@@ -114,11 +128,12 @@ export declare class ContractScriptError extends Error {
 }
 export interface DeployOptions extends RunnerOptions {
     privateStateKey?: string;
-    privateStateSecretKey?: string;
     args?: unknown[];
 }
 export interface DeployResult {
     contractAddress: string;
+    txHash?: string;
+    txId?: string;
 }
 export declare function runCall(options: CallOptions): Promise<CallResult>;
 export declare function runDeploy(options: DeployOptions): Promise<DeployResult>;
@@ -131,6 +146,8 @@ export interface RunnerOptions {
     managedDir: string;
     contractName: string;
     servePort: number;
+    contractKeys: ContractKeys;
+    privateStateSecretKey?: string;
     onMessage?: (msg: string) => void;
     signal?: AbortSignal;
 }
@@ -214,8 +231,16 @@ export declare const contractCodes: readonly [
         readonly order: 205;
         readonly summary: "No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json).";
         readonly recovery: "Ask the user to compile the contract (compact compile), or pass the dApp folder (path) or the managed folder (managed).";
+    },
+    {
+        readonly code: "CONTRACT_INFO_INVALID";
+        readonly exitCode: 1;
+        readonly order: 206;
+        readonly summary: "A compiled contract's contract-info.json is not what the Compact compiler writes (not JSON, or its circuits or witnesses missing or malformed).";
+        readonly recovery: "The message names what is wrong: ask the user to compile the contract again (compact compile).";
     }
 ];
+export declare const RUNS_CONTRACTS: import("@kuiralabs/midnight-cli-core").CodeSet;
 export declare const contractDefinition: CommandDefinition;
 export declare const contractGuidance: PackageGuidance;
 export declare const contractCommands: CommandPackage;

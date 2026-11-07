@@ -7,6 +7,7 @@ import { deployContract } from '../lib/contract/deploy.ts';
 import { callContract } from '../lib/contract/call.ts';
 import { readContractState } from '../lib/contract/state.ts';
 import { showPaidStep } from '@kuiralabs/midnight-wallet/commands';
+import { receiptJson } from '@kuiralabs/midnight-chain';
 import { resolveContractCallRequest, resolveContractDeployRequest, resolveDappDir, resolveScanDir } from '../lib/contract/request.ts';
 import {
   findContractInfo,
@@ -140,10 +141,13 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
       contractName: deployed.contractName,
       address: deployed.address,
       network: deployed.network,
+      ...(deployed.txHash === undefined ? {} : { txHash: deployed.txHash }),
+      ...(deployed.receipt === undefined ? {} : receiptJson(deployed.receipt)),
     });
   } else {
     ctx.output.stderr('\n');
     ctx.output.stderr(keyValue('Address', deployed.address) + '\n');
+    if (deployed.txHash !== undefined) ctx.output.stderr(keyValue('Tx hash', deployed.txHash) + '\n');
     ctx.output.stderr('\n' + green('  ✓ Deploy successful') + '\n');
     writeNextStepsHint(ctx.output, deployed.address, info.circuits, deployed.network);
     // Pipeable address on stdout for shell composition (e.g. `addr=$(mn contract deploy)`).
@@ -207,8 +211,11 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
       address,
       network: called.network,
       status: called.status,
+      ...(called.txHash === undefined ? {} : { txHash: called.txHash }),
+      ...(called.receipt === undefined ? {} : receiptJson(called.receipt)),
     });
   } else {
+    if (called.txHash !== undefined) ctx.output.stderr('\n' + keyValue('Tx hash', called.txHash) + '\n');
     ctx.output.stderr('\n' + green('  ✓ Circuit call successful') + '\n\n');
   }
 }

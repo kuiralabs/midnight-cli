@@ -83,6 +83,8 @@ import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
+import * as mnFs from 'node:fs';
+import * as mnPath from 'node:path';
 `;
 
 /**
@@ -156,19 +158,15 @@ if (!witnesses) {
   for (const p of WITNESS_CANDIDATES) process.stderr.write('  - ' + p + '\\n');
 }
 
-// Generate initial private state.
-// Uses a deterministic seed derived from the wallet so post/takeDown use the same key.
-// The private state provider (leveldb) persists between calls, but initialPrivateState
-// is the fallback when no stored state exists yet.
+// The contract's initial private state, seeded with the secret mn gives the
+// script in its environment (resolvePrivateStateSecretKey, injected above via
+// .toString()): the paying wallet's own, derived from its seed, so every deploy
+// and call of one wallet uses the same; or the caller's --secret-key.
 ${parts.privateStateSecretFn}
 function makeInitialPrivateState() {
   if (createPrivateState) {
-    // Secret precedence (see resolvePrivateStateSecretKey, injected above via
-    // .toString()): an explicit mn --secret-key (from env MN_PRIVATE_STATE_SECRET,
-    // never on disk) wins, else a deterministic key from the wallet's coin public
-    // key so post/takeDown reuse it, else random.
     const secretKey = resolvePrivateStateSecretKey(
-      process.env.MN_PRIVATE_STATE_SECRET,
+      process.env.${parts.privateStateSecretEnv},
       walletState?.shieldedCoinPublicKey,
     );
     try { return createPrivateState(secretKey); } catch {}
@@ -197,14 +195,30 @@ export function providerSetupCode(networkConfig: NetworkConfig, privateStateKey:
   return `
 const zkConfigProvider = new NodeZkConfigProvider(MANAGED_DIR);
 
+// The private-state store, in the folder the script runs in (midnight-js's
+// default place), opened for the paying wallet first: kept to its owner, its
+// entries under the wallet's own password and account (openPrivateStateStore).
+const PRIVATE_STATE_DIR = mnPath.resolve('midnight-level-db');
+${parts.privateStateStoreFn}
+const { accountId: privateStateAccount } = await openPrivateStateStore(
+  { fs: mnFs, join: mnPath.join, provide: (value) => () => value, umask: (mask) => process.umask(mask), levelPrivateStateProvider },
+  {
+    dir: PRIVATE_STATE_DIR,
+    storeName: ${JSON.stringify(privateStateKey)},
+    password: process.env.${parts.privateStatePasswordEnv},
+    accountId: process.env.${parts.privateStateAccountEnv},
+  },
+);
+
 const providers = {
   // The network the transactions are built for, and how long one stays valid
   // (mn serve applies its own TTL when it balances).
   config: { networkId: ${JSON.stringify(networkConfig.networkId.toLowerCase())}, ttlSeconds: ${TX_TTL_SECONDS} },
   privateStateProvider: levelPrivateStateProvider({
+    midnightDbName: PRIVATE_STATE_DIR,
     privateStateStoreName: ${JSON.stringify(privateStateKey)},
-    privateStoragePasswordProvider: () => Promise.resolve('mn-contract-default-pwd-16ch'),
-    accountId: 'mn-contract-runner',
+    privateStoragePasswordProvider: () => process.env.${parts.privateStatePasswordEnv},
+    accountId: privateStateAccount,
   }),
   publicDataProvider: indexerPublicDataProvider({
     queryURL: process.env.${parts.indexerUrlEnv},
@@ -233,7 +247,7 @@ ${parts.rpcClientCode(opts.servePort)}
 ${contractSetupCode(opts.contractName, opts.managedDir, parts)}
 
 process.stderr.write('Connecting to mn serve...\\n');
-await rpcConnect();
+await rpcConnect(${JSON.stringify(opts.networkConfig.networkId.toLowerCase())});
 process.stderr.write('Connected\\n');
 
 ${PROVIDER_IMPORTS}
@@ -255,7 +269,9 @@ const deployed = await deployContract(providers, {
 const address = deployed.deployTxData?.public?.contractAddress ?? 'unknown';
 process.stderr.write('Deploy complete: ' + address + '\\n');
 
-console.log(JSON.stringify({ contractAddress: address }));
+// The deploy's transaction, as the indexer listed it once midnight-js saw it final.
+const deployTx = deployed.deployTxData?.public;
+console.log(JSON.stringify({ contractAddress: address, txHash: deployTx?.txHash, txId: deployTx?.txId }));
 rpcClose();
 process.exit(0);
 `;
@@ -269,7 +285,7 @@ ${parts.rpcClientCode(opts.servePort)}
 ${contractSetupCode(opts.contractName, opts.managedDir, parts)}
 
 process.stderr.write('Connecting to mn serve...\\n');
-await rpcConnect();
+await rpcConnect(${JSON.stringify(opts.networkConfig.networkId.toLowerCase())});
 process.stderr.write('Connected\\n');
 
 ${PROVIDER_IMPORTS}
@@ -289,9 +305,11 @@ const deployed = await findDeployedContract(providers, {
 process.stderr.write('Calling ${opts.circuit}...\\n');
 ${parts.coerceArgFn}
 const args = (${JSON.stringify(opts.args ?? [])}).map(coerceArg);
-await deployed.callTx.${opts.circuit}(...args);
+const called = await deployed.callTx.${opts.circuit}(...args);
 
-console.log(JSON.stringify({ status: 'success', circuit: ${JSON.stringify(opts.circuit)} }));
+// The call's transaction, as the indexer listed it once midnight-js saw it final.
+const callTx = called?.public;
+console.log(JSON.stringify({ status: 'success', circuit: ${JSON.stringify(opts.circuit)}, txHash: callTx?.txHash, txId: callTx?.txId }));
 rpcClose();
 process.exit(0);
 `;
