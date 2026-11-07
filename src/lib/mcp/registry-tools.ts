@@ -5,7 +5,7 @@
 // server's one tool of its own, midnight_confirm_operation, redeems the tokens
 // the confirmation flow gives.
 
-import { captureCommand, type CommandRun, getEndpointOverridesForNetwork, loadCliConfig, resolveNetworkName, type CommandRegistry, type ParsedArgs, type RegisteredTool, type ToolAnnotations, type ToolInputSchema, confirmationText, toolArgv, toolDescription } from '@kuiralabs/midnight-cli-core';
+import { captureCommand, type CommandRun, DEFAULT_WALLET_NAME, getEndpointOverridesForNetwork, loadCliConfig, resolveNetworkName, type CommandRegistry, type ParsedArgs, type RegisteredTool, type ToolAnnotations, type ToolInputSchema, confirmationText, toolArgv, toolDescription } from '@kuiralabs/midnight-cli-core';
 
 /** A tool as tools/list sends it. */
 export interface ListedTool {
@@ -73,6 +73,25 @@ export function endpointOverridesNote(tool: RegisteredTool, params: Readonly<Rec
     return set === undefined ? [] : [`${label} ${set} (set with config)`];
   });
   return named.length === 0 ? '' : `. Endpoints: ${named.join(', ')}`;
+}
+
+/**
+ * The parameters of a call behind confirmation with the wallet and network
+ * it acts as pinned: for a tool that takes a wallet, the one given or else
+ * the active one, and the network given or else the saved one, both under
+ * the state root `root`, as they are when the call is requested. The token
+ * keeps these, so the text the user confirms names them and confirming runs
+ * as them, even if the active wallet or network changed in between.
+ */
+export function pinConfirmedTarget(tool: RegisteredTool, params: Readonly<Record<string, unknown>>, root: string): Record<string, unknown> {
+  const properties = tool.inputSchema.properties;
+  if (!Object.hasOwn(properties, 'wallet')) return { ...params };
+  const pinned: Record<string, unknown> = { ...params };
+  if (pinned.wallet === undefined) pinned.wallet = loadCliConfig(root).wallet ?? DEFAULT_WALLET_NAME;
+  if (Object.hasOwn(properties, 'network') && pinned.network === undefined) {
+    pinned.network = resolveNetworkName({ args: toolArgv(tool, params), configDir: root });
+  }
+  return pinned;
 }
 
 /**

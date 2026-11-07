@@ -21,7 +21,7 @@ import { withServerAdvice } from './lib/mcp/server-advice.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { createConfirmationStore } from './lib/mcp/confirmation.ts';
 import { assertKnownParams, assertParamTypes } from './lib/mcp/known-params.ts';
-import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from './lib/mcp/registry-tools.ts';
+import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, pinConfirmedTarget, runTool } from './lib/mcp/registry-tools.ts';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
@@ -136,13 +136,16 @@ async function callTool(request: CallToolRequest, extra: RequestHandlerExtra<Ser
 
   // Step 1 of confirmation: return a pending token instead of executing.
   if (tool !== undefined && needsConfirmation(tool, params)) {
+    // The wallet and network the call acts as are fixed now: confirming runs as them, whatever is active then.
+    let pinned: Record<string, unknown>;
     let description: string;
     try {
-      description = await confirmationFor(tool, params, call);
+      pinned = pinConfirmedTarget(tool, params, call.host.paths().stateRoot);
+      description = await confirmationFor(tool, pinned, call);
     } catch (err) {
       return errorResponse(err instanceof Error ? err : new Error(String(err)), call);
     }
-    const pending = confirmationStore.create({ tool: name, args: params, description });
+    const pending = confirmationStore.create({ tool: name, args: pinned, description });
     return {
       content: [{
         type: 'text' as const,

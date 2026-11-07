@@ -6,7 +6,10 @@
 import { describe, expect, it } from 'vitest';
 import { createCommandRegistry, type CommandDefinition, type ToolDefinition, type CallContext, MINIMAL_FLAG, type ParsedArgs } from '@kuiralabs/midnight-cli-core';
 import { installedCommands } from '../lib/installed-commands.ts';
-import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, runTool } from '../lib/mcp/registry-tools.ts';
+import { CONFIRM_TOOL, confirmationFor, findTool, listedTools, pinConfirmedTarget, runTool } from '../lib/mcp/registry-tools.ts';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { ownCall } from './helpers/own-call.ts';
 
 const received: ParsedArgs[] = [];
@@ -76,6 +79,43 @@ describe('the MCP server\'s tools from a registry', () => {
 
   it('confirms the definition\'s text when there is no check', async () => {
     expect(await confirmationFor(findTool(registry, 'thing_plain')!, {}, ownCall())).toBe('Plain thing');
+  });
+});
+
+describe('pinConfirmedTarget', () => {
+  const withConfig = (config: Record<string, unknown> | undefined, test: (root: string) => void): void => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mn-pin-'));
+    try {
+      if (config !== undefined) fs.writeFileSync(path.join(root, 'config.json'), JSON.stringify(config));
+      test(root);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  };
+  const transfer = findTool(installedCommands, 'midnight_transfer')!;
+
+  it('fills in the active wallet and the saved network, as they are when the call is asked', () => {
+    withConfig({ wallet: 'alice', network: 'preview' }, (root) => {
+      expect(pinConfirmedTarget(transfer, { to: 'bob', amount: '1' }, root)).toStrictEqual({ to: 'bob', amount: '1', wallet: 'alice', network: 'preview' });
+    });
+  });
+
+  it('keeps the wallet and network the call names', () => {
+    withConfig({ wallet: 'alice', network: 'preview' }, (root) => {
+      expect(pinConfirmedTarget(transfer, { to: 'bob', amount: '1', wallet: 'carol', network: 'undeployed' }, root)).toStrictEqual({ to: 'bob', amount: '1', wallet: 'carol', network: 'undeployed' });
+    });
+  });
+
+  it('pins the default wallet and network when none is saved', () => {
+    withConfig(undefined, (root) => {
+      expect(pinConfirmedTarget(transfer, { to: 'bob', amount: '1' }, root)).toStrictEqual({ to: 'bob', amount: '1', wallet: 'default', network: 'undeployed' });
+    });
+  });
+
+  it('leaves a tool that acts on no wallet as it was called', () => {
+    withConfig({ wallet: 'alice' }, (root) => {
+      expect(pinConfirmedTarget(findTool(installedCommands, 'midnight_wallet_remove')!, { name: 'bob' }, root)).toStrictEqual({ name: 'bob' });
+    });
   });
 });
 

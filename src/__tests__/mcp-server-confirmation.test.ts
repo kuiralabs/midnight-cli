@@ -225,6 +225,40 @@ describe('midnight_wallet_generate with force', () => {
   });
 });
 
+// Regression: a token ran as whatever wallet was active when it was
+// confirmed, so switching the active wallet between the two steps spent from
+// a wallet the user never confirmed.
+describe('a confirmation pins the wallet and network it was asked for', () => {
+  const UNREACHABLE = { node: 'ws://127.0.0.1:1', 'indexer-ws': 'ws://127.0.0.1:1/api/v4/graphql/ws', 'proof-server': 'http://127.0.0.1:1' };
+  const OFFER = 'cd'.repeat(32);
+
+  it('names the active wallet and network in what the user confirms, and runs as them after the active wallet changed', async () => {
+    await call('midnight_wallet_generate', { name: 'frank' });
+    await call('midnight_wallet_use', { name: 'alice' });
+    // An open offer on record for frank only: run as frank, the cancel would find it and go to the network.
+    const frank = JSON.parse(fs.readFileSync(path.join(home, '.midnight', 'wallets', 'frank.json'), 'utf8')) as { addresses: Record<string, string> };
+    const offers = path.join(home, '.midnight', 'swap-offers', 'undeployed');
+    fs.mkdirSync(offers, { recursive: true });
+    fs.writeFileSync(path.join(offers, `${frank.addresses.undeployed}.json`), JSON.stringify({ offers: [{
+      id: OFFER, terms: { give: { token: '00'.repeat(32), amount: '1' }, want: { token: '01'.repeat(32), amount: '1' } },
+      nullifiers: ['ef'.repeat(32)], madeAt: new Date(0).toISOString(), expiresAt: new Date(0).toISOString(),
+    }] }));
+
+    const pending = await call('midnight_swap_cancel', { id: OFFER.slice(0, 8), ...UNREACHABLE });
+    expect(pending.error, String(pending.message)).toBeUndefined();
+    expect(pending.description).toMatch(/^Cancel swap offer cdcdcdcd of wallet alice on undeployed, /);
+
+    await call('midnight_wallet_use', { name: 'frank' });
+    try {
+      const done = await call('midnight_confirm_operation', { token: pending.token });
+      // Run as alice, who has no such offer: refused from mn's record, nothing sent.
+      expect(done).toMatchObject({ error: true, code: 'INVALID_ARGS', message: expect.stringContaining('This wallet has no open offer cdcdcdcd') });
+    } finally {
+      await call('midnight_wallet_use', { name: 'alice' });
+    }
+  }, 60_000);
+});
+
 describe('midnight_wallet_remove', () => {
   const walletFile = (name: string) => path.join(home, '.midnight', 'wallets', `${name}.json`);
 

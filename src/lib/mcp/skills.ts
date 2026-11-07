@@ -271,7 +271,7 @@ const confirmedTools = (registry: CommandRegistry): string =>
  * name and the commands no tool runs, which the user runs in a terminal.
  */
 function registryPieces(registry: CommandRegistry): GuidancePiece[] {
-  const confirmation = `- **Some tools use a two-step confirmation token**: ${confirmedTools(registry)}. The first call returns a pending token + description and does nothing else; show the description verbatim, and call \`midnight_confirm_operation({ token })\` only after the user explicitly says yes. (\`midnight_wallet_generate\` asks only with \`force: true\`, which replaces a wallet.)`;
+  const confirmation = `- **Some tools use a two-step confirmation token**: ${confirmedTools(registry)}. The first call returns a pending token + description and does nothing else; show the description verbatim, and call \`midnight_confirm_operation({ token })\` only after the user explicitly says yes The token keeps the wallet and network the first call acted as (the active ones when it named none), and the description names them: confirming runs as them even if the active wallet or network changed since. (\`midnight_wallet_generate\` asks only with \`force: true\`, which replaces a wallet.)`;
   const terminalOnly = registry.commands.filter((command) => command.help !== undefined && (command.mcp?.tools.length ?? 0) === 0).map((command) => `\`mn ${command.name}\``);
   return [
     { text: 'skill-core', section: 'safety-rules', order: 500, body: `${confirmation} Full flow in \`midnight-wallet://skill/full\`.\n\n` },
