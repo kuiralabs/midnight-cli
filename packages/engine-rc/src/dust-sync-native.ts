@@ -5,7 +5,7 @@
 // accelerator, never a hard dependency.
 
 import { cacheRootDir, networkCacheFolder, nativeCheckpointName } from '@kuiralabs/midnight-cli-core/engine';
-import { assertEndpointUsable, DIR_MODE, FILE_MODE, type NetworkConfig, type Settings } from '@kuiralabs/midnight-cli-core';
+import { assertEndpointUsable, DIR_MODE, DISABLE_NATIVE_DUST_ENV, DUST_SYNC_BIN_ENV, FILE_MODE, type NetworkConfig, type Settings } from '@kuiralabs/midnight-cli-core';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -99,12 +99,27 @@ export function resolveSidecarBinary(settings: Pick<Settings, 'dustSyncBin'>): s
 export function platformPackageBinary(fromUrl: string): string | null {
   const exe = process.platform === 'win32' ? 'dust-sync.exe' : 'dust-sync';
   try {
-    const pkg = `@kuiralabs/dust-sync-${process.platform}-${process.arch}`;
+    const pkg = sidecarPackageName();
     const binPath = join(dirname(createRequire(fromUrl).resolve(`${pkg}/package.json`)), exe);
     return existsSync(binPath) ? binPath : null;
   } catch {
     return null; // package not installed
   }
+}
+
+/** A network mn doesn't run itself (preview, preprod, mainnet): its Dust history is long, and read through the sidecar. */
+export function isHostedNetwork(network: Pick<NetworkConfig, 'networkId'>): boolean {
+  return network.networkId !== 'Undeployed';
+}
+
+/** The notice a hosted network's Dust read in WASM gives, with why it isn't the sidecar's. */
+export function wasmDustNotice(networkName: string, why: string): string {
+  return `  Dust on ${networkName} is read in-process (WASM), slower than the native dust-sync sidecar: ${why}.`;
+}
+
+/** The platform package that ships the sidecar for this machine. */
+export function sidecarPackageName(): string {
+  return `@kuiralabs/dust-sync-${process.platform}-${process.arch}`;
 }
 
 const LEDGER_PROBE_TIMEOUT_MS = 5_000;
@@ -121,24 +136,49 @@ export function sidecarLedger(bin: string): number | null {
   return /^\d+$/.test(printed) ? Number(printed) : null;
 }
 
+/**
+ * Why the native sidecar can't be used, or null when it can: it is turned
+ * off, no binary resolves, or the one that does folds another ledger than
+ * this engine's.
+ */
+export function sidecarUnavailableReason(settings: Pick<Settings, 'isNativeDustOff' | 'dustSyncBin'>): string | null {
+  if (settings.isNativeDustOff) return `the native sidecar is turned off (${DISABLE_NATIVE_DUST_ENV}=1)`;
+  const bin = resolveSidecarBinary(settings);
+  if (bin === null) {
+    const named = settings.dustSyncBin ? `, and ${DUST_SYNC_BIN_ENV} names no file (${settings.dustSyncBin})` : '';
+    return `no dust-sync sidecar is installed (no ${sidecarPackageName()} package${named})`;
+  }
+  const folds = sidecarLedger(bin);
+  if (folds === SIDECAR_LEDGER) return null;
+  return `the dust-sync sidecar at ${bin} ${folds === null ? "doesn't say which ledger it folds" : `folds ledger ${folds}`}, and this mn reads ledger ${SIDECAR_LEDGER}: reinstall mn`;
+}
+
 /** True when the native sidecar should be used: not disabled, a binary resolves, and it folds this engine's ledger. */
 export function nativeDustSyncAvailable(settings: Pick<Settings, 'isNativeDustOff' | 'dustSyncBin'>): boolean {
-  if (settings.isNativeDustOff) return false;
-  const bin = resolveSidecarBinary(settings);
-  return bin !== null && sidecarLedger(bin) === SIDECAR_LEDGER;
+  return sidecarUnavailableReason(settings) === null;
 }
 
 /**
- * True when the sidecar's result is the one mn's reader would reach for this
- * sync. The sidecar folds ledger 9 only: on a forked chain it reads the
- * ledger-8 events and starts its fold at the fork, which equals mn's reader
- * only when the sync ends past the fork. So the chain tip must be known to be
- * on ledger 9, and a sync resuming a ledger-8 checkpoint (one that stopped
- * before the fork) is left to mn's reader, which crosses the fork from it.
+ * Why the sidecar's result would not be the one mn's reader reaches for this
+ * sync, or null when it would. The sidecar folds ledger 9 only: on a forked
+ * chain it reads the ledger-8 events and starts its fold at the fork, which
+ * equals mn's reader only when the sync ends past the fork. So the chain tip
+ * must be known to be on ledger 9, and a sync resuming a ledger-8 checkpoint
+ * (one that stopped before the fork) is left to mn's reader, which crosses the
+ * fork from it.
  */
+export function sidecarSkipReason(sync: { chainProtocolVersion: bigint | null; initialState?: DustLedgerState }): string | null {
+  if (sync.chainProtocolVersion === null) return "the indexer didn't say which protocol version the chain is on";
+  if (ledgerOfProtocolVersion(sync.chainProtocolVersion) !== 9) return `the chain is on ledger 8 (protocol version ${sync.chainProtocolVersion})`;
+  if (sync.initialState !== undefined && sync.initialState.ledgerVersion !== 9) {
+    return 'the Dust checkpoint stopped before the chain\'s fork to ledger 9, and the sidecar folds ledger 9 only';
+  }
+  return null;
+}
+
+/** True when the sidecar's result is the one mn's reader would reach for this sync (see sidecarSkipReason). */
 export function sidecarServesSync(sync: { chainProtocolVersion: bigint | null; initialState?: DustLedgerState }): boolean {
-  if (sync.chainProtocolVersion === null || ledgerOfProtocolVersion(sync.chainProtocolVersion) !== 9) return false;
-  return sync.initialState === undefined || sync.initialState.ledgerVersion === 9;
+  return sidecarSkipReason(sync) === null;
 }
 
 /**

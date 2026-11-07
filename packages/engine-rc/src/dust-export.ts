@@ -22,6 +22,7 @@ import { buildFacade, stopFacade, overlayDustDirectSnapshot } from './facade.ts'
 import type { DustExportResult } from '@kuiralabs/midnight-cli-core/engine';
 import type { NetworkConfig, VerboseLog, NoticeSink } from '@kuiralabs/midnight-cli-core';
 import type { WalletDataRepository } from './wallet-data-repository.ts';
+import type { DustLedger } from './dust-ledger-state.ts';
 export type { DustExportResult } from '@kuiralabs/midnight-cli-core/engine';
 
 
@@ -40,14 +41,14 @@ export interface DustExportOptions {
    * The default touches the node relay (building a facade opens its API-WS), so
    * tests stub this to stay offline.
    */
-  buildBaseDust?: (seed: Buffer, networkConfig: NetworkConfig, root: string, notice: NoticeSink, log?: VerboseLog) => Promise<string>;
+  buildBaseDust?: (seed: Buffer, networkConfig: NetworkConfig, root: string, notice: NoticeSink, log: VerboseLog | undefined, dustLedger: DustLedger) => Promise<string>;
   /** The call's verbose lines. */
   log?: VerboseLog;
 }
 
-/** Build a fresh facade from keys and read its base (empty) dust snapshot. */
-async function defaultBuildBaseDust(seedBuffer: Buffer, networkConfig: NetworkConfig, root: string, notice: NoticeSink, log?: VerboseLog): Promise<string> {
-  const bundle = await buildFacade(seedBuffer, networkConfig, root, notice, null, log);
+/** Build a fresh facade from keys, its Dust wallet on `dustLedger`, and read its base (empty) dust snapshot. */
+async function defaultBuildBaseDust(seedBuffer: Buffer, networkConfig: NetworkConfig, root: string, notice: NoticeSink, log: VerboseLog | undefined, dustLedger: DustLedger): Promise<string> {
+  const bundle = await buildFacade(seedBuffer, networkConfig, root, notice, null, log, dustLedger);
   try {
     return await (bundle.facade as unknown as {
       dust: { serializeState(): Promise<string> };
@@ -62,9 +63,9 @@ async function defaultBuildBaseDust(seedBuffer: Buffer, networkConfig: NetworkCo
  *
  * 1. Full dust sync via the repository (native sidecar when available, WASM
  *    otherwise; resumes from the on-disk checkpoint and retries past partials).
- * 2. Build a fresh facade (from keys only — no `start()`, so no network I/O)
- *    to get a correctly-shaped base dust snapshot (publicKey/protocolVersion/
- *    networkId + schema).
+ * 2. Build a fresh facade (from keys only — no `start()`, so no sync) to get a
+ *    correctly-shaped base dust snapshot (publicKey/protocolVersion/networkId +
+ *    schema), its Dust wallet on the synced state's ledger.
  * 3. Overlay the synced `DustLocalState` onto that base — the same operation
  *    `maybeBridgeDustCache` does for the CLI's own write commands.
  */
@@ -85,7 +86,9 @@ export async function exportDustSnapshot(
     log: options.log,
   });
 
-  const baseDust = await (options.buildBaseDust ?? defaultBuildBaseDust)(seedBuffer, networkConfig, options.root, options.notice, options.log);
+  // The base snapshot is on the synced state's ledger: on a chain that forked
+  // from ledger 8, a wallet built from keys alone would be on ledger 8.
+  const baseDust = await (options.buildBaseDust ?? defaultBuildBaseDust)(seedBuffer, networkConfig, options.root, options.notice, options.log, view.state.ledgerVersion);
 
   // Overlay whenever at least one event has been folded in. For a wallet with no
   // dust events yet (lastAppliedEventId -1) the fresh base snapshot is already the

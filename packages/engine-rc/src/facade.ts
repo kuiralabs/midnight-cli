@@ -15,7 +15,7 @@ import {
 } from '@midnightntwrk/wallet-sdk/facade';
 import { type WalletSeeds } from '@midnightntwrk/wallet-sdk/hd';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { InMemoryTransactionHistoryStorage } from '@midnightntwrk/wallet-sdk';
+import { InMemoryTransactionHistoryStorage, ProtocolVersion } from '@midnightntwrk/wallet-sdk';
 import * as rx from 'rxjs';
 import { makeDefaultSubmissionService } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 
@@ -23,7 +23,8 @@ import { FORK_SCHEDULE } from './fork-schedule.ts';
 import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from './derivation.ts';
 import { loadDustCache, dustPublicKeyHex, type DustCacheEntry } from './dust-direct-cache.ts';
 import { ledgerOfProtocolVersion, serializeDustLedgerState, type DustLedger } from './dust-ledger-state.ts';
-import { assertNetworkAnswers, isStreamEmpty } from '@kuiralabs/midnight-chain';
+import { isHostedNetwork, wasmDustNotice } from './dust-sync-native.ts';
+import { assertNetworkAnswers, fetchProtocolVersion, isStreamEmpty } from '@kuiralabs/midnight-chain';
 import { readOpenOffers, type NetworkName } from '@kuiralabs/midnight-cli-core';
 import type { CoinPicking } from '@kuiralabs/midnight-cli-core/engine';
 import { PickingShieldedWallet, shieldedCoinPicking, type ShieldedCoin } from './shielded-wallet.ts';
@@ -65,6 +66,12 @@ export interface FacadeBundle {
  *
  * Its diagnostics go to `log`, the call's verbose lines; a cache it can't
  * restore from is said through `notice` before it builds from scratch.
+ *
+ * `dustLedger` puts a fresh build's Dust wallet on that ledger, for a caller
+ * that hands it a Dust state of that ledger (a checkpoint of the direct reader
+ * or the sidecar, see overlayDustDirectSnapshot). Without it the SDK starts the
+ * wallet where the chain's history starts, which on a chain that forked from
+ * ledger 8 is ledger 8.
  */
 export async function buildFacade(
   seedBuffer: Buffer,
@@ -73,6 +80,7 @@ export async function buildFacade(
   notice: NoticeSink,
   cache?: WalletCacheData | null,
   log?: VerboseLog,
+  dustLedger?: DustLedger,
 ): Promise<FacadeBundle> {
   const networkId = getNetworkId(networkConfig.networkId);
 
@@ -114,13 +122,16 @@ export async function buildFacade(
 
   // Fresh build. The class-level startWithSeed probes which side of the fork
   // the chain is on and builds the wallet there. It doesn't start syncing;
-  // startFacade does that.
+  // startFacade does that. A Dust wallet asked onto a ledger answers that probe
+  // itself, with a version read before the build: the SDK gives its probe 5 s
+  // and on no answer starts on ledger 8.
+  const dustStart = dustLedger === undefined ? undefined : await dustStartVersion(dustLedger, networkConfig.indexer);
   const initFresh = () => WalletFacade.init({
     configuration,
     submissionService: (config) => submissionOnDemand(config.relayURL),
     shielded: (cfg) => PickingShieldedWallet(cfg, coinPicking).startWithSeed(seeds.shielded),
     unshielded: (cfg) => UnshieldedWallet(cfg).startWithPublicKey(PublicKey.fromKeyStore(keystore)),
-    dust: (cfg) => DustWallet(cfg).startWithSeed(seeds.dust),
+    dust: (cfg) => DustWallet(dustStart === undefined ? cfg : { ...cfg, chainVersionProbe: () => Promise.resolve(dustStart) }).startWithSeed(seeds.dust),
   });
 
   // Bridge: if the dust-direct cache has a more recent DustLocalState than the
@@ -129,7 +140,7 @@ export async function buildFacade(
   // register) benefit from the indexer-direct reader's checkpoint without
   // re-implementing the whole transaction flow.
   const dustPublicKey = ledger.DustSecretKey.fromSeed(seeds.dust).publicKey;
-  const effectiveCache = cache ? maybeBridgeDustCache(cache, networkConfig, dustPublicKey, root, log) : null;
+  const effectiveCache = cache ? maybeBridgeDustCache(cache, networkConfig, dustPublicKey, root, notice, log) : null;
 
   // Attempt cache restore — fall back to fresh build on any deserialization error.
   let restoredFromCache = false;
@@ -158,6 +169,19 @@ export async function buildFacade(
   }
 
   return { facade, keystore, seeds, coinPicking, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS };
+}
+
+/**
+ * The protocol version a new Dust wallet starts at to be on `ledger`. Ledger 9:
+ * the chain tip's version when the indexer says it is on ledger 9 (what the
+ * SDK records for a wallet it starts on the chain's current ledger), else the
+ * fork version, the first of ledger 9's. Ledger 8: the lowest version, which
+ * the SDK's ledger-8 variant owns.
+ */
+export async function dustStartVersion(ledger: DustLedger, indexerHttpUrl: string): Promise<ProtocolVersion.ProtocolVersion> {
+  if (ledger === 8) return ProtocolVersion.MinSupportedVersion;
+  const tip = await fetchProtocolVersion(indexerHttpUrl).catch(() => null);
+  return ProtocolVersion.ProtocolVersion(tip !== null && ledgerOfProtocolVersion(tip) === 9 ? tip : FORK_SCHEDULE.v9);
 }
 
 /** What the facade submits through, as WalletFacade.init takes it. */
@@ -272,6 +296,7 @@ function maybeBridgeDustCache(
   networkConfig: NetworkConfig,
   dustPublicKey: ledger.DustPublicKey,
   root: string,
+  notice: NoticeSink,
   log?: VerboseLog,
 ): WalletCacheData {
   try {
@@ -293,6 +318,10 @@ function maybeBridgeDustCache(
     return { ...cache, dust: overlayDustDirectSnapshot(cache.dust, direct) };
   } catch (err) {
     log?.('facade', `Dust-direct bridge skipped: ${(err as Error).message}`);
+    // The wallet then reads the Dust events past its own saved position itself.
+    if (err instanceof DustSnapshotLedgerMismatchError && isHostedNetwork(networkConfig)) {
+      notice(wasmDustNotice(networkConfig.networkId.toLowerCase(), `the Dust checkpoint doesn't fit the saved wallet (${err.message})`));
+    }
     return cache;
   }
 }

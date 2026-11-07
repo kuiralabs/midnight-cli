@@ -110,7 +110,7 @@ export {
   type CallSdkWarnings, createSdkWarningRouter, sdkTransientWarning, type SdkWarningCalls,
   withCallSdkWarnings
 } from './lib/sdk-warnings.ts';
-export { PASSPHRASE_ENV, type Settings, settingsFromEnvironment } from './lib/settings.ts';
+export { PASSPHRASE_ENV, DUST_SYNC_BIN_ENV, DISABLE_NATIVE_DUST_ENV, type Settings, settingsFromEnvironment } from './lib/settings.ts';
 export { shieldedDisabledReason, shieldedSyncEnabled } from './lib/shielded-policy.ts';
 export { sleep, untilCancelled } from './lib/sleep.ts';
 export { NoStateRootError } from './lib/state-root.ts';

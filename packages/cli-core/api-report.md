@@ -755,6 +755,8 @@ export interface SdkWarningCalls {
 }
 export declare function withCallSdkWarnings<T>(calls: SdkWarningCalls, given: CallSdkWarnings | undefined, work: (warnings: CallSdkWarnings) => Promise<T>): Promise<T>;
 export declare const PASSPHRASE_ENV = "MN_PASSPHRASE";
+export declare const DUST_SYNC_BIN_ENV = "MN_DUST_SYNC_BIN";
+export declare const DISABLE_NATIVE_DUST_ENV = "MN_DISABLE_NATIVE_DUST";
 export interface Settings {
     passphrase: string | undefined;
     seed: string | undefined;

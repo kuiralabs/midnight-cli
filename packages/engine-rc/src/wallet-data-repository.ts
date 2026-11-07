@@ -36,7 +36,7 @@ import { loadDustCache, saveDustCache, dustPublicKeyHexFromSeed, validateDustCac
 import { getChainGenesisHash, assertLedgerSupported, checkLedgerSupported, fetchProtocolVersion, checkBalance, type BalanceSummary, callNodeRpc, fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain';
 import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { dustKeysFromSeed, type DustLedgerState } from './dust-ledger-state.ts';
-import { nativeDustSyncAvailable, runDustSyncNative, sidecarServesSync } from './dust-sync-native.ts';
+import { isHostedNetwork, runDustSyncNative, sidecarSkipReason, sidecarUnavailableReason, wasmDustNotice } from './dust-sync-native.ts';
 import { deriveDustSeed } from './derivation.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
 export type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/engine';
@@ -226,15 +226,21 @@ export class WalletDataRepository {
   private async freshWalletOnDustCheckpoint(seed: Buffer, network: NetworkConfig, networkName: NetworkName, root: string, notice: NoticeSink, log?: VerboseLog): Promise<WalletCacheData | null> {
     const checkpoint = loadDustCache(networkName, dustPublicKeyHexFromSeed(seed), root);
     if (!checkpoint || checkpoint.lastAppliedEventId < 0) return null;
-    const fresh = await buildFacade(seed, network, root, notice, null, log);
+    // The new wallet's Dust starts on the checkpoint's ledger, so the checkpoint
+    // fits it: on a chain that forked from ledger 8 a wallet built from keys
+    // starts on ledger 8, where a ledger-9 checkpoint can't go.
+    const fresh = await buildFacade(seed, network, root, notice, null, log, checkpoint.state.ledgerVersion);
     try {
       const { shielded, unshielded, dust } = fresh.facade as unknown as Record<'shielded' | 'unshielded' | 'dust', { serializeState(): Promise<string> }>;
       const [shieldedState, unshieldedState, dustState] = await Promise.all([shielded.serializeState(), unshielded.serializeState(), dust.serializeState()]);
       return { shielded: shieldedState, unshielded: unshieldedState, dust: overlayDustDirectSnapshot(dustState, checkpoint) };
     } catch (err) {
-      // A checkpoint of the other ledger than the new wallet's (a sync that
-      // stopped before the fork): the wallet is built from its keys instead.
-      if (err instanceof DustSnapshotLedgerMismatchError) return null;
+      // The wallet is built from its keys instead, and replays the chain's
+      // whole Dust history itself: said, never silent, on a hosted network.
+      if (err instanceof DustSnapshotLedgerMismatchError) {
+        if (isHostedNetwork(network)) notice(wasmDustNotice(networkName, `the Dust checkpoint doesn't fit a new wallet (${err.message})`));
+        return null;
+      }
       throw err;
     } finally {
       await stopFacade(fresh).catch(() => {});
@@ -420,9 +426,8 @@ export class WalletDataRepository {
     const writeMode = requireStrictSync && !opts.readOnly;
     const networkName = networkNameOf(network);
     const address = deriveUnshieldedAddress(seed, networkName);
-    const isRemote = network.networkId !== 'Undeployed';
     const syncTimeoutMs = opts.syncTimeoutMs
-      ?? (isRemote ? SYNC_ATTEMPT_REMOTE_MS : SYNC_ATTEMPT_LOCAL_MS);
+      ?? (isHostedNetwork(network) ? SYNC_ATTEMPT_REMOTE_MS : SYNC_ATTEMPT_LOCAL_MS);
 
     // On a ledger-8 chain the SDK's sync retries forever; refuse up front.
     await assertLedgerSupported(networkName, network, this.fetchProtocolVersion, opts.signal);
@@ -691,23 +696,28 @@ function defaultDustFetcher(
  * it's available and serves this sync (a chain past the fork, no ledger-8
  * checkpoint to resume); fall back to the WASM reader on a missing binary or
  * any failure. The sidecar is an optional accelerator, so a fallback is a
- * slowdown, never a break.
+ * slowdown, never a break. On a hosted network the fallback is said through
+ * the host's notices, with why; on the localnet only in the verbose lines.
  * Each sync reads the host's settings: the sidecar to run, whether to run it,
  * and whether to collapse the generation tree.
  */
 function nativeOrWasmDustFetcher(host: EngineHost): NonNullable<RepoDeps['fetchDust']> {
   return async (seed, network, opts) => {
     const settings = host.settings();
-    if (sidecarServesSync(opts) && nativeDustSyncAvailable(settings)) {
+    let why = sidecarSkipReason(opts) ?? sidecarUnavailableReason(settings);
+    if (why === null) {
       try {
         return await runDustSyncNative(seed, network, { ...opts, settings });
       } catch (err) {
-        opts.log?.('dust', `native sidecar failed, using WASM: ${(err as Error).message}`);
+        why = `the dust-sync sidecar failed: ${(err as Error).message}`;
       }
     }
+    if (isHostedNetwork(network)) host.notice(wasmDustNotice(networkNameOf(network), why));
+    else opts.log?.('dust', `reading Dust with the WASM reader: ${why}`);
     return defaultDustFetcher(seed, network, opts, !settings.isDustCollapseOff);
   };
 }
+
 
 // ── Helpers ───────────────────────────────────────────────
 
