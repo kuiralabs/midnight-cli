@@ -49,6 +49,16 @@ describe('--json keeps stderr quiet', () => {
   }, 60_000);
 });
 
+describe('a human-mode error', () => {
+  it('with a code of its own says what to do, and no generic "Run midnight help"', async () => {
+    const port = await closedPort();
+    const run = mn('balance', 'mn_addr_undeployed1gkasr3z3vwyscy2jpp53nzr37v7n4r3lsfgj6v5g584dakjzt0xqun4d4r', '--indexer-ws', `ws://127.0.0.1:${port}/api/v4/graphql/ws`);
+    expect(run.status).toBe(4);
+    expect(run.stderr).toContain(`Cannot reach the indexer at http://127.0.0.1:${port}/api/v4/graphql`);
+    expect(run.stderr).not.toContain('midnight help');
+  }, 60_000);
+});
+
 describe('mn serve against endpoints that are down', () => {
   it('fails fast with NETWORK_ERROR naming the indexer, instead of retrying for ever', async () => {
     expect(mn('wallet', 'generate', 'servetest', '--network', 'undeployed', '--json').status).toBe(0);

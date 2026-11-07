@@ -134,7 +134,9 @@ run().then((outcome) => {
   } else if (isUsageError(err)) {
     process.stderr.write('\n' + usageMessage(message, 'Run "midnight manual" for the full reference, or "midnight help <command>" for one command.') + '\n\n');
   } else {
-    process.stderr.write('\n' + errorMessage(message, 'Run "midnight help" for usage information.') + '\n\n');
+    // An error with a code of its own says what to do; only one mn can't name (UNKNOWN) points at help.
+    const suggestion = errorCode === 'UNKNOWN' ? 'Run "midnight help" for usage information.' : undefined;
+    process.stderr.write('\n' + errorMessage(message, suggestion) + '\n\n');
   }
   process.exit(exitCode);
 });

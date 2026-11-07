@@ -1151,9 +1151,13 @@ export declare function planDustInputs<TToken>({ owed, coinCount, choose, feeWit
 export declare function spreadFeeAcrossInputs<TToken>(inputs: readonly DustInput<TToken>[], fee: bigint): DustInput<TToken>[];
 export declare class DustFeeNotGeneratedError extends Error {
     readonly code = "DUST_GENERATING";
-    constructor(plan: RegistrationPlan, now: Date);
+    constructor(plan: RegistrationPlan, now: Date, context?: RegistrationContext);
 }
 export declare function planRegistration(fee: bigint, estimates: readonly DustGenerationEstimate[]): RegistrationPlan;
+export interface RegistrationContext {
+    readonly networkId?: string;
+    readonly retry?: string;
+}
 export declare function awaitDustForFee(dust: DustBalanceSource, needed: bigint, onStatus?: (status: string) => void, signal?: AbortSignal): Promise<void>;
 export declare const DUST_SHORT_WAIT_MS: number;
 export interface DustWaitPlan {

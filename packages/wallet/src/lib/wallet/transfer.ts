@@ -33,6 +33,13 @@ export interface NightTransfer {
   readonly receipt?: Receipt;
 }
 
+/** How to fund a wallet's shielded NIGHT on `network`: the local faucet on undeployed, a shielded transfer from another wallet elsewhere. */
+export function fundShieldedHint(network: NetworkName, amountText: string): string {
+  return network === 'undeployed'
+    ? `Fund the shielded balance: midnight airdrop ${amountText} --shielded`
+    : 'Fund the shielded balance with a shielded transfer from another wallet (midnight transfer <this wallet\'s shielded address> <amount> --shielded).';
+}
+
 /**
  * Refuses, as a usage mistake, a shielded transfer on a network with no
  * shielded faucet (no wallet holds shielded NIGHT there), unless `force`.
@@ -105,8 +112,7 @@ export async function transferNight(host: Host, source: WalletSource, options: T
         // A wallet file keeps its shielded address for the next read.
         ...(walletPath === null ? {} : { onSenderShieldedAddress: (shieldedAddress: string) => saveShieldedAddress(walletPath, network, shieldedAddress) }),
         insufficient: (available) =>
-          `Insufficient shielded balance: ${available} NIGHT available, ${text} NIGHT requested.\n` +
-          `Fund shielded balance: midnight airdrop ${text} --shielded`,
+          `Insufficient shielded balance: ${available} NIGHT available, ${text} NIGHT requested.\n` + fundShieldedHint(network, text),
         log: options.log,
         signal,
         onStatus: (status) => steps.update(status),

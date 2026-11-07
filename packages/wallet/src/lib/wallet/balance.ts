@@ -55,6 +55,8 @@ export async function readAddressBalance(host: Host, address: string, options: R
   const { network, networkConfig } = networkTargetOf(host, { ...networkChoiceOf(options), network: addressNetwork(address, options.network) });
   const steps = progressSteps(options.onProgress);
   steps.start(`Checking balance on ${network}...`);
+  // A read needs the indexer alone.
+  await assertEndpointsReachable(endpointsOf(networkConfig, { node: false }), { signal });
   const result = await (await host.engines.for(network)).wallet.unshieldedBalance(address, networkConfig, {
     forceFresh: options.forceFresh,
     signal,

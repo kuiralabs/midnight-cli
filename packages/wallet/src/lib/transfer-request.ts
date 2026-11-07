@@ -2,6 +2,7 @@
 // before syncing, the MCP server before it issues a confirmation token, so a
 // typo in the amount or the recipient is refused up front.
 
+import * as fs from 'node:fs';
 import { type ParsedArgs, getFlag, hasFlag, UsageError, resolveNetworkName, sdkSetOf, type EngineKeys, parseAmount, type NetworkName, looksLikeShieldedAddress, looksLikeUnshieldedAddress } from '@kuiralabs/midnight-cli-core';
 import { loadWalletConfig, resolveWalletPath, walletAddress, walletShieldedAddress, type UnlockHost, type WalletConfig } from './wallet-config.ts';
 import { assertShieldedTransferAllowed } from './wallet/transfer.ts';
@@ -70,12 +71,24 @@ function assertRecipient(keys: EngineKeys, address: string, shielded: boolean, n
  * address comes from that wallet's file.
  */
 async function resolveRecipient(input: string, args: ParsedArgs, shielded: boolean, root: string, host: UnlockHost): Promise<string> {
+  if (looksLikeShieldedAddress(input) && !shielded) {
+    throw new UsageError(
+      `${input} is a shielded address: add --shielded to send it shielded NIGHT.\n` +
+      'Example: midnight transfer mn_shield-addr_... 100 --shielded'
+    );
+  }
   if (looksLikeUnshieldedAddress(input) || looksLikeShieldedAddress(input)) {
     return input;
   }
 
   const recipientPath = resolveWalletPath(root, input);
   const networkName = resolveNetworkName({ args, configDir: root });
+  if (!fs.existsSync(recipientPath)) {
+    throw new UsageError(
+      `Unknown recipient "${input}": it is neither an address nor one of your wallets.\n` +
+      `Give the recipient's address (${shielded ? 'mn_shield-addr_...' : 'mn_addr_...'}), or the name of a wallet of yours (midnight wallet list shows them).`
+    );
+  }
 
   if (shielded) {
     const shieldedAddr = await walletShieldedAddress(recipientPath, networkName, root, host);

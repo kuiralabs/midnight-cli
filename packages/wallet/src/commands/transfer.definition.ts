@@ -89,6 +89,8 @@ export const transferDefinition: CommandDefinition = {
       amount: 'Amount transferred (NIGHT string)',
       recipient: 'Recipient address (bech32m)',
       network: 'Network name',
+      selfTransfer: 'true when the recipient is the sending wallet itself (absent otherwise)',
+      note: 'With selfTransfer: the NIGHT stays in the wallet and the transfer only spends a fee',
     },
   },
   intro: { brief: 'Send NIGHT tokens', order: 8 },

@@ -40,7 +40,7 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
       }
 
       progress.update('Checking dust...');
-      await ensureDust(bundle, (status: string) => progress.update(status), undefined, signal);
+      await ensureDust(bundle, (status: string) => progress.update(status), undefined, signal, { networkId: networkConfig.networkId, retry: 'the transfer' });
 
       throwIfCancelled(signal);
 
