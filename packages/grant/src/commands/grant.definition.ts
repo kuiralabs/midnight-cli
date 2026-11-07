@@ -4,6 +4,7 @@ import { type CommandDefinition, type ToolCheckCall, ENDPOINT_PARAMS, confirmati
 import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
 import { OPENS_WALLET } from '@kuiralabs/midnight-wallet/commands';
+import { ACTS_ON_ACCOUNT } from './grant.codes.ts';
 
 /** A grant request can run: its arguments, the network, the account and the wallet are all in order. */
 async function checkGrant(params: Readonly<Record<string, unknown>>, call: ToolCheckCall) {
@@ -186,7 +187,7 @@ export const grantDefinition: CommandDefinition = {
   intro: { brief: 'Grants that let agents spend', order: 12 },
   needsWalletSdk: true,
   shell: { payer: true },
-  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'NO_ACCOUNT', 'ACCOUNT_KEYS_UNAVAILABLE', 'CALLER_PIN_UNSUPPORTED', 'NO_PAYER', 'MAINNET_REFUSED'] },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, ACTS_ON_ACCOUNT, 'CHAIN_CLOCK_BEHIND', 'CALLER_PIN_UNSUPPORTED', 'NO_PAYER', 'MAINNET_REFUSED'] },
   load: () => import('./grant.ts'),
   mcp: {
     tools: [

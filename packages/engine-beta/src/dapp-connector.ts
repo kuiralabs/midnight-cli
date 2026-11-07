@@ -845,10 +845,10 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
   function heldByOthersOr(err: unknown): unknown {
     const holding = pendingCount() + submittingTxs.size + buildsInFlight - 1;
     if (holding <= 0 || !isSdkInsufficientFundsError(err)) return err;
-    const them = holding === 1 ? '1 other transaction built through this server holds coins until it is on chain or released' : `${holding} other transactions built through this server hold coins until they are on chain or released`;
+    const them = holding === 1 ? '1 other transaction of this wallet\'s, made here, holds coins until it is on chain or released' : `${holding} other transactions of this wallet's, made here, hold coins until they are on chain or released`;
     return createApiError('InsufficientFunds',
-      `The wallet's free coins don't cover this: ${them} (another request's, being built, not yet submitted or being submitted). `
-      + `Retry once ${holding === 1 ? 'it has' : 'they have'} landed; if it still fails, the wallet holds too little.`,
+      `The wallet's free coins don't cover this: ${them} (being built, built and not yet submitted, or being submitted). `
+      + `Retry once ${holding === 1 ? 'it has' : 'they have'} landed or been released; if it still fails, the wallet holds too little.`,
       'INSUFFICIENT_BALANCE');
   }
 

@@ -11,7 +11,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { classifyError, createHost, EXIT_GENERAL_ERROR } from '@kuiralabs/midnight-cli-core';
 import { accountChainFor } from '../lib/grant/account-chain.ts';
-import { accountKeysFailureOf } from '../lib/grant/account.ts';
+import { accountKeysFailureOf } from '../lib/grant/account-keys.ts';
 import { AccountKeysUnavailableError } from '../lib/grant/account-errors.ts';
 import { grantCodes } from '../commands/grant.codes.ts';
 import { loadInstalledEngine } from '../../../../test-support/test-host.ts';

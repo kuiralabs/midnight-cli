@@ -222,7 +222,8 @@ describe('wallet session', () => {
       const session = sessionOver('undeployed', openedWith(initSwap), () => [], { reopen, delayMs: 0 });
 
       await session.swap(give, take);
-      await expect(session.swap(give, take)).rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE', message: 'Insufficient funds', cause: { _tag: 'Wallet.InsufficientFunds' } });
+      // The first swap, built and not submitted, holds the coins: said so.
+      await expect(session.swap(give, take)).rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE', message: expect.stringContaining("1 other transaction of this wallet's, made here, holds coins") });
       expect(reopen).not.toHaveBeenCalled();
       await session.close();
     });

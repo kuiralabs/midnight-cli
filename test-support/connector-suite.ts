@@ -1939,7 +1939,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const err: any = await connector.handlers.makeTransfer(desired, ctx('c2')).catch((e: any) => e);
         expect(err.code).toBe('InsufficientFunds');
         expect(err.mnCode).toBe('INSUFFICIENT_BALANCE');
-        expect(err.message).toBe("The wallet's free coins don't cover this: 1 other transaction built through this server holds coins until it is on chain or released (another request's, being built, not yet submitted or being submitted). Retry once it has landed; if it still fails, the wallet holds too little.");
+        expect(err.message).toBe("The wallet's free coins don't cover this: 1 other transaction of this wallet's, made here, holds coins until it is on chain or released (being built, built and not yet submitted, or being submitted). Retry once it has landed or been released; if it still fails, the wallet holds too little.");
       });
 
       it('counts another request\'s transaction still being built as holding coins', async () => {
@@ -1956,7 +1956,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         await vi.waitFor(() => expect(transfer).toHaveBeenCalledTimes(1));
         const err: any = await connector.handlers.makeTransfer(desired, ctx('c2')).catch((e: any) => e);
         expect(err.code).toBe('InsufficientFunds');
-        expect(err.message).toContain('1 other transaction built through this server holds coins');
+        expect(err.message).toContain("1 other transaction of this wallet's, made here, holds coins");
 
         built({ type: 'RECIPE' });
         await expect(first).resolves.toEqual({ tx: expect.any(String) });
