@@ -16,6 +16,15 @@ export const processOutput: CallOutput = {
   stderr: (text) => { process.stderr.write(text); },
 };
 
+/**
+ * The CLI's output for a --json call: the result and stdout as `output` has
+ * them, and nothing on stderr (no spinner, heading, notice or warning), as
+ * help and the manual promise. Errors under --json go to stdout as JSON.
+ */
+export function jsonModeOutput(output: CallOutput): CallOutput {
+  return { result: output.result, stdout: output.stdout, stderr: () => {} };
+}
+
 /** Whether the command starts the wallet SDK (more heap before it loads, and an explicit exit when it ends). False for a command not installed. */
 export function commandNeedsWalletSdk(registry: CommandRegistry, name: string): boolean {
   return registry.find(name)?.needsWalletSdk === true;

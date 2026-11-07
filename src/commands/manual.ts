@@ -195,7 +195,7 @@ export function buildManual(): string {
   // ── JSON output ───────────────────────────────────────────
   out.push(subhead('JSON OUTPUT'));
   out.push(`  Every command accepts ${yellow('--json')} for structured output on stdout.`);
-  out.push(`  Stderr keeps the chrome (spinners, headers); stdout stays parseable.`);
+  out.push(`  Stderr stays quiet (no spinners, headers or notices); errors are JSON on stdout.`);
   out.push('');
   out.push(`  ${dim('$')} ${dim('mn balance <addr> --json | jq -r .NIGHT')}`);
   out.push(`  ${dim('$')} ${dim('mn wallet info alice --json')}`);

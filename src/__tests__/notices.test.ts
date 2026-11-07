@@ -1,6 +1,6 @@
 // What a library has for the person at the terminal goes to the notices its
 // host takes, never to stderr directly: a host that takes none drops it, and
-// the CLI's host writes it to stderr as before. HOME is a temporary folder.
+// the CLI's host writes it to stderr as before (not under --json). HOME is a temporary folder.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
@@ -41,13 +41,21 @@ describe('notices', () => {
     expect(lines[0]).toMatch(/not protected: its seed is in plain text/);
   });
 
+  const mnSeed = (...flags: string[]) => spawnSync(path.join(ROOT, 'node_modules/.bin/tsx'), [path.join(ROOT, 'src/wallet.ts'), 'wallet', 'seed', 'alice', ...flags], {
+    cwd: home, encoding: 'utf8', timeout: 60_000, input: '', env: { ...process.env, HOME: home, NO_COLOR: '1', MN_NO_LOCAL_DETECT: '1' },
+  });
+
   it('reach stderr through the CLI, as before', () => {
     plainWallet('alice');
-    const run = spawnSync(path.join(ROOT, 'node_modules/.bin/tsx'), [path.join(ROOT, 'src/wallet.ts'), 'wallet', 'seed', 'alice', '--json'], {
-      cwd: home, encoding: 'utf8', timeout: 60_000, input: '', env: { ...process.env, HOME: home, NO_COLOR: '1', MN_NO_LOCAL_DETECT: '1' },
-    });
-    expect(run.status, run.stderr).toBe(0);
+    const run = mnSeed();
     expect(run.stderr).toMatch(/Warning: wallet .*alice\.json is not protected/);
     // Starting the CLI through tsx takes seconds under a full parallel run: the test waits as long as its spawn does.
+  }, 60_000);
+
+  it('stay off stderr under --json, which keeps it quiet', () => {
+    plainWallet('alice');
+    const run = mnSeed('--json');
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.stderr).toBe('');
   }, 60_000);
 });

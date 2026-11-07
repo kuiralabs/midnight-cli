@@ -6,7 +6,7 @@
 import { parseArgs, hasFlag, assertKnownFlags, type CommandOutcome, classifyError, humanizeNetworkError, asReported, isUsageError, writeJsonError } from '@kuiralabs/midnight-cli-core';
 import { errorMessage, usageMessage, createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui';
 import { installedCommands } from './lib/installed-commands.ts';
-import { commandNeedsWalletSdk, dispatchCommand, processOutput } from './lib/command-dispatch.ts';
+import { commandNeedsWalletSdk, dispatchCommand, jsonModeOutput, processOutput } from './lib/command-dispatch.ts';
 import { PKG_NAME, PKG_VERSION } from './lib/pkg.ts';
 import { migrateOldWallet } from '@kuiralabs/midnight-wallet';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
@@ -65,9 +65,10 @@ if (needsWalletSdk) await ensureHeapForSync();
 hideProjectIdsInOutput();
 
 // What the libraries get from their host: the SDK noise filters, notices on
-// stderr, settings from the environment, the state root ~/.midnight, and the
-// terminal to ask their questions (passphrase, approvals) at.
-const host = createCliHost({ prompter: createTerminalPrompter() });
+// stderr (none under --json, unless --verbose asks for its lines), settings
+// from the environment, the state root ~/.midnight, and the terminal to ask
+// their questions (passphrase, approvals) at.
+const host = createCliHost({ prompter: createTerminalPrompter(), notices: !jsonMode || hasFlag(args, 'verbose') });
 
 // Auto-migrate old ~/.midnight/wallet.json → wallets/default.json (silent, one-time)
 migrateOldWallet(host.paths().stateRoot);
@@ -94,7 +95,8 @@ async function run(): Promise<CommandOutcome | void> {
   // The command, what the shell gives its handler, a notice or a refusal: all from its definition.
   return dispatchCommand(installedCommands, command, args, {
     signal,
-    output: processOutput,
+    // --json keeps stderr quiet: the result (or the error) on stdout is all there is.
+    output: jsonMode ? jsonModeOutput(processOutput) : processOutput,
     host,
     payer: async () => (await import('@kuiralabs/midnight-connect')).servePayer,
     // wallet protect also seals grant's accounts, through the protector grant provides.

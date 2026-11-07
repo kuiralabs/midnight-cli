@@ -12,7 +12,9 @@ import { receiptText } from '../ui/receipt.ts';
 export default async function transferCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
   const request = await resolveTransferRequest(args, ctx.config.paths.stateRoot, ctx.host);
-  const progress = spinnerReporter(ctx.progress, false);
+  const jsonMode = hasFlag(args, 'json');
+  // --json shows no step and no heading on the terminal.
+  const progress = spinnerReporter(ctx.progress, jsonMode);
   try {
     const result = await transferNight(ctx.host, { wallet: request.walletPath }, {
       ...networkChoiceFromArgs(args),
@@ -23,9 +25,12 @@ export default async function transferCommand(args: ParsedArgs, ctx: CallContext
       signal: ctx.signal,
       log: ctx.diagnostics.line,
       sdkWarnings: ctx.sdkWarnings,
-      onProgress: (event) => (event.kind === 'wallet-opened' ? printHeading(event, request, ctx) : progress.report(event)),
+      onProgress: (event) => {
+        if (event.kind !== 'wallet-opened') progress.report(event);
+        else if (!jsonMode) printHeading(event, request, ctx);
+      },
     });
-    printTransfer(result, request, hasFlag(args, 'json'), ctx);
+    printTransfer(result, request, jsonMode, ctx);
   } catch (err) {
     progress.fail('Failed');
     throw err;

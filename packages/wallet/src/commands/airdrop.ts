@@ -29,7 +29,9 @@ export default async function airdropCommand(args: ParsedArgs, ctx: CallContext)
   }
 
   const amount = parseAmount(amountStr);
-  const progress = spinnerReporter(ctx.progress, false);
+  const jsonMode = hasFlag(args, 'json');
+  // --json shows no step and no heading on the terminal.
+  const progress = spinnerReporter(ctx.progress, jsonMode);
   try {
     const result = await airdropNight(ctx.host, {
       ...networkChoiceFromArgs(args),
@@ -39,9 +41,12 @@ export default async function airdropCommand(args: ParsedArgs, ctx: CallContext)
       signal: ctx.signal,
       log: ctx.diagnostics.line,
       sdkWarnings: ctx.sdkWarnings,
-      onProgress: (event) => (event.kind === 'airdrop-addressed' ? printHeading(event, amount, ctx) : progress.report(event)),
+      onProgress: (event) => {
+        if (event.kind !== 'airdrop-addressed') progress.report(event);
+        else if (!jsonMode) printHeading(event, amount, ctx);
+      },
     });
-    printAirdrop(result, amount, hasFlag(args, 'json'), ctx);
+    printAirdrop(result, amount, jsonMode, ctx);
   } catch (err) {
     progress.fail('Failed');
     throw err;
