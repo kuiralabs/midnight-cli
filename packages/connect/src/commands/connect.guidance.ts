@@ -2,10 +2,12 @@
 // its pieces of `help --agent` and of the two skills, each naming its section
 // and its place there.
 
-import type { PackageGuidance } from '@kuiralabs/midnight-cli-core';
+import { codeGuidancePieces, type PackageGuidance } from '@kuiralabs/midnight-cli-core';
+import { connectCodes } from './connect.codes.ts';
 
 export const connectGuidance: PackageGuidance = {
   pieces: [
+    ...codeGuidancePieces(connectCodes),
     {
       text: 'skill-full',
       section: 'what-you-can-do',
@@ -27,10 +29,17 @@ ConnectedAPI interface (same as the Lace browser wallet). Any DApp
 can connect to it — no browser extension needed.
 
   - Port default: 9932, localhost only
-  - Shielded wallet: not synced on preview, preprod and stagenet (no
-    shielded faucet) unless --force-shielded; a dApp that needs shielded
-    balances or coins there needs it
+  - Shielded wallet on preview, preprod and stagenet: serve is ready
+    without waiting for the shielded sync, which goes on behind it, so
+    shielded balances it reports may be incomplete until it catches up.
+    --force-shielded waits for the full shielded sync first; a dApp that
+    needs shielded balances or coins there needs it
+  - A client calls connect(networkId) first, as the DApp connector API
+    has it: any other method before that is refused as Disconnected
   - Read operations: never prompt
+  - A request that needs approval with no terminal to ask at is refused
+    as APPROVAL_UNAVAILABLE (PermissionRejected to the dApp), not as a
+    rejection: start serve with --approve-all or --approve-fees for that
   - Write operations, balancing included (balanceUnsealedTransaction /
     balanceSealedTransaction sign and return a finished transaction):
     terminal approval prompt (or --approve-all)
@@ -40,7 +49,7 @@ can connect to it — no browser extension needed.
     unshielded input, and needs no non-Dust value; otherwise they are
     refused. submitTransaction is auto-approved only for a transaction this
     server balanced that way on the same connection. Everything else still
-    prompts (rejected without a terminal). --max-fee <DUST> (default 10)
+    prompts. --max-fee <DUST> (default 10)
     and --max-pending <n> (default 2) bound what an agent can cost it.
   - A fee the wallet's Dust doesn't cover yet (its NIGHT is still generating
     it): serve waits when the rest is at most 2 minutes away, and otherwise

@@ -201,11 +201,11 @@ describe('approval', () => {
     // through any node, so it is a write: it prompts unless --approve-all, or
     // --approve-fees for a fee-only balance.
     it.each(['balanceUnsealedTransaction', 'balanceSealedTransaction'])(
-      'prompts for %s even with autoApproveReads (no terminal: rejected), naming the flags that would approve it',
+      'prompts for %s even with autoApproveReads (no terminal: nobody to ask), naming the flags that would approve it',
       async (method) => {
         try {
           const result = await promptApproval({ method, network: 'undeployed', details: [] }, { ...asker, autoApproveReads: true });
-          expect(result).toBe('reject');
+          expect(result).toBe('unavailable');
           const written = stripAnsi(stderrOutput.join(''));
           expect(written).not.toContain('Auto-approved');
           expect(written).toContain('Balancing prompts like any other write: use --approve-all for non-interactive environments, or --approve-fees');
@@ -226,19 +226,19 @@ describe('approval', () => {
         details: [],
       };
       const result = await promptApproval(prepRequest, { ...asker, autoApproveReads: false });
-      expect(result).toBe('reject'); // falls through to non-TTY rejection
+      expect(result).toBe('unavailable'); // falls through to nobody to ask
     });
 
     it('does not auto-approve write methods when only autoApproveReads is set', async () => {
       // Non-TTY stdin will cause immediate rejection
 
       const result = await promptApproval(baseRequest, { ...asker, autoApproveReads: true });
-      expect(result).toBe('reject');
+      expect(result).toBe('unavailable');
     });
 
     describe('fee-only policy (--approve-fees)', () => {
       // Every case runs non-interactively: an agent can't answer a prompt,
-      // so anything the policy doesn't approve must be rejected outright.
+      // so anything the policy doesn't approve is approved by nobody.
 
       it.each(['balanceUnsealedTransaction', 'balanceSealedTransaction', 'submitTransaction'])(
         'auto-approves a fee-only %s and says why',
@@ -250,32 +250,32 @@ describe('approval', () => {
       );
 
       it.each(['makeTransfer', 'makeIntent', 'signData', 'submitTransaction', 'balanceUnsealedTransaction'])(
-        'rejects %s when it is not fee-only',
+        'approves no %s that is not fee-only (nobody to ask)',
         async (method) => {
           const result = await promptApproval({ ...baseRequest, method }, { ...asker, approveFees: true });
-          expect(result).toBe('reject');
+          expect(result).toBe('unavailable');
         },
       );
 
       it('grants nothing from a fee-only request when the server was not started with --approve-fees', async () => {
         const result = await promptApproval({ ...baseRequest, method: 'submitTransaction', feeOnly: true }, asker);
-        expect(result).toBe('reject');
+        expect(result).toBe('unavailable');
       });
     });
 
-    it('rejects when stdin is not a TTY', async () => {
+    it('approves nothing when stdin is not a TTY: nobody can be asked', async () => {
       asker.prompter = createTerminalPrompter({ input: new PassThrough(), output: new PassThrough(), isTTY: false });
 
       const result = await promptApproval(baseRequest, asker);
-      expect(result).toBe('reject');
+      expect(result).toBe('unavailable');
 
       const written = stripAnsi(stderrOutput.join(''));
       expect(written).toContain('Cannot prompt for approval: stdin is not a TTY');
     });
 
-    it('rejects when the host set no prompter, saying so', async () => {
+    it('approves nothing when the host set no prompter, saying so', async () => {
       const result = await promptApproval(baseRequest, asker);
-      expect(result).toBe('reject');
+      expect(result).toBe('unavailable');
 
       const written = stripAnsi(stderrOutput.join(''));
       expect(written).toContain('Cannot prompt for approval: the host gave no prompter (createHost prompter)');
@@ -284,13 +284,13 @@ describe('approval', () => {
     describe('without a terminal, the hint names what the server could have been started with', () => {
 
       it('suggests --approve-all, or --approve-fees for a fee wallet, on a server with neither', async () => {
-        expect(await promptApproval(baseRequest, asker)).toBe('reject');
+        expect(await promptApproval(baseRequest, asker)).toBe('unavailable');
         const written = stripAnsi(stderrOutput.join(''));
         expect(written).toContain('makeTransfer needs a terminal to approve: use --approve-all for non-interactive environments, or --approve-fees for a fee wallet');
       });
 
       it('on a fee wallet, says the request is outside --approve-fees and names the method', async () => {
-        expect(await promptApproval(baseRequest, { ...asker, approveFees: true })).toBe('reject');
+        expect(await promptApproval(baseRequest, { ...asker, approveFees: true })).toBe('unavailable');
         const written = stripAnsi(stderrOutput.join(''));
         expect(written).toContain("--approve-fees approves only paying the Dust fee for an agent's own balanced transaction");
         expect(written).toContain('makeTransfer needs a terminal to approve');
@@ -361,7 +361,7 @@ describe('describeApprovalPolicy (what mn serve reports, in its header and --jso
     // What each claim means for a request of that kind: 'auto' approves anything,
     // 'fee-only' approves only a fee-only request, 'prompt' approves nothing.
     const expectedFor = (claim: string, feeOnly: boolean) =>
-      claim === 'auto' || (claim === 'fee-only' && feeOnly) ? 'approve' : 'reject';
+      claim === 'auto' || (claim === 'fee-only' && feeOnly) ? 'approve' : 'unavailable';
 
     it.each([
       [{ approveAll: true, autoApproveReads: true }],

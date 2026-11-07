@@ -192,13 +192,17 @@ export function connectorSuite(engine: ConnectorEngine): void {
     });
 
     describe('getDustBalance', () => {
-      it('returns { cap, balance } with balance from state.dust.balance()', async () => {
+      // Regression: the cap was the balance itself, hard-coded.
+      it('returns { cap, balance }: the balance from state.dust.balance(), the cap what the unspent NIGHT generates at most', async () => {
         connector = createConnector({
-          bundleOverrides: { stateFn: () => rx.of(mockState({ dustBalance: 42000n })) },
+          bundleOverrides: { stateFn: () => rx.of(mockState({
+            dustBalance: 42000n,
+            dustCoins: [{ maxCap: 100000n, dtime: undefined }, { maxCap: 50000n, dtime: undefined }, { maxCap: 70000n, dtime: new Date(0) }],
+          })) },
         });
         const result = await connector.handlers.getDustBalance({}, ctx()) as any;
         expect(result.balance).toBe(42000n);
-        expect(result.cap).toBe(42000n);
+        expect(result.cap).toBe(150000n);
       });
     });
 
@@ -500,7 +504,8 @@ export function connectorSuite(engine: ConnectorEngine): void {
         expect(result.verifyingKey).toBe('5678efghpubkey');
       });
 
-      it('rejects when stdin is not TTY and no approveAll', async () => {
+      // Regression: with no terminal, a write reached the dApp as "User rejected the request" though no one was asked.
+      it('refuses as approval unavailable, not as a rejection, when stdin is not a TTY and no approveAll', async () => {
         const origIsTTY = process.stdin.isTTY;
         Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
         process.stderr.write = (() => true) as any;
@@ -510,13 +515,18 @@ export function connectorSuite(engine: ConnectorEngine): void {
           await expect(connector.handlers.signData({
             data: 'deadbeef',
             options: { encoding: 'hex', keyType: 'unshielded' },
-          }, ctx())).rejects.toMatchObject({ code: 'Rejected', message: 'User rejected the request', mnCode: 'TX_REJECTED' });
+          }, ctx())).rejects.toMatchObject({
+            code: 'PermissionRejected',
+            message: 'No one could be asked to approve the request: signData needs approval, and mn serve has no terminal to ask at. '
+              + "Start mn serve with --approve-all to approve requests without asking (or --approve-fees for a wallet that only pays an agent's Dust fee), or run it at a terminal.",
+            mnCode: 'APPROVAL_UNAVAILABLE',
+          });
         } finally {
           Object.defineProperty(process.stdin, 'isTTY', { value: origIsTTY, configurable: true });
         }
       });
 
-      it('rejects with Rejected error code', async () => {
+      it('refuses with PermissionRejected, the API\'s code for a permission not given', async () => {
         const origIsTTY = process.stdin.isTTY;
         Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
         process.stderr.write = (() => true) as any;
@@ -527,7 +537,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
             await connector.handlers.submitTransaction({ tx: 'aabb' }, ctx());
             expect.unreachable('should have thrown');
           } catch (err: any) {
-            expect(err.code).toBe('Rejected');
+            expect(err.code).toBe('PermissionRejected');
             expect(err.type).toBe('DAppConnectorAPIError');
           }
         } finally {
@@ -1512,7 +1522,9 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
         const err: any = await connector.handlers.submitTransaction({ tx: hex(await sealedBytes(agentPaysMerchant())) }, ctx('agent')).catch((e: any) => e);
 
-        expect(err.code).toBe('Rejected');
+        // Outside the fee policy, and no terminal to ask: nobody approves it.
+        expect(err.code).toBe('PermissionRejected');
+        expect(err.mnCode).toBe('APPROVAL_UNAVAILABLE');
         expect(submit).not.toHaveBeenCalled();
       });
 
@@ -1523,7 +1535,8 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const balanced = await connector.handlers.balanceUnsealedTransaction({ tx: hex(await unsealedBytes(agentPaysMerchant())) }, ctx('agent')) as any;
         const err: any = await connector.handlers.submitTransaction({ tx: balanced.tx }, ctx('someone-else')).catch((e: any) => e);
 
-        expect(err.code).toBe('Rejected');
+        expect(err.code).toBe('PermissionRejected');
+        expect(err.mnCode).toBe('APPROVAL_UNAVAILABLE');
         expect(submit).not.toHaveBeenCalled();
       });
 
@@ -1537,11 +1550,11 @@ export function connectorSuite(engine: ConnectorEngine): void {
         opts.approveFees = true;
         const err: any = await connector.handlers.submitTransaction({ tx: balanced.tx }, ctx('agent')).catch((e: any) => e);
 
-        expect(err.code).toBe('Rejected');
-        // The agent learns why, not just that it was refused.
-        expect(err.message).toBe('User rejected the request: this fee wallet (--approve-fees) approves without the operator only '
-          + "paying the Dust fee for an agent's own transaction and submitting a transaction it balanced that way on the same connection");
-        expect(err.mnCode).toBe('TX_REJECTED');
+        // Nobody was asked, so nobody rejected it: the agent learns why, and that it is no operator's rejection.
+        expect(err.code).toBe('PermissionRejected');
+        expect(err.message).toBe('No one could be asked to approve the request: submitTransaction needs approval, and mn serve has no terminal to ask at. '
+          + "This fee wallet (--approve-fees) approves without asking only paying the Dust fee for an agent's own transaction and submitting a transaction it balanced that way on the same connection.");
+        expect(err.mnCode).toBe('APPROVAL_UNAVAILABLE');
         expect(submit).not.toHaveBeenCalled();
       });
 
@@ -1600,7 +1613,8 @@ export function connectorSuite(engine: ConnectorEngine): void {
           desiredOutputs: [{ kind: 'unshielded', type: NIGHT, value: '1', recipient: UNSHIELDED_RECIPIENT }],
         }, ctx()).catch((e: any) => e);
 
-        expect(err.code).toBe('Rejected');
+        expect(err.code).toBe('PermissionRejected');
+        expect(err.mnCode).toBe('APPROVAL_UNAVAILABLE');
         expect(transfer).not.toHaveBeenCalled();
       });
     });
@@ -1868,7 +1882,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
         // Submit on the SAME connector → rejection → reverts the finalized tx
         await expect(connector.handlers.submitTransaction({ tx: balanceResult.tx }, ctx(connId)))
-          .rejects.toMatchObject({ code: 'Rejected' });
+          .rejects.toMatchObject({ code: 'PermissionRejected', mnCode: 'APPROVAL_UNAVAILABLE' });
 
         expect(revertFn).toHaveBeenCalledWith(finalized);
         // Untracked: a later disconnect has nothing left to revert.
@@ -1974,7 +1988,8 @@ export function connectorSuite(engine: ConnectorEngine): void {
         try {
           const err: any = await connector.handlers[method]({ tx: walletSpend }, ctx()).catch((e: any) => e);
 
-          expect(err.code).toBe('Rejected');
+          expect(err.code).toBe('PermissionRejected');
+          expect(err.mnCode).toBe('APPROVAL_UNAVAILABLE');
           expect(balance).not.toHaveBeenCalled();
           expect(bundle.facade.signRecipe).not.toHaveBeenCalled();
         } finally {

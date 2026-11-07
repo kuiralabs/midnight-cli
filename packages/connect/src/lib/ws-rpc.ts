@@ -2,7 +2,7 @@
 // Transport layer for the DApp Connector — dispatches RPC calls to handler functions
 
 import { WebSocketServer, WebSocket } from 'ws';
-import { defineHostSlot, type Host, type APIError, type RpcHandler, type RpcHandlerContext } from '@kuiralabs/midnight-cli-core';
+import { defineHostSlot, type Host, type APIError, type RpcHandler, type RpcHandlerContext, createApiError } from '@kuiralabs/midnight-cli-core';
 
 // The wire types the connector's handlers use, from where every package can reach them.
 export { createApiError, type APIError, type ErrorCode, type RpcHandler, type RpcHandlerContext } from '@kuiralabs/midnight-cli-core';
@@ -275,6 +275,12 @@ export function createRpcServer(options: RpcServerOptions): RpcServer {
         requestId = request.id;
         connection.requestCount++;
         onRequest?.(connection, request);
+
+        // The DApp connector API offers only connect before a connection is
+        // made: every other method is the connected API's.
+        if (request.method !== 'connect' && !connection.authenticated) {
+          throw createApiError('Disconnected', `Not connected: call connect with the wallet's network id before ${request.method}`);
+        }
 
         // Own entries only: a name like "toString" or "__proto__" must not reach Object.prototype.
         const handler = Object.hasOwn(handlers, request.method) ? handlers[request.method] : undefined;

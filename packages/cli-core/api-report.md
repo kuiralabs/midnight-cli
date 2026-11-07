@@ -34,10 +34,19 @@ export interface ToolsTableRow {
     readonly params?: readonly string[];
 }
 export declare function wrapWords(text: string, width: number): string[];
-export declare function nightAmountJson(micro: bigint): number;
+export declare function nightAmountJson(micro: bigint): string;
 export declare function nightAmountText(micro: bigint): string;
 export declare function nightToMicro(amountNight: number): bigint;
 export declare function parseAmount(amountStr: string): bigint;
+export interface ApprovalPolicy {
+    reads: 'auto';
+    balancing: 'auto' | 'fee-only' | 'prompt';
+    writes: 'auto' | 'fee-only' | 'prompt';
+    feeLimits?: {
+        maxFeeSpecks: string;
+        maxPending: number;
+    };
+}
 export declare function describeApprovalPolicy(options: Omit<ApprovalOptions, 'prompter' | 'notice'>, feeLimits: FeeLimits): ApprovalPolicy;
 export declare const FULL_FLAG = "_full";
 export declare function getFlag(args: ParsedArgs, name: string): string | undefined;
@@ -260,6 +269,7 @@ export type APIError = Error & {
 export declare function createApiError(code: ErrorCode, reason: string, mnCode?: string): APIError;
 export type ErrorCode = 'InternalError' | 'Rejected' | 'InvalidRequest' | 'PermissionRejected' | 'Disconnected' | 'InsufficientFunds';
 export declare const OPERATOR_REJECTED_MESSAGE = "User rejected the request";
+export declare const APPROVAL_UNAVAILABLE_MESSAGE = "No one could be asked to approve the request";
 export type RpcHandler = (params: Record<string, unknown>, context: RpcHandlerContext) => Promise<unknown>;
 export interface RpcHandlerContext {
     notify: (method: string, params?: Record<string, unknown>) => void;
@@ -390,6 +400,10 @@ export interface ScriptParts {
     rpcClientCode(servePort: number): string;
     readonly coerceArgFn: string;
     readonly privateStateSecretFn: string;
+    readonly privateStateStoreFn: string;
+    readonly privateStateSecretEnv: string;
+    readonly privateStatePasswordEnv: string;
+    readonly privateStateAccountEnv: string;
     readonly witnessCandidates: readonly string[];
     readonly indexerUrlEnv: string;
     readonly indexerWsUrlEnv: string;
@@ -529,6 +543,9 @@ export declare const ERROR_CODES: {
     readonly NO_STATE_ROOT: "NO_STATE_ROOT";
     readonly NO_PAYER: "NO_PAYER";
     readonly NO_NODE_RUNTIME: "NO_NODE_RUNTIME";
+    readonly CONTRACT_INFO_INVALID: "CONTRACT_INFO_INVALID";
+    readonly SERVE_PORT_IN_USE: "SERVE_PORT_IN_USE";
+    readonly APPROVAL_UNAVAILABLE: "APPROVAL_UNAVAILABLE";
     readonly COMMAND_FAILED: "COMMAND_FAILED";
     readonly UNKNOWN: "UNKNOWN";
 };
@@ -540,6 +557,10 @@ export declare const EXIT_NETWORK_ERROR = 4;
 export declare const EXIT_TX_REJECTED = 6;
 export declare const EXIT_WALLET_NOT_FOUND = 3;
 export declare function humanizeNetworkError(message: string): string;
+export interface FeeLimits {
+    maxFeeSpecks: bigint;
+    maxPending: number;
+}
 export declare function parseFeeLimits(maxFee: string | undefined, maxPending: string | undefined): FeeLimits;
 export declare function createHost(options?: HostOptions): Host;
 export declare function defineHostSlot<T>(name: string, init: () => T): HostSlot<T>;
@@ -688,6 +709,7 @@ export interface PayingTarget {
 export declare function resolvePayingTarget(args: ParsedArgs, command: string, subcommand: string, root: string, host: Host): PayingTarget;
 export interface ServedWallet {
     port: number;
+    contractKeys: ContractKeys;
     stop: () => Promise<void>;
 }
 export interface PhaseTiming {
@@ -768,6 +790,12 @@ export interface Settings {
 export declare function settingsFromEnvironment(env: Record<string, string | undefined>): Settings;
 export declare function shieldedDisabledReason(network: NetworkName): string;
 export declare function shieldedSyncEnabled(network: NetworkName, force?: boolean): boolean;
+export interface ContractKeys {
+    readonly privateStateSecret: string;
+    readonly storagePassword: string;
+    readonly storageAccountId: string;
+}
+export declare function contractKeysFromSeed(seed: Uint8Array): ContractKeys;
 export declare function sleep(ms: number, signal?: AbortSignal): Promise<void>;
 export declare function untilCancelled<T>(work: Promise<T>, signal?: AbortSignal): Promise<T>;
 export declare class NoStateRootError extends Error {
@@ -1140,6 +1168,11 @@ export declare class DustFeeNotGeneratedError extends Error {
     constructor(plan: RegistrationPlan, now: Date);
 }
 export declare function planRegistration(fee: bigint, estimates: readonly DustGenerationEstimate[]): RegistrationPlan;
+export interface DustCoinGeneration {
+    readonly maxCap: bigint;
+    readonly dtime: Date | undefined;
+}
+export declare function dustGenerationCap(coins: readonly DustCoinGeneration[]): bigint;
 export declare function awaitDustForFee(dust: DustBalanceSource, needed: bigint, onStatus?: (status: string) => void, signal?: AbortSignal): Promise<void>;
 export declare const DUST_SHORT_WAIT_MS: number;
 export interface DustWaitPlan {
@@ -1328,6 +1361,10 @@ export interface ScriptParts {
     rpcClientCode(servePort: number): string;
     readonly coerceArgFn: string;
     readonly privateStateSecretFn: string;
+    readonly privateStateStoreFn: string;
+    readonly privateStateSecretEnv: string;
+    readonly privateStatePasswordEnv: string;
+    readonly privateStateAccountEnv: string;
     readonly witnessCandidates: readonly string[];
     readonly indexerUrlEnv: string;
     readonly indexerWsUrlEnv: string;

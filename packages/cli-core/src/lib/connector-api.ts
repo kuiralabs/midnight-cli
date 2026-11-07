@@ -49,5 +49,8 @@ export function createApiError(code: ErrorCode, reason: string, mnCode?: string)
   return error;
 }
 
+/** The start of the error message when a request needs an approval and nobody can be asked (mn serve has no terminal). */
+export const APPROVAL_UNAVAILABLE_MESSAGE = 'No one could be asked to approve the request';
+
 /** The error message when the operator declines an approval prompt. */
 export const OPERATOR_REJECTED_MESSAGE = 'User rejected the request';

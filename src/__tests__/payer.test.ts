@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { parseArgs, saveCliConfig, NoPayerError, resolvePayingTarget, networkTargetOf, type NetworkName, createSdkWarningRouter, CancelledError, createHost } from '@kuiralabs/midnight-cli-core';
+import { parseArgs, saveCliConfig, contractKeysFromSeed, NoPayerError, resolvePayingTarget, networkTargetOf, type NetworkName, createSdkWarningRouter, CancelledError, createHost } from '@kuiralabs/midnight-cli-core';
 import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
 import { NoAccountError } from '@kuiralabs/midnight-grant';
 import { probeServeNetwork, servePayerAt } from '@kuiralabs/midnight-connect';
@@ -16,13 +16,16 @@ import { contractDefinition } from '@kuiralabs/midnight-contract/commands';
 import { grantDefinition } from '@kuiralabs/midnight-grant/commands';
 import { cliCall } from './helpers/cli-call.ts';
 import { stateRootIn } from '../../test-support/state-root-in.ts';
+import { rcKeys } from '../../test-support/rc-engine.ts';
+import { saveWalletConfig } from '../../test-support/plain-wallet.ts';
+import { loadInstalledEngine } from '../../test-support/test-host.ts';
 
 // The handlers, as the shell loads them.
 const { default: contractCommand } = await contractDefinition.load();
 const { default: grantCommand } = await grantDefinition.load();
 
 // The host the tests' calls run in: nobody to ask, notices dropped.
-const host = createHost();
+const host = createHost({ engineLoader: loadInstalledEngine });
 
 const ENDPOINTS = ['--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
 
@@ -118,14 +121,27 @@ describe('a command called without a payer', () => {
 describe('the serve payer', () => {
   // A running `mn serve`: a real JSON-RPC WebSocket server answering the
   // probes the reuse check makes, for the requested chain.
-  async function runningServe() {
+  // A wallet of the test's own, active, that the running serve pays from.
+  const SEED = Buffer.alloc(32, 3);
+  function activeWallet(): string {
+    const dir = path.join(home, '.midnight', 'wallets');
+    fs.mkdirSync(dir, { recursive: true });
+    const addresses = rcKeys.unshieldedAddresses(SEED);
+    saveWalletConfig({ seed: SEED.toString('hex'), addresses, createdAt: new Date(0).toISOString() }, path.join(dir, 'payer.json'));
+    saveCliConfig({ network: 'undeployed', wallet: 'payer' }, stateRootIn(home));
+    return addresses.undeployed;
+  }
+
+  async function runningServe(unshieldedAddress?: string) {
     const { WebSocketServer } = await import('ws');
     const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
     await new Promise<void>((r) => wss.once('listening', () => r()));
     wss.on('connection', (ws) => ws.on('message', (data) => {
       const req = JSON.parse(data.toString());
-      const result = req.method === 'getConnectionStatus' ? { status: 'connected', networkId: 'undeployed' }
+      const result = req.method === 'connect' ? { networkId: 'undeployed' }
+        : req.method === 'getConnectionStatus' ? { status: 'connected', networkId: 'undeployed' }
         : req.method === 'getConfiguration' ? { substrateNodeUri: 'ws://localhost:29944', indexerWsUri: 'ws://localhost:28088/api/v4/graphql/ws' }
+        : req.method === 'getUnshieldedAddress' && unshieldedAddress !== undefined ? { unshieldedAddress }
         : null;
       ws.send(JSON.stringify({ jsonrpc: '2.0', id: req.id, result }));
     }));
@@ -133,13 +149,14 @@ describe('the serve payer', () => {
     return { port, close: () => new Promise<void>((r) => wss.close(() => r())) };
   }
 
-  it('serves the wallet through a running mn serve, and leaves it running when stopped', async () => {
-    const serve = await runningServe();
+  it('serves the wallet through a running mn serve, with its contract keys, and leaves it running when stopped', async () => {
+    const serve = await runningServe(activeWallet());
     const said: string[] = [];
     try {
       const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy', stateRootIn(home), host);
       const served = await servePayerAt(serve.port).serve(target, undefined, silentSpinner((message) => said.push(message)), createSdkWarningRouter().openCall().warnings, undefined);
       expect(served.port).toBe(serve.port);
+      expect(served.contractKeys).toEqual(contractKeysFromSeed(SEED));
       expect(said).toEqual([`Reusing existing mn serve on port ${serve.port}`, `mn serve ready (port ${serve.port})`]);
       await served.stop();
       expect(await probeServeNetwork(serve.port)).toBe('undeployed');

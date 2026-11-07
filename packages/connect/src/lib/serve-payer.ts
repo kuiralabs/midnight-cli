@@ -10,13 +10,14 @@ import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { assertWalletCanPay } from '@kuiralabs/midnight-wallet';
 
 /**
- * An mn serve on `port` for the command's network and wallet: one already
- * running there is reused (its stop does nothing); one on another network
- * refuses, saying what to do.
+ * An mn serve for the command's network and wallet: the one already on
+ * `port` when it can pay for the command (its stop does nothing), else one
+ * started in this process on a free port, so commands run at once never
+ * collide on a port.
  */
 async function serveWallet(port: number, { network, root, host, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<ServedWallet> {
-  const { startServeOrReuse } = await import('./serve-manager.ts');
-  const handle = await startServeOrReuse({
+  const { reuseServeOrStartAnother } = await import('./serve-manager.ts');
+  const handle = await reuseServeOrStartAnother({
     root,
     host,
     port,
@@ -29,7 +30,7 @@ async function serveWallet(port: number, { network, root, host, endpoints }: Pay
     signal,
   });
   progress.stop('mn serve ready (port ' + handle.port + ')');
-  return { port: handle.port, stop: () => handle.stop() };
+  return { port: handle.port, contractKeys: handle.contractKeys, stop: () => handle.stop() };
 }
 
 /**
@@ -45,7 +46,7 @@ async function connectWallet({ network, root, host, endpoints }: PayingTarget, w
   return sessionOver(network, await open(), (tx, stage) => engine.ledger.readTransaction(tx, stage), { reopen: open, onMessage: (msg) => progress.update(msg) });
 }
 
-/** The payer whose served wallet is the mn serve on `port`. */
+/** The payer whose served wallet is the mn serve on `port` when one there can pay for the command, else one it starts on a free port. */
 export function servePayerAt(port: number): Payer {
   return {
     // The wallet mn serve pays from is mn's own: its balance is checked as mn keeps it.
@@ -55,4 +56,5 @@ export function servePayerAt(port: number): Payer {
   };
 }
 
+/** mn's own payer: an mn serve on the default port that can pay for the command, else one on a free port. */
 export const servePayer: Payer = servePayerAt(DEFAULT_SERVE_PORT);

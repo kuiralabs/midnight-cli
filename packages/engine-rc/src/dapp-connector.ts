@@ -2,8 +2,8 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, type DAppConnector, type DAppConnectorCallbacks } from '@kuiralabs/midnight-cli-core/engine';
-import { type NoticeSink, LEDGER_9_FORK_VERSION, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core';
+import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap } from '@kuiralabs/midnight-cli-core/engine';
+import { type NoticeSink, LEDGER_9_FORK_VERSION, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE } from '@kuiralabs/midnight-cli-core';
 import { dim, roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
@@ -378,8 +378,16 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       { method, network: networkConfig.networkId, details, dappName: context?.connectionId, feeOnly },
       approvalOptions,
     );
-    const outcome = result === 'reject' ? 'rejected' : 'approved';
+    const outcome = result === 'approve' ? 'approved' : result === 'reject' ? 'rejected' : 'unavailable';
     context?.notify('approval:resolved', { method, result: outcome });
+    if (result === 'unavailable') {
+      // Nobody was asked, so nobody rejected it: say what would let it through.
+      throw createApiError('PermissionRejected', `${APPROVAL_UNAVAILABLE_MESSAGE}: ${method} needs approval, and mn serve has no terminal to ask at. `
+        + (approvalOptions.approveFees
+          ? 'This fee wallet (--approve-fees) approves without asking only paying the Dust fee for an agent\'s own transaction and submitting a transaction it balanced that way on the same connection.'
+          : 'Start mn serve with --approve-all to approve requests without asking (or --approve-fees for a wallet that only pays an agent\'s Dust fee), or run it at a terminal.'),
+        'APPROVAL_UNAVAILABLE');
+    }
     if (result === 'reject') {
       throw createApiError('Rejected', approvalOptions.approveFees
         ? `${OPERATOR_REJECTED_MESSAGE}: this fee wallet (--approve-fees) approves without the operator only paying the `
@@ -841,11 +849,8 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
     getDustBalance: async () => {
       const state = getState();
-      const balance = state.dust.balance(new Date());
-      // API expects { cap, balance }. Exact cap requires estimating from
-      // registered NIGHT UTXO dust generation potential. For v1, use balance
-      // as approximation — both represent current dust availability.
-      return { cap: balance, balance };
+      // The cap is what the wallet's unspent NIGHT generates at most (dustGenerationCap).
+      return { cap: dustGenerationCap(state.dust.totalCoins), balance: state.dust.balance(new Date()) };
     },
 
     getUnshieldedAddress: async () => {

@@ -31,7 +31,8 @@ export interface ApprovalRequest {
   feeOnly?: boolean;
 }
 
-export type ApprovalResult = 'approve' | 'reject';
+/** Approved; rejected by whoever answered; or nobody could be asked (no terminal, no prompter), which is no one's rejection. */
+export type ApprovalResult = 'approve' | 'reject' | 'unavailable';
 
 export interface ApprovalOptions {
   /** Auto-approve read-only methods without prompting */
@@ -155,13 +156,13 @@ function nonInteractiveHint(request: ApprovalRequest, options: Pick<ApprovalOpti
 
 /**
  * Prompt the user to approve or reject a DApp Connector operation.
- * Returns 'approve' or 'reject'.
+ * Returns 'approve', 'reject', or 'unavailable' when nobody can be asked.
  *
  * If options.approveAll is true, auto-approves without prompting.
  * If options.approveFees is true, auto-approves a fee-only request.
  * If options.autoApproveReads is true and the method is read-only, auto-approves.
  *
- * Rejects if stdin is not a TTY (non-interactive environment).
+ * Unavailable if stdin is not a TTY (non-interactive environment) or the host gave no prompter.
  * Only one prompt can be active at a time: the prompter refuses a second
  * question while one is open, and the request is rejected.
  */
@@ -186,14 +187,14 @@ export async function promptApproval(
     return 'approve';
   }
 
-  // Non-interactive environment — reject by default
+  // Non-interactive environment: nobody to ask, so nothing is approved.
   const { prompter } = options;
   if (prompter === null || !prompter.isInteractive()) {
     notice(red(prompter === null
       ? '  Cannot prompt for approval: the host gave no prompter (createHost prompter)'
       : '  Cannot prompt for approval: stdin is not a TTY'));
     notice(dim(`  ${nonInteractiveHint(request, options)}`));
-    return 'reject';
+    return 'unavailable';
   }
 
   // The request is part of the question, so whoever answers sees what they approve.

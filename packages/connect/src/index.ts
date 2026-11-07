@@ -7,5 +7,6 @@
 // says. The serve command and connect's guidance are "./commands".
 
 export { servePayer, servePayerAt } from './lib/serve-payer.ts';
-export { probeServeNetwork, type ServeHandle, type ServeManagerOptions, startServeOrReuse } from './lib/serve-manager.ts';
+export { probeServe, probeServeNetwork, reuseServeOrStartAnother, type ServeHandle, type ServeManagerOptions, type ServeProbe, serveWalletContractKeys } from './lib/serve-manager.ts';
+export { ServeNotReusableError, startServeOrReuse } from './lib/serve-on-port.ts';
 export { createRpcServer, type JsonRpcRequest, type RpcConnection, type RpcServer, type RpcServerOptions } from './lib/ws-rpc.ts';
