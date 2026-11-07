@@ -407,8 +407,9 @@ export class WalletDataRepository {
    *      (the SDK's internal coin index hadn't caught up to the state
    *      snapshot), stop+rebuild+re-sync and call fn again. Bounded.
    *   5. Save wallet cache on success.
-   *   6. Auto-invalidate dust+unshielded+facade memo entries for this seed
-   *      (writes mutate state). Read-only borrowers pass `readOnly: true`.
+   *   6. Auto-invalidate the dust+unshielded memo entries for this seed
+   *      (writes mutate state), keeping the wallet cache just saved.
+   *      Read-only borrowers pass `readOnly: true`.
    *   7. stopFacade in `finally`.
    *
    * The SDK's `FacadeBundle` is intentionally exposed via `lease.bundle` so
@@ -550,7 +551,11 @@ export class WalletDataRepository {
       if (!opts.skipAutoSave) {
         try { await saveWalletCache(address, networkName, bundle.facade, opts.root, chainId); } catch { /* best-effort */ }
       }
-      if (!opts.readOnly) this.invalidate({ network, root: opts.root, seed });
+      // A write changed what the chain holds for this wallet, so the balances
+      // read before it are dropped. The saved wallet state stays: it was synced
+      // just now, and the next write resumes from it (its sync then picks up
+      // this write's transaction) instead of rebuilding the wallet.
+      if (!opts.readOnly) this.invalidate({ network, root: opts.root, seed, kinds: ['dust', 'unshielded'] });
       return result;
     } finally {
       await cleanup();
