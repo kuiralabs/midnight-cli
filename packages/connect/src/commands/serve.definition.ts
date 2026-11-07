@@ -23,7 +23,14 @@ export const serveDefinition: CommandDefinition = {
         '                              and the submit of what it balanced; other writes prompt',
       ],
     },
-    { name: 'force-shielded', takesValue: false },
+    {
+      name: 'force-shielded',
+      takesValue: false,
+      help: [
+        '--force-shielded              Sync the shielded wallet too on preview, preprod and',
+        '                              stagenet (skipped there by default: no shielded faucet)',
+      ],
+    },
     {
       name: 'max-fee',
       takesValue: true,
@@ -83,7 +90,7 @@ export const serveDefinition: CommandDefinition = {
   ],
   help: {
     description: 'Start DApp Connector server over WebSocket JSON-RPC',
-    usage: 'midnight serve [--port <n>] [--wallet <name|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all | --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--no-auto-approve-reads] [--json]',
+    usage: 'midnight serve [--port <n>] [--wallet <name|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all | --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--force-shielded] [--no-auto-approve-reads] [--json]',
     flags: [
       { flag: 'port' },
       { flag: 'wallet' },
@@ -95,6 +102,7 @@ export const serveDefinition: CommandDefinition = {
       { flag: 'approve-fees' },
       { flag: 'max-fee' },
       { flag: 'max-pending' },
+      { flag: 'force-shielded' },
       { flag: 'no-auto-approve-reads' },
     ],
     examples: [

@@ -20,13 +20,16 @@ export const connectGuidance: PackageGuidance = {
       body: `DAPP CONNECTOR
 ──────────────
 
-  midnight serve [--port 9932] [--approve-all | --approve-fees] [--network name]
+  midnight serve [--port 9932] [--approve-all | --approve-fees] [--network name] [--force-shielded]
 
 Starts a WebSocket JSON-RPC server implementing the Midnight
 ConnectedAPI interface (same as the Lace browser wallet). Any DApp
 can connect to it — no browser extension needed.
 
   - Port default: 9932, localhost only
+  - Shielded wallet: not synced on preview, preprod and stagenet (no
+    shielded faucet) unless --force-shielded; a dApp that needs shielded
+    balances or coins there needs it
   - Read operations: never prompt
   - Write operations, balancing included (balanceUnsealedTransaction /
     balanceSealedTransaction sign and return a finished transaction):

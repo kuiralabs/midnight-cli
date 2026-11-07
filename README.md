@@ -45,7 +45,7 @@ Install the prerelease with npm 11 or older (or run it with `npx`; with npm 12, 
 | `midnight dust <register\|status\|export> [--wallet <name\|file>] [--seed <hex> (export only)] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--no-cache (status only)]` | Register UTXOs for dust (fee token) generation, check status, or export a restorable snapshot |
 | `midnight config <get\|set\|unset> <key> [value] [--network <name>]` | Manage persistent config (default network, endpoints, etc.) |
 | `midnight cache clear [--network <name>] [--wallet <name\|file>]` | Manage wallet state cache (clear cached sync data) |
-| `midnight serve [--port <n>] [--wallet <name\|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all \| --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--no-auto-approve-reads] [--json]` | Start DApp Connector server over WebSocket JSON-RPC |
+| `midnight serve [--port <n>] [--wallet <name\|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--approve-all \| --approve-fees [--max-fee <DUST>] [--max-pending <n>]] [--force-shielded] [--no-auto-approve-reads] [--json]` | Start DApp Connector server over WebSocket JSON-RPC |
 | `midnight test <create\|run\|list\|results> [options]` | Generate and run E2E test suites for Midnight dApps |
 | `midnight dev [path]` | Iteration loop for Compact contract development (localnet + compile-on-save + one-key deploy) |
 | `midnight contract <inspect\|deploy\|call\|state> [options]` | Inspect, deploy, call, and query Midnight smart contracts |
