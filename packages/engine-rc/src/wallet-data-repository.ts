@@ -325,7 +325,11 @@ export class WalletDataRepository {
       lastAppliedEventId = result.lastAppliedEventId >= 0
         ? result.lastAppliedEventId
         : (cached?.lastAppliedEventId ?? -1);
-      if (result.lastAppliedEventId >= 0 || !cached) {
+      // A window that applied nothing over no cache is kept only when it is
+      // complete (an empty Dust timeline). A cut-short one holds no position:
+      // on a forked chain its state is the tip's ledger 9 while the timeline
+      // starts with ledger-8 events, which the next window would refuse.
+      if (result.lastAppliedEventId >= 0 || (!cached && !result.partial)) {
         try { saveDustCache(networkName, pubkeyHex, result.state, lastAppliedEventId, opts.root, chainId, result.retention); } catch { /* best-effort */ }
       }
 

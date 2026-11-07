@@ -325,6 +325,55 @@ describe('WalletDataRepository — dust reads', () => {
     expect(view.lastAppliedEventId).toBe(499);
   });
 
+  // Regression: a cold window cut short before its first event (Ctrl+C, a
+  // timeout, a sidecar stopped before the fork) was saved as the tip's
+  // ledger-9 state at cursor -1. On a forked chain the next window resumed it
+  // from event 0, a ledger-8 event, and every read failed until a cache clear.
+  it('keeps nothing from a cold window cut short before applying an event, so the next window starts cold', async () => {
+    const seen: Array<{ startFromId: number; initialLedger: number | undefined }> = [];
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: async () => 2_001_100n,
+      now: () => 1_000_000,
+      fetchTip: async () => 'tip-A',
+      fetchChainId: async () => null,
+      fetchUnshielded: async () => fakeBalanceSummary(),
+      fetchDust: async (_seed, _net, opts) => {
+        seen.push({ startFromId: opts.startFromId, initialLedger: opts.initialState?.ledgerVersion });
+        return seen.length === 1
+          ? fakeDustResult({ lastAppliedEventId: -1, eventCount: 0, partial: true })
+          : fakeDustResult({ lastAppliedEventId: 1_630_127, eventCount: 1_630_128, partial: false });
+      },
+    });
+
+    const view = await repo.dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
+    expect(seen).toEqual([
+      { startFromId: 0, initialLedger: undefined },
+      { startFromId: 0, initialLedger: undefined },
+    ]);
+    expect(view.partial).toBe(false);
+  });
+
+  it('keeps a complete read of an empty Dust timeline, which the next read resumes', async () => {
+    const seen: Array<{ startFromId: number; initialLedger: number | undefined }> = [];
+    // A new repository per read: its memo would otherwise answer the second one.
+    const read = () => new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL,
+      now: () => 1_000_000,
+      fetchTip: async () => 'tip-A',
+      fetchChainId: async () => null,
+      fetchUnshielded: async () => fakeBalanceSummary(),
+      fetchDust: async (_seed, _net, opts) => {
+        seen.push({ startFromId: opts.startFromId, initialLedger: opts.initialState?.ledgerVersion });
+        return fakeDustResult({ lastAppliedEventId: -1, eventCount: 0, partial: false });
+      },
+    }).dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
+
+    await read();
+    await read();
+    expect(seen).toEqual([
+      { startFromId: 0, initialLedger: undefined },
+      { startFromId: 0, initialLedger: 9 },
+    ]);
+  });
+
   it('keeps a completed sync when the tip fetch fails at memo time', async () => {
     // The tip probe is an optimization. A cold dust sync is minutes of work that
     // is already on disk by this point; a node blip must not turn it into a throw.
