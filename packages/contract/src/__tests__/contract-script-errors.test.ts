@@ -194,3 +194,18 @@ describe('a contract script and a contract run, in the error-code parity table',
     for (const [where] of changed) expect(where).toMatch(/\(approved\b/);
   });
 });
+
+// Regression: midnight-js 5 reports a provider's failure as its own
+// ProviderFailedError and keeps only the provider error's message on `cause`,
+// so a deploy short of Dust at mn serve came back UNKNOWN (exit 1) instead of
+// DUST_REQUIRED (exit 5), its message replaced by the wrapper's.
+describe("mn serve's refusal through midnight-js's provider wrapper", () => {
+  const DUST_SHORT = "Not enough Dust available for this transaction's fee: the wallet has 0.16 DUST and the fee takes 1.20. Its registered NIGHT generates the rest in about 3 minutes.";
+
+  it("is reported as mn serve's refusal: its message and its code", async () => {
+    const err = await scriptFailureAtServe(() => createApiError('InternalError', DUST_SHORT, 'DUST_REQUIRED'), { wrapped: true });
+    expect(err).toBeInstanceOf(ContractScriptError);
+    expect(err.message).toBe(DUST_SHORT);
+    expect(classifyError(err, CONTRACT_CODES)).toStrictEqual({ errorCode: 'DUST_REQUIRED', exitCode: 5 });
+  });
+});

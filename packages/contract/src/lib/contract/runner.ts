@@ -195,8 +195,9 @@ function rpcCall(method, params = {}) {
         if (msg.id === id) {
           clearTimeout(timeout);
           rpcWs.removeListener('message', handler);
-          // mn serve's failure, with mn's code for it when the server gave one.
-          if (msg.error) reject(Object.assign(new Error(msg.error.message || JSON.stringify(msg.error)), typeof msg.error.data?.mnCode === 'string' ? { code: msg.error.data.mnCode } : {}));
+          // mn serve's failure, with mn's code for it when the server gave one,
+          // kept as the last refusal for the prelude's fail (see SCRIPT_PRELUDE).
+          if (msg.error) reject(globalThis.mnServeRefusal = Object.assign(new Error(msg.error.message || JSON.stringify(msg.error)), typeof msg.error.data?.mnCode === 'string' ? { code: msg.error.data.mnCode } : {}));
           else resolve(msg.result);
         }
       } catch {}
@@ -265,9 +266,18 @@ const TRANSPORT_FAILURE_FN = `\nconst isTransportFailure = (${isTransportFailure
  * for a connection that could not be made, which carries only the socket's
  * (ECONNREFUSED) or none. Without it Node prints the uncaught exception with
  * its source context, and that became mn's error.
+ *
+ * midnight-js 5 reports a provider's failure as its own ProviderFailedError,
+ * rebuilding the provider's error on `cause` with its message and nothing
+ * else, so mn serve's code is lost there. The script's client for mn serve
+ * keeps the last refusal it received (rpcClientCode), and a failure of the
+ * providers backed by mn serve is reported as that refusal.
  */
 export const SCRIPT_PRELUDE = `${TRANSPORT_FAILURE_FN}
+const SERVE_BACKED_PROVIDER_METHODS = ['balanceTx', 'submitTx'];
 const fail = (e) => {
+  const refusal = globalThis.mnServeRefusal;
+  if (e?.name === 'ProviderFailedError' && SERVE_BACKED_PROVIDER_METHODS.includes(e.method) && refusal) e = refusal;
   const carried = typeof e?.code === 'string' && !isTransportFailure({ code: e.code }) ? e.code : undefined;
   const code = carried ?? (isTransportFailure(e) ? 'NETWORK_ERROR' : undefined);
   const failure = { message: String(e?.message ?? e), ...(code === undefined ? {} : { code }) };
