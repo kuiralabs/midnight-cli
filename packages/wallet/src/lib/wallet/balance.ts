@@ -3,7 +3,7 @@
 // NIGHT and tokens, read with its secret keys, where the network has a
 // shielded faucet (or when asked).
 
-import { type Host, throwIfCancelled, UsageError, detectNetworkFromAddress, isNamedOnlyNetwork, NetworkNotNamedError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core';
+import { type Host, type EngineKeys, addressPrefix, looksLikeShieldedAddress, throwIfCancelled, UsageError, detectNetworkFromAddress, isNamedOnlyNetwork, NetworkNotNamedError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core';
 import { checkLedgerSupported, fetchProtocolVersion, getChainGenesisHash } from '@kuiralabs/midnight-chain';
 import { saveShieldedAddress } from '../wallet-config.ts';
 import { seedOf, type WalletSource } from '../seed-resolver.ts';
@@ -44,6 +44,18 @@ export function addressNetwork(address: string, network?: NetworkName): NetworkN
   return network ?? inferred ?? undefined;
 }
 
+/** Refuses, as a usage mistake, anything but an unshielded address on `network`; a shielded one is told its balance needs the wallet. */
+function assertUnshieldedAddress(keys: EngineKeys, address: string, network: NetworkName): void {
+  try {
+    keys.assertAddress(address, 'unshielded', network);
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    throw new UsageError(looksLikeShieldedAddress(address)
+      ? `${address} is a shielded address: its balance is private, read only with its wallet: midnight balance --wallet <name> --shielded`
+      : `Invalid address: ${why}\nExpected an unshielded address (${addressPrefix('unshielded', network)}...) on ${network}, or no address for the active wallet's balance.`);
+  }
+}
+
 /**
  * The unshielded balance of `address`, from the indexer through mn's cache,
  * on the network its prefix names unless `options.network` says another
@@ -53,9 +65,12 @@ export async function readAddressBalance(host: Host, address: string, options: R
   const { signal, log } = options;
   throwIfCancelled(signal);
   const { network, networkConfig } = networkTargetOf(host, { ...networkChoiceOf(options), network: addressNetwork(address, options.network) });
+  const engine = await host.engines.for(network);
+  // Checked before the indexer is asked: it is sent only an address it can read.
+  assertUnshieldedAddress(engine.keys, address, network);
   const steps = progressSteps(options.onProgress);
   steps.start(`Checking balance on ${network}...`);
-  const result = await (await host.engines.for(network)).wallet.unshieldedBalance(address, networkConfig, {
+  const result = await engine.wallet.unshieldedBalance(address, networkConfig, {
     forceFresh: options.forceFresh,
     signal,
     log,

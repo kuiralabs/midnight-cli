@@ -60,6 +60,19 @@ describe('balance command — address resolution errors', () => {
   });
 });
 
+describe('balance command — the address given', () => {
+  // Every word after the first used to be ignored, and the first sent to the indexer as it was.
+  it('refuses a second address as a usage error', async () => {
+    const args = parseArgs(['balance', GENESIS_UNDEPLOYED_ADDRESS, EMPTY_ADDRESS, '--network', 'undeployed']);
+    await expect(cliCall(balanceCommand, args)).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('balance takes one address') });
+  });
+
+  it('refuses a word that is not an address as a usage error', async () => {
+    const args = parseArgs(['balance', 'notanaddress', '--network', 'undeployed', '--indexer-ws', 'ws://localhost:19999']);
+    await expect(cliCall(balanceCommand, args)).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('Invalid address') });
+  });
+});
+
 describe('balance command — shielded flag errors', () => {
   it('throws when --shielded used without wallet file', async () => {
     const args = parseArgs(['balance', '--shielded', '--wallet', path.join(TEST_DIR, 'nonexistent.json')]);
