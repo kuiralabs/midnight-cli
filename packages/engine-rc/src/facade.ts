@@ -48,6 +48,8 @@ export interface FacadeBundle {
   restoredFromCache?: boolean;
   /** The network's indexer (HTTP), for reads the facade doesn't offer, like the chain's clock. */
   indexerHttpUrl?: string;
+  /** The node the facade submits to: a submit's wait asks whether it still answers. */
+  nodeUrl?: string;
   /** The network's indexer (WebSocket), asked which event streams are empty when a sync starts. */
   indexerWsUrl?: string;
   /** The streams the chain has no events in, as read when the sync started. */
@@ -157,7 +159,7 @@ export async function buildFacade(
     facade = await initFresh();
   }
 
-  return { facade, keystore, seeds, coinPicking, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS };
+  return { facade, keystore, seeds, coinPicking, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS, nodeUrl: networkConfig.node };
 }
 
 /** What the facade submits through, as WalletFacade.init takes it. */

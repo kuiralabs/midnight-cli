@@ -73,18 +73,24 @@ const host = createCliHost({ prompter: createTerminalPrompter(), notices: !jsonM
 // Auto-migrate old ~/.midnight/wallet.json → wallets/default.json (silent, one-time)
 migrateOldWallet(host.paths().stateRoot);
 
-// Global AbortController for clean shutdown on SIGINT/SIGTERM
+// Global AbortController for clean shutdown on SIGINT/SIGTERM. The call
+// stops on its signal and ends CANCELLED (exit 7), with its JSON under --json.
+// Only a call that has not ended 5 s later is cut off, with the shell's code
+// for the signal: 130 for SIGINT, 143 for SIGTERM. (A repeated signal is not
+// taken as "stop now": Ctrl+C reaches a re-exec'd child twice, from the
+// terminal and forwarded by its parent, lib/heap-guard.ts.)
 const abortController = new AbortController();
 const { signal } = abortController;
+const SIGNAL_EXIT_CODES = { SIGINT: 130, SIGTERM: 143 } as const;
 
-function handleShutdown() {
+function handleShutdown(received: keyof typeof SIGNAL_EXIT_CODES) {
+  if (abortController.signal.aborted) return;
   abortController.abort();
-  // Give active operations a moment to clean up, then force exit
-  setTimeout(() => process.exit(130), 5_000).unref();
+  setTimeout(() => process.exit(SIGNAL_EXIT_CODES[received]), 5_000).unref();
 }
 
-process.on('SIGINT', handleShutdown);
-process.on('SIGTERM', handleShutdown);
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 
 async function run(): Promise<CommandOutcome | void> {
   // An unrecognised flag is refused before anything runs, instead of being

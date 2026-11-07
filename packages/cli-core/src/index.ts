@@ -119,4 +119,4 @@ export { isTransportFailure, withTransportCode } from './lib/transport-failure.t
 export { type EndpointRole, EndpointUnreachableError, endpointUnreachable, transportReason } from './lib/endpoint-unreachable.ts';
 export { type VerboseLog } from './lib/verbose.ts';
 export { clearWalletCache } from './lib/wallet-cache.ts';
-export { openWalletSession, type OpenWalletSessionOptions, sessionOver, type WalletSession } from './lib/wallet-session.ts';
+export { openWalletSession, type OpenWalletSessionOptions, sessionOver, type SessionSubmitBounds, type WalletSession } from './lib/wallet-session.ts';

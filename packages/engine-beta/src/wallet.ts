@@ -4,7 +4,7 @@
 // themselves before the SDK moved behind the engine.
 
 import { deriveUnshieldedAddress } from './derive-address.ts';
-import { assertSpendsNoOfferCoin, type DAppConnector, type EngineWallet, type OpenedConnector, type PrepWallet, type ServedWalletSession, type ShieldedTransferParams, reportingEngineErrors, getNetworkId, bindCachesToIndexer, describeIndexerChange, loadWalletCache, saveWalletCache, DUST_SHORT_WAIT_MS, payWhenDustCovers } from '@kuiralabs/midnight-cli-core/engine';
+import { assertSpendsNoOfferCoin, type DAppConnector, type EngineWallet, type OpenedConnector, type PrepWallet, type ServedWalletSession, type ShieldedTransferParams, reportingEngineErrors, getNetworkId, bindCachesToIndexer, describeIndexerChange, loadWalletCache, saveWalletCache, DUST_SHORT_WAIT_MS, payWhenDustCovers, proveWithin, submitWithin, PROOF_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/engine';
 import { readOpenOffers, InsufficientBalanceError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import { trackElapsed } from '@kuiralabs/midnight-cli-core/ui';
 import { spentNullifiers } from './offer-reader.ts';
@@ -13,7 +13,7 @@ import { MidnightBech32m } from '@midnightntwrk/wallet-sdk-address-format';
 import { assertLedgerSupported } from '@kuiralabs/midnight-chain';
 import { decodeShieldedAddress } from './addresses.ts';
 import { buildFacade, hasDustAvailable, isFacadeSynced, startAndSyncFacade, stopFacade, waitForDustAvailable } from './facade.ts';
-import { ensureDust, executeTransfer } from './transfer.ts';
+import { ensureDust, executeTransfer, transactionIdOf } from './transfer.ts';
 import { airdropNight } from './airdrop.ts';
 import { registerDust } from './dust-register.ts';
 import { exportDustSnapshot } from './dust-export.ts';
@@ -40,7 +40,7 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
       }
 
       progress.update('Checking dust...');
-      await ensureDust(bundle, (status: string) => progress.update(status));
+      await ensureDust(bundle, (status: string) => progress.update(status), undefined, signal);
 
       throwIfCancelled(signal);
 
@@ -61,7 +61,9 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
       const signed = await bundle.facade.signRecipe(recipe, bundle.keystore.signDataAsync);
 
       progress.update('Generating ZK proof (this may take a few minutes)...');
-      const finalized = await bundle.facade.finalizeRecipe(signed);
+      // Cancelled while proving, the call stops at once: nothing was sent.
+      const finalized = await proveWithin(bundle.facade.finalizeRecipe(signed), PROOF_TIMEOUT_MS, signal);
+      throwIfCancelled(signal);
 
       // Spending an open swap offer's coins would cancel it: refused.
       const open = readOpenOffers(root, network, deriveUnshieldedAddress(seed, network));
@@ -81,7 +83,8 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
       const txId = await trackElapsed(
         progress,
         'Submitting and waiting for finalization (typically 12 to 30s)...',
-        bundle.facade.submitTransaction(finalized),
+        // Bounded: against a node that went away the SDK's submit never returns.
+        submitWithin(bundle.facade.submitTransaction(finalized), { txId: transactionIdOf(finalized), node: bundle.nodeUrl, signal }),
       );
       return String(txId);
     },

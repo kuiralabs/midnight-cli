@@ -410,6 +410,22 @@ describe('registerNightUtxos', () => {
     expect(registerSpy).not.toHaveBeenCalled();
   });
 
+  it('cancelled while proving: CANCELLED, and nothing is sent', async () => {
+    vi.useRealTimers();
+    const controller = new AbortController();
+    const submitTransaction = vi.fn().mockResolvedValue('reg-tx');
+    // A proof that takes its time; the call is cancelled while it runs.
+    const finalizeRecipe = vi.fn(() => new Promise<any>(() => {}));
+    const bundle = createBundleStub({ finalizeRecipe, submitTransaction });
+
+    const registering = registerNightUtxos(bundle, [NIGHT_UTXO], DUST_ADDRESS, undefined, controller.signal);
+    await vi.waitFor(() => expect(finalizeRecipe).toHaveBeenCalled());
+    controller.abort();
+
+    await expect(registering).rejects.toMatchObject({ code: 'CANCELLED' });
+    expect(submitTransaction).not.toHaveBeenCalled();
+  });
+
   it('says how long it will wait, then registers, when the fee is generated within mn\'s wait', async () => {
     const statuses: string[] = [];
     const waitForGeneratedDust = vi.fn().mockResolvedValue(undefined);

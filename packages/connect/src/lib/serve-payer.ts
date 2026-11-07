@@ -51,7 +51,7 @@ async function connectWallet(target: PayingTarget, wallet: string | undefined, p
   const { openConnector } = await import('./serve-manager.ts');
   const engine = await host.engines.load(sdkSetOf(network, root));
   const open = () => openConnector({ root, host, network, endpoints, wallet, onMessage: (msg) => progress.update(msg), dustWaitMs: OWN_COMMAND_DUST_WAIT_MS, sdkWarnings, forceShielded: options.shielded, signal });
-  return sessionOver(network, await open(), (tx, stage) => engine.ledger.readTransaction(tx, stage), { reopen: open, onMessage: (msg) => progress.update(msg) });
+  return sessionOver(network, await open(), (tx, stage) => engine.ledger.readTransaction(tx, stage), { reopen: open, onMessage: (msg) => progress.update(msg) }, { node: target.networkConfig.node, signal });
 }
 
 /** The payer whose served wallet is the mn serve on `port`. */

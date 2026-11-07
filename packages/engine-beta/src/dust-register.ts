@@ -23,7 +23,7 @@ export async function registerDust(repo: WalletDataRepository, seed: Buffer, net
 
         // ensureDust handles: early return if dust exists, registration
         // of unregistered UTXOs, waiting for dust coins.
-        const result = await ensureDust(bundle, (status: string) => onStatus?.(status), state);
+        const result = await ensureDust(bundle, (status: string) => onStatus?.(status), state, signal);
 
         throwIfCancelled(signal);
 

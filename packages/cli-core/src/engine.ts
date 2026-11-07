@@ -28,6 +28,7 @@ export {
   type TransferResult, type UnshieldedView
 } from './lib/engine.ts';
 export { EngineError, ProofTimeoutError } from './lib/errors.ts';
+export { proveWithin, SUBMIT_WAIT_MS, submitWithin, type SubmitWaitOptions } from './lib/submit-wait.ts';
 export { DEFAULT_FEE_LIMITS, feeLimitRefusal, type FeeLimits, pendingLimitRefusal } from './lib/fee-limits.ts';
 export { getNetworkId, networkIdForName } from './lib/network-id.ts';
 export { assertSpendsNoOfferCoin } from './lib/open-offers.ts';

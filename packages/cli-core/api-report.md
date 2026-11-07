@@ -823,7 +823,11 @@ export interface OpenWalletSessionOptions {
     onMessage?: (message: string) => void;
     sdkWarnings?: CallSdkWarnings;
 }
-export declare function sessionOver(network: NetworkName, opened: OpenedConnector, readTransaction: (tx: string, stage: 'unsealed' | 'sealed') => TransactionDetail[], reopening?: SessionReopening): WalletSession;
+export declare function sessionOver(network: NetworkName, opened: OpenedConnector, readTransaction: (tx: string, stage: 'unsealed' | 'sealed') => TransactionDetail[], reopening?: SessionReopening, submitBounds?: SessionSubmitBounds): WalletSession;
+export interface SessionSubmitBounds {
+    readonly node?: string;
+    readonly signal?: AbortSignal;
+}
 export interface WalletSession {
     readonly network: NetworkName;
     addresses(): Promise<WalletAddresses>;
@@ -1425,6 +1429,16 @@ export declare class ProofTimeoutError extends EngineError {
     constructor(message?: string, options?: {
         cause?: unknown;
     });
+}
+export declare function proveWithin<T>(work: Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T>;
+export declare const SUBMIT_WAIT_MS = 180000;
+export declare function submitWithin<T>(work: Promise<T>, options?: SubmitWaitOptions): Promise<T>;
+export interface SubmitWaitOptions {
+    readonly txId?: string;
+    readonly node?: string;
+    readonly timeoutMs?: number;
+    readonly nodeCheckMs?: number;
+    readonly signal?: AbortSignal;
 }
 export declare const DEFAULT_FEE_LIMITS: FeeLimits;
 export declare function feeLimitRefusal(feeSpecks: bigint, limits: FeeLimits): string | undefined;

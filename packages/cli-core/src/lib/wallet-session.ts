@@ -19,6 +19,7 @@ import { settingsFromEnvironment } from './settings.ts';
 import { shieldedSyncEnabled } from './shielded-policy.ts';
 import { throwIfCancelled } from './errors.ts';
 import { isColdStartRace, toEngineError } from './sdk-errors.ts';
+import { submitWithin } from './submit-wait.ts';
 import type { SwapLeg } from './swap-offer.ts';
 import type { OpenOffer } from './open-offers.ts';
 import type { CallSdkWarnings } from './sdk-warnings.ts';
@@ -107,6 +108,12 @@ export interface WalletSession {
   close(): Promise<void>;
 }
 
+/** What bounds a session's submit: the node it goes to, asked whether it still answers while the submit waits, and the session's cancellation. */
+export interface SessionSubmitBounds {
+  readonly node?: string;
+  readonly signal?: AbortSignal;
+}
+
 export interface SessionReopening {
   /** Opens the same wallet again, as it was first opened. */
   reopen: () => Promise<OpenedConnector>;
@@ -126,6 +133,7 @@ export function sessionOver(
   opened: OpenedConnector,
   readTransaction: (tx: string, stage: 'unsealed' | 'sealed') => TransactionDetail[],
   reopening?: SessionReopening,
+  submitBounds: SessionSubmitBounds = {},
 ): WalletSession {
   let current = opened;
   let requestId = 0;
@@ -226,7 +234,12 @@ export function sessionOver(
       return (await call('signData', { data, options: { encoding, keyType: 'unshielded' } })) as SignedData;
     },
     async submit(tx) {
-      return ((await call('submitTransaction', { tx })) as { txHash: string }).txHash;
+      // Cancelled before it is sent, nothing is; once sent, the wait is bounded
+      // (the SDK's submit never returns against a node that went away) and
+      // honours the cancellation, saying the transaction may still land.
+      throwIfCancelled(submitBounds.signal);
+      const submitting = call('submitTransaction', { tx }) as Promise<{ txHash: string }>;
+      return (await submitWithin(submitting, { node: submitBounds.node, signal: submitBounds.signal })).txHash;
     },
     async readTransaction(tx, stage) {
       if (closed) throw new Error('The wallet session is closed');
@@ -321,5 +334,5 @@ async function openSession(options: OpenWalletSessionOptions): Promise<WalletSes
     signal,
     onMessage: options.onMessage ?? (() => {}),
   });
-  return sessionOver(network, await open(), (tx, stage) => engine.ledger.readTransaction(tx, stage), { reopen: open, onMessage: options.onMessage });
+  return sessionOver(network, await open(), (tx, stage) => engine.ledger.readTransaction(tx, stage), { reopen: open, onMessage: options.onMessage }, { node: networkConfig.node, signal });
 }

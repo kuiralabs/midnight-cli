@@ -2,8 +2,8 @@
 // Handles: facade lifecycle, sync, balance check, dust, tx build/sign/prove/submit, retries
 
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { ProofTimeoutError, getNetworkId, TOKEN_MULTIPLIER, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, STALE_UTXO_ERROR_CODE, DUST_REGISTRATION_TIMEOUT_MS, DUST_REGISTRATION_RETRY_DELAY_MS, SYNC_ATTEMPT_TIMEOUT_MS, DUST_COST_OVERHEAD, MIN_DUST_FOR_TRANSFER, isColdStartRace, isDustRelatedError, DustFeeNotGeneratedError, planRegistration, awaitDustForFee, sleep, type EnsureDustResult, type TransferParams, type TransferResult } from '@kuiralabs/midnight-cli-core/engine';
-import { DustRequiredError, InsufficientBalanceError, SyncTimeoutError, throwIfCancelled, type NetworkConfig, type VerboseLog, nightAmountText, NATIVE_TOKEN_TYPE, formatWait, type CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
+import { getNetworkId, proveWithin, submitWithin, TOKEN_MULTIPLIER, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, STALE_UTXO_ERROR_CODE, DUST_REGISTRATION_TIMEOUT_MS, DUST_REGISTRATION_RETRY_DELAY_MS, SYNC_ATTEMPT_TIMEOUT_MS, DUST_COST_OVERHEAD, MIN_DUST_FOR_TRANSFER, isColdStartRace, isDustRelatedError, DustFeeNotGeneratedError, planRegistration, awaitDustForFee, sleep, type EnsureDustResult, type TransferParams, type TransferResult } from '@kuiralabs/midnight-cli-core/engine';
+import { CancelledError, DustRequiredError, InsufficientBalanceError, SyncTimeoutError, throwIfCancelled, type NetworkConfig, type VerboseLog, nightAmountText, NATIVE_TOKEN_TYPE, formatWait, type CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
 import { toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, type DustAddress } from '@midnightntwrk/wallet-sdk-address-format';
 import { type FacadeState, type UtxoWithMeta } from '@midnightntwrk/wallet-sdk-facade';
@@ -40,6 +40,11 @@ export function validateRecipientAddress(address: string, networkConfig: Network
 export { isDustRelatedError, isSdkInsufficientFundsError } from '@kuiralabs/midnight-cli-core/engine';
 import { assertChainClockCurrent, fetchChainTime } from '@kuiralabs/midnight-chain';
 
+/** The finalized transaction's identifier (what the submit returns, and `midnight tx status` takes); undefined when it has none. */
+export function transactionIdOf(tx: { identifiers(): string[] }): string | undefined {
+  try { return tx.identifiers()[0]; } catch { return undefined; }
+}
+
 /** How long the transfer retry waits for Dust to grow when the fee is above the pre-flight threshold. */
 const DUST_GROW_WAIT_MS = 10_000;
 export type { EnsureDustResult, TransferParams, TransferResult } from '@kuiralabs/midnight-cli-core/engine';
@@ -65,6 +70,7 @@ async function submitDustRegistration(
   nightUtxos: readonly UtxoWithMeta[],
   dustReceiverAddress: DustAddress,
   waitTimeoutMs: number,
+  signal: AbortSignal | undefined,
 ): Promise<string> {
   // Timeout-protected: waitForSyncedState() can hang if the dust wallet's
   // shareReplay buffer cleared or the indexer is slow. Throw a retryable error
@@ -88,13 +94,17 @@ async function submitDustRegistration(
   );
   let finalized;
   try {
-    finalized = await bundle.facade.finalizeRecipe(recipe);
+    // Cancelled before or while proving, nothing is sent.
+    throwIfCancelled(signal);
+    finalized = await proveWithin(bundle.facade.finalizeRecipe(recipe), PROOF_TIMEOUT_MS, signal);
+    throwIfCancelled(signal);
   } catch (err) {
     // Registering books the NIGHT UTXOs; release them so a retry can book them again.
     try { await bundle.facade.revert(recipe); } catch { /* best-effort */ }
     throw err;
   }
-  return await bundle.facade.submitTransaction(finalized);
+  // Bounded: against a node that went away the SDK's submit never returns.
+  return await submitWithin(bundle.facade.submitTransaction(finalized), { txId: transactionIdOf(finalized), node: bundle.nodeUrl, signal });
 }
 
 /**
@@ -112,6 +122,7 @@ export async function registerNightUtxos(
   nightUtxos: readonly UtxoWithMeta[],
   dustReceiverAddress: DustAddress,
   onStatus?: (status: string) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   const startTime = Date.now();
   const deadline = startTime + DUST_REGISTRATION_TIMEOUT_MS;
@@ -147,14 +158,15 @@ export async function registerNightUtxos(
   try {
     while (Date.now() < deadline) {
       try {
-        return await submitDustRegistration(bundle, nightUtxos, dustReceiverAddress, deadline - Date.now());
+        return await submitDustRegistration(bundle, nightUtxos, dustReceiverAddress, deadline - Date.now(), signal);
       } catch (err: any) {
+        if (err instanceof CancelledError) throw err;
         lastError = err;
         if (isDustRelatedError(err) && Date.now() + DUST_REGISTRATION_RETRY_DELAY_MS < deadline) {
           retrying = true;
           const elapsed = formatElapsed(Date.now() - startTime);
           onStatus?.(`Waiting for dust generation capacity (${elapsed} elapsed${waitNote})...`);
-          await new Promise(resolve => setTimeout(resolve, DUST_REGISTRATION_RETRY_DELAY_MS));
+          await sleep(DUST_REGISTRATION_RETRY_DELAY_MS, signal);
           continue;
         }
         throw err;
@@ -190,6 +202,8 @@ export async function ensureDust(
    *  facade.state() / waitForSyncedState() which are unreliable due to
    *  shareReplay({ refCount: true }) clearing its buffer between subscriptions. */
   syncedState?: FacadeState,
+  /** Cancels a registration before it is sent, and the waits. */
+  signal?: AbortSignal,
 ): Promise<EnsureDustResult> {
   // Prefer caller-provided state; fall back to waitForSyncedState (best-effort).
   const state = syncedState ?? await bundle.facade.waitForSyncedState();
@@ -220,7 +234,7 @@ export async function ensureDust(
   if (nightUtxos.length > 0) {
     onStatus?.(`Registering ${nightUtxos.length} UTXO(s) for dust generation...`);
 
-    txHash = await registerNightUtxos(bundle, nightUtxos, state.dust.address, onStatus);
+    txHash = await registerNightUtxos(bundle, nightUtxos, state.dust.address, onStatus, signal);
   } else {
     onStatus?.('UTXOs already registered, waiting for dust generation...');
   }
@@ -283,6 +297,8 @@ async function buildAndSubmitTransfer(
 
   while (true) {
     try {
+      // A call cancelled between attempts stops before building another.
+      throwIfCancelled(signal);
       if (lastError) {
         await quickSync(bundle, 'lite');
       }
@@ -310,14 +326,12 @@ async function buildAndSubmitTransfer(
       log?.('transfer', 'Signing recipe...');
       const signedRecipe = await bundle.facade.signRecipe(unprovenRecipe, bundle.keystore.signDataAsync);
 
+      throwIfCancelled(signal);
       log?.('transfer', 'Generating ZK proof...');
       onProving?.();
-      const finalizedTx = await Promise.race([
-        bundle.facade.finalizeRecipe(signedRecipe),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new ProofTimeoutError()), PROOF_TIMEOUT_MS);
-        }),
-      ]);
+      // Cancelled while proving, the call stops at once: nothing was sent.
+      const finalizedTx = await proveWithin(bundle.facade.finalizeRecipe(signedRecipe), PROOF_TIMEOUT_MS, signal);
+      throwIfCancelled(signal);
 
       log?.('transfer', 'Submitting transaction to node...');
       onSubmitting?.();
@@ -330,13 +344,16 @@ async function buildAndSubmitTransfer(
         : undefined;
       let txHash: string;
       try {
-        txHash = await bundle.facade.submitTransaction(finalizedTx);
+        // Bounded: against a node that went away the SDK's submit never returns.
+        txHash = await submitWithin(bundle.facade.submitTransaction(finalizedTx), { txId: transactionIdOf(finalizedTx), node: bundle.nodeUrl, signal });
       } finally {
         if (tickInterval) clearInterval(tickInterval);
       }
       log?.('transfer', `Transaction submitted: ${txHash}`);
       return txHash;
     } catch (err: any) {
+      // Cancelled: no retry.
+      if (err instanceof CancelledError) throw err;
       lastError = err;
 
       // Stale UTXO: quick-sync and retry immediately (limited attempts)
@@ -371,12 +388,13 @@ async function buildAndSubmitTransfer(
             onDust?.(`Dust is short of this transaction's fee; waiting ${DUST_GROW_WAIT_MS / 1000} s for more...`);
             await sleep(DUST_GROW_WAIT_MS, signal);
           }
-          await ensureDust(bundle, onDust, freshState);
+          await ensureDust(bundle, onDust, freshState, signal);
         } catch (retryErr: any) {
           // Re-throw "Insufficient dust" immediately — not retryable
           if (String(retryErr?.message).startsWith('Insufficient dust')) throw retryErr;
+          if (retryErr instanceof CancelledError) throw retryErr;
           // quickSync or ensureDust may fail (shareReplay stale-read) — wait and retry anyway
-          await new Promise(resolve => setTimeout(resolve, 5_000));
+          await sleep(5_000, signal);
         }
         continue;
       }
@@ -452,7 +470,7 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
         throwIfCancelled(signal);
 
         log?.('transfer', 'Ensuring dust availability...');
-        const dustResult = await ensureDust(bundle, onDust, state);
+        const dustResult = await ensureDust(bundle, onDust, state, signal);
         // When ensureDust had to wait, it returned once any Dust showed (right
         // after registering that can be less than the fee): wait for the fee on
         // current state. Time-boxed like every other sync wait; skipped on timeout.
