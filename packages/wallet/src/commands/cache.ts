@@ -1,7 +1,7 @@
 // cache command — manage wallet state cache
 // cache clear [--network <name>] [--wallet <name|file>]
 
-import { type ParsedArgs, getFlag, hasFlag, UsageError, throwIfCancelled, clearWalletCache, clearDustDirectCache, clearNativeDustCheckpoint, clearShieldedDirectCache, resolveNetworkName, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, getFlag, hasFlag, UsageError, throwIfCancelled, clearWalletCache, clearDustDirectCache, clearNativeDustCheckpoint, clearShieldedDirectCache, resolveNetworkName, assertValidNetworkName, type CallContext } from '@kuiralabs/midnight-cli-core';
 import { green } from '@kuiralabs/midnight-cli-core/ui';
 import { resolveWalletPath, unlockWallet } from '../lib/wallet-config.ts';
 import { clearChainCaches } from '../lib/chain-caches.ts';
@@ -18,6 +18,8 @@ export default async function cacheCommand(args: ParsedArgs, ctx: CallContext): 
   const root = ctx.config.paths.stateRoot;
   const walletFlag = getFlag(args, 'wallet');
   const networkFlag = getFlag(args, 'network');
+  // Checked before anything is read or cleared: a name mn doesn't know is never a folder to clear.
+  if (networkFlag !== undefined) assertValidNetworkName(networkFlag);
   const jsonMode = hasFlag(args, 'json');
 
   if (walletFlag) {

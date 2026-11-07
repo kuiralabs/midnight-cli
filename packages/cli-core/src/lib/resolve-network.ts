@@ -8,7 +8,7 @@ import {
   type NetworkName,
   type NetworkConfig,
   isValidNetworkName,
-  getValidNetworkNames,
+  assertValidNetworkName,
   resolveNetworkConfig,
   type EndpointOverrides,
 } from './network.ts';
@@ -36,12 +36,7 @@ export function resolveNetworkName(ctx: NetworkResolutionContext): NetworkName {
   // 1. Explicit --network flag
   const flagValue = getFlag(ctx.args, 'network');
   if (flagValue !== undefined) {
-    if (!isValidNetworkName(flagValue)) {
-      throw new Error(
-        `Invalid network: "${flagValue}"\n` +
-        `Valid networks: ${getValidNetworkNames().join(', ')}`
-      );
-    }
+    assertValidNetworkName(flagValue);
     return flagValue;
   }
 

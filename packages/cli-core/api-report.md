@@ -600,6 +600,7 @@ export declare class AmbiguousLocalStacksError extends Error {
     constructor(found: LocalStackPorts);
 }
 export declare function applyEndpointOverrides(config: NetworkConfig, flagOverrides: EndpointOverrides, networkName: NetworkName, configDir: string): NetworkConfig;
+export declare function assertValidNetworkName(name: string): asserts name is NetworkName;
 export declare function detectLocalStacks(settings: Pick<Settings, 'isLocalDetectOff'>): LocalStackPorts;
 export declare function detectNetworkFromAddress(address: string): NetworkName | null;
 export declare function endpointFlags(e: EndpointOverrides): Record<string, string>;
@@ -611,6 +612,9 @@ export interface EndpointOverrides {
 export declare function getNetworkConfig(name: NetworkName): NetworkConfig;
 export declare function getValidNetworkNames(): readonly string[];
 export declare function isNamedOnlyNetwork(name: string): boolean;
+export declare class InvalidNetworkError extends UsageError {
+    constructor(name: string, valid?: readonly string[]);
+}
 export declare function isValidNetworkName(name: string): name is NetworkName;
 export declare const LEDGER_9_FORK_VERSION = 2000000n;
 export declare function looksLikeShieldedAddress(text: string): boolean;

@@ -6,7 +6,10 @@ import { randomBytes } from 'node:crypto';
 
 import { clearWalletCache } from '../lib/wallet-cache.ts';
 import { CACHE_VERSION } from '../lib/constants.ts';
-import { loadWalletCache, saveWalletCache, getCachePath } from '../lib/wallet-cache.ts';
+import { loadWalletCache, saveWalletCache, getCachePath, networkCacheFolder } from '../lib/wallet-cache.ts';
+import { clearDustDirectCache, clearNativeDustCheckpoint, clearShieldedDirectCache } from '../lib/reader-cache-files.ts';
+import { InvalidNetworkError } from '../lib/network.ts';
+import { UsageError } from '../lib/errors.ts';
 
 const TEST_ADDRESS = 'mn_addr_preprod1mp06mtx1234567890abcdef';
 const TEST_NETWORK = 'preprod';
@@ -242,5 +245,41 @@ describe('wallet-cache', () => {
       expect(loaded!.unshielded).toBe('new-unshielded');
       expect(loaded!.dust).toBe('new-dust');
     });
+  });
+});
+
+// A network name is joined onto the cache folder, so only a network mn knows
+// is ever one: anything else (`..`, `../wallets`) would name a folder outside
+// it, whose `.json` files a clear deletes.
+describe('cache paths refuse a name that is not a network', () => {
+  let root: string;
+  beforeEach(() => {
+    root = makeTmpDir();
+    mkdirSync(join(root, 'wallets'), { recursive: true });
+    writeFileSync(join(root, 'wallets', 'alice.json'), '{}');
+    writeFileSync(join(root, 'config.json'), '{}');
+  });
+  afterEach(() => { rmSync(root, { recursive: true, force: true }); });
+
+  const kept = () => {
+    expect(existsSync(join(root, 'wallets', 'alice.json'))).toBe(true);
+    expect(existsSync(join(root, 'config.json'))).toBe(true);
+  };
+
+  it.each(['..', '../wallets', 'bogus'])('%s: every clear and path throws InvalidNetworkError, deleting nothing', (network) => {
+    expect(() => clearWalletCache(undefined, network, root)).toThrow(InvalidNetworkError);
+    expect(() => clearDustDirectCache(network, undefined, root)).toThrow(InvalidNetworkError);
+    expect(() => clearShieldedDirectCache(network, undefined, root)).toThrow(InvalidNetworkError);
+    expect(() => clearNativeDustCheckpoint(network, undefined, root)).toThrow(InvalidNetworkError);
+    expect(() => getCachePath(TEST_ADDRESS, network, root)).toThrow(InvalidNetworkError);
+    expect(() => networkCacheFolder(network, root)).toThrow(/Invalid network/);
+    kept();
+  });
+
+  it('is a usage error (INVALID_ARGS)', () => {
+    let thrown: unknown;
+    try { clearWalletCache(undefined, '../wallets', root); } catch (err) { thrown = err; }
+    expect(thrown).toBeInstanceOf(UsageError);
+    expect((thrown as UsageError).code).toBe('INVALID_ARGS');
   });
 });

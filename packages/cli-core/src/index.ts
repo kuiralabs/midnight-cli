@@ -81,9 +81,9 @@ export {
 } from './lib/keystore.ts';
 export { MainnetRefusedError, refuseOnMainnet } from './lib/mainnet-refusal.ts';
 export {
-  addressPrefix, AmbiguousLocalStacksError, applyEndpointOverrides, detectLocalStacks, detectNetworkFromAddress,
+  addressPrefix, AmbiguousLocalStacksError, applyEndpointOverrides, assertValidNetworkName, detectLocalStacks, detectNetworkFromAddress,
   endpointFlags, type EndpointOverrides, getNetworkConfig, getValidNetworkNames, isNamedOnlyNetwork,
-  isValidNetworkName, LEDGER_9_FORK_VERSION, looksLikeShieldedAddress, looksLikeUnshieldedAddress,
+  InvalidNetworkError, isValidNetworkName, LEDGER_9_FORK_VERSION, looksLikeShieldedAddress, looksLikeUnshieldedAddress,
   type NetworkConfig, type NetworkName, NetworkNotNamedError, networksOnSdkSet, resolveNetworkConfig,
   sdkSetOfNetwork
 } from './lib/network.ts';
