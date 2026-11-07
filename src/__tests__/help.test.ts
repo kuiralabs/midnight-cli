@@ -10,32 +10,33 @@ let savedIsTTY: boolean | undefined;
 
 beforeEach(() => {
   process.env.NO_COLOR = '';
-  savedIsTTY = process.stderr.isTTY;
+  savedIsTTY = process.stdout.isTTY;
   // Ensure the horizontal layout path runs (not the plain-text agent path)
-  Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true });
+  Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
   io = captureOutput();
 });
 
 afterEach(() => {
   delete process.env.NO_COLOR;
-  Object.defineProperty(process.stderr, 'isTTY', { value: savedIsTTY, configurable: true });
+  Object.defineProperty(process.stdout, 'isTTY', { value: savedIsTTY, configurable: true });
   io.restore();
 });
 
 describe('help command — general help', () => {
-  it('displays the logo, wordmark, and commands on stderr', async () => {
+  it('displays the logo, wordmark, and commands on stdout, as help <command> does', async () => {
     const args = parseArgs(['help']);
     await cliCall(helpCommand, args);
-    const err = io.stderr();
+    expect(io.stderr()).toBe('');
+    const err = io.stdout();
     expect(err).toContain('████████████');
     expect(err).toContain('█▄ ▄█');
     expect(err).toContain('Commands');
   });
 
-  it('lists all commands on stderr', async () => {
+  it('lists all commands on stdout', async () => {
     const args = parseArgs(['help']);
     await cliCall(helpCommand, args);
-    const err = io.stderr();
+    const err = io.stdout();
     expect(err).toContain('wallet');
     expect(err).toContain('info');
     expect(err).toContain('balance');
@@ -48,11 +49,12 @@ describe('help command — general help', () => {
     expect(err).toContain('config');
   });
 
-  it('outputs plain text when stderr is not a TTY (agent-friendly)', async () => {
-    Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true });
+  it('outputs plain text on stdout when stdout is not a TTY (agent-friendly, pipeable)', async () => {
+    Object.defineProperty(process.stdout, 'isTTY', { value: undefined, configurable: true });
     const args = parseArgs(['help']);
     await cliCall(helpCommand, args);
-    const err = io.stderr();
+    expect(io.stderr()).toBe('');
+    const err = io.stdout();
     // No logo animation
     expect(err).not.toContain('██████████████');
     // Has command list
@@ -132,6 +134,27 @@ describe('help command — specific command help', () => {
   });
 });
 
+describe('help command — --json', () => {
+  it('help <unknown> --json is a usage error, as help <unknown> is', async () => {
+    await expect(cliCall(helpCommand, parseArgs(['help', 'nope', '--json']))).rejects.toThrow('Unknown command: "nope"');
+    expect(io.stdout()).toBe('');
+  });
+
+  it('help <command> --json gives the manifest of that command alone', async () => {
+    await cliCall(helpCommand, parseArgs(['help', 'balance', '--json']));
+    const manifest = JSON.parse(io.stdout()) as { commands: Array<{ name: string }> };
+    expect(manifest.commands.map((c) => c.name)).toEqual(['balance']);
+  });
+
+  it('help --agent --json gives JSON, the agent manual in it', async () => {
+    await cliCall(helpCommand, parseArgs(['help', '--agent', '--json']));
+    const manifest = JSON.parse(io.stdout()) as { cli: { name: string }; commands: unknown[]; agentManual: string };
+    expect(manifest.cli.name).toBe('midnight-wallet-cli');
+    expect(manifest.commands.length).toBeGreaterThan(5);
+    expect(manifest.agentManual).toContain('STRUCTURED JSON OUTPUT');
+  });
+});
+
 describe('help\'s specs (from the registry)', () => {
   it('every spec has a name and description', () => {
     for (const spec of helpSpecs()) {
@@ -155,9 +178,9 @@ describe('help — the lists come from the registry', () => {
   }
 
   it('the plain intro lists grant after dev, with its brief', async () => {
-    Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: undefined, configurable: true });
     await cliCall(helpCommand, parseArgs(['help']));
-    const lines = introLines(io.stderr());
+    const lines = introLines(io.stdout());
     expect(lines.slice(9, 15)).toStrictEqual([
       'contract  Inspect, deploy, call contracts',
       'dev  Contract dev loop (watch + deploy)',
@@ -171,7 +194,7 @@ describe('help — the lists come from the registry', () => {
 
   it('the TTY intro lists grant after dev, with its brief', async () => {
     await cliCall(helpCommand, parseArgs(['help', '--no-intro']));
-    const err = io.stderr().replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+    const err = io.stdout().replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
     const dev = err.indexOf('Contract dev loop (watch + deploy)');
     const grant = err.indexOf('Grants that let agents spend');
     const config = err.indexOf('Manage CLI config');
@@ -202,6 +225,7 @@ describe('help — the lists come from the registry', () => {
     expect(out.indexOf('Errors:')).toBeGreaterThan(out.indexOf('Examples:'));
     expect(out.split('Errors:\n')[1]).toBe([
       '  NETWORK_ERROR                  4  Indexer/node/proof-server connection refused or DNS failure.',
+      '  SYNC_TIMEOUT                   4  Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync.',
       '  Also: the network codes, and INVALID_ARGS, CANCELLED, UNKNOWN, UNSUPPORTED_NODE, NO_STATE_ROOT (mn manual lists them all).',
       '',
       '',
@@ -224,6 +248,7 @@ describe('help — the lists come from the registry', () => {
     const tx = manifest.commands.find((c) => c.name === 'tx')!;
     expect(tx.errorCodes).toStrictEqual([
       { code: 'NETWORK_ERROR', exitCode: 4 },
+      { code: 'SYNC_TIMEOUT', exitCode: 4 },
       { code: 'AMBIGUOUS_LOCAL_STACKS', exitCode: 4 },
       { code: 'BLOCKFROST_PROJECT_ID_REQUIRED', exitCode: 4 },
       { code: 'BLOCKFROST_PROJECT_ID_REJECTED', exitCode: 4 },

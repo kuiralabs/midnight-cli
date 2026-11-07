@@ -92,4 +92,18 @@ describe('the unknown-flag refusal, through the shell', () => {
     expect(run.status).toBe(0);
     expect(JSON.parse(run.stdout)).toMatchObject({ cli: { name: 'midnight-wallet-cli' } });
   });
+
+  it('refuses help for an unknown command with exit 2, with --json as without', () => {
+    const json = mn('help', 'nope', '--json');
+    expect(json.status).toBe(2);
+    expect(JSON.parse(json.stdout)).toMatchObject({ error: true, code: 'INVALID_ARGS', exitCode: 2 });
+    expect(mn('help', 'nope').status).toBe(2);
+  });
+
+  it('writes the general help to stdout, as a command\'s help, and nothing to stderr', () => {
+    const run = mn('help');
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain('Commands:');
+    expect(run.stderr).toBe('');
+  });
 });

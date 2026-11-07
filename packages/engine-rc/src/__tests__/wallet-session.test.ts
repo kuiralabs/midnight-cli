@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import * as rx from 'rxjs';
 import { DustAddress, MidnightBech32m, ShieldedAddress, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
-import { sessionOver, type WalletSession, DustRequiredError, TransactionRefusedError, classifyError, createHost, createSdkWarningRouter, openWalletSession, type Engine, type OpenWalletSessionOptions } from '@kuiralabs/midnight-cli-core';
+import { sessionOver, type SessionSubmitBounds, type WalletSession, DustRequiredError, TransactionRefusedError, classifyError, createHost, createSdkWarningRouter, openWalletSession, type Engine, type OpenWalletSessionOptions } from '@kuiralabs/midnight-cli-core';
 import type { OpenedConnector } from '@kuiralabs/midnight-cli-core/engine';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -22,6 +22,7 @@ import { agentPaysMerchant, unsealedBytes } from '../../../../test-support/ledge
 import { Effect } from 'effect';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import { CORE_CODES } from '../../../../test-support/core-codes.ts';
+import { closedPort } from '../../../../test-support/closed-port.ts';
 
 const { WALLET_SHIELDED, WALLET_UNSHIELDED, createBundleStub, mockState } = connectorStub({
   createDAppConnector, deriveShieldedAddress, DustAddress, UnshieldedAddress, ledger9ProtocolVersion: FORK_SCHEDULE.v9,
@@ -37,7 +38,7 @@ beforeAll(async () => {
   AGENT_TX = Buffer.from(await unsealedBytes(agentPaysMerchant())).toString('hex');
 });
 
-function openSession(options: { bundleOverrides?: Parameters<typeof createBundleStub>[0]; readTransaction?: (tx: string, stage: 'unsealed' | 'sealed') => TransactionDetail[] } = {}) {
+function openSession(options: { bundleOverrides?: Parameters<typeof createBundleStub>[0]; readTransaction?: (tx: string, stage: 'unsealed' | 'sealed') => TransactionDetail[]; submitBounds?: SessionSubmitBounds } = {}) {
   const bundle = createBundleStub({
     stateFn: () => rx.of(mockState({ unshieldedBalances: { [NIGHT_RAW]: 7_000_000n }, shieldedBalances: { [NIGHT_RAW]: 3n }, dustBalance: 42n })),
     ...options.bundleOverrides,
@@ -46,9 +47,38 @@ function openSession(options: { bundleOverrides?: Parameters<typeof createBundle
   (bundle.facade as unknown as { revert: typeof revert }).revert = revert;
   const connector = createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
   const stop = vi.fn(async () => { connector.dispose(); });
-  const session: WalletSession = sessionOver('undeployed', { connector, stop }, options.readTransaction ?? (() => []));
+  const session: WalletSession = sessionOver('undeployed', { connector, stop }, options.readTransaction ?? (() => []), undefined, options.submitBounds);
   return { session, bundle, revert, stop };
 }
+
+describe('wallet session — a submit the node never finalizes', () => {
+  // The SDK's submit against a node that went away: it never returns.
+  const neverFinalized = () => new Promise<string>(() => {});
+
+  it('stops waiting once the node stops answering: NETWORK_ERROR naming the node', async () => {
+    const node = `ws://127.0.0.1:${await closedPort()}`;
+    const { session } = openSession({ bundleOverrides: { submitTransaction: vi.fn(neverFinalized) }, submitBounds: { node } });
+    const started = Date.now();
+    const balanced = await session.balanceTransaction(AGENT_TX);
+    await expect(session.submit(balanced)).rejects.toMatchObject({ code: 'NETWORK_ERROR', message: expect.stringContaining(`The node at ${node} stopped answering while the transaction was submitted`) });
+    // The node is asked every 10 s.
+    expect(Date.now() - started).toBeLessThan(20_000);
+    await session.close();
+  }, 30_000);
+
+  it('honours the session\'s cancellation: CANCELLED, before sending and while waiting', async () => {
+    const controller = new AbortController();
+    const submitTransaction = vi.fn(neverFinalized);
+    const { session } = openSession({ bundleOverrides: { submitTransaction }, submitBounds: { signal: controller.signal } });
+    const balanced = await session.balanceTransaction(AGENT_TX);
+    const waiting = session.submit(balanced);
+    controller.abort();
+    await expect(waiting).rejects.toMatchObject({ code: 'CANCELLED', message: expect.stringContaining('it was sent and may still land') });
+    await expect(session.submit(balanced)).rejects.toMatchObject({ code: 'CANCELLED' });
+    expect(submitTransaction).toHaveBeenCalledOnce();
+    await session.close();
+  });
+});
 
 describe('wallet session', () => {
   it('names the wallet\'s addresses on its network', async () => {

@@ -5,6 +5,7 @@
 import { type ParsedArgs, getFlag, hasFlag, rejectNoCacheForWrites, resolveNetwork, applyEndpointOverrides, type DAppConnector, type DAppConnectorCallbacks, OPERATOR_REJECTED_MESSAGE, type PhaseTiming, DEFAULT_SERVE_PORT, shieldedSyncEnabled, parseFeeLimits, describeApprovalPolicy, type CallContext, UsageError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import { header, divider, formatAddress, bold, dim, teal, green, red, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { resolveWalletPath, unlockWallet } from '@kuiralabs/midnight-wallet';
+import { assertEndpointsReachable, endpointsOf } from '@kuiralabs/midnight-chain';
 import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
 import { serveHeaderLines } from '../lib/serve-header.ts';
 
@@ -52,6 +53,10 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
     node: getFlag(args, 'node'),
     indexerWS: getFlag(args, 'indexer-ws'),
   }, networkName, root);
+
+  // The indexer and the node answer before the wallet syncs: the wallet SDK
+  // would retry one it can't reach for ever.
+  await assertEndpointsReachable(endpointsOf(networkConfig), { signal: ctx.signal });
 
   // ── Header ──
 

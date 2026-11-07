@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import { assertEndpointUsable, endpointRefusalFromWsError, NATIVE_TOKEN_TYPE, BALANCE_CHECK_TIMEOUT_MS, CancelledError, NetworkError, type BalanceSummary } from '@kuiralabs/midnight-cli-core';
+import { assertEndpointUsable, endpointRefusalFromWsError, NATIVE_TOKEN_TYPE, BALANCE_CHECK_TIMEOUT_MS, CancelledError, NetworkError, SyncTimeoutError, type BalanceSummary } from '@kuiralabs/midnight-cli-core';
 
 export type { BalanceSummary } from '@kuiralabs/midnight-cli-core';
 
@@ -212,9 +212,9 @@ export function checkBalance(
       if (!settled) {
         settled = true;
         settle();
-        reject(new Error(
-          `Indexer closed the connection before balance sync completed. ` +
-          `Indexer: ${indexerWS}`
+        reject(new NetworkError(
+          `The indexer at ${indexerWS} closed the connection before the balance was read.\n` +
+          'Check that it is running and that the URL is right (--indexer-ws, or: midnight config set indexer-ws <url>), then retry.'
         ));
       }
     });
@@ -224,9 +224,9 @@ export function checkBalance(
         settled = true;
         signal?.removeEventListener('abort', onAbort);
         ws.close();
-        reject(new Error(
-          `Balance check timed out after ${BALANCE_CHECK_TIMEOUT_MS / 1000}s. ` +
-          `Indexer: ${indexerWS}`
+        reject(new SyncTimeoutError(
+          `The indexer at ${indexerWS} did not finish sending the balance within ${BALANCE_CHECK_TIMEOUT_MS / 1000} s.\n` +
+          'It accepted the connection but stopped answering: check that it is healthy and caught up with the node, then retry.'
         ));
       }
     }, BALANCE_CHECK_TIMEOUT_MS);

@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseArgs } from '@kuiralabs/midnight-cli-core';
+import { classifyError, parseArgs } from '@kuiralabs/midnight-cli-core';
+import { installedCommands } from '../lib/installed-commands.ts';
 import { txDefinition } from '@kuiralabs/midnight-chain/commands';
 import { startLocalIndexer, type LocalIndexer } from '../../test-support/local-indexer.ts';
 import { BLOCK, HASH, IDENTIFIER, answer, regular } from '../../test-support/fixtures/tx-status.ts';
@@ -68,6 +69,14 @@ describe('mn tx status', () => {
     await run('status', IDENTIFIER, '--wait', '--timeout', '30', '--json');
     expect(JSON.parse(io.stdout()).state).toBe('final');
     expect(asked).toBe(2);
+  });
+
+  it('with --wait, a transaction still not listed when the wait ends is SYNC_TIMEOUT (exit 4), not notFound with exit 0', async () => {
+    indexer = await startLocalIndexer(() => answer([]));
+    const failure = run('status', IDENTIFIER, '--wait', '--timeout', '1', '--json');
+    await expect(failure).rejects.toMatchObject({ code: 'SYNC_TIMEOUT', message: expect.stringContaining(`has not listed transaction ${IDENTIFIER} after waiting 1 s`) });
+    expect(classifyError(await failure.catch((e: unknown) => e as Error) as Error, installedCommands)).toEqual({ exitCode: 4, errorCode: 'SYNC_TIMEOUT' });
+    expect(io.stdout()).toBe('');
   });
 
   it.each([

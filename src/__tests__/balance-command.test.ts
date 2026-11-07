@@ -98,7 +98,9 @@ describe('balance command — --indexer-ws override', () => {
       await cliCall(balanceCommand, args);
       expect.fail('Should have thrown');
     } catch (err: any) {
-      expect(err.message).toContain('WebSocket');
+      // The indexer it was given is the one named.
+      expect(err.code).toBe('NETWORK_ERROR');
+      expect(err.message).toContain('Cannot reach the indexer at http://localhost:19999');
     }
   });
 });

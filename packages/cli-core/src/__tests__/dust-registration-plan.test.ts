@@ -49,16 +49,22 @@ describe('DustFeeNotGeneratedError', () => {
   const now = new Date('2026-10-05T04:05:23.000Z');
 
   it('says what the fee is, what is generated, when it is covered, and what to do', () => {
-    const err = new DustFeeNotGeneratedError(planRegistration(FEE, [TWENTY_NIGHT]), now);
+    const err = new DustFeeNotGeneratedError(planRegistration(FEE, [TWENTY_NIGHT]), now, { networkId: 'Undeployed' });
     expect(err.message).toBe('Registering for Dust costs a 0.526587115818352 DUST fee, paid from the Dust this wallet\'s NIGHT generates. '
       + 'It has generated 0.33795496 DUST so far, so the fee is covered in about 20 minutes (around 2026-10-05T04:24:23.875Z). '
-      + 'Run midnight dust register again then, or add more NIGHT to register sooner (on undeployed: midnight airdrop 1000).');
+      + 'Run midnight dust register again then, or add more NIGHT (midnight airdrop 1000) to register sooner.');
+  });
+
+  it('fits the network and the command: no airdrop where there is no faucet, and the command that was run', () => {
+    const err = new DustFeeNotGeneratedError(planRegistration(FEE, [TWENTY_NIGHT]), now, { networkId: 'Preview', retry: 'the transfer' });
+    expect(err.message).toContain('Run the transfer again then, or add more NIGHT (transfer NIGHT to it from another wallet) to register sooner.');
+    expect(err.message).not.toContain('airdrop');
   });
 
   it('says it never will when the cap is below the fee', () => {
-    const err = new DustFeeNotGeneratedError(planRegistration(FEE, [{ dust: { generatedNow: 1n, rate: 1n, maxCap: 2n } }]), now);
+    const err = new DustFeeNotGeneratedError(planRegistration(FEE, [{ dust: { generatedNow: 1n, rate: 1n, maxCap: 2n } }]), now, { networkId: 'Undeployed' });
     expect(err.message).toContain('but it can never generate that much: its NIGHT holds at most');
-    expect(err.message).toContain('Add more NIGHT (on undeployed: midnight airdrop 1000), then run: midnight dust register');
+    expect(err.message).toContain('Add more NIGHT (midnight airdrop 1000), then run: midnight dust register');
   });
 
   it('exits as an insufficient balance, with its own error code', () => {

@@ -119,6 +119,7 @@ export { sleep, untilCancelled } from './lib/sleep.ts';
 export { NoStateRootError } from './lib/state-root.ts';
 export { checkTerms, type OfferContents, type SwapLeg, type SwapTerms, TermsMismatchError } from './lib/swap-offer.ts';
 export { isTransportFailure, withTransportCode } from './lib/transport-failure.ts';
+export { type EndpointRole, EndpointUnreachableError, endpointUnreachable, transportReason } from './lib/endpoint-unreachable.ts';
 export { type VerboseLog } from './lib/verbose.ts';
 export { clearWalletCache } from './lib/wallet-cache.ts';
-export { openWalletSession, type OpenWalletSessionOptions, sessionOver, type WalletSession } from './lib/wallet-session.ts';
+export { openWalletSession, type OpenWalletSessionOptions, sessionOver, type SessionSubmitBounds, type WalletSession } from './lib/wallet-session.ts';

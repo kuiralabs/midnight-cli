@@ -477,6 +477,7 @@ export class WalletDataRepository {
             syncMode,
             requireStrictSync,
             log: opts.log,
+            signal: opts.signal,
           });
           break;
         } catch (err: any) {
@@ -544,6 +545,7 @@ export class WalletDataRepository {
             syncMode,
             requireStrictSync,
             log: opts.log,
+            signal: opts.signal,
           });
         }
       }

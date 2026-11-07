@@ -13,7 +13,8 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { WalletDataRepository, type DustView, type UnshieldedView, type RepoDeps } from '../wallet-data-repository.ts';
 import { testHost } from '../../../../test-support/test-host.ts';
 import { UnsupportedLedgerError, type BalanceSummary } from '@kuiralabs/midnight-chain';
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core';
+import { CancelledError, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
+import { startSilentNetwork } from '../../../../test-support/stand-in-indexer.ts';
 import type { DustDirectResult } from '../dust-direct.ts';
 import { emptyDustLedgerState } from '../dust-ledger-state.ts';
 
@@ -592,4 +593,23 @@ describe('WalletDataRepository — dust cache chain-reset guard', () => {
     expect(startFromSeen).toBe(6);          // resumed from lastAppliedEventId + 1
     expect(view.fromCache).toBe(true);
   });
+});
+
+describe('WalletDataRepository — withFacade cancelled', () => {
+  it('stops the sync with CancelledError when the call is cancelled, instead of waiting it out', async () => {
+    const silent = await startSilentNetwork();
+    try {
+      const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: LEDGER9_PROTOCOL, fetchChainId: async () => null });
+      const network: NetworkConfig = { networkId: 'Undeployed', indexer: silent.indexer, indexerWS: silent.indexerWS, node: silent.node, proofServer: 'http://127.0.0.1:9' };
+      const controller = new AbortController();
+      const started = Date.now();
+      const cancelled = repo.withFacade(SEED, network, async () => 'never reached', { root: TMP, notice: dropNotice, noPrime: true, signal: controller.signal });
+      setTimeout(() => controller.abort(), 1_500);
+      await expect(cancelled).rejects.toBeInstanceOf(CancelledError);
+      // The sync's own deadline is 30 s on a local network: cancelled, it ends long before.
+      expect(Date.now() - started).toBeLessThan(15_000);
+    } finally {
+      await silent.close();
+    }
+  }, 60_000);
 });

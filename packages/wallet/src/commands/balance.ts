@@ -55,7 +55,8 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
     );
   }
 
-  const progress = spinnerReporter(ctx.progress, false);
+  // --json shows no step on the terminal.
+  const progress = spinnerReporter(ctx.progress, hasFlag(args, 'json'));
   try {
     const result = await readAddressBalance(ctx.host, address, {
       ...choice,

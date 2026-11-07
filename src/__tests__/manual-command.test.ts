@@ -115,3 +115,24 @@ describe('help --json global flags', () => {
     }
   });
 });
+
+describe('mn manual --json', () => {
+  it('holds the manual as plain text, no ANSI escape codes, even where colour is on', async () => {
+    const { default: manualCommand } = await import('../commands/manual.ts');
+    const { parseArgs } = await import('@kuiralabs/midnight-cli-core');
+    const { captureOutput } = await import('../../test-support/capture-output.ts');
+    const { cliCall } = await import('./helpers/cli-call.ts');
+    const saved = process.env.FORCE_COLOR;
+    process.env.FORCE_COLOR = '1';
+    const io = captureOutput();
+    try {
+      await cliCall(manualCommand, parseArgs(['manual', '--json']));
+    } finally {
+      io.restore();
+      if (saved === undefined) delete process.env.FORCE_COLOR; else process.env.FORCE_COLOR = saved;
+    }
+    const { manual } = JSON.parse(io.stdout()) as { manual: string };
+    expect(manual).toContain('EXIT CODES');
+    expect(manual).not.toMatch(/\x1b\[/);
+  });
+});

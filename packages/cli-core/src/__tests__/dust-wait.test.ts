@@ -59,7 +59,8 @@ describe('awaitDustForFee', () => {
     const slow = growing(660_000_000_000_000n, 1_000_000_000_000n); // 240 s to go
     const err = await awaitDustForFee(slow, NEEDED).catch((e) => e).finally(() => vi.useRealTimers());
     expect(err.message).toBe('Insufficient dust for transaction fees.\nAvailable: 0.660000 DUST, need ≥0.900000 DUST.\n'
-      + "This wallet's NIGHT generates that in about 4 minutes; retry then.");
+      + "This wallet's NIGHT generates that in about 4 minutes; retry then.\n"
+      + 'If another transaction from this wallet is running (another mn, or mn serve), it holds the Dust it spends until it is final: let it finish, then retry.');
     expect(240_000).toBeGreaterThan(DUST_SHORT_WAIT_MS);
   });
 

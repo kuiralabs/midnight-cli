@@ -6,13 +6,14 @@
 import { parseArgs, hasFlag, assertKnownFlags, type CommandOutcome, classifyError, humanizeNetworkError, asReported, isUsageError, writeJsonError } from '@kuiralabs/midnight-cli-core';
 import { errorMessage, usageMessage, createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui';
 import { installedCommands } from './lib/installed-commands.ts';
-import { commandNeedsWalletSdk, dispatchCommand, processOutput } from './lib/command-dispatch.ts';
-import { PKG_VERSION } from './lib/pkg.ts';
+import { commandNeedsWalletSdk, dispatchCommand, jsonModeOutput, processOutput } from './lib/command-dispatch.ts';
+import { PKG_NAME, PKG_VERSION } from './lib/pkg.ts';
 import { migrateOldWallet } from '@kuiralabs/midnight-wallet';
 import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { createCliHost } from './lib/cli-host.ts';
+import { ignoreClosedReaders } from './lib/closed-reader.ts';
 
 // --mcp: start MCP server instead of CLI (for: npx midnight-wallet-cli --mcp)
 if (process.argv.includes('--mcp')) {
@@ -20,12 +21,15 @@ if (process.argv.includes('--mcp')) {
   await import('./mcp-server.ts');
 } else {
 
+// A reader that closes early (| head, | grep -q) is not a failure: see lib/closed-reader.ts.
+ignoreClosedReaders();
+
 const args = parseArgs();
 const jsonMode = hasFlag(args, 'json');
 
-// Global --version / -v handling
+// Global --version / -v handling: the version, or with --json the version as JSON.
 if (hasFlag(args, 'version') || hasFlag(args, 'v')) {
-  process.stdout.write(PKG_VERSION + '\n');
+  process.stdout.write((jsonMode ? JSON.stringify({ name: PKG_NAME, version: PKG_VERSION }) : PKG_VERSION) + '\n');
   process.exit(0);
 }
 
@@ -61,25 +65,32 @@ if (needsWalletSdk) await ensureHeapForSync();
 hideProjectIdsInOutput();
 
 // What the libraries get from their host: the SDK noise filters, notices on
-// stderr, settings from the environment, the state root ~/.midnight, and the
-// terminal to ask their questions (passphrase, approvals) at.
-const host = createCliHost({ prompter: createTerminalPrompter() });
+// stderr (none under --json, unless --verbose asks for its lines), settings
+// from the environment, the state root ~/.midnight, and the terminal to ask
+// their questions (passphrase, approvals) at.
+const host = createCliHost({ prompter: createTerminalPrompter(), notices: !jsonMode || hasFlag(args, 'verbose') });
 
 // Auto-migrate old ~/.midnight/wallet.json → wallets/default.json (silent, one-time)
 migrateOldWallet(host.paths().stateRoot);
 
-// Global AbortController for clean shutdown on SIGINT/SIGTERM
+// Global AbortController for clean shutdown on SIGINT/SIGTERM. The call
+// stops on its signal and ends CANCELLED (exit 7), with its JSON under --json.
+// Only a call that has not ended 5 s later is cut off, with the shell's code
+// for the signal: 130 for SIGINT, 143 for SIGTERM. (A repeated signal is not
+// taken as "stop now": Ctrl+C reaches a re-exec'd child twice, from the
+// terminal and forwarded by its parent, lib/heap-guard.ts.)
 const abortController = new AbortController();
 const { signal } = abortController;
+const SIGNAL_EXIT_CODES = { SIGINT: 130, SIGTERM: 143 } as const;
 
-function handleShutdown() {
+function handleShutdown(received: keyof typeof SIGNAL_EXIT_CODES) {
+  if (abortController.signal.aborted) return;
   abortController.abort();
-  // Give active operations a moment to clean up, then force exit
-  setTimeout(() => process.exit(130), 5_000).unref();
+  setTimeout(() => process.exit(SIGNAL_EXIT_CODES[received]), 5_000).unref();
 }
 
-process.on('SIGINT', handleShutdown);
-process.on('SIGTERM', handleShutdown);
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 
 async function run(): Promise<CommandOutcome | void> {
   // An unrecognised flag is refused before anything runs, instead of being
@@ -90,7 +101,8 @@ async function run(): Promise<CommandOutcome | void> {
   // The command, what the shell gives its handler, a notice or a refusal: all from its definition.
   return dispatchCommand(installedCommands, command, args, {
     signal,
-    output: processOutput,
+    // --json keeps stderr quiet: the result (or the error) on stdout is all there is.
+    output: jsonMode ? jsonModeOutput(processOutput) : processOutput,
     host,
     payer: async () => (await import('@kuiralabs/midnight-connect')).servePayer,
     // wallet protect also seals grant's accounts, through the protector grant provides.
@@ -122,7 +134,9 @@ run().then((outcome) => {
   } else if (isUsageError(err)) {
     process.stderr.write('\n' + usageMessage(message, 'Run "midnight manual" for the full reference, or "midnight help <command>" for one command.') + '\n\n');
   } else {
-    process.stderr.write('\n' + errorMessage(message, 'Run "midnight help" for usage information.') + '\n\n');
+    // An error with a code of its own says what to do; only one mn can't name (UNKNOWN) points at help.
+    const suggestion = errorCode === 'UNKNOWN' ? 'Run "midnight help" for usage information.' : undefined;
+    process.stderr.write('\n' + errorMessage(message, suggestion) + '\n\n');
   }
   process.exit(exitCode);
 });

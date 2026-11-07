@@ -162,3 +162,23 @@ describe('checkBalance — registered/unregistered counts', () => {
     expect(result.utxoCount).toBe(0);
   });
 });
+
+describe('checkBalance — an indexer that stops answering', () => {
+  beforeEach(() => { socketRef.current = undefined; });
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
+
+  it('is SYNC_TIMEOUT naming the indexer when it goes silent', async () => {
+    vi.useFakeTimers();
+    const promise = checkBalance('addr-silent', 'ws://silent:8088/api/v4/graphql/ws');
+    const outcome = expect(promise).rejects.toMatchObject({ code: 'SYNC_TIMEOUT', message: expect.stringContaining('The indexer at ws://silent:8088/api/v4/graphql/ws did not finish sending the balance within 60 s') });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await outcome;
+  });
+
+  it('is NETWORK_ERROR naming the indexer when it closes the connection early', async () => {
+    const promise = checkBalance('addr-closed', 'ws://closing:8088/api/v4/graphql/ws');
+    await new Promise((r) => setImmediate(r));
+    socketRef.current!.emit('close');
+    await expect(promise).rejects.toMatchObject({ code: 'NETWORK_ERROR', message: expect.stringContaining('The indexer at ws://closing:8088/api/v4/graphql/ws closed the connection') });
+  });
+});

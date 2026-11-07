@@ -86,10 +86,10 @@ describe('resolveTransferRequest', () => {
     [[RECIPIENT.undeployed, '0'], 'Invalid amount: "0" — must be greater than 0'],
     [[RECIPIENT.undeployed, '-5'], 'Invalid amount: "-5"'],
     [[RECIPIENT.undeployed, '1.1234567'], 'NIGHT has 6 decimals'],
-    [['nobody', '1'], 'Wallet file not found'],
+    [['nobody', '1'], 'Unknown recipient "nobody": it is neither an address nor one of your wallets'],
     [['mn_addr_undeployed1notanaddress', '1'], 'Invalid recipient address'],
     [[RECIPIENT.preprod, '1'], 'Expected a bech32m address (mn_addr_...) for network "undeployed"'],
-    [[RECIPIENT_SHIELDED.undeployed, '1'], 'Invalid recipient address'],
+    [[RECIPIENT_SHIELDED.undeployed, '1'], 'is a shielded address: add --shielded'],
     [[RECIPIENT.undeployed, '1', '--shielded'], 'Invalid shielded address'],
     [[RECIPIENT.undeployed, '1', '--wallet', 'nosuchsender'], 'Wallet file not found'],
   ])('refuses %j', async (argv, message) => {
@@ -120,5 +120,30 @@ describe('a shielded transfer where shielded is off, in the error-code parity ta
   it('reports INVALID_ARGS, exit 2, as before codes were owned per package', async () => {
     const err = await request(rcKeys.shieldedAddresses(SENDER_SEED).preprod, '1', '--wallet', 'sender', '--shielded', '--network', 'preprod').catch((e: Error) => e);
     expect(classifyError(err as Error, codeRegistry(coreCodes, walletCodes))).toStrictEqual({ errorCode: 'INVALID_ARGS', exitCode: 2 });
+  });
+});
+
+describe('resolveTransferRequest — a recipient that does not fit', () => {
+  it('names an unknown recipient as neither an address nor a wallet, without suggesting to generate one', async () => {
+    const failure = request('carol', '1', '--wallet', 'sender', '--network', 'undeployed');
+    await expect(failure).rejects.toBeInstanceOf(UsageError);
+    await expect(failure).rejects.toThrow('Unknown recipient "carol": it is neither an address nor one of your wallets.');
+    await expect(failure).rejects.not.toThrow(/generate/i);
+  });
+
+  it('says to add --shielded for a shielded address given without it', async () => {
+    await expect(request(RECIPIENT_SHIELDED.undeployed, '1', '--wallet', 'sender', '--network', 'undeployed'))
+      .rejects.toThrow(`${RECIPIENT_SHIELDED.undeployed} is a shielded address: add --shielded to send it shielded NIGHT.`);
+  });
+});
+
+describe('fundShieldedHint', () => {
+  it('points at the airdrop on undeployed only, and at a shielded transfer elsewhere', async () => {
+    const { fundShieldedHint } = await import('../lib/wallet/transfer.ts');
+    expect(fundShieldedHint('undeployed', '5')).toBe('Fund the shielded balance: midnight airdrop 5 --shielded');
+    for (const network of ['preview', 'preprod', 'stagenet', 'mainnet'] as const) {
+      expect(fundShieldedHint(network, '5')).not.toContain('airdrop');
+      expect(fundShieldedHint(network, '5')).toContain('shielded transfer from another wallet');
+    }
   });
 });

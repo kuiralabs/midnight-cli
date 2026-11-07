@@ -16,7 +16,7 @@ export {
 } from './lib/constants.ts';
 export { type CoinPicking, type CoinRule, createCoinPicking, type PickableCoin, pickCoin } from './lib/coin-picker.ts';
 export { chooseDustCoins, type DustInput, planDustInputs, spreadFeeAcrossInputs } from './lib/dust-balancing-plan.ts';
-export { DustFeeNotGeneratedError, planRegistration } from './lib/dust-registration-plan.ts';
+export { DustFeeNotGeneratedError, planRegistration, type RegistrationContext } from './lib/dust-registration-plan.ts';
 export { type DustCoinGeneration, dustGenerationCap } from './lib/dust-cap.ts';
 export { awaitDustForFee, DUST_SHORT_WAIT_MS, type DustWaitPlan, payWhenDustCovers, planDustWait, sleep } from './lib/dust-wait.ts';
 export {
@@ -29,6 +29,7 @@ export {
   type TransferResult, type UnshieldedView
 } from './lib/engine.ts';
 export { EngineError, ProofTimeoutError } from './lib/errors.ts';
+export { proveWithin, SUBMIT_WAIT_MS, submitWithin, type SubmitWaitOptions } from './lib/submit-wait.ts';
 export { DEFAULT_FEE_LIMITS, feeLimitRefusal, type FeeLimits, pendingLimitRefusal } from './lib/fee-limits.ts';
 export { getNetworkId, networkIdForName } from './lib/network-id.ts';
 export { assertSpendsNoOfferCoin } from './lib/open-offers.ts';

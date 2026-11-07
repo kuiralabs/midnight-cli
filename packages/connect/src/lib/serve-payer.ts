@@ -8,6 +8,11 @@
 import { DEFAULT_SERVE_PORT, OWN_COMMAND_DUST_WAIT_MS, type ConnectOptions, type Payer, type PayingTarget, type ServedWallet, sdkSetOf, sessionOver, type WalletSession, type CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { assertWalletCanPay } from '@kuiralabs/midnight-wallet';
+import { assertNetworkReady } from '@kuiralabs/midnight-chain';
+
+/** A ledger-9 chain, and the indexer, the node and the proof server answer, before a wallet is served or opened to pay: the wallet SDK would retry one it can't reach. */
+const assertCanServe = ({ network, networkConfig }: PayingTarget, signal: AbortSignal | undefined): Promise<void> =>
+  assertNetworkReady(network, networkConfig, { proofServer: true }, { signal });
 
 /**
  * An mn serve for the command's network and wallet: the one already on
@@ -15,7 +20,9 @@ import { assertWalletCanPay } from '@kuiralabs/midnight-wallet';
  * started in this process on a free port, so commands run at once never
  * collide on a port.
  */
-async function serveWallet(port: number, { network, root, host, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<ServedWallet> {
+async function serveWallet(port: number, target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): Promise<ServedWallet> {
+  await assertCanServe(target, signal);
+  const { network, root, host, endpoints } = target;
   const { reuseServeOrStartAnother } = await import('./serve-manager.ts');
   const handle = await reuseServeOrStartAnother({
     root,
@@ -39,11 +46,13 @@ async function serveWallet(port: number, { network, root, host, endpoints }: Pay
  * server that is running already is reused. Closing it reverts what it
  * balanced but never submitted.
  */
-async function connectWallet({ network, root, host, endpoints }: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined, options: ConnectOptions = {}): Promise<WalletSession> {
+async function connectWallet(target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined, options: ConnectOptions = {}): Promise<WalletSession> {
+  await assertCanServe(target, signal);
+  const { network, root, host, endpoints } = target;
   const { openConnector } = await import('./serve-manager.ts');
   const engine = await host.engines.load(sdkSetOf(network, root));
   const open = () => openConnector({ root, host, network, endpoints, wallet, onMessage: (msg) => progress.update(msg), dustWaitMs: OWN_COMMAND_DUST_WAIT_MS, sdkWarnings, forceShielded: options.shielded, signal });
-  return sessionOver(network, await open(), (tx, stage) => engine.ledger.readTransaction(tx, stage), { reopen: open, onMessage: (msg) => progress.update(msg) });
+  return sessionOver(network, await open(), (tx, stage) => engine.ledger.readTransaction(tx, stage), { reopen: open, onMessage: (msg) => progress.update(msg) }, { node: target.networkConfig.node, signal });
 }
 
 /** The payer whose served wallet is the mn serve on `port` when one there can pay for the command, else one it starts on a free port. */

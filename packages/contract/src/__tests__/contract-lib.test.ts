@@ -17,6 +17,7 @@ import { deployContract } from '../lib/contract/deploy.ts';
 import { callContract } from '../lib/contract/call.ts';
 import { readContractState } from '../lib/contract/state.ts';
 import { startLocalIndexer, type LocalIndexer } from '../../../../test-support/local-indexer.ts';
+import { closedPort } from '../../../../test-support/closed-port.ts';
 
 const ADDRESS = 'cb5230e1ac98e07520d3b330016743a05fec38dd8fe894ae5b9ac3f71cac5190';
 const ENDPOINTS = { network: 'undeployed' as const, node: 'ws://127.0.0.1:29944', indexerWS: 'ws://127.0.0.1:28088/api/v4/graphql/ws', proofServer: 'http://127.0.0.1:26300' };
@@ -178,8 +179,18 @@ describe('readContractState', () => {
       { kind: 'start', message: 'Querying contract state...' },
       { kind: 'fallback', reason: expect.stringContaining(`No compiled contract found in ${empty}`) },
     ]);
-    expect(indexer.requests).toHaveLength(1);
-    expect(indexer.requests[0]!.variables).toMatchObject({ address: ADDRESS });
+    // The reachability check's one small query, then the state's.
+    expect(indexer.requests).toHaveLength(2);
+    expect(indexer.requests[0]).toEqual({ query: '{ __typename }' });
+    expect(indexer.requests[1]!.variables).toMatchObject({ address: ADDRESS });
+  });
+
+  it('fails at once with NETWORK_ERROR naming an indexer that is down, without falling back', async () => {
+    const port = await closedPort();
+    const said: unknown[] = [];
+    await expect(readContractState(host, { ...at(), indexerWS: `ws://127.0.0.1:${port}/api/v4/graphql/ws`, dappDir: dapp, address: ADDRESS, onProgress: (event) => said.push(event) }))
+      .rejects.toMatchObject({ code: 'NETWORK_ERROR', message: expect.stringContaining(`Cannot reach the indexer at http://127.0.0.1:${port}/api/v4/graphql: connection refused.`) });
+    expect(said.some((event) => (event as { kind: string }).kind === 'fallback')).toBe(false);
   });
 
   it('refuses an address that is not 64 hex characters with INVALID_ARGS, saying nothing and asking no indexer', async () => {

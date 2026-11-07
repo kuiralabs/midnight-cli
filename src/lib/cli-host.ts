@@ -16,12 +16,17 @@ import { installSdkProcessGuard } from '@kuiralabs/midnight-cli-core/process';
 import { settingsFromEnvironment, type Prompter, MIDNIGHT_DIR, createHost, type Host } from '@kuiralabs/midnight-cli-core';
 import { loadInstalledEngine } from './installed-engines.ts';
 
-/** The CLI's host, or the MCP server's (`prompter` null: no terminal there). Made once per process: each installs a process guard of its own. */
-export function createCliHost({ prompter }: { prompter: Prompter | null }): Host {
+/**
+ * The CLI's host, or the MCP server's (`prompter` null: no terminal there).
+ * Made once per process: each installs a process guard of its own. With
+ * `notices` false (a --json run of the CLI without --verbose) the libraries'
+ * notices are dropped, so stderr stays quiet.
+ */
+export function createCliHost({ prompter, notices = true }: { prompter: Prompter | null; notices?: boolean }): Host {
   return createHost({
     settings: () => settingsFromEnvironment(process.env),
     paths: () => ({ stateRoot: join(homedir(), MIDNIGHT_DIR), home: homedir() }),
-    notice: (line) => process.stderr.write(line + '\n'),
+    notice: notices ? (line) => process.stderr.write(line + '\n') : () => {},
     prompter,
     sdkWarnings: installSdkProcessGuard({ console: true, outsideCalls: 'exit' }).calls,
     engineLoader: loadInstalledEngine,

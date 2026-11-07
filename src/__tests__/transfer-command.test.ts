@@ -117,7 +117,7 @@ describe('transfer command — address validation errors', () => {
 
     // "not-a-wallet" doesn't start with mn_addr_, so it's treated as a wallet name
     const args = parseArgs(['transfer', 'not-a-wallet', '100', '--wallet', walletFile]);
-    await expect(cliCall(transferCommand, args)).rejects.toThrow('Wallet file not found');
+    await expect(cliCall(transferCommand, args)).rejects.toThrow('Unknown recipient "not-a-wallet": it is neither an address nor one of your wallets');
   });
 });
 
@@ -133,7 +133,7 @@ describe('transfer command — wallet name resolution', () => {
 
     // "nonexistent-wallet" is not an address (no mn_addr_ prefix) so it will be treated as a wallet name
     const args = parseArgs(['transfer', 'nonexistent-wallet', '100', '--wallet', walletFile]);
-    await expect(cliCall(transferCommand, args)).rejects.toThrow('Wallet file not found');
+    await expect(cliCall(transferCommand, args)).rejects.toThrow('Unknown recipient "nonexistent-wallet"');
   });
 
   it('throws when wallet name used with --shielded but has no shielded address', async () => {
@@ -193,5 +193,20 @@ describe('transfer command — shielded flag', () => {
 
     const args = parseArgs(['transfer', 'mn_shield-addr_preprod1someaddr', '100', '--shielded', '--wallet', walletFile, '--network', 'preprod']);
     await expect(cliCall(transferCommand, args)).rejects.toThrow(/Shielded is not read on preprod by default/);
+  });
+});
+
+describe('transfer command — to the sending wallet itself', () => {
+  it('warns, without refusing, before it starts', async () => {
+    const walletFile = path.join(TEST_DIR, 'wallet.json');
+    const addresses = rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex'));
+    saveWalletConfig({ seed: TEST_SEED, addresses, createdAt: new Date().toISOString() }, walletFile);
+    const { closedPort } = await import('../../test-support/closed-port.ts');
+    const port = await closedPort();
+    const args = parseArgs(['transfer', addresses.undeployed, '1', '--wallet', walletFile, '--network', 'undeployed',
+      '--indexer-ws', `ws://127.0.0.1:${port}/api/v4/graphql/ws`, '--node', `ws://127.0.0.1:${port}`, '--proof-server', `http://127.0.0.1:${port}`]);
+    // Not refused for it: it goes on, and here fails on the network that is down.
+    await expect(cliCall(transferCommand, args)).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+    expect(io.stderr()).toContain('Warning: The recipient is this wallet itself: the NIGHT stays in it, and the transfer only spends a fee.');
   });
 });

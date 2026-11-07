@@ -43,11 +43,14 @@ export function msUntilDust(dust: DustBalanceSource, needed: bigint, now: Date, 
 }
 
 /** Not enough Dust for the fee, with how long until there is. */
+/** Another transaction from the same wallet (another mn, or mn serve) holds the Dust it spends until it is final: mn has no per-wallet lock, so it says so. */
+const HELD_BY_ANOTHER = 'If another transaction from this wallet is running (another mn, or mn serve), it holds the Dust it spends until it is final: let it finish, then retry.';
+
 export function dustShortError(have: bigint, needed: bigint, waitMs: number | null): DustRequiredError {
   const when = waitMs === null
     ? "This wallet's registered NIGHT won't generate that within a day: register more NIGHT (midnight dust register)."
     : `This wallet's NIGHT generates that in ${formatWait(waitMs)}; retry then.`;
-  return new DustRequiredError(`Insufficient dust for transaction fees.\nAvailable: ${toDust(have)} DUST, need ≥${toDust(needed)} DUST.\n${when}`);
+  return new DustRequiredError(`Insufficient dust for transaction fees.\nAvailable: ${toDust(have)} DUST, need ≥${toDust(needed)} DUST.\n${when}\n${HELD_BY_ANOTHER}`);
 }
 
 /**

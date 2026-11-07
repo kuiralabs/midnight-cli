@@ -28,7 +28,8 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
   const minimal = isMinimalMode(args);
   // The network (--network flag / config / fallback) and its endpoints (--flag > config > network default).
   const call = { ...networkChoiceFromArgs(args), signal: ctx.signal, log: ctx.diagnostics.line, sdkWarnings: ctx.sdkWarnings };
-  const progress = spinnerReporter(ctx.progress, false);
+  // --json shows no step and no heading on the terminal.
+  const progress = spinnerReporter(ctx.progress, isJson);
 
   try {
     // export: accepts a raw --seed (so a dApp operator can export a snapshot for its
@@ -42,14 +43,14 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
     // status / register: a named wallet, the active one when none is given.
     const wallet = { wallet: getFlag(args, 'wallet') };
     if (subcommand === 'status') {
-      const status = await readDustStatus(ctx.host, wallet, { ...call, forceFresh: hasFlag(args, 'no-cache'), onProgress: headed('Dust Status', progress.report, ctx) });
+      const status = await readDustStatus(ctx.host, wallet, { ...call, forceFresh: hasFlag(args, 'no-cache'), onProgress: headed('Dust Status', progress.report, isJson, ctx) });
       printStatus(status, isJson, minimal, ctx);
       return;
     }
 
     // register: the full wallet flow (proof server, keystore, sync); writes always use the cache.
     rejectNoCacheForWrites(args);
-    const registration = await registerDust(ctx.host, wallet, { ...call, onProgress: headed('Dust Register', progress.report, ctx) });
+    const registration = await registerDust(ctx.host, wallet, { ...call, onProgress: headed('Dust Register', progress.report, isJson, ctx) });
     printRegistration(registration, isJson, ctx);
   } catch (err) {
     progress.fail('Failed');
@@ -57,13 +58,14 @@ export default async function dustCommand(args: ParsedArgs, ctx: CallContext): P
   }
 }
 
-/** Shows each step, and heads the output with `title` and the network once the wallet is open. */
-function headed(title: string, report: (event: ProgressEvent) => void, ctx: CallContext): (event: ProgressEvent | WalletOpened) => void {
+/** Shows each step, and heads the output with `title` and the network once the wallet is open (not under --json). */
+function headed(title: string, report: (event: ProgressEvent) => void, jsonMode: boolean, ctx: CallContext): (event: ProgressEvent | WalletOpened) => void {
   return (event) => {
     if (event.kind !== 'wallet-opened') {
       report(event);
       return;
     }
+    if (jsonMode) return;
     ctx.output.stderr('\n' + header(title) + '\n\n');
     ctx.output.stderr(keyValue('Network', event.network) + '\n\n');
   };

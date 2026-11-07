@@ -17,7 +17,8 @@ import { PASSPHRASE_ENV } from '../lib/passphrase.ts';
 import { transferNight, type TransferNightOptions } from '../lib/wallet/transfer.ts';
 import type { WalletOpened } from '../lib/wallet/wallet-call.ts';
 import { saveWalletConfig } from '../../../../test-support/plain-wallet.ts';
-import { startLedger8Indexer, startRefusingEndpoint, type Ledger8Indexer } from '../../../../test-support/stand-in-indexer.ts';
+import { startIndexerOnProtocol, startLedger8Indexer, startRefusingEndpoint, type Ledger8Indexer } from '../../../../test-support/stand-in-indexer.ts';
+import { closedPort } from '../../../../test-support/closed-port.ts';
 
 const PASSPHRASE = 'correct horse battery staple';
 const SEED_A = 'e5'.repeat(32);
@@ -79,6 +80,21 @@ function transfer(extra: Partial<TransferNightOptions> = {}): TransferNightOptio
 }
 
 describe('transferNight', () => {
+  it('fails fast with NETWORK_ERROR naming the node when it is down, before the wallet syncs or proves', async () => {
+    const host = programHost('a');
+    aliceOf(host, SEED_A);
+    const ledger9 = await startIndexerOnProtocol(2_001_000);
+    const port = await closedPort();
+    try {
+      const started = Date.now();
+      await expect(transferNight(host, { wallet: 'alice' }, transfer({ indexerWS: ledger9.url, node: `ws://127.0.0.1:${port}`, proofServer: `http://127.0.0.1:${port}` })))
+        .rejects.toMatchObject({ code: 'NETWORK_ERROR', message: expect.stringContaining(`Cannot reach the node at ws://127.0.0.1:${port}: connection refused.`) });
+      expect(Date.now() - started).toBeLessThan(10_000);
+    } finally {
+      await ledger9.close();
+    }
+  });
+
   it('opens the wallet, says its first step, and fails with UNSUPPORTED_LEDGER on a ledger-8 chain, before the wallet syncs', async () => {
     const host = programHost('a');
     aliceOf(host, SEED_A);

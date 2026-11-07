@@ -15,7 +15,26 @@ export declare class ChainClockBehindError extends Error {
 }
 export declare function fetchChainTime(indexerHttpUrl: string): Promise<Date | null>;
 export declare function getChainGenesisHash(nodeWsUrl: string, signal?: AbortSignal): Promise<string | null>;
+export declare function assertEndpointsReachable(needed: NeededEndpoints, options?: ReachabilityOptions): Promise<void>;
 export declare function assertNetworkAnswers(network: Pick<NetworkConfig, 'indexer' | 'indexerWS' | 'node'>, request?: typeof fetch): Promise<void>;
+export declare function assertNetworkReady(networkName: string, network: Pick<NetworkConfig, 'indexer' | 'node' | 'proofServer'>, needs?: {
+    proofServer?: boolean;
+    node?: boolean;
+}, options?: ReachabilityOptions): Promise<void>;
+export declare function endpointsOf(network: Pick<NetworkConfig, 'indexer' | 'node' | 'proofServer'>, needs?: {
+    proofServer?: boolean;
+    node?: boolean;
+}): NeededEndpoints;
+export interface NeededEndpoints {
+    readonly indexer?: string;
+    readonly node?: string;
+    readonly proofServer?: string;
+}
+export declare const REACHABILITY_TIMEOUT_MS = 5000;
+export interface ReachabilityOptions {
+    readonly signal?: AbortSignal;
+    readonly timeoutMs?: number;
+}
 export declare function fetchEventTip(indexerWS: string, stream: LedgerEventStream): Promise<number | null>;
 export declare function isCursorBeyondTip(lastAppliedEventId: number, tip: number | null): boolean;
 export declare function isStreamEmpty(indexerWS: string, stream: LedgerEventStream): Promise<boolean>;
@@ -50,6 +69,7 @@ export declare function spendsOf(indexer: {
     fromBlock?: number;
     signal?: AbortSignal;
 }): Promise<CoinSpend[]>;
+export declare function explainProofFailure(err: unknown, proofServerUrl: string, signal?: AbortSignal): Promise<unknown>;
 export declare function waitForProofServerReady(proofServerUrl: string, opts?: WaitForProofServerOptions): Promise<void>;
 export type Receipt = {
     readonly listed: true;

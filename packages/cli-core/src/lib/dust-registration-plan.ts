@@ -39,19 +39,35 @@ export function planRegistration(fee: bigint, estimates: readonly DustGeneration
   return { fee, generated, ratePerSecond, cap, waitMs };
 }
 
+/** Where a registration that can't pay its fee yet was asked for: the network (for how to add NIGHT) and the command to run again. */
+export interface RegistrationContext {
+  /** The network's id (Undeployed, Preview, …), as a network config has it. */
+  readonly networkId?: string;
+  /** The command to run again once the fee is covered: "midnight dust register" when not given. */
+  readonly retry?: string;
+}
+
+/** How to add NIGHT on the network: the local faucet on undeployed, a transfer from another wallet elsewhere. */
+function addNightHint(networkId: string | undefined): string {
+  if (networkId === undefined) return '';
+  return networkId.toLowerCase() === 'undeployed' ? ' (midnight airdrop 1000)' : ' (transfer NIGHT to it from another wallet)';
+}
+
 /** The NIGHT can't pay the registration fee within the time mn waits (or ever). */
 export class DustFeeNotGeneratedError extends Error {
   readonly code = 'DUST_GENERATING';
 
-  constructor(plan: RegistrationPlan, now: Date) {
+  constructor(plan: RegistrationPlan, now: Date, context: RegistrationContext = {}) {
     const what = `Registering for Dust costs a ${toDust(plan.fee)} DUST fee, paid from the Dust this wallet's NIGHT generates`;
     const so = `It has generated ${toDust(plan.generated)} DUST so far`;
+    const retry = context.retry ?? 'midnight dust register';
+    const addNight = addNightHint(context.networkId);
     super(plan.waitMs === null
       ? `${what}, but it can never generate that much: its NIGHT holds at most ${toDust(plan.cap)} DUST. `
-        + `${so}. Add more NIGHT (on undeployed: midnight airdrop 1000), then run: midnight dust register`
+        + `${so}. Add more NIGHT${addNight}, then run: ${retry}`
       : `${what}. ${so}, so the fee is covered in ${formatWait(plan.waitMs)} `
         + `(around ${new Date(now.getTime() + plan.waitMs).toISOString()}). `
-        + 'Run midnight dust register again then, or add more NIGHT to register sooner (on undeployed: midnight airdrop 1000).');
+        + `Run ${retry} again then, or add more NIGHT${addNight} to register sooner.`);
     this.name = 'DustFeeNotGeneratedError';
     Object.setPrototypeOf(this, DustFeeNotGeneratedError.prototype);
   }

@@ -14,9 +14,10 @@
 //     does without the guard. Any other unhandled rejection is printed and
 //     exits 1.
 //   - With `console`, while a call listens, the SDK's Wallet.* traces on
-//     console.error go to that call too, and polkadot-js's RPC-CORE lines on
-//     console.warn and console.error (one per failed submit) are dropped. At
-//     any other time the console is untouched.
+//     console.error go to that call too, and polkadot-js's RPC-CORE lines (one
+//     per failed submit) and its logger's API lines (API/INIT, API-WS: a node
+//     it can't reach, once every few seconds) on console.warn, console.error
+//     and console.log are dropped. At any other time the console is untouched.
 //
 // Which call a warning belongs to: each call runs inside its own
 // AsyncLocalStorage store, so a warning raised while it runs carries its
@@ -52,6 +53,17 @@ export interface SdkProcessGuard {
   uninstall(): void;
 }
 
+/**
+ * A line of polkadot-js's own logger about its API or its connection
+ * ("API/INIT: …FATAL", "API-WS: disconnected from …"): it writes the date,
+ * then its label (`API-WS:`, padded), then the message. mn reports a node it
+ * can't reach itself (NETWORK_ERROR naming it), so these only repeat it.
+ */
+function isPolkadotApiLine(args: readonly unknown[]): boolean {
+  return typeof args[0] === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(args[0])
+    && typeof args[1] === 'string' && /^(API|RPC)[-/A-Z]*:$/.test(args[1].trim());
+}
+
 /** The line a reported warning prints when the host gives no `onWarning`. */
 const reportOnConsole = (warn: (...args: unknown[]) => void): SdkWarningListener =>
   (tag, message) => warn(`${tag}: ${message} (a transient wallet SDK error; the SDK retries)`);
@@ -69,7 +81,7 @@ export function installSdkProcessGuard(options: SdkProcessGuardOptions = {}): Sd
   const originalError = console.error;
   const originalWarn = console.warn;
   const onWarning = options.onWarning ?? reportOnConsole(originalWarn);
-  const isRpcNoise = (args: unknown[]) => args.some((a) => String(a).includes('RPC-CORE'));
+  const isRpcNoise = (args: unknown[]) => args.some((a) => String(a).includes('RPC-CORE')) || isPolkadotApiLine(args);
 
   const onRejection = (reason: unknown): void => {
     // A rejection that is only a string is never the SDK's: its errors are objects with a _tag.
@@ -101,9 +113,15 @@ export function installSdkProcessGuard(options: SdkProcessGuardOptions = {}): Sd
     if (router.isListening() && isRpcNoise(args)) return;
     originalWarn(...args);
   };
+  const originalLog = console.log;
+  const patchedLog = (...args: unknown[]) => {
+    if (router.isListening() && isPolkadotApiLine(args)) return;
+    originalLog(...args);
+  };
   if (options.console === true) {
     console.error = patchedError;
     console.warn = patchedWarn;
+    console.log = patchedLog;
   }
 
   return {
@@ -118,6 +136,7 @@ export function installSdkProcessGuard(options: SdkProcessGuardOptions = {}): Sd
       // Given back only where nobody replaced them since.
       if (console.error === patchedError) console.error = originalError;
       if (console.warn === patchedWarn) console.warn = originalWarn;
+      if (console.log === patchedLog) console.log = originalLog;
     },
   };
 }

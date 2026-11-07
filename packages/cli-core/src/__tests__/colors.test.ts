@@ -6,25 +6,60 @@ const RESET = '\x1b[0m';
 
 describe('isColorEnabled', () => {
   const originalEnv = { ...process.env };
+  const stdoutTTY = process.stdout.isTTY;
+  const stderrTTY = process.stderr.isTTY;
+  const setTTY = (stdout: boolean, stderr: boolean): void => {
+    Object.defineProperty(process.stdout, 'isTTY', { value: stdout, configurable: true, writable: true });
+    Object.defineProperty(process.stderr, 'isTTY', { value: stderr, configurable: true, writable: true });
+  };
+
+  beforeEach(() => {
+    delete process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
+  });
 
   afterEach(() => {
-    // Restore original env
+    Object.defineProperty(process.stdout, 'isTTY', { value: stdoutTTY, configurable: true, writable: true });
+    Object.defineProperty(process.stderr, 'isTTY', { value: stderrTTY, configurable: true, writable: true });
     delete process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
     Object.assign(process.env, originalEnv);
   });
 
-  it('returns true when NO_COLOR is not set', () => {
-    delete process.env.NO_COLOR;
+  it('is on at a terminal: stdout and stderr both TTYs', () => {
+    setTTY(true, true);
     expect(isColorEnabled()).toBe(true);
   });
 
+  it('is off when stdout is piped or redirected, so no escape code reaches the pipe', () => {
+    setTTY(false, true);
+    expect(isColorEnabled()).toBe(false);
+  });
+
+  it('is off when stderr is redirected', () => {
+    setTTY(true, false);
+    expect(isColorEnabled()).toBe(false);
+  });
+
+  it('FORCE_COLOR turns it on off a terminal, and FORCE_COLOR=0 off at one', () => {
+    setTTY(false, false);
+    process.env.FORCE_COLOR = '1';
+    expect(isColorEnabled()).toBe(true);
+    setTTY(true, true);
+    process.env.FORCE_COLOR = '0';
+    expect(isColorEnabled()).toBe(false);
+  });
+
   it('returns false when NO_COLOR is set', () => {
+    setTTY(true, true);
     process.env.NO_COLOR = '';
     expect(isColorEnabled()).toBe(false);
   });
 
-  it('returns false when NO_COLOR is set to any value', () => {
+  it('returns false when NO_COLOR is set to any value, even with FORCE_COLOR', () => {
+    setTTY(true, true);
     process.env.NO_COLOR = '1';
+    process.env.FORCE_COLOR = '1';
     expect(isColorEnabled()).toBe(false);
   });
 });
@@ -34,10 +69,12 @@ describe('low-level helpers with colors enabled', () => {
 
   beforeEach(() => {
     delete process.env.NO_COLOR;
+    process.env.FORCE_COLOR = '1';
   });
 
   afterEach(() => {
     delete process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
     Object.assign(process.env, originalEnv);
   });
 
@@ -89,10 +126,12 @@ describe('named shortcuts with colors enabled', () => {
 
   beforeEach(() => {
     delete process.env.NO_COLOR;
+    process.env.FORCE_COLOR = '1';
   });
 
   afterEach(() => {
     delete process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
     Object.assign(process.env, originalEnv);
   });
 

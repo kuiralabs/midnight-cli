@@ -1,7 +1,7 @@
 // tx command: what became of a transaction, from the indexer
 // Usage: midnight tx status <hash or identifier> [--wait [--timeout <seconds>]] [--network <name>] [--json]
 
-import { type ParsedArgs, getFlag, hasFlag, UsageError, resolveNetwork, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, getFlag, hasFlag, UsageError, SyncTimeoutError, resolveNetwork, type CallContext } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, formatDust, dim, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { parseTxReference, transactionStatus, TX_STATUS_WAIT_MS } from '../lib/tx-status.ts';
 import { transactionStatusJson } from '../lib/tx-receipt.ts';
@@ -24,7 +24,15 @@ export default async function txCommand(args: ParsedArgs, ctx: CallContext): Pro
   const { name: network, config } = resolveNetwork({ args, configDir: ctx.config.paths.stateRoot }, ctx.config.settings);
 
   const progress = spinnerReporter(ctx.progress, jsonMode);
-  const status = await transactionStatus({ indexer: config.indexer, ref, wait: hasFlag(args, 'wait'), timeoutMs, signal: ctx.signal, onProgress: progress.report });
+  const wait = hasFlag(args, 'wait');
+  const status = await transactionStatus({ indexer: config.indexer, ref, wait, timeoutMs, signal: ctx.signal, onProgress: progress.report });
+  // A wait that ended without the transaction gave up: SYNC_TIMEOUT (exit 4), never notFound with exit 0, so a script tells it from one that landed.
+  if (wait && status.state === 'notFound') {
+    throw new SyncTimeoutError(
+      `The indexer at ${config.indexer} has not listed transaction ${given} after waiting ${timeoutMs / 1000} s: it may still be on its way, or it was dropped or never sent.\n`
+      + `Wait longer with --timeout <seconds>, or ask again: midnight tx status ${given}`,
+    );
+  }
 
   if (jsonMode) {
     ctx.output.result({ subcommand: 'status', network, transaction: given, ...transactionStatusJson(status) });

@@ -5,7 +5,7 @@
 
 import { type Host, throwIfCancelled, UsageError, type NetworkName, addressPrefix, looksLikeShieldedAddress, networkTargetOf, refuseOnMainnet, progressSteps, withCallSdkWarnings, nightAmountText, GENESIS_SEED, type HostEngines } from '@kuiralabs/midnight-cli-core';
 import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
-import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
+import { assertNetworkReady, explainProofFailure, type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
 import { resolveWalletPath, saveShieldedAddress, walletAddress, walletShieldedAddress, type UnlockHost } from '../wallet-config.ts';
 import { receiptOfSubmitted, saySyncPercent, submitSteps } from './submit-steps.ts';
 import { networkChoiceOf, type WalletCallOptions } from './wallet-call.ts';
@@ -85,6 +85,8 @@ export async function airdropNight(host: Host, options: AirdropNightOptions): Pr
   const txHash = await withCallSdkWarnings(host.sdkWarnings, options.sdkWarnings, async (sdkWarnings) => {
     if (!shielded) {
       steps.start('Starting genesis wallet...');
+      // A ledger-9 chain, and the indexer, the node and the proof server answer, before the sync and the proof.
+      await assertNetworkReady(network, networkConfig, { proofServer: true }, { signal });
       return (await (await host.engines.for(network)).wallet.airdrop({
         root,
         notice: host.notice,
@@ -107,6 +109,7 @@ export async function airdropNight(host: Host, options: AirdropNightOptions): Pr
     const stopListening = sdkWarnings.listen(undefined);
     try {
       steps.start('Syncing genesis wallet...');
+      await assertNetworkReady(network, networkConfig, { proofServer: true }, { signal });
       return await (await host.engines.for(network)).wallet.shieldedTransfer({
         seed: Buffer.from(GENESIS_SEED, 'hex'),
         root,
@@ -128,7 +131,7 @@ export async function airdropNight(host: Host, options: AirdropNightOptions): Pr
     } finally {
       stopListening();
     }
-  });
+  }).catch(async (err: unknown) => { throw await explainProofFailure(err, networkConfig.proofServer, signal); });
 
   const receipt = await receiptOfSubmitted(networkConfig.indexer, txHash, steps, signal, receiptWaitMs);
   return { network, txHash, recipient, shielded, ...(receipt === undefined ? {} : { receipt }) };

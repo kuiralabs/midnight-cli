@@ -18,7 +18,8 @@ export const helpDefinition: CommandDefinition = {
     jsonFields: {
       cli: 'CLI metadata (name, version, description)',
       globalFlags: 'Array of global flag descriptions',
-      commands: 'Array of command specs with jsonFields',
+      commands: 'Array of command specs with jsonFields (only the named command\'s with help <command>)',
+      agentManual: 'With --agent: the AI & MCP reference, as text',
     },
   },
   intro: { brief: 'Show command usage', order: 18 },

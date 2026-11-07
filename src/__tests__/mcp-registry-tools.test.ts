@@ -83,7 +83,7 @@ describe("the installed tools' descriptions", () => {
   it("end with their command's own codes, then its sets of codes by name", () => {
     const description = (name: string): string => listedTools(installedCommands).find((tool) => tool.name === name)!.description;
     const own = (name: string): string => findTool(installedCommands, name)!.description;
-    expect(description('midnight_tx_status')).toBe(`${own('midnight_tx_status')} Errors: NETWORK_ERROR; and the network codes (see the skill).`);
+    expect(description('midnight_tx_status')).toBe(`${own('midnight_tx_status')} Errors: NETWORK_ERROR, SYNC_TIMEOUT; and the network codes (see the skill).`);
     expect(description('midnight_config_get')).toBe(`${own('midnight_config_get')} Errors: the network codes (see the skill).`);
     expect(description('midnight_transfer')).toBe(`${own('midnight_transfer')} Errors: CHAIN_CLOCK_BEHIND; and the network, wallet, engine, sync, paying, offers and chain codes (see the skill).`);
     // Every installed tool says what it can fail with in at most 20 words.

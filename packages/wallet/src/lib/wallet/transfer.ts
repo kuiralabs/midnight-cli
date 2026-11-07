@@ -5,7 +5,7 @@
 
 import { type Host, throwIfCancelled, UsageError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, nightAmountText, shieldedDisabledReason, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core';
 import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
-import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
+import { assertNetworkReady, explainProofFailure, type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
 import { saveShieldedAddress } from '../wallet-config.ts';
 import { seedOf, type WalletSource } from '../seed-resolver.ts';
 import { receiptOfSubmitted, saySyncPercent, submitSteps } from './submit-steps.ts';
@@ -31,6 +31,13 @@ export interface NightTransfer {
   readonly txHash: string;
   /** The transaction once the indexer lists it, or why it is missing; absent when `receiptWaitMs` is 0. */
   readonly receipt?: Receipt;
+}
+
+/** How to fund a wallet's shielded NIGHT on `network`: the local faucet on undeployed, a shielded transfer from another wallet elsewhere. */
+export function fundShieldedHint(network: NetworkName, amountText: string): string {
+  return network === 'undeployed'
+    ? `Fund the shielded balance: midnight airdrop ${amountText} --shielded`
+    : 'Fund the shielded balance with a shielded transfer from another wallet (midnight transfer <this wallet\'s shielded address> <amount> --shielded).';
 }
 
 /**
@@ -63,6 +70,8 @@ export async function transferNight(host: Host, source: WalletSource, options: T
   const txHash = await withCallSdkWarnings(host.sdkWarnings, options.sdkWarnings, async (sdkWarnings) => {
     if (!options.shielded) {
       steps.start('Starting wallet...');
+      // A ledger-9 chain, and the indexer, the node and the proof server answer, before the sync and the proof.
+      await assertNetworkReady(network, networkConfig, { proofServer: true }, { signal });
       return (await (await host.engines.for(network)).wallet.transfer({
         root,
         notice: host.notice,
@@ -85,6 +94,7 @@ export async function transferNight(host: Host, source: WalletSource, options: T
     const stopListening = sdkWarnings.listen(undefined);
     try {
       steps.start('Syncing wallet...');
+      await assertNetworkReady(network, networkConfig, { proofServer: true }, { signal });
       const text = nightAmountText(amount);
       const walletPath = wallet.walletPath;
       return await (await host.engines.for(network)).wallet.shieldedTransfer({
@@ -102,8 +112,7 @@ export async function transferNight(host: Host, source: WalletSource, options: T
         // A wallet file keeps its shielded address for the next read.
         ...(walletPath === null ? {} : { onSenderShieldedAddress: (shieldedAddress: string) => saveShieldedAddress(walletPath, network, shieldedAddress) }),
         insufficient: (available) =>
-          `Insufficient shielded balance: ${available} NIGHT available, ${text} NIGHT requested.\n` +
-          `Fund shielded balance: midnight airdrop ${text} --shielded`,
+          `Insufficient shielded balance: ${available} NIGHT available, ${text} NIGHT requested.\n` + fundShieldedHint(network, text),
         log: options.log,
         signal,
         onStatus: (status) => steps.update(status),
@@ -113,7 +122,7 @@ export async function transferNight(host: Host, source: WalletSource, options: T
     } finally {
       stopListening();
     }
-  });
+  }).catch(async (err: unknown) => { throw await explainProofFailure(err, networkConfig.proofServer, signal); });
 
   const receipt = await receiptOfSubmitted(networkConfig.indexer, txHash, steps, signal, receiptWaitMs);
   return { network, txHash, ...(receipt === undefined ? {} : { receipt }) };

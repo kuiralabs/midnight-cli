@@ -841,6 +841,16 @@ export declare class TermsMismatchError extends Error {
 }
 export declare function isTransportFailure(failure: unknown): boolean;
 export declare function withTransportCode(err: unknown): unknown;
+export type EndpointRole = 'node' | 'indexer' | 'proof server';
+export declare class EndpointUnreachableError extends NetworkError {
+    readonly endpoint: EndpointRole;
+    readonly url: string;
+    constructor(endpoint: EndpointRole, url: string, reason: string, options?: {
+        cause?: unknown;
+    });
+}
+export declare function endpointUnreachable(endpoint: EndpointRole, url: string, failure: unknown): EndpointUnreachableError;
+export declare function transportReason(failure: unknown): string;
 export type VerboseLog = (phase: string, message: string) => void;
 export declare function clearWalletCache(address: string | undefined, network: string | undefined, root: string): void;
 export declare function openWalletSession(options: OpenWalletSessionOptions): Promise<WalletSession>;
@@ -858,7 +868,11 @@ export interface OpenWalletSessionOptions {
     onMessage?: (message: string) => void;
     sdkWarnings?: CallSdkWarnings;
 }
-export declare function sessionOver(network: NetworkName, opened: OpenedConnector, readTransaction: (tx: string, stage: 'unsealed' | 'sealed') => TransactionDetail[], reopening?: SessionReopening): WalletSession;
+export declare function sessionOver(network: NetworkName, opened: OpenedConnector, readTransaction: (tx: string, stage: 'unsealed' | 'sealed') => TransactionDetail[], reopening?: SessionReopening, submitBounds?: SessionSubmitBounds): WalletSession;
+export interface SessionSubmitBounds {
+    readonly node?: string;
+    readonly signal?: AbortSignal;
+}
 export interface WalletSession {
     readonly network: NetworkName;
     addresses(): Promise<WalletAddresses>;
@@ -1182,9 +1196,13 @@ export declare function planDustInputs<TToken>({ owed, coinCount, choose, feeWit
 export declare function spreadFeeAcrossInputs<TToken>(inputs: readonly DustInput<TToken>[], fee: bigint): DustInput<TToken>[];
 export declare class DustFeeNotGeneratedError extends Error {
     readonly code = "DUST_GENERATING";
-    constructor(plan: RegistrationPlan, now: Date);
+    constructor(plan: RegistrationPlan, now: Date, context?: RegistrationContext);
 }
 export declare function planRegistration(fee: bigint, estimates: readonly DustGenerationEstimate[]): RegistrationPlan;
+export interface RegistrationContext {
+    readonly networkId?: string;
+    readonly retry?: string;
+}
 export interface DustCoinGeneration {
     readonly maxCap: bigint;
     readonly dtime: Date | undefined;
@@ -1469,6 +1487,16 @@ export declare class ProofTimeoutError extends EngineError {
     constructor(message?: string, options?: {
         cause?: unknown;
     });
+}
+export declare function proveWithin<T>(work: Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T>;
+export declare const SUBMIT_WAIT_MS = 180000;
+export declare function submitWithin<T>(work: Promise<T>, options?: SubmitWaitOptions): Promise<T>;
+export interface SubmitWaitOptions {
+    readonly txId?: string;
+    readonly node?: string;
+    readonly timeoutMs?: number;
+    readonly nodeCheckMs?: number;
+    readonly signal?: AbortSignal;
 }
 export declare const DEFAULT_FEE_LIMITS: FeeLimits;
 export declare function feeLimitRefusal(feeSpecks: bigint, limits: FeeLimits): string | undefined;

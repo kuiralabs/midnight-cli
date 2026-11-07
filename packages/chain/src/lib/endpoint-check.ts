@@ -1,8 +1,16 @@
 // Asked before a wallet sync starts: the wallet SDK retries an endpoint that
 // refuses it without saying why, so mn finds out first. The endpoints mn
 // connects to itself are checked where the connection is made.
+//
+// And asked before a command starts its work: whether the endpoints it needs
+// answer at all. The wallet SDK retries an endpoint it can't reach for as long
+// as it is let (a transfer waited 92 s for a SYNC_TIMEOUT, mn serve for ever),
+// and a dead proof server showed only after the sync. One check, a few seconds
+// at most, names the endpoint that failed and what to check.
 
-import { assertEndpointUsable, endpointRefusal, isBlockfrostUrl, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
+import WebSocket from 'ws';
+import { checkLedgerSupported, fetchProtocolVersion } from './ledger-guard.ts';
+import { assertEndpointUsable, endpointRefusal, endpointRefusalFromWsError, endpointUnreachable, isBlockfrostUrl, throwIfCancelled, CancelledError, type EndpointRole, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
 
 const PROBE_TIMEOUT_MS = 10_000;
 
@@ -33,4 +41,125 @@ export async function assertNetworkAnswers(
   }
   const refusal = endpointRefusal(network.indexer, status);
   if (refusal !== undefined) throw refusal;
+}
+
+/** How long each endpoint has to answer the reachability check. */
+export const REACHABILITY_TIMEOUT_MS = 5_000;
+
+/** The endpoints a command needs: the indexer's (HTTP) URL, the node's and the proof server's. */
+export interface NeededEndpoints {
+  readonly indexer?: string;
+  readonly node?: string;
+  readonly proofServer?: string;
+}
+
+export interface ReachabilityOptions {
+  /** Cancels the check: it fails with CancelledError. */
+  readonly signal?: AbortSignal;
+  /** How long each endpoint has to answer; REACHABILITY_TIMEOUT_MS when not given. */
+  readonly timeoutMs?: number;
+}
+
+/**
+ * The endpoints `network` has that `needs` names (by default the indexer and
+ * the node; the proof server for a command that proves).
+ */
+export function endpointsOf(network: Pick<NetworkConfig, 'indexer' | 'node' | 'proofServer'>, needs: { proofServer?: boolean; node?: boolean } = {}): NeededEndpoints {
+  return {
+    indexer: network.indexer,
+    ...(needs.node === false ? {} : { node: network.node }),
+    ...(needs.proofServer === true ? { proofServer: network.proofServer } : {}),
+  };
+}
+
+/**
+ * Throws, within a few seconds, when an endpoint the command needs doesn't
+ * answer: an EndpointUnreachableError (NETWORK_ERROR) naming it, its URL and
+ * why, for the first of them in the order indexer, node, proof server. Any
+ * answer counts (an HTTP status, a WebSocket upgrade); what the endpoint says
+ * is for the command to read. An endpoint that can't be used as configured
+ * (shut down, Blockfrost without a project id) or refuses the upgrade throws
+ * that endpoint's own error.
+ */
+export async function assertEndpointsReachable(needed: NeededEndpoints, options: ReachabilityOptions = {}): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? REACHABILITY_TIMEOUT_MS;
+  const probes: Array<[EndpointRole, string, Promise<unknown>]> = [];
+  if (needed.indexer !== undefined) probes.push(['indexer', needed.indexer, probeHttp(needed.indexer, 'POST', timeoutMs, options.signal)]);
+  if (needed.node !== undefined) probes.push(['node', needed.node, probeWebSocket(needed.node, timeoutMs, options.signal)]);
+  if (needed.proofServer !== undefined) probes.push(['proof server', needed.proofServer, probeHttp(needed.proofServer, 'GET', timeoutMs, options.signal)]);
+  const failures = await Promise.all(probes.map(([, , probe]) => probe));
+  throwIfCancelled(options.signal);
+  for (let i = 0; i < probes.length; i++) {
+    const failure = failures[i];
+    if (failure === undefined) continue;
+    if (failure instanceof Error && 'code' in failure && typeof (failure as { code?: unknown }).code === 'string' && !isTransportCode((failure as { code: string }).code)) throw failure;
+    const [role, url] = probes[i]!;
+    throw endpointUnreachable(role, url, failure);
+  }
+}
+
+const isTransportCode = (code: string): boolean => /^(E[A-Z]+|UND_ERR_[A-Z_]+)$/.test(code);
+
+/** Undefined when the URL answers an HTTP request with any status; else why it didn't. */
+async function probeHttp(url: string, method: 'GET' | 'POST', timeoutMs: number, signal: AbortSignal | undefined): Promise<unknown> {
+  try {
+    assertEndpointUsable(url);
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const response = await fetch(url, {
+      method,
+      ...(method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: '{ __typename }' }) } : {}),
+      signal: signal === undefined ? timeout : AbortSignal.any([timeout, signal]),
+    });
+    // The body is not read: let the connection go.
+    await response.body?.cancel().catch(() => {});
+    return undefined;
+  } catch (err) {
+    return err;
+  }
+}
+
+/** Undefined when the URL accepts a WebSocket connection; else why it didn't. */
+function probeWebSocket(url: string, timeoutMs: number, signal: AbortSignal | undefined): Promise<unknown> {
+  return new Promise((resolve) => {
+    try {
+      assertEndpointUsable(url);
+    } catch (err) {
+      resolve(err);
+      return;
+    }
+    if (signal?.aborted === true) { resolve(new CancelledError()); return; }
+    const ws = new WebSocket(url);
+    let settled = false;
+    const finish = (outcome: unknown): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      ws.removeAllListeners();
+      // A socket that never opened is torn down; an open one is closed.
+      ws.on('error', () => {});
+      try { if (ws.readyState === WebSocket.CONNECTING) ws.terminate(); else ws.close(); } catch { /* already gone */ }
+      resolve(outcome);
+    };
+    const onAbort = (): void => finish(new CancelledError());
+    const timer = setTimeout(() => finish(Object.assign(new Error(`no answer within ${timeoutMs / 1000} s`), { name: 'TimeoutError' })), timeoutMs);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    ws.on('open', () => finish(undefined));
+    ws.on('error', (err) => finish(endpointRefusalFromWsError(url, err) ?? err));
+  });
+}
+
+/**
+ * What a wallet operation asks before it syncs: the chain is on ledger 9
+ * (UNSUPPORTED_LEDGER when the indexer says otherwise), and the endpoints it
+ * needs answer (assertEndpointsReachable).
+ */
+export async function assertNetworkReady(
+  networkName: string,
+  network: Pick<NetworkConfig, 'indexer' | 'node' | 'proofServer'>,
+  needs: { proofServer?: boolean; node?: boolean } = {},
+  options: ReachabilityOptions = {},
+): Promise<void> {
+  checkLedgerSupported(networkName, await fetchProtocolVersion(network.indexer, options.signal));
+  await assertEndpointsReachable(endpointsOf(network, needs), options);
 }

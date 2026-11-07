@@ -79,6 +79,12 @@ describe('the SDK-warning router', () => {
 });
 
 describe('sdkTransientWarning', () => {
+  it('says a lost connection in words, never "[object ErrorEvent]" or nothing', () => {
+    const lost = 'a connection to the indexer or the node failed (the wallet SDK gave no details)';
+    expect(sdkTransientWarning({ _tag: 'Wallet.Sync', message: '[object ErrorEvent]' })).toEqual({ tag: 'Wallet.Sync', message: lost });
+    expect(sdkTransientWarning({ _tag: 'Wallet.Sync', message: '' })).toEqual({ tag: 'Wallet.Sync', message: lost });
+  });
+
   it('reads a Wallet.* error, its string trace, and nothing else', () => {
     expect(sdkTransientWarning({ _tag: 'Wallet.Sync', message: 'Internal Server Error' })).toEqual({ tag: 'Wallet.Sync', message: 'Internal Server Error' });
     expect(sdkTransientWarning({ _tag: 'Wallet.Sync' })).toEqual({ tag: 'Wallet.Sync', message: 'transient error' });
