@@ -57,6 +57,21 @@ describe("the guard as mn's shell installs it (console filters on, a rejection o
     expect(result.stderr).toBe('a real problem\n');
   });
 
+  it("drops polkadot-js's own logger lines about its API and connection while a call listens, and keeps a real error", () => {
+    const result = run([
+      `const { logger } = await import(${JSON.stringify(join(ROOT, 'node_modules/@polkadot/util/logger.js'))});`,
+      "await listen(undefined);",
+      "logger('API-WS').error('disconnected from ws://127.0.0.1:1/: 1006:: Abnormal Closure');",
+      "logger('API/INIT').error('Error: FATAL: Unable to initialize the API: connect ECONNREFUSED');",
+      "logger('API-WS').warn('reconnecting');",
+      "logger('API-WS').log('connected');",
+      "console.error('a real problem');",
+    ].join('\n'));
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('a real problem\n');
+    expect(result.stdout).toBe('');
+  });
+
   it('touches nothing while no call listens: SDK traces and RPC noise print as they would without the guard', () => {
     const result = run([
       "console.error({ _tag: 'Wallet.Sync', message: 'Internal Server Error' });",
