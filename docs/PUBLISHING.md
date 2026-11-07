@@ -20,25 +20,22 @@ midnight help && mn help
 npm uninstall -g midnight-wallet-cli
 ```
 
-The main tarball ships only `dist/`, `docs/SKILL.md`, `docs/SKILL-CORE.md` and `NOTICE` (see `files` in `package.json`). Anything else the code reads at run time has to be added there: `node scripts/fresh-install-check.mjs` installs the packed tarball into an empty directory and checks it, MCP resources included. The native binaries live in the separate `@nel349/dust-sync-*` packages, not this tarball.
+The main tarball ships only `dist/`, `docs/SKILL.md`, `docs/SKILL-CORE.md` and `NOTICE` (see `files` in `package.json`). Anything else the code reads at run time has to be added there: `node scripts/fresh-install-check.mjs` installs the packed tarball into an empty directory and checks it, MCP resources included. The native binaries live in the separate `@kuiralabs/dust-sync-*` packages, not this tarball.
 
 ## Cut a release
 
-1. Bump the version in `package.json`, then sync it into the platform packages + `optionalDependencies`:
-   ```bash
-   node scripts/sync-sidecar-versions.mjs   # pins every @nel349/dust-sync-* to the new version (exact)
-   ```
+1. Bump the version in `package.json`, and the @kuiralabs workspace packages' version (`0.1.0-rc.N`) in every `packages/*/package.json`, the five `packages/dust-sync-*` platform packages included. The release workflow pins mn's `optionalDependencies` to the platform packages' version (exactly) with `node scripts/sync-sidecar-versions.mjs`; run it by hand only to check, and don't commit what it writes, since `npm ci` can't install a platform package before it is published.
 2. Update `CHANGELOG.md` (dated section), commit, and push `main`.
 3. Tag and push:
    ```bash
    git tag vX.Y.Z && git push origin vX.Y.Z
    ```
 4. The `release` workflow first checks that the tag (without the leading `v`) equals `package.json`'s `version`, and fails before publishing anything if they differ. Then, on native runners per platform:
-   - builds `dust-sync` with `cargo build --release --locked` (the `--locked` keeps the `ledger-v8 =8.1.0` pins so the serialized `DustLocalState` round-trips byte-identically);
-   - publishes the five `@nel349/dust-sync-<os>-<arch>` packages **before** the main package (so its optional deps resolve);
+   - builds `dust-sync` with `cargo build --release --locked` (the `--locked` keeps the `midnight-ledger-v9 =1.0.0` pins so the serialized `DustLocalState` round-trips byte-identically with the rc engine's `@midnightntwrk/ledger-v9`), runs its tests and checks that `dust-sync --ledger` prints `9` where the runner can run the binary (all but darwin-x64, which is cross-compiled);
+   - publishes the five `@kuiralabs/dust-sync-<os>-<arch>` packages **before** the main package (so its optional deps resolve), unless that version is on npm already; an `-rc` version goes to the `next` dist-tag;
    - publishes `midnight-wallet-cli`.
 
-**Prereleases.** A tag with a prerelease suffix (e.g. `v0.6.0-rc.0`) skips the sidecar entirely: no build, no platform packages, no `sync-sidecar-versions` run. Only the main package is published, under the npm `next` dist-tag, so it never becomes `latest`. Bump `package.json` to the same prerelease version before tagging; the tag check above applies here too.
+**Prereleases.** A tag with a prerelease suffix (e.g. `v0.6.0-rc.0`) publishes everything, the platform packages included, under the npm `next` dist-tag, so it never becomes `latest`. Bump `package.json` to the same prerelease version before tagging; the tag check above applies here too.
 
 Dry-run the build without publishing via the workflow's `workflow_dispatch` (`dry_run: true`) — it builds all five targets and skips the publish job.
 
@@ -46,7 +43,7 @@ Dry-run the build without publishing via the workflow's `workflow_dispatch` (`dr
 
 Publishing uses **OIDC trusted publishing** (no long-lived secret) once each of the six packages has a trusted publisher configured on npmjs.com (repo `kuiralabs/midnight-cli`, workflow `release-sidecar.yml`).
 
-**First release bootstrap** — a trusted publisher can only be attached to a package that already exists, so the very first publish needs a one-time classic **Automation** token stored as the `NPM_TOKEN` repo secret. After that release, configure the six trusted publishers and the secret can be deleted; every later tag publishes tokenless.
+**First release bootstrap** — a trusted publisher can only be attached to a package that already exists, so the very first publish needs a one-time classic **Automation** token stored as the `NPM_TOKEN` repo secret. After that release, configure the six trusted publishers and the secret can be deleted; every later tag publishes tokenless. The five `@kuiralabs/dust-sync-*` platform packages are new names on npm (they were `@nel349/dust-sync-*` up to 0.5.x), so their first publish needs that token too, and a trusted publisher each afterwards.
 
 ## Notes
 

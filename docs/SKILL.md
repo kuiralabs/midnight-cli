@@ -208,7 +208,7 @@ A tool's description ends with the codes it can fail with: its own, and sets of 
 - Not a custody service. Keys are on the user's disk (`~/.midnight/wallets/<name>.json`).
 - Not an instant-sync tool for a first-time wallet on a hosted network. First run replays the chain's event history; the CLI caches state after that so repeat runs are fast.
 - Not a contract compiler. The project's `package.json` should expose a `compact` script (Midnight convention, e.g. `"compact": "compact compile src/foo.compact src/managed/foo"`) or a `compile` script as a generic fallback. `mn dev` detects whichever is present; create-mn-app and midnight-starship templates ship with the `compact` script already wired.
-- Not quick to prime Dust on a hosted network, on this ledger-9 build: priming always runs in WASM (the native accelerator is built for ledger 8 and is not used), so a cold prime takes minutes, not seconds.
+- Not quick to prime Dust on a hosted network the first time: a cold prime reads the chain's whole Dust event history, so it takes minutes, not seconds (mainnet's 1.6M events: about 11 minutes with the native accelerator, about 18 without).
 
 ## Authoritative references
 

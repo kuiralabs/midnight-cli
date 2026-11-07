@@ -2,14 +2,14 @@
 # npm packages + the main package, so an `npm install midnight-wallet-cli` gets the
 # fast native cold dust sync (~4.5 min) instead of falling back to WASM (~22 min).
 #
-# Trigger: push a `v*` tag (after bumping the version + running
-# `node scripts/sync-sidecar-versions.mjs`). Or run manually with dry_run to build
-# without publishing.
+# Trigger: push a `v*` tag (after bumping the versions). Or run manually with
+# dry_run to build without publishing.
 #
-# Prerelease tags (a `-` after the version, e.g. v0.6.0-rc.0) skip the sidecar
-# entirely and publish only the main package, under the npm `next` dist-tag so
-# a prerelease never becomes `latest`. The ledger-9 prereleases ship without the
-# sidecar: it's built against ledger 8, and mn never selects it there.
+# Prerelease tags (a `-` after the version, e.g. v0.6.0-rc.0) publish under the
+# npm `next` dist-tag so a prerelease never becomes `latest`. The platform
+# packages (@kuiralabs/dust-sync-<os>-<arch>) carry the @kuiralabs workspace
+# packages' version (0.1.0-rc.N), not mn's: one already on npm is not published
+# again, and an -rc version goes to `next` too.
 #
 # Auth: OIDC trusted publishing (no long-lived secret) once each package has a
 # trusted publisher configured on npmjs.com (repo kuiralabs/midnight-cli,
@@ -32,39 +32,60 @@ on:
 jobs:
   build-sidecar:
     name: build ${{ matrix.pkg }}
-    # Not for prerelease tags (see header). Manual dry runs still build.
-    if: ${{ !(startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')) }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false # one platform failing must not block the others (deps are optional)
+      fail-fast: false # every platform reports its own result; publish needs them all
       matrix:
         include:
-          - { os: macos-14,         target: aarch64-apple-darwin,      pkg: darwin-arm64, ext: '' }
+          # `native`: the runner can run what it builds (tests and the ledger check run there).
+          - { os: macos-14,         target: aarch64-apple-darwin,      pkg: darwin-arm64, ext: '',     native: true }
           # darwin-x64 cross-compiled on the Apple-Silicon runner (macOS ships the
           # x86_64 SDK). Avoids the scarce/deprecated macos-13 Intel runner, which
           # queues indefinitely; macos-14 has plentiful capacity.
-          - { os: macos-14,         target: x86_64-apple-darwin,       pkg: darwin-x64,   ext: '' }
-          - { os: ubuntu-latest,    target: x86_64-unknown-linux-gnu,  pkg: linux-x64,    ext: '' }
-          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, pkg: linux-arm64,  ext: '' }
-          - { os: windows-latest,   target: x86_64-pc-windows-msvc,    pkg: win32-x64,    ext: '.exe' }
+          - { os: macos-14,         target: x86_64-apple-darwin,       pkg: darwin-x64,   ext: '',     native: false }
+          - { os: ubuntu-latest,    target: x86_64-unknown-linux-gnu,  pkg: linux-x64,    ext: '',     native: true }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, pkg: linux-arm64,  ext: '',     native: true }
+          - { os: windows-latest,   target: x86_64-pc-windows-msvc,    pkg: win32-x64,    ext: '.exe', native: true }
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      # The ledger-9 crates link rustls on aws-lc-rs, whose aws-lc-sys compiles
+      # AWS-LC from C (pregenerated bindings exist for all five targets, so no
+      # bindgen or clang; cmake, preinstalled on these runners, is only its
+      # fallback). On Windows x86-64 its assembly needs NASM, which the runner
+      # lacks: use the NASM objects aws-lc-sys ships instead.
+      - name: Use aws-lc-sys's prebuilt NASM objects
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "AWS_LC_SYS_PREBUILT_NASM=1" >> "$GITHUB_ENV"
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: sidecar/dust-sync
-      # --locked keeps the ledger crate pins (=8.1.0 etc.) so the serialized
-      # DustLocalState round-trips byte-identically with @midnight-ntwrk/ledger-v8.
+      # --locked keeps the ledger crate pins (midnight-ledger-v9 =1.0.0 etc.) so
+      # the serialized DustLocalState round-trips byte-identically with the rc
+      # engine's @midnightntwrk/ledger-v9.
       - name: Build sidecar
         working-directory: sidecar/dust-sync
         run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Test sidecar
+        if: matrix.native
+        working-directory: sidecar/dust-sync
+        run: cargo test --release --locked --target ${{ matrix.target }}
       - name: Sanity-check it's the right arch
         if: runner.os != 'Windows'
         run: file "sidecar/dust-sync/target/${{ matrix.target }}/release/dust-sync${{ matrix.ext }}"
+      # mn runs only a sidecar that reports its own ledger as ledger 9.
+      - name: Check it folds ledger 9
+        if: matrix.native
+        shell: bash
+        run: |
+          set -euo pipefail
+          ledger="$("sidecar/dust-sync/target/${{ matrix.target }}/release/dust-sync${{ matrix.ext }}" --ledger)"
+          [ "$ledger" = "9" ] || { echo "::error::dust-sync --ledger printed '$ledger', not 9"; exit 1; }
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
@@ -76,11 +97,11 @@ jobs:
   publish:
     name: publish to npm
     needs: build-sidecar
-    # Only publish for a real tag push (never for a manual dry run). The sidecar
-    # build is skipped for prerelease tags, so a skipped build must not block.
+    # Only publish for a real tag push (never for a manual dry run), and only
+    # with every platform's binary built.
     if: >-
       ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-      && (needs.build-sidecar.result == 'success' || needs.build-sidecar.result == 'skipped') }}
+      && needs.build-sidecar.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       PRERELEASE: ${{ contains(github.ref_name, '-') }}
@@ -117,12 +138,12 @@ jobs:
         run: npm install -g npm@11
       - run: npm ci
       - name: Download all platform binaries
-        if: env.PRERELEASE != 'true'
         uses: actions/download-artifact@v4
         with:
           path: /tmp/dust-sync-artifacts
+      # mn pins each platform package exactly, so a version that is not on npm
+      # yet must be published now, with its binary; one already there stays.
       - name: Stage each binary into its platform package
-        if: env.PRERELEASE != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -130,33 +151,37 @@ jobs:
             ext=""; [ "$pkg" = "win32-x64" ] && ext=".exe"
             src="/tmp/dust-sync-artifacts/dust-sync-$pkg/dust-sync$ext"
             dest="packages/dust-sync-$pkg/dust-sync$ext"
-            if [ -f "$src" ]; then
+            name="$(node -p "require('./packages/dust-sync-$pkg/package.json').name")"
+            version="$(node -p "require('./packages/dust-sync-$pkg/package.json').version")"
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is published already"
+            elif [ -f "$src" ]; then
               cp "$src" "$dest"; chmod +x "$dest" || true
               echo "staged $pkg"
             else
-              echo "::warning::no binary for $pkg — that platform will fall back to WASM"
+              echo "::error::no binary for $pkg, and $name@$version is not on npm: mn would pin a package that does not exist"
+              exit 1
             fi
           done
-      - name: Pin all versions to the tag
-        if: env.PRERELEASE != 'true'
+      - name: Pin mn's optional dependencies to the platform packages
         run: node scripts/sync-sidecar-versions.mjs
       # Platform packages MUST publish before the main package, so the main
-      # package's optionalDependencies resolve. A platform with no binary this run
-      # is skipped (its dir has only package.json) rather than shipping an empty pkg.
+      # package's optionalDependencies resolve. Only staged ones publish (a
+      # version on npm already has no binary staged).
       - name: Publish platform packages
-        if: env.PRERELEASE != 'true'
         shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          set -uo pipefail
+          set -euo pipefail
           for pkg in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do
             ext=""; [ "$pkg" = "win32-x64" ] && ext=".exe"
             if [ -f "packages/dust-sync-$pkg/dust-sync$ext" ]; then
-              ( cd "packages/dust-sync-$pkg" && npm publish --access public ) \
-                || echo "::warning::publish failed for $pkg (already published at this version?)"
+              version="$(node -p "require('./packages/dust-sync-$pkg/package.json').version")"
+              tag=""; case "$version" in *-*) tag="--tag next" ;; esac
+              ( cd "packages/dust-sync-$pkg" && npm publish --access public $tag )
             else
-              echo "skipping $pkg — no binary"
+              echo "skipping $pkg: published already"
             fi
           done
       # mn depends on its workspace packages (core, chain, one engine per SDK

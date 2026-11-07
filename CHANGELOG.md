@@ -4,6 +4,17 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **The native Dust reader is back, on ledger 9.** The `dust-sync` sidecar is built on the final ledger-9 crates (`midnight-ledger-v9` 1.0.0) and the rc engine runs it again for a cold or resumed Dust sync, falling back to the WASM reader when the binary is missing, reports another ledger, or fails. On a chain that forked from ledger 8 (mainnet) it reads the ledger-8 events without folding them, since the fork's migration starts ledger 9 from an empty Dust state, and folds from the first ledger-9 event: the result is the WASM reader's, byte for byte. A run stopped inside the ledger-8 events keeps how far it read in its own checkpoint (marked `before_fork`, never handed to mn's Dust cache) and the next run resumes there. It runs only when the chain tip is on ledger 9 and the sync doesn't resume a ledger-8 checkpoint. A cold mainnet read took about 11 minutes with it against about 18 with WASM, most of it streaming the events through Blockfrost. `MN_DUST_SYNC_BIN` and `MN_DISABLE_NATIVE_DUST` apply again on the rc engine (the beta engine still never runs it).
+- **The sidecar says which ledger it folds** (`dust-sync --ledger` prints `9`), and mn runs only a binary that answers 9, so a sidecar package built for ledger 8 is never used. Its checkpoints record their ledger too: one an earlier sidecar wrote is not resumed.
+- **The sidecar's platform packages are `@kuiralabs/dust-sync-<os>-<arch>`** (they were `@nel349/dust-sync-*` up to 0.5.x), versioned with the other `@kuiralabs` packages from `0.1.0-rc.3`.
+
+### Fixed
+
+- **The sidecar couldn't reach a `wss://` indexer on the ledger-9 crates:** two TLS crypto providers are linked, so rustls refused to pick one and every hosted-network sync panicked. It now installs one before connecting.
+- **A cold Dust sync cut short before its first event (Ctrl+C, a timeout) broke the next one on mainnet:** it was cached as an empty ledger-9 state at the start of the timeline, which the next sync resumed and then refused on the first ledger-8 event, until `mn cache clear`. Such a window now keeps nothing.
+
 ## [0.6.0-rc.14] - 2026-11-05
 
 ### Added

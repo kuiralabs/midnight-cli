@@ -19,7 +19,7 @@ export const walletGuidance: PackageGuidance = {
       text: 'skill-full',
       section: 'not-this-cli',
       order: 20,
-      body: `- Not quick to prime Dust on a hosted network, on this ledger-9 build: priming always runs in WASM (the native accelerator is built for ledger 8 and is not used), so a cold prime takes minutes, not seconds.
+      body: `- Not quick to prime Dust on a hosted network the first time: a cold prime reads the chain's whole Dust event history, so it takes minutes, not seconds (mainnet's 1.6M events: about 11 minutes with the native accelerator, about 18 without).
 `,
     },
     {
