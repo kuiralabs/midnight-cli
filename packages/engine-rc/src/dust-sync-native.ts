@@ -6,8 +6,8 @@
 
 import { cacheRootDir, networkCacheFolder, nativeCheckpointName } from '@kuiralabs/midnight-cli-core/engine';
 import { assertEndpointUsable, DIR_MODE, FILE_MODE, type NetworkConfig, type Settings } from '@kuiralabs/midnight-cli-core';
-import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -19,9 +19,29 @@ import { type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { type DustLedgerState } from './dust-ledger-state.ts';
 import { collapseForeignGenerations } from './dust-collapse.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
+import { ledgerOfProtocolVersion } from './dust-ledger-state.ts';
+import { FORK_SCHEDULE } from './fork-schedule.ts';
+
+/**
+ * The ledger of the Dust states this engine reads, and so the only ledger a
+ * sidecar may fold with: it replays events with its own copy of the ledger,
+ * and its state is deserialized with this engine's.
+ */
+export const SIDECAR_LEDGER = 9;
+
+/** A sidecar checkpoint holds a Dust state of another ledger than this engine reads. */
+export class SidecarLedgerMismatchError extends Error {
+  constructor(readonly ledger: number) {
+    super(`the dust-sync sidecar returned a ledger-${ledger} Dust state; this engine reads ledger ${SIDECAR_LEDGER}. Reinstall mn so its dust-sync package matches it.`);
+    this.name = 'SidecarLedgerMismatchError';
+    Object.setPrototypeOf(this, SidecarLedgerMismatchError.prototype);
+  }
+}
 
 /** Sidecar checkpoint JSON shape (snake_case — matches the Rust `Checkpoint`). */
 export interface SidecarCheckpoint {
+  /** The ledger of `dust_state`; absent in a checkpoint from a sidecar built before ledger 9. */
+  ledger?: number;
   dust_state: string;
   last_applied_event_id: number;
   owned_generation_indices: number[];
@@ -30,6 +50,12 @@ export interface SidecarCheckpoint {
   available_coins: number;
   events_applied: number;
   partial: boolean;
+  /**
+   * The run stopped inside a forked chain's ledger-8 events: the cursor says
+   * how far the sidecar read (it resumes from its own file), and `dust_state`
+   * is not a state at that cursor. Absent in older checkpoints.
+   */
+  before_fork?: boolean;
 }
 
 interface NativeFetchOptions {
@@ -46,8 +72,8 @@ interface NativeFetchOptions {
 
 /**
  * Locate the sidecar binary. Order: the settings' override (MN_DUST_SYNC_BIN) →
- * the (Phase 3) optional platform package → the dev build under
- * sidecar/dust-sync. Returns null when none resolve (→ WASM fallback).
+ * the dev build under sidecar/dust-sync → the optional platform package.
+ * Returns null when none resolve (→ WASM fallback).
  */
 export function resolveSidecarBinary(settings: Pick<Settings, 'dustSyncBin'>): string | null {
   const fromEnv = settings.dustSyncBin;
@@ -62,19 +88,18 @@ export function resolveSidecarBinary(settings: Pick<Settings, 'dustSyncBin'>): s
     if (existsSync(devBuild)) return devBuild;
   }
 
-  // Phase 3 platform package: @nel349/dust-sync-<os>-<arch>.
   return platformPackageBinary(import.meta.url);
 }
 
 /**
- * The sidecar binary in the platform package (@nel349/dust-sync-<os>-<arch>)
+ * The sidecar binary in the platform package (@kuiralabs/dust-sync-<os>-<arch>)
  * resolvable from `fromUrl`, or null when it isn't installed. Resolved with
  * node:module's createRequire, which works from source and from the bundle.
  */
 export function platformPackageBinary(fromUrl: string): string | null {
   const exe = process.platform === 'win32' ? 'dust-sync.exe' : 'dust-sync';
   try {
-    const pkg = `@nel349/dust-sync-${process.platform}-${process.arch}`;
+    const pkg = `@kuiralabs/dust-sync-${process.platform}-${process.arch}`;
     const binPath = join(dirname(createRequire(fromUrl).resolve(`${pkg}/package.json`)), exe);
     return existsSync(binPath) ? binPath : null;
   } catch {
@@ -82,21 +107,38 @@ export function platformPackageBinary(fromUrl: string): string | null {
   }
 }
 
+const LEDGER_PROBE_TIMEOUT_MS = 5_000;
 
-/** True when the native sidecar should be used (binary resolves + not disabled). */
 /**
- * The ledger the sidecar binary is built against. It replays dust events with
- * its own copy of the ledger, so it can only serve a chain on the same ledger.
- * No ledger-9 `midnight-ledger` crate is published yet.
+ * The ledger a sidecar binary folds with, as its `--ledger` prints it; null
+ * when it can't say (a sidecar built before ledger 9 refuses the flag). Asked
+ * on every sync (a few milliseconds), so a replaced binary is never trusted on
+ * an earlier answer.
  */
-const SIDECAR_LEDGER: number = 8;
-/** The ledger this build of mn targets. */
-const MN_LEDGER: number = 9;
+export function sidecarLedger(bin: string): number | null {
+  const run = spawnSync(bin, ['--ledger'], { encoding: 'utf-8', timeout: LEDGER_PROBE_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'ignore'] });
+  const printed = run.status === 0 ? run.stdout.trim() : '';
+  return /^\d+$/.test(printed) ? Number(printed) : null;
+}
 
+/** True when the native sidecar should be used: not disabled, a binary resolves, and it folds this engine's ledger. */
 export function nativeDustSyncAvailable(settings: Pick<Settings, 'isNativeDustOff' | 'dustSyncBin'>): boolean {
-  if (SIDECAR_LEDGER !== MN_LEDGER) return false;
   if (settings.isNativeDustOff) return false;
-  return resolveSidecarBinary(settings) !== null;
+  const bin = resolveSidecarBinary(settings);
+  return bin !== null && sidecarLedger(bin) === SIDECAR_LEDGER;
+}
+
+/**
+ * True when the sidecar's result is the one mn's reader would reach for this
+ * sync. The sidecar folds ledger 9 only: on a forked chain it reads the
+ * ledger-8 events and starts its fold at the fork, which equals mn's reader
+ * only when the sync ends past the fork. So the chain tip must be known to be
+ * on ledger 9, and a sync resuming a ledger-8 checkpoint (one that stopped
+ * before the fork) is left to mn's reader, which crosses the fork from it.
+ */
+export function sidecarServesSync(sync: { chainProtocolVersion: bigint | null; initialState?: DustLedgerState }): boolean {
+  if (sync.chainProtocolVersion === null || ledgerOfProtocolVersion(sync.chainProtocolVersion) !== 9) return false;
+  return sync.initialState === undefined || sync.initialState.ledgerVersion === 9;
 }
 
 /**
@@ -113,11 +155,15 @@ export function resumeDecision(existingCursor: number, startFromId: number, hasI
   return 'fresh';
 }
 
-/** Last-applied event id in a sidecar checkpoint file, or -2 if absent/unreadable. */
-function readCheckpointCursor(path: string): number {
+/**
+ * Last-applied event id in a sidecar checkpoint file, or -2 if absent,
+ * unreadable, or of another ledger (one an earlier sidecar wrote on ledger 8).
+ */
+export function readCheckpointCursor(path: string): number {
   if (!existsSync(path)) return -2;
   try {
     const cp: SidecarCheckpoint = JSON.parse(readFileSync(path, 'utf-8'));
+    if (cp.ledger !== SIDECAR_LEDGER) return -2;
     return typeof cp.last_applied_event_id === 'number' ? cp.last_applied_event_id : -2;
   } catch { return -2; }
 }
@@ -157,13 +203,14 @@ export function runDustSyncNative(
     //    (e.g. a prior run was killed mid-sync), keep it — don't rewind it.
     //  - else seed it from the repo's cached state so we resume from there.
     //  - else (no cache) let the sidecar start fresh.
-    const args = ['--indexer-ws', network.indexerWS, '--out', out];
+    const args = ['--indexer-ws', network.indexerWS, '--out', out, '--ledger9-from', String(FORK_SCHEDULE.v9)];
     const decision = resumeDecision(readCheckpointCursor(out), opts.startFromId, !!opts.initialState);
     if (decision === 'seed') {
       // The sidecar reads ledger-9 states only; a ledger-8 checkpoint (a forked
       // chain's sync stopped before the fork) is left to the WASM reader.
-      if (opts.initialState!.ledgerVersion !== 9) { reject(new Error('dust-sync reads ledger-9 Dust states only')); return; }
+      if (opts.initialState!.ledgerVersion !== SIDECAR_LEDGER) { reject(new SidecarLedgerMismatchError(opts.initialState!.ledgerVersion)); return; }
       const seedCp: SidecarCheckpoint = {
+        ledger: SIDECAR_LEDGER,
         dust_state: Buffer.from(opts.initialState!.state.serialize()).toString('hex'),
         last_applied_event_id: opts.startFromId - 1,
         owned_generation_indices: opts.initialRetention?.ownedGenerationIndices ?? [],
@@ -218,7 +265,7 @@ export function runDustSyncNative(
           : JSON.parse(readFileSync(out, 'utf-8'));
         resolve(adaptResult(cp, opts.settings));
       } catch (err) {
-        reject(new Error(`dust-sync output parse failed: ${(err as Error).message}`));
+        reject(err instanceof SidecarLedgerMismatchError ? err : new Error(`dust-sync output parse failed: ${(err as Error).message}`));
       }
     });
   });
@@ -226,6 +273,8 @@ export function runDustSyncNative(
 
 /** Map the sidecar's checkpoint JSON to a `DustDirectResult`, collapsed unless the settings say not to. Exported for tests. */
 export function adaptResult(cp: SidecarCheckpoint, settings: Pick<Settings, 'isDustCollapseOff'>): DustDirectResult {
+  if (cp.ledger !== SIDECAR_LEDGER) throw new SidecarLedgerMismatchError(cp.ledger ?? 8);
+  if (cp.before_fork && !cp.partial) throw new Error('dust-sync reported a finished run that stopped before the fork');
   const now = new Date();
   let state = ledger.DustLocalState.deserialize(new Uint8Array(Buffer.from(cp.dust_state, 'hex')));
   // The Rust sidecar doesn't collapse the generation tree, so a native sync would
@@ -252,7 +301,10 @@ export function adaptResult(cp: SidecarCheckpoint, settings: Pick<Settings, 'isD
       ownedGenerationIndices: cp.owned_generation_indices,
       generationFrontier: cp.generation_frontier,
     },
-    lastAppliedEventId: cp.last_applied_event_id,
+    // A run stopped before the fork holds no Dust state at its cursor: the
+    // repository keeps nothing from it (its cursor stays where it was), and the
+    // sidecar's next run resumes reading from its own checkpoint file.
+    lastAppliedEventId: cp.before_fork ? -1 : cp.last_applied_event_id,
     partial: cp.partial,
   };
 }

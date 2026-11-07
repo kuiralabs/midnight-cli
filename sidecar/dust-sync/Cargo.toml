@@ -4,15 +4,19 @@ version = "0.0.0"
 edition = "2021"
 publish = false
 
-# Ledger versions MUST stay in lockstep with the CLI's @midnight-ntwrk/ledger-v8
-# (serialization compatibility depends on it). See tasks/dust-native-sidecar-plan.md.
+# The ledger crates MUST stay in lockstep with the rc engine's
+# @midnightntwrk/ledger-v9: the Dust state it writes is the one mn deserializes,
+# so the two serializations have to match byte for byte.
 [dependencies]
-midnight-ledger = "=8.1.0"
-midnight-storage = "=1.1.1"
-midnight-base-crypto = "=1.0.0"
-midnight-serialize = "=1.1.0"
+midnight-ledger = { package = "midnight-ledger-v9", version = "=1.0.0" }
+midnight-storage = "=2.0.4"
+midnight-base-crypto = "=1.1.0"
+midnight-serialize = "=1.2.0"
 hex = "0.4"
 tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+# base-crypto pulls reqwest with rustls on aws-lc-rs while ureq and tungstenite
+# use ring: with two providers linked, rustls needs one installed explicitly.
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 ureq = { version = "2", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

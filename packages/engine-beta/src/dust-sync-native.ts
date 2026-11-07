@@ -61,19 +61,18 @@ export function resolveSidecarBinary(settings: Pick<Settings, 'dustSyncBin'>): s
     if (existsSync(devBuild)) return devBuild;
   }
 
-  // Phase 3 platform package: @nel349/dust-sync-<os>-<arch>.
   return platformPackageBinary(import.meta.url);
 }
 
 /**
- * The sidecar binary in the platform package (@nel349/dust-sync-<os>-<arch>)
+ * The sidecar binary in the platform package (@kuiralabs/dust-sync-<os>-<arch>)
  * resolvable from `fromUrl`, or null when it isn't installed. Resolved with
  * node:module's createRequire, which works from source and from the bundle.
  */
 export function platformPackageBinary(fromUrl: string): string | null {
   const exe = process.platform === 'win32' ? 'dust-sync.exe' : 'dust-sync';
   try {
-    const pkg = `@nel349/dust-sync-${process.platform}-${process.arch}`;
+    const pkg = `@kuiralabs/dust-sync-${process.platform}-${process.arch}`;
     const binPath = join(dirname(createRequire(fromUrl).resolve(`${pkg}/package.json`)), exe);
     return existsSync(binPath) ? binPath : null;
   } catch {
@@ -82,18 +81,17 @@ export function platformPackageBinary(fromUrl: string): string | null {
 }
 
 
-/** True when the native sidecar should be used (binary resolves + not disabled). */
 /**
- * The ledger the sidecar binary is built against. It replays dust events with
- * its own copy of the ledger, so it can only serve a chain on the same ledger.
- * No ledger-9 `midnight-ledger` crate is published yet.
+ * The sidecar is built on the final ledger-9 crates (the rc engine's
+ * @midnightntwrk/ledger-v9 1.0.0); this engine reads ledger-v9 1.0.0-rc.3
+ * states, whose serialization the sidecar is not checked against. So the beta
+ * engine never runs it.
  */
-const SIDECAR_LEDGER: number = 8;
-/** The ledger this build of mn targets. */
-const MN_LEDGER: number = 9;
+const SIDECAR_SERVES_THIS_ENGINE = false;
 
+/** True when the native sidecar should be used (binary resolves + not disabled). */
 export function nativeDustSyncAvailable(settings: Pick<Settings, 'isNativeDustOff' | 'dustSyncBin'>): boolean {
-  if (SIDECAR_LEDGER !== MN_LEDGER) return false;
+  if (!SIDECAR_SERVES_THIS_ENGINE) return false;
   if (settings.isNativeDustOff) return false;
   return resolveSidecarBinary(settings) !== null;
 }

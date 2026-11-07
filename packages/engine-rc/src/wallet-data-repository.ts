@@ -36,7 +36,7 @@ import { loadDustCache, saveDustCache, dustPublicKeyHexFromSeed, validateDustCac
 import { getChainGenesisHash, assertLedgerSupported, checkLedgerSupported, fetchProtocolVersion, checkBalance, type BalanceSummary, callNodeRpc, fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain';
 import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { dustKeysFromSeed, type DustLedgerState } from './dust-ledger-state.ts';
-import { nativeDustSyncAvailable, runDustSyncNative } from './dust-sync-native.ts';
+import { nativeDustSyncAvailable, runDustSyncNative, sidecarServesSync } from './dust-sync-native.ts';
 import { deriveDustSeed } from './derivation.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
 export type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/engine';
@@ -687,16 +687,18 @@ function defaultDustFetcher(
 }
 
 /**
- * Prefer the native sidecar (~5x faster cold dust sync) when it's available;
- * fall back to the WASM reader on a missing binary or any failure. The sidecar
- * is an optional accelerator, so a fallback is a slowdown, never a break.
+ * Prefer the native sidecar (faster on a cold dust sync) when
+ * it's available and serves this sync (a chain past the fork, no ledger-8
+ * checkpoint to resume); fall back to the WASM reader on a missing binary or
+ * any failure. The sidecar is an optional accelerator, so a fallback is a
+ * slowdown, never a break.
  * Each sync reads the host's settings: the sidecar to run, whether to run it,
  * and whether to collapse the generation tree.
  */
 function nativeOrWasmDustFetcher(host: EngineHost): NonNullable<RepoDeps['fetchDust']> {
   return async (seed, network, opts) => {
     const settings = host.settings();
-    if (nativeDustSyncAvailable(settings)) {
+    if (sidecarServesSync(opts) && nativeDustSyncAvailable(settings)) {
       try {
         return await runDustSyncNative(seed, network, { ...opts, settings });
       } catch (err) {
