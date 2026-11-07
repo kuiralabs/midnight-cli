@@ -96,6 +96,20 @@ export function isValidNetworkName(name: string): name is NetworkName {
   return VALID_NETWORK_NAMES.includes(name as NetworkName);
 }
 
+/** A network name mn doesn't know. `valid` is what the message offers instead: every network, unless the place it was given takes fewer. */
+export class InvalidNetworkError extends UsageError {
+  constructor(name: string, valid: readonly string[] = VALID_NETWORK_NAMES) {
+    super(`Invalid network: "${name}"\nValid networks: ${valid.join(', ')}`);
+    this.name = 'InvalidNetworkError';
+    Object.setPrototypeOf(this, InvalidNetworkError.prototype);
+  }
+}
+
+/** Throws InvalidNetworkError unless `name` is a network mn knows. */
+export function assertValidNetworkName(name: string): asserts name is NetworkName {
+  if (!isValidNetworkName(name)) throw new InvalidNetworkError(name);
+}
+
 /**
  * Networks a command acts on only when it names them itself (`--network`, a
  * tool's network parameter): never the saved network, never one inferred

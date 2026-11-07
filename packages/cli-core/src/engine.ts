@@ -43,6 +43,6 @@ export { decodeSignPayload, signedMessageBytes } from './lib/sign-data.ts';
 export { describeLeg, NotAnOfferError } from './lib/swap-offer.ts';
 export { fromHex, toHex } from './lib/tx-serde.ts';
 export {
-  cacheRootDir, clearWalletCache, getCachePath, loadWalletCache, networkCacheFolder, saveWalletCache,
+  cacheRootDir, clearWalletCache, getCachePath, loadWalletCache, networkCacheFolder, saveWalletCache, walletCacheFileName,
   validateWalletCacheChainId, type WalletCacheData
 } from './lib/wallet-cache.ts';

@@ -10,9 +10,10 @@ import {
   getActiveWalletName,
   loadWalletConfig,
 } from '../lib/wallet-config.ts';
-import { migrateOldWallet } from '../lib/wallet-paths.ts';
+import { ensureWalletsDir, migrateOldWallet } from '../lib/wallet-paths.ts';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../../../test-support/plain-wallet.ts';
-import { loadCliConfig, saveCliConfig, type CliConfig, MIDNIGHT_DIR, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DEFAULT_WALLET_FILENAME, DIR_MODE, FILE_MODE, isValidWalletName, createHost } from '@kuiralabs/midnight-cli-core';
+import { loadCliConfig, saveCliConfig, type CliConfig, MIDNIGHT_DIR, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, DEFAULT_WALLET_FILENAME, DIR_MODE, FILE_MODE, isValidWalletName, createHost, InvalidWalletNameError } from '@kuiralabs/midnight-cli-core';
+import { getCachePath, saveWalletCache } from '@kuiralabs/midnight-cli-core/engine';
 import { rcKeys } from '../../../../test-support/rc-engine.ts';
 import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 
@@ -243,5 +244,49 @@ describe('wallet config round-trip with named wallets', () => {
     expect(loaded).not.toHaveProperty('seed');
     expect(loaded.isSealed).toBe(false);
     expect(loaded.addresses).toEqual(VALID_WALLET.addresses);
+  });
+});
+
+// The active wallet's name, written into config.json by hand, is checked as one
+// given on the command line: "../../x" named a file outside the wallets folder.
+describe('the active wallet named in config.json', () => {
+  it.each(['../../x', '../wallets/alice', 'x'.repeat(65)])('%s is refused, saying how to choose a wallet', (name) => {
+    createConfig({ wallet: name });
+    expect(() => getActiveWalletName(TEST_MIDNIGHT_DIR)).toThrow(InvalidWalletNameError);
+    expect(() => resolveWalletPath(TEST_MIDNIGHT_DIR)).toThrow(/active wallet in .*config\.json.*\n.*midnight wallet use <name>/s);
+  });
+});
+
+// A removed wallet's sync caches went on taking space, and were read again by
+// a wallet later made from the same seed.
+describe('removeWallet and the wallet\'s caches', () => {
+  it('removes the wallet\'s sync cache on each network, leaving the other wallet\'s', async () => {
+    createWalletFile('alice', VALID_WALLET);
+    createWalletFile('bob', VALID_WALLET_2);
+    createConfig({ wallet: 'alice' });
+    const serialized = { serializeState: async () => 's' };
+    const facade = { shielded: serialized, unshielded: serialized, dust: serialized };
+    for (const network of ['undeployed', 'preview'] as const) {
+      await saveWalletCache(VALID_WALLET.addresses[network], network, facade, TEST_MIDNIGHT_DIR);
+      await saveWalletCache(VALID_WALLET_2.addresses[network], network, facade, TEST_MIDNIGHT_DIR);
+    }
+
+    removeWallet(TEST_MIDNIGHT_DIR, 'bob');
+
+    for (const network of ['undeployed', 'preview'] as const) {
+      expect(fs.existsSync(getCachePath(VALID_WALLET_2.addresses[network], network, TEST_MIDNIGHT_DIR))).toBe(false);
+      expect(fs.existsSync(getCachePath(VALID_WALLET.addresses[network], network, TEST_MIDNIGHT_DIR))).toBe(true);
+    }
+  });
+});
+
+describe('the wallets folder', () => {
+  it('is narrowed to 0700, with the state root, when an earlier mn left them 0755', () => {
+    fs.mkdirSync(TEST_WALLETS_DIR, { recursive: true });
+    fs.chmodSync(TEST_MIDNIGHT_DIR, 0o755);
+    fs.chmodSync(TEST_WALLETS_DIR, 0o755);
+    ensureWalletsDir(TEST_MIDNIGHT_DIR);
+    expect(fs.statSync(TEST_MIDNIGHT_DIR).mode & 0o777).toBe(0o700);
+    expect(fs.statSync(TEST_WALLETS_DIR).mode & 0o777).toBe(0o700);
   });
 });

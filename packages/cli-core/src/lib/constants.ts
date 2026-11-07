@@ -103,13 +103,18 @@ export const CACHE_DIR_NAME = 'cache';
 export const WALLETS_DIR_NAME = 'wallets';
 export const DEFAULT_WALLET_NAME = 'default';
 
+/** The longest wallet name: its file name, and the folders named after it, stay well inside any filesystem's limit. */
+export const MAX_WALLET_NAME_LENGTH = 64;
+
 /**
  * Validate a wallet name (not a path).
- * Rejects empty strings, path separators, '.json' suffix, '..' traversal,
- * and control characters. Returns true if the name is safe.
+ * Rejects empty strings, names longer than MAX_WALLET_NAME_LENGTH, path
+ * separators, '.json' suffix, '..' traversal, and control characters.
+ * Returns true if the name is safe.
  */
 export function isValidWalletName(name: string): boolean {
   if (!name || name !== name.trim()) return false;
+  if ([...name].length > MAX_WALLET_NAME_LENGTH) return false;
   if (/[\/\\]/.test(name)) return false;
   if (name.endsWith('.json')) return false;
   if (name === '.' || name === '..') return false;

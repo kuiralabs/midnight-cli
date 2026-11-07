@@ -181,3 +181,21 @@ describe('isVerbose', () => {
     expect(isVerbose(args)).toBe(true);
   });
 });
+
+// --flag=value was taken as a flag named "flag=value", refused as unknown with
+// no hint that a space was meant.
+describe('parseArgs: --flag=value', () => {
+  it('reads --flag=value as --flag value', () => {
+    expect(parseArgs(['balance', '--network=preview', '--json']).flags).toStrictEqual({ network: 'preview', json: true });
+  });
+
+  it('keeps every "=" after the first in the value, and a value that starts with "-"', () => {
+    expect(parseArgs(['x', '--node=ws://h:1/?a=b', '--amount=-5']).flags).toStrictEqual({ node: 'ws://h:1/?a=b', amount: '-5' });
+  });
+
+  it('reads --flag= as an empty value, never the next word', () => {
+    const args = parseArgs(['x', '--network=', 'preview']);
+    expect(args.flags).toStrictEqual({ network: '' });
+    expect(args.subcommand).toBe('preview');
+  });
+});

@@ -86,6 +86,22 @@ describe('readAddressBalance', () => {
     expect(indexer.subscriptions.map((s) => s.address)).toEqual([address]);
   });
 
+  // Anything else was sent to the indexer as it was, and failed there.
+  it.each([
+    ['not an address', 'notanaddress'],
+    ['an address with a broken checksum', () => rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed').slice(0, -1) + 'q'],
+  ])('refuses %s as a usage error, before asking the indexer', async (_what, given) => {
+    const address = typeof given === 'function' ? given() : given;
+    await expect(readAddressBalance(programHost('a'), address, { ...endpoints(), network: 'undeployed', forceFresh: true })).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('Invalid address') });
+    expect(indexer.subscriptions).toEqual([]);
+  });
+
+  it('refuses a shielded address as a usage error, saying its balance needs the wallet, before asking the indexer', async () => {
+    const address = rcKeys.shieldedAddresses(Buffer.from(SEED_A, 'hex')).undeployed;
+    await expect(readAddressBalance(programHost('a'), address, { ...endpoints(), network: 'undeployed', forceFresh: true })).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('--shielded') });
+    expect(indexer.subscriptions).toEqual([]);
+  });
+
   it('fails with NETWORK_ERROR when the indexer refuses the connection', async () => {
     const address = rcKeys.unshieldedAddress(Buffer.from(SEED_A, 'hex'), 'undeployed');
     await expect(readAddressBalance(programHost('a'), address, { ...endpoints(), indexerWS: `ws://127.0.0.1:${refusing.port}/api/v4/graphql/ws`, forceFresh: true })).rejects.toMatchObject({ code: 'NETWORK_ERROR' });

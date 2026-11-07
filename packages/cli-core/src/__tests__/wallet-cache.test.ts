@@ -6,7 +6,10 @@ import { randomBytes } from 'node:crypto';
 
 import { clearWalletCache } from '../lib/wallet-cache.ts';
 import { CACHE_VERSION } from '../lib/constants.ts';
-import { loadWalletCache, saveWalletCache, getCachePath } from '../lib/wallet-cache.ts';
+import { loadWalletCache, saveWalletCache, getCachePath, networkCacheFolder, walletCacheFileName } from '../lib/wallet-cache.ts';
+import { clearDustDirectCache, clearNativeDustCheckpoint, clearShieldedDirectCache } from '../lib/reader-cache-files.ts';
+import { InvalidNetworkError } from '../lib/network.ts';
+import { UsageError } from '../lib/errors.ts';
 
 const TEST_ADDRESS = 'mn_addr_preprod1mp06mtx1234567890abcdef';
 const TEST_NETWORK = 'preprod';
@@ -32,9 +35,10 @@ describe('wallet-cache', () => {
   });
 
   describe('getCachePath', () => {
-    it('returns path under the state root\'s cache/network/prefix.json', () => {
+    it('returns path under the state root\'s cache/network/wallet-<address hash>.json', () => {
       const path = getCachePath(TEST_ADDRESS, TEST_NETWORK, root);
-      expect(path).toBe(join(cacheDir, TEST_NETWORK, `${TEST_ADDRESS.slice(0, 20)}.json`));
+      expect(path).toBe(join(cacheDir, TEST_NETWORK, walletCacheFileName(TEST_ADDRESS)));
+      expect(walletCacheFileName(TEST_ADDRESS)).toMatch(/^wallet-[0-9a-f]{32}\.json$/);
     });
   });
 
@@ -241,6 +245,99 @@ describe('wallet-cache', () => {
       expect(loaded!.shielded).toBe('new-shielded');
       expect(loaded!.unshielded).toBe('new-unshielded');
       expect(loaded!.dust).toBe('new-dust');
+    });
+  });
+});
+
+// A network name is joined onto the cache folder, so only a network mn knows
+// is ever one: anything else (`..`, `../wallets`) would name a folder outside
+// it, whose `.json` files a clear deletes.
+describe('cache paths refuse a name that is not a network', () => {
+  let root: string;
+  beforeEach(() => {
+    root = makeTmpDir();
+    mkdirSync(join(root, 'wallets'), { recursive: true });
+    writeFileSync(join(root, 'wallets', 'alice.json'), '{}');
+    writeFileSync(join(root, 'config.json'), '{}');
+  });
+  afterEach(() => { rmSync(root, { recursive: true, force: true }); });
+
+  const kept = () => {
+    expect(existsSync(join(root, 'wallets', 'alice.json'))).toBe(true);
+    expect(existsSync(join(root, 'config.json'))).toBe(true);
+  };
+
+  it.each(['..', '../wallets', 'bogus'])('%s: every clear and path throws InvalidNetworkError, deleting nothing', (network) => {
+    expect(() => clearWalletCache(undefined, network, root)).toThrow(InvalidNetworkError);
+    expect(() => clearDustDirectCache(network, undefined, root)).toThrow(InvalidNetworkError);
+    expect(() => clearShieldedDirectCache(network, undefined, root)).toThrow(InvalidNetworkError);
+    expect(() => clearNativeDustCheckpoint(network, undefined, root)).toThrow(InvalidNetworkError);
+    expect(() => getCachePath(TEST_ADDRESS, network, root)).toThrow(InvalidNetworkError);
+    expect(() => networkCacheFolder(network, root)).toThrow(/Invalid network/);
+    kept();
+  });
+
+  it('is a usage error (INVALID_ARGS)', () => {
+    let thrown: unknown;
+    try { clearWalletCache(undefined, '../wallets', root); } catch (err) { thrown = err; }
+    expect(thrown).toBeInstanceOf(UsageError);
+    expect((thrown as UsageError).code).toBe('INVALID_ARGS');
+  });
+});
+
+// Every undeployed address starts `mn_addr_undeployed1` (19 characters), so a
+// file named by the first 20 put many wallets in one: each overwrote the
+// other's state, and clearing one wallet's cache cleared the other's.
+describe('two wallets whose addresses share their first characters', () => {
+  const ALICE = 'mn_addr_undeployed1q' + 'a'.repeat(40);
+  const BOB = 'mn_addr_undeployed1q' + 'b'.repeat(40);
+  const facadeOf = (tag: string) => ({
+    shielded: { serializeState: async () => `${tag}-shielded` },
+    unshielded: { serializeState: async () => `${tag}-unshielded` },
+    dust: { serializeState: async () => `${tag}-dust` },
+  });
+  let root: string;
+  beforeEach(() => { root = makeTmpDir(); });
+  afterEach(() => { rmSync(root, { recursive: true, force: true }); });
+
+  it('keep a cache file each', async () => {
+    expect(getCachePath(ALICE, 'undeployed', root)).not.toBe(getCachePath(BOB, 'undeployed', root));
+    await saveWalletCache(ALICE, 'undeployed', facadeOf('alice'), root);
+    await saveWalletCache(BOB, 'undeployed', facadeOf('bob'), root);
+    expect(loadWalletCache(ALICE, 'undeployed', root)?.dust).toBe('alice-dust');
+    expect(loadWalletCache(BOB, 'undeployed', root)?.dust).toBe('bob-dust');
+  });
+
+  it('clearing one leaves the other', async () => {
+    await saveWalletCache(ALICE, 'undeployed', facadeOf('alice'), root);
+    await saveWalletCache(BOB, 'undeployed', facadeOf('bob'), root);
+    clearWalletCache(ALICE, 'undeployed', root);
+    expect(loadWalletCache(ALICE, 'undeployed', root)).toBeNull();
+    expect(loadWalletCache(BOB, 'undeployed', root)?.dust).toBe('bob-dust');
+  });
+
+  describe('a cache an earlier mn kept under the shared name', () => {
+    const sharedName = (address: string) => join(root, 'cache', 'undeployed', `${address.slice(0, 20)}.json`);
+    const writeShared = (address: string) => {
+      mkdirSync(join(root, 'cache', 'undeployed'), { recursive: true });
+      writeFileSync(sharedName(address), JSON.stringify({ version: CACHE_VERSION, network: 'undeployed', address, timestamp: 'x', wallets: { shielded: 's', unshielded: 'u', dust: 'd' } }));
+    };
+
+    it('is not read', () => {
+      writeShared(ALICE);
+      expect(loadWalletCache(ALICE, 'undeployed', root)).toBeNull();
+    });
+
+    it('is removed when the wallet\'s cache is saved', async () => {
+      writeShared(ALICE);
+      await saveWalletCache(ALICE, 'undeployed', facadeOf('alice'), root);
+      expect(existsSync(sharedName(ALICE))).toBe(false);
+    });
+
+    it('is removed when the wallet\'s cache is cleared', () => {
+      writeShared(ALICE);
+      clearWalletCache(ALICE, 'undeployed', root);
+      expect(existsSync(sharedName(ALICE))).toBe(false);
     });
   });
 });

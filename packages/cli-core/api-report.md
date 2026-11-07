@@ -116,6 +116,9 @@ export interface CliConfig {
     'indexer-ws'?: string;
     wallet?: string;
 }
+export declare class CorruptConfigError extends UsageError {
+    constructor(configPath: string, reason: string);
+}
 export declare function getConfigValue(key: string, configDir: string, scope?: NetworkName): string;
 export declare function getEndpointOverridesForNetwork(config: CliConfig, networkName: NetworkName): NetworkEndpointOverrides;
 export declare function loadCliConfig(configDir: string): CliConfig;
@@ -269,6 +272,7 @@ export interface RpcHandlerContext {
 }
 export declare const BALANCE_CHECK_TIMEOUT_MS = 60000;
 export declare const DASHBOARD_BASE_URL = "https://midnight-comp-tracker.vercel.app";
+export declare const DEFAULT_CONFIG_FILENAME = "config.json";
 export declare const DEFAULT_SERVE_PORT = 9932;
 export declare const DEFAULT_WALLET_FILENAME = "wallet.json";
 export declare const DEFAULT_WALLET_NAME = "default";
@@ -277,6 +281,7 @@ export declare const FILE_MODE = 384;
 export declare const GENESIS_SEED = "0000000000000000000000000000000000000000000000000000000000000001";
 export declare function isValidWalletName(name: string): boolean;
 export declare const LOCALNET_DIR_NAME = "localnet";
+export declare const MAX_WALLET_NAME_LENGTH = 64;
 export declare const MIDNIGHT_DIR = ".midnight";
 export declare const NATIVE_TOKEN_TYPE = "0000000000000000000000000000000000000000000000000000000000000000";
 export declare const SYNC_HEAP_MIN_GAIN_MB = 512;
@@ -290,6 +295,12 @@ export declare function readJsonIfPresent<T>(file: string): T | undefined;
 export declare function writeJsonDurably(file: string, value: unknown, { exclusive }?: {
     exclusive?: boolean;
 }): void;
+export declare function assertValidWalletName(name: string): void;
+export declare class InvalidWalletNameError extends UsageError {
+    constructor(name: string, where?: string, fix?: string);
+}
+export declare function ensureOwnerOnlyDir(dir: string): void;
+export declare function narrowToOwnerOnly(file: string): void;
 export declare function formatWait(ms: number): string;
 export declare function dustShortError(have: bigint, needed: bigint, waitMs: number | null): DustRequiredError;
 export declare const OWN_COMMAND_DUST_WAIT_MS: number;
@@ -600,6 +611,7 @@ export declare class AmbiguousLocalStacksError extends Error {
     constructor(found: LocalStackPorts);
 }
 export declare function applyEndpointOverrides(config: NetworkConfig, flagOverrides: EndpointOverrides, networkName: NetworkName, configDir: string): NetworkConfig;
+export declare function assertValidNetworkName(name: string): asserts name is NetworkName;
 export declare function detectLocalStacks(settings: Pick<Settings, 'isLocalDetectOff'>): LocalStackPorts;
 export declare function detectNetworkFromAddress(address: string): NetworkName | null;
 export declare function endpointFlags(e: EndpointOverrides): Record<string, string>;
@@ -611,6 +623,9 @@ export interface EndpointOverrides {
 export declare function getNetworkConfig(name: NetworkName): NetworkConfig;
 export declare function getValidNetworkNames(): readonly string[];
 export declare function isNamedOnlyNetwork(name: string): boolean;
+export declare class InvalidNetworkError extends UsageError {
+    constructor(name: string, valid?: readonly string[]);
+}
 export declare function isValidNetworkName(name: string): name is NetworkName;
 export declare const LEDGER_9_FORK_VERSION = 2000000n;
 export declare function looksLikeShieldedAddress(text: string): boolean;
@@ -1500,6 +1515,7 @@ export declare function saveWalletCache(address: string, network: string, facade
         serializeState(): Promise<string>;
     };
 }, root: string, chainId?: string): Promise<void>;
+export declare function walletCacheFileName(address: string): string;
 export declare function validateWalletCacheChainId(network: string, currentChainId: string | null, root: string): string[];
 export interface WalletCacheData {
     shielded: string;

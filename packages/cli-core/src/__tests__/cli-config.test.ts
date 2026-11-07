@@ -2,16 +2,19 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { loadCliConfig, saveCliConfig, getConfigValue, setConfigValue, unsetConfigValue, getValidConfigKeys, getBlockfrostProjectId, getSdkSetOverride } from '../lib/cli-config.ts';
+import { CorruptConfigError, loadCliConfig, saveCliConfig, getConfigValue, setConfigValue, unsetConfigValue, getValidConfigKeys, getBlockfrostProjectId, getSdkSetOverride } from '../lib/cli-config.ts';
 import { NetworkNotNamedError, sdkSetOfNetwork } from '../lib/network.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
-import { getCachePath, networkCacheFolder } from '../lib/wallet-cache.ts';
+import { getCachePath, networkCacheFolder, walletCacheFileName } from '../lib/wallet-cache.ts';
 import { getDustCachePath } from '../lib/reader-cache-files.ts';
 
 const TEST_DIR = path.join(os.tmpdir(), `midnight-cli-config-test-${process.pid}`);
 
 beforeEach(() => {
   fs.mkdirSync(TEST_DIR, { recursive: true });
+  // The wallets the tests make active: config set wallet takes only a wallet that exists.
+  fs.mkdirSync(path.join(TEST_DIR, 'wallets'));
+  for (const name of ['alice', 'bob']) fs.writeFileSync(path.join(TEST_DIR, 'wallets', `${name}.json`), '{}');
 });
 
 afterEach(() => {
@@ -48,16 +51,25 @@ describe('loadCliConfig', () => {
     expect(config.network).toBe('undeployed');
   });
 
-  it('falls back to default for corrupted JSON', () => {
-    fs.writeFileSync(path.join(TEST_DIR, 'config.json'), '{broken json!!');
-    const config = loadCliConfig(TEST_DIR);
-    expect(config.network).toBe('undeployed');
+  // A file it can't read used to be taken as the defaults (another network, no
+  // endpoints), and the next config set wrote the defaults over it.
+  it.each([
+    ['corrupted JSON', '{broken json!!'],
+    ['an empty file', ''],
+    ['JSON that is not an object', '["undeployed"]'],
+  ])('refuses %s, saying how to fix it, as a usage error', (_what, content) => {
+    fs.writeFileSync(path.join(TEST_DIR, 'config.json'), content);
+    expect(() => loadCliConfig(TEST_DIR)).toThrow(CorruptConfigError);
+    expect(() => loadCliConfig(TEST_DIR)).toThrow(/can't read its config file .*move it aside/s);
+    expect(() => loadCliConfig(TEST_DIR)).toThrow(expect.objectContaining({ code: 'INVALID_ARGS' }));
   });
 
-  it('falls back to default for empty file', () => {
-    fs.writeFileSync(path.join(TEST_DIR, 'config.json'), '');
-    const config = loadCliConfig(TEST_DIR);
-    expect(config.network).toBe('undeployed');
+  it('never writes over a file it can\'t read', () => {
+    const file = path.join(TEST_DIR, 'config.json');
+    fs.writeFileSync(file, '{broken json!!');
+    expect(() => setConfigValue('network', 'preview', TEST_DIR)).toThrow(CorruptConfigError);
+    expect(() => unsetConfigValue('node', TEST_DIR)).toThrow(CorruptConfigError);
+    expect(fs.readFileSync(file, 'utf8')).toBe('{broken json!!');
   });
 
   it('falls back to default when network field is missing from JSON', () => {
@@ -251,6 +263,16 @@ describe('wallet config key', () => {
 
   it('rejects whitespace-only wallet name', () => {
     expect(() => setConfigValue('wallet', '   ', TEST_DIR)).toThrow('Invalid wallet name');
+  });
+
+  it('refuses a wallet with no file, as wallet use does, leaving the one set', () => {
+    setConfigValue('wallet', 'alice', TEST_DIR);
+    expect(() => setConfigValue('wallet', 'nope', TEST_DIR)).toThrow('Wallet "nope" not found');
+    expect(getConfigValue('wallet', TEST_DIR)).toBe('alice');
+  });
+
+  it('refuses a name longer than a wallet name may be', () => {
+    expect(() => setConfigValue('wallet', 'x'.repeat(65), TEST_DIR)).toThrow('at most 64');
   });
 
   it('returns (not set) when wallet is not configured', () => {
@@ -664,12 +686,12 @@ describe('the SDK set a network runs on', () => {
   it('is the table\'s until config gives the network another, and the caches follow it to a folder of the set\'s own', () => {
     expect(sdkSetOfNetwork('undeployed', root)).toBe('rc');
     expect(networkCacheFolder('undeployed', root)).toBe('undeployed');
-    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)).toBe(path.join(root, 'cache', 'undeployed', 'mn_addr_undeployed1a.json'));
+    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)).toBe(path.join(root, 'cache', 'undeployed', walletCacheFileName('mn_addr_undeployed1abcdefghijklmnopqrst')));
 
     setConfigValue('sdk-set', 'beta', root, 'undeployed');
     expect(sdkSetOfNetwork('undeployed', root)).toBe('beta');
     expect(networkCacheFolder('undeployed', root)).toBe('undeployed.beta');
-    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)).toBe(path.join(root, 'cache', 'undeployed.beta', 'mn_addr_undeployed1a.json'));
+    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)).toBe(path.join(root, 'cache', 'undeployed.beta', walletCacheFileName('mn_addr_undeployed1abcdefghijklmnopqrst')));
     expect(getDustCachePath('undeployed', 'ab'.repeat(32), root)).toBe(path.join(root, 'cache', 'undeployed.beta', `dust-${'ab'.repeat(10)}.json`));
 
     // Back on the network's own set, the caches it kept there are the ones read.
@@ -677,5 +699,20 @@ describe('the SDK set a network runs on', () => {
     expect(networkCacheFolder('undeployed', root)).toBe('undeployed');
     expect(sdkSetOfNetwork('stagenet', root)).toBe('beta');
     expect(networkCacheFolder('stagenet', root)).toBe('stagenet');
+  });
+});
+
+// config.json can hold a Blockfrost project id. A folder or file an earlier mn
+// left readable to others is narrowed to its owner when mn next writes it.
+describe('the config file\'s permissions', () => {
+  it('narrows an existing 0755 folder and 0644 file to 0700 and 0600 on save', () => {
+    const root = path.join(TEST_DIR, 'wide');
+    fs.mkdirSync(root, { mode: 0o755 });
+    fs.chmodSync(root, 0o755);
+    fs.writeFileSync(path.join(root, 'config.json'), JSON.stringify({ network: 'undeployed' }), { mode: 0o644 });
+    fs.chmodSync(path.join(root, 'config.json'), 0o644);
+    setConfigValue('network', 'preview', root);
+    expect(fs.statSync(root).mode & 0o777).toBe(0o700);
+    expect(fs.statSync(path.join(root, 'config.json')).mode & 0o777).toBe(0o600);
   });
 });

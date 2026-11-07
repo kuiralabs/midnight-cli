@@ -8,7 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { WrongPassphraseError, FILE_MODE, createHost } from '@kuiralabs/midnight-cli-core';
+import { WrongPassphraseError, FILE_MODE, createHost, sealSecret } from '@kuiralabs/midnight-cli-core';
 import { createTerminalPrompter } from '@kuiralabs/midnight-cli-core/ui';
 import {
   NoPassphraseError,
@@ -123,3 +123,37 @@ describe('a new secret', () => {
   });
 });
 
+
+// The keystore is what holds mn to one passphrase. Deleted, with sealed
+// wallets left, the next new secret used to set whatever passphrase it was
+// given, and mn could open none of the wallets sealed under the first.
+describe('sealed wallets whose keystore is gone', () => {
+  const sealWalletAt = (root: string, name: string, passphrase: string) => {
+    const dir = path.join(root, 'wallets');
+    fs.mkdirSync(dir, { recursive: true });
+    const sealed = sealSecret(Buffer.from(JSON.stringify({ seed: 'ab'.repeat(32) }), 'utf8'), passphrase, 'wallet');
+    fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify({ addresses: {}, createdAt: '2026-11-07T00:00:00.000Z', sealed }));
+  };
+
+  it('refuses a new passphrase that does not open them, setting none', async () => {
+    const root = stateRootIn(home);
+    sealWalletAt(root, 'alice', PASSPHRASE);
+    await expect(passphraseForNewSecret(host, root, { env: { [PASSPHRASE_ENV]: 'a different passphrase' } })).rejects.toThrow(WrongPassphraseError);
+    await expect(passphraseForNewSecret(host, root, { env: { [PASSPHRASE_ENV]: 'a different passphrase' } })).rejects.toThrow(/keystore .* is missing/);
+    expect(isPassphraseSet(root)).toBe(false);
+  });
+
+  it('restores the keystore with the passphrase they were sealed under', async () => {
+    const root = stateRootIn(home);
+    sealWalletAt(root, 'alice', PASSPHRASE);
+    expect(await passphraseForNewSecret(host, root, { env: { [PASSPHRASE_ENV]: PASSPHRASE } })).toBe(PASSPHRASE);
+    expect(isPassphraseSet(root)).toBe(true);
+    await expect(unlockPassphrase(createHost(), root, { env: { [PASSPHRASE_ENV]: 'a different passphrase' } })).rejects.toThrow(WrongPassphraseError);
+  });
+
+  it('says how to restore it when a sealed wallet is opened', async () => {
+    const root = stateRootIn(home);
+    sealWalletAt(root, 'alice', PASSPHRASE);
+    await expect(unlockPassphrase(createHost(), root, { env: { [PASSPHRASE_ENV]: PASSPHRASE } })).rejects.toThrow(/keystore .* is missing.*midnight wallet protect/);
+  });
+});

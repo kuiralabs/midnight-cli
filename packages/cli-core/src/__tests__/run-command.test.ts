@@ -122,8 +122,8 @@ describe('runCommand', () => {
     expect(results).toStrictEqual([{ ran: 'noticed' }]);
   });
 
-  it('refuses an unavailable command with its message, loading nothing', async () => {
-    await expect(run(command('refused', { unavailable: 'not now' }))).rejects.toThrow(new Error('not now'));
+  it('refuses an unavailable command with its message, as a usage error, loading nothing', async () => {
+    await expect(run(command('refused', { unavailable: 'not now' }))).rejects.toMatchObject({ code: 'INVALID_ARGS', message: 'not now' });
     expect(loaded).toStrictEqual([]);
   });
 

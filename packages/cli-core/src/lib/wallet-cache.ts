@@ -1,12 +1,13 @@
 // Wallet state cache — persist serialized wallet state to disk for fast restore.
 // On subsequent runs, the SDK restores from checkpoint and only syncs delta.
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, readdirSync, renameSync } from 'node:fs';
+import { existsSync, writeFileSync, readFileSync, unlinkSync, readdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
-import { CACHE_VERSION, CACHE_DIR_NAME, DIR_MODE, FILE_MODE } from './constants.ts';
-import { defaultSdkSetOf, isValidNetworkName, sdkSetOfNetwork } from './network.ts';
+import { CACHE_VERSION, CACHE_DIR_NAME, FILE_MODE } from './constants.ts';
+import { ensureOwnerOnlyDir } from './owner-only.ts';
+import { assertValidNetworkName, defaultSdkSetOf, sdkSetOfNetwork } from './network.ts';
 
 export interface WalletCacheData {
   shielded: string;
@@ -38,30 +39,52 @@ export function cacheRootDir(root: string): string {
  * A network's folder under the cache folder: the network's name, or
  * `<network>.<set>` while `midnight config set sdk-set` runs it on another SDK
  * set, so one set never reads the state the other wrote. The set is the one
- * the config under the state root `root` gives.
+ * the config under the state root `root` gives. Any other name is refused
+ * (InvalidNetworkError): it would name a folder anywhere (`..`, `../wallets`),
+ * and clearing a cache deletes the `.json` files in it.
  */
 export function networkCacheFolder(network: string, root: string): string {
-  if (!isValidNetworkName(network)) return network;
+  assertValidNetworkName(network);
   const set = sdkSetOfNetwork(network, root);
   return set === defaultSdkSetOf(network) ? network : `${network}.${set}`;
 }
 
-/** How much of an address or key names its cache file: enough to keep them apart, short enough for any filesystem. */
+/** How much of a public key (hex) names its Dust or shielded cache file: enough to keep keys apart, short enough for any filesystem. */
 export const CACHE_KEY_PREFIX_LENGTH = 20;
 
-/** The part of an address or key a cache file is named by. */
-export function cacheKeyOf(addressOrKey: string): string {
-  return addressOrKey.slice(0, CACHE_KEY_PREFIX_LENGTH);
+/** The part of a public key a cache file is named by. */
+export function cacheKeyOf(key: string): string {
+  return key.slice(0, CACHE_KEY_PREFIX_LENGTH);
+}
+
+/**
+ * A wallet sync cache's file name: a hash of the whole address. An address's
+ * first characters are its network's prefix (`mn_addr_undeployed1` is 19), so
+ * a name cut from the address put many wallets in one file.
+ */
+export function walletCacheFileName(address: string): string {
+  return `wallet-${createHash('sha256').update(address).digest('hex').slice(0, 32)}.json`;
 }
 
 /**
  * Derive the cache file path for a given address and network.
- * Path: <cache folder>/<network>/<address-prefix>.json
+ * Path: <cache folder>/<network>/wallet-<address hash>.json
  */
 export function getCachePath(address: string, network: string, root: string): string {
-  const base = cacheRootDir(root);
-  const prefix = cacheKeyOf(address);
-  return join(base, networkCacheFolder(network, root), `${prefix}.json`);
+  return join(cacheRootDir(root), networkCacheFolder(network, root), walletCacheFileName(address));
+}
+
+/**
+ * Where an earlier mn kept a wallet's sync cache: the address's first 20
+ * characters, a name wallets shared. Never read: the file is removed when the
+ * wallet's cache is saved or cleared, so it doesn't stay behind.
+ */
+function sharedNameCachePath(address: string, network: string, root: string): string {
+  return join(cacheRootDir(root), networkCacheFolder(network, root), `${address.slice(0, 20)}.json`);
+}
+
+function removeSharedNameCache(address: string, network: string, root: string): void {
+  try { unlinkSync(sharedNameCachePath(address, network, root)); } catch { /* none there */ }
 }
 
 /**
@@ -136,10 +159,8 @@ export async function saveWalletCache(
   const path = getCachePath(address, network, root);
   const dir = dirname(path);
 
-  // Ensure directory exists
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true, mode: DIR_MODE });
-  }
+  ensureOwnerOnlyDir(cacheRootDir(root));
+  ensureOwnerOnlyDir(dir);
 
   // Atomic write: temp file + rename
   const tmpPath = path + `.tmp.${randomBytes(4).toString('hex')}`;
@@ -151,6 +172,7 @@ export async function saveWalletCache(
     try { unlinkSync(tmpPath); } catch { /* best-effort */ }
     throw err;
   }
+  removeSharedNameCache(address, network, root);
 }
 
 /**
@@ -208,6 +230,7 @@ export function clearWalletCache(address: string | undefined, network: string | 
     // Delete specific cache file
     const path = getCachePath(address, network, root);
     try { unlinkSync(path); } catch { /* not found is ok */ }
+    removeSharedNameCache(address, network, root);
     return;
   }
 

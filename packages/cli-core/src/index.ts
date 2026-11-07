@@ -27,7 +27,7 @@ export {
   type CommandOutcome, createCallContext, runHandler, SecondResultError
 } from './lib/call-context.ts';
 export {
-  type CliConfig, getConfigValue, getEndpointOverridesForNetwork, loadCliConfig, saveCliConfig,
+  type CliConfig, CorruptConfigError, getConfigValue, getEndpointOverridesForNetwork, loadCliConfig, saveCliConfig,
   setConfigValue
 } from './lib/cli-config.ts';
 export {
@@ -44,12 +44,14 @@ export {
   type RpcHandlerContext
 } from './lib/connector-api.ts';
 export {
-  BALANCE_CHECK_TIMEOUT_MS, DASHBOARD_BASE_URL, DEFAULT_SERVE_PORT, DEFAULT_WALLET_FILENAME,
+  BALANCE_CHECK_TIMEOUT_MS, DASHBOARD_BASE_URL, DEFAULT_CONFIG_FILENAME, DEFAULT_SERVE_PORT, DEFAULT_WALLET_FILENAME,
   DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE, GENESIS_SEED, isValidWalletName, LOCALNET_DIR_NAME,
-  MIDNIGHT_DIR, NATIVE_TOKEN_TYPE, SYNC_HEAP_MIN_GAIN_MB, SYNC_HEAP_RAM_FRACTION, SYNC_HEAP_TARGET_MB,
+  MAX_WALLET_NAME_LENGTH, MIDNIGHT_DIR, NATIVE_TOKEN_TYPE, SYNC_HEAP_MIN_GAIN_MB, SYNC_HEAP_RAM_FRACTION, SYNC_HEAP_TARGET_MB,
   WALLETS_DIR_NAME
 } from './lib/constants.ts';
 export { FileExistsError, readJsonIfPresent, writeJsonDurably } from './lib/durable-file.ts';
+export { assertValidWalletName, InvalidWalletNameError } from './lib/wallet-name.ts';
+export { ensureOwnerOnlyDir, narrowToOwnerOnly } from './lib/owner-only.ts';
 export { formatWait } from './lib/duration.ts';
 export { dustShortError, OWN_COMMAND_DUST_WAIT_MS } from './lib/dust-wait.ts';
 export {
@@ -81,9 +83,9 @@ export {
 } from './lib/keystore.ts';
 export { MainnetRefusedError, refuseOnMainnet } from './lib/mainnet-refusal.ts';
 export {
-  addressPrefix, AmbiguousLocalStacksError, applyEndpointOverrides, detectLocalStacks, detectNetworkFromAddress,
+  addressPrefix, AmbiguousLocalStacksError, applyEndpointOverrides, assertValidNetworkName, detectLocalStacks, detectNetworkFromAddress,
   endpointFlags, type EndpointOverrides, getNetworkConfig, getValidNetworkNames, isNamedOnlyNetwork,
-  isValidNetworkName, LEDGER_9_FORK_VERSION, looksLikeShieldedAddress, looksLikeUnshieldedAddress,
+  InvalidNetworkError, isValidNetworkName, LEDGER_9_FORK_VERSION, looksLikeShieldedAddress, looksLikeUnshieldedAddress,
   type NetworkConfig, type NetworkName, NetworkNotNamedError, networksOnSdkSet, resolveNetworkConfig,
   sdkSetOfNetwork
 } from './lib/network.ts';

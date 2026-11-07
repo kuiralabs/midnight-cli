@@ -16,7 +16,7 @@ const isValueToken = (token: string): boolean => !token.startsWith('-') || /^-\d
 /**
  * Parse process.argv into structured command, subcommand, positionals, and flags.
  * First non-flag arg = command, second = subcommand, rest = positionals.
- * --key value pairs become flags. --key at end of argv becomes boolean true.
+ * --key value and --key=value pairs become flags. --key at end of argv becomes boolean true.
  */
 export function parseArgs(argv?: string[]): ParsedArgs {
   const args = argv ?? process.argv.slice(2);
@@ -27,7 +27,12 @@ export function parseArgs(argv?: string[]): ParsedArgs {
   while (i < args.length) {
     const arg = args[i]!;
 
-    if (arg.startsWith('--')) {
+    if (arg.startsWith('--') && arg.includes('=')) {
+      // --key=value: the value is everything after the first '=' (it may hold '=' itself, or be empty).
+      const at = arg.indexOf('=');
+      flags[arg.slice(2, at)] = arg.slice(at + 1);
+      i += 1;
+    } else if (arg.startsWith('--')) {
       const key = arg.slice(2);
       const next = args[i + 1];
       if (next !== undefined && isValueToken(next)) {

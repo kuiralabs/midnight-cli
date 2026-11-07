@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { captureCommand, createHost, type Host, parseArgs, MIDNIGHT_DIR, loadCliConfig, sdkSetOf, readOpenOffers, recordOpenOffer, type OpenOffer, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
-import { cacheRootDir, getCachePath, networkCacheFolder } from '@kuiralabs/midnight-cli-core/engine';
+import { cacheRootDir, getCachePath, networkCacheFolder, walletCacheFileName } from '@kuiralabs/midnight-cli-core/engine';
 import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
 import { ownCall } from './helpers/own-call.ts';
 import { installedCommands } from '../lib/installed-commands.ts';
@@ -113,8 +113,8 @@ describe('two hosts with different state roots', () => {
     expect(networkCacheFolder('undeployed', rootB)).toBe('undeployed');
     const cacheA = getCachePath(address, 'undeployed', rootA);
     const cacheB = getCachePath(address, 'undeployed', rootB);
-    expect(cacheA).toBe(path.join(rootA, 'cache', 'undeployed.beta', 'mn_addr_undeployed1a.json'));
-    expect(cacheB).toBe(path.join(rootB, 'cache', 'undeployed', 'mn_addr_undeployed1a.json'));
+    expect(cacheA).toBe(path.join(rootA, 'cache', 'undeployed.beta', walletCacheFileName(address)));
+    expect(cacheB).toBe(path.join(rootB, 'cache', 'undeployed', walletCacheFileName(address)));
 
     // Clearing one host's caches leaves the other's.
     for (const file of [cacheA, cacheB]) {

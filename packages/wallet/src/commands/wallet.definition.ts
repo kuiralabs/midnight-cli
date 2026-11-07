@@ -100,8 +100,9 @@ export const walletDefinition: CommandDefinition = {
       activeNetwork: 'The active network (generate, list, info)',
       createdAt: 'ISO 8601 creation timestamp (generate, info)',
       file: 'Wallet file path (generate, info)',
-      seed: 'Hex-encoded seed (generate, seed)',
-      mnemonic: 'BIP-39 mnemonic, 24 words, when the wallet has one (generate, seed)',
+      seed: 'Hex-encoded seed (generate, seed; never over MCP)',
+      mnemonic: 'BIP-39 mnemonic, 24 words, when the wallet has one (generate, seed; never over MCP)',
+      seedShown: 'Over MCP (generate): that the seed and mnemonic are not returned, and the command that shows them',
       entropy: 'The 32-byte BIP-39 entropy (seed with --entropy)',
       wallets: 'Array of wallet info objects (list)',
       wallet: 'The wallet acted on (use, remove)',
@@ -120,7 +121,7 @@ export const walletDefinition: CommandDefinition = {
     tools: [
       {
         name: 'midnight_wallet_generate',
-        description: 'Create wallet.',
+        description: 'Create a wallet and make it the active wallet, as `midnight wallet generate` does. Its seed and mnemonic are not returned; the user sees them at a terminal with `midnight wallet seed <name>`.',
         annotations: { destructiveHint: true },
         params: [
           { name: 'name', schema: { type: 'string' } },

@@ -11,7 +11,7 @@ import { MINIMAL_FLAG, type ParsedArgs } from './argv.ts';
 import { createCallContext, runHandler, type CallOutput, type CommandOutcome } from './call-context.ts';
 import type { CommandDefinition, CommandRegistry, RegisteredTool } from './command-definition.ts';
 import { commandOwnCodes, declaredSets } from './command-definition.ts';
-import { CommandFailedError } from './errors.ts';
+import { CommandFailedError, UsageError } from './errors.ts';
 import type { Host } from './host.ts';
 import type { Payer } from './payer.ts';
 
@@ -45,7 +45,8 @@ const provided = async <T>(value: Provided<T>): Promise<T> => (typeof value === 
  */
 export async function runCommand<Protector = unknown>(definition: RunnableDefinition, args: ParsedArgs, run: CommandRun<Protector> & { readonly output: CallOutput }): Promise<CommandOutcome | void> {
   const { payer, protectors, notice, unavailable } = definition.shell;
-  if (unavailable !== undefined) throw new Error(unavailable);
+  // Refused like an unknown command: a usage error (exit 2), where its --help shows the general help (exit 0).
+  if (unavailable !== undefined) throw new UsageError(unavailable);
   if (notice !== undefined) run.output.stderr(notice);
   const { default: handler } = await definition.load();
   const given = {

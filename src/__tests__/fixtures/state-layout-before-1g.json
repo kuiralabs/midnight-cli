@@ -29,7 +29,7 @@
     "check"
   ],
   "paths": {
-    "walletCache": ".midnight/cache/undeployed/mn_addr_undeployed1a.json",
+    "walletCache": ".midnight/cache/undeployed/wallet-476ce96c924ce4ac7c3fe2e4231281c0.json",
     "dustCache": ".midnight/cache/undeployed/dust-abababababababababab.json",
     "shieldedCache": ".midnight/cache/undeployed/shielded-cdcdcdcdcdcdcdcdcdcd.json",
     "compose": ".midnight/localnet/compose.yml",

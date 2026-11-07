@@ -12,9 +12,9 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
   // ── Parse args ──
 
   const portStr = getFlag(args, 'port');
-  const port = portStr ? parseInt(portStr, 10) : DEFAULT_SERVE_PORT;
+  const port = portStr !== undefined && /^\d+$/.test(portStr) ? Number(portStr) : portStr === undefined ? DEFAULT_SERVE_PORT : Number.NaN;
   if (Number.isNaN(port) || port < 1 || port > 65535) {
-    throw new Error(`Invalid port: "${portStr}" — must be 1-65535`);
+    throw new UsageError(`Invalid port: "${portStr}" — must be 1-65535`);
   }
 
   const approveAll = hasFlag(args, 'approve-all');

@@ -8,7 +8,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DIR_MODE, FILE_MODE, throwIfCancelled, UsageError, openSecret, sealSecret, type Prompter, defineHostSlot, type Host, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
+import { ensureOwnerOnlyDir, FILE_MODE, throwIfCancelled, UsageError, isSealedSecret, openSecret, sealSecret, type Prompter, defineHostSlot, type Host, PASSPHRASE_ENV, WrongPassphraseError } from '@kuiralabs/midnight-cli-core';
+import { getDefaultWalletPath, getWalletsDir } from './wallet-paths.ts';
 
 /** The variable a non-interactive run sets the passphrase in (named in settings.ts). */
 export { PASSPHRASE_ENV };
@@ -69,9 +70,48 @@ export function isPassphraseSet(root: string): boolean {
 export function establishPassphrase(root: string, passphrase: string): void {
   const file = keystorePath(root);
   if (fs.existsSync(file)) throw new UsageError(`mn's passphrase is already set (${file}).`);
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: DIR_MODE });
+  ensureOwnerOnlyDir(path.dirname(file));
   // `wx`: never over a check another process wrote meanwhile.
   fs.writeFileSync(file, JSON.stringify({ check: sealSecret(CHECK_VALUE, passphrase, 'keystore-check') }, null, 2) + '\n', { mode: FILE_MODE, flag: 'wx' });
+}
+
+/**
+ * The sealed secret of one wallet under the state root `root`, or undefined
+ * when no wallet there is sealed. Without the keystore it is what tells the
+ * passphrase the wallets were sealed under from any other.
+ */
+function aSealedWalletSecret(root: string): unknown {
+  const dir = getWalletsDir(root);
+  const files = [
+    ...(fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort().map((f) => path.join(dir, f)) : []),
+    getDefaultWalletPath(root),
+  ];
+  for (const file of files) {
+    try {
+      const sealed = (JSON.parse(fs.readFileSync(file, 'utf8')) as { sealed?: unknown }).sealed;
+      if (isSealedSecret(sealed)) return sealed;
+    } catch { /* missing or not a wallet file: not one to check against */ }
+  }
+  return undefined;
+}
+
+/**
+ * Refuses, where the keystore is missing but wallets are sealed (it was
+ * deleted, or never copied with them), a passphrase that doesn't open them:
+ * set as the one passphrase, it would lock mn out of every one of them.
+ */
+function assertOpensSealedWallets(root: string, passphrase: string): void {
+  const sealed = aSealedWalletSecret(root);
+  if (sealed === undefined) return;
+  try {
+    openSecret(sealed, passphrase, 'wallet');
+  } catch (error) {
+    if (!(error instanceof WrongPassphraseError)) throw error;
+    throw new WrongPassphraseError(
+      `mn's keystore (${keystorePath(root)}) is missing, and the wallets in ${getWalletsDir(root)} are sealed under another passphrase.\n`
+      + 'Give the passphrase they were sealed with: it restores the keystore. A different one is never set, so the wallets stay readable.',
+    );
+  }
 }
 
 /** Refuses `passphrase` unless it is the one set. */
@@ -105,7 +145,12 @@ export async function unlockPassphrase(host: PassphraseHost, root: string, sourc
   const read = withHostPassphrase(host, source);
   const fromEnv = read.env?.[PASSPHRASE_ENV];
   if (known !== undefined && (fromEnv === undefined || fromEnv === '' || fromEnv === known)) return known;
-  if (!isPassphraseSet(root)) throw new UsageError('mn has no passphrase yet. Set one with: midnight wallet protect');
+  if (!isPassphraseSet(root)) {
+    if (aSealedWalletSecret(root) !== undefined) {
+      throw new UsageError(`mn's keystore (${keystorePath(root)}) is missing, though wallets here are sealed. Restore it with: midnight wallet protect, giving the passphrase they were sealed with.`);
+    }
+    throw new UsageError('mn has no passphrase yet. Set one with: midnight wallet protect');
+  }
   const passphrase = await readPassphrase(host.prompter, read);
   checkPassphrase(root, passphrase);
   unlocked.set(root, passphrase);
@@ -115,10 +160,13 @@ export async function unlockPassphrase(host: PassphraseHost, root: string, sourc
 /**
  * The passphrase to seal a new secret under: the one set, or, on a machine
  * with none yet, a new one (asked twice at a terminal), which is then set.
+ * Where wallets are sealed but the keystore is gone, only the passphrase
+ * they were sealed under is set.
  */
 export async function passphraseForNewSecret(host: PassphraseHost, root: string, source: PassphraseSource = {}): Promise<string> {
   if (isPassphraseSet(root)) return unlockPassphrase(host, root, source);
   const passphrase = await readPassphrase(host.prompter, { ...withHostPassphrase(host, source), confirm: true });
+  assertOpensSealedWallets(root, passphrase);
   if ([...passphrase].length < MIN_PASSPHRASE_LENGTH) {
     throw new UsageError(`mn's passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters.`);
   }

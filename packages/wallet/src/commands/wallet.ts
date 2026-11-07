@@ -2,8 +2,7 @@
 // Subcommands: generate, list, use, info, remove
 
 import * as fs from 'fs';
-import * as readline from 'readline';
-import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, UsageError, throwIfCancelled, resolveNetworkName, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, getFlag, hasFlag, isMinimalMode, MINIMAL_FLAG, UsageError, CancelledError, throwIfCancelled, resolveNetworkName, type CallContext } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, divider, formatAddress, bold, yellow, dim, green, teal } from '@kuiralabs/midnight-cli-core/ui';
 import { mnemonicToEntropy } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
@@ -72,7 +71,7 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
   }
 
   if (fs.existsSync(targetPath) && !hasFlag(args, 'force')) {
-    throw new Error(
+    throw new UsageError(
       `Wallet "${name}" already exists: ${targetPath}\n` +
       `Use --force to overwrite.`
     );
@@ -97,12 +96,18 @@ async function walletGenerate(args: ParsedArgs, ctx: CallContext): Promise<void>
       shieldedAddresses,
       activeAddress,
       activeNetwork: networkName,
-      seed: seedBuffer.toString('hex'),
       file: savedPath,
       createdAt: created.createdAt,
       active: true,
     };
-    if (mnemonic) result.mnemonic = mnemonic;
+    // An MCP call (it carries MINIMAL_FLAG) never gets the secrets: they would land in the agent's context.
+    // There is no tool that reveals a seed; the person reads it at a terminal.
+    if (hasFlag(args, MINIMAL_FLAG)) {
+      result.seedShown = `No: the seed and mnemonic are not returned here. To see them, run at a terminal: midnight wallet seed ${name}`;
+    } else {
+      result.seed = seedBuffer.toString('hex');
+      if (mnemonic) result.mnemonic = mnemonic;
+    }
     ctx.output.result(result);
     return;
   }
@@ -357,11 +362,10 @@ async function walletSeed(args: ParsedArgs, ctx: CallContext): Promise<void> {
   ctx.output.stderr(yellow('  Never share it. Never paste it into a website.') + '\n');
   ctx.output.stderr('\n');
 
-  const confirmed = await confirm('  Show seed? (y/N) ');
-  if (!confirmed) {
-    ctx.output.stderr(dim('  Cancelled.') + '\n\n');
-    return;
-  }
+  // Shown only on a yes: a no, no answer (the input ended) or nobody to ask cancels (CANCELLED, exit 7).
+  const answer = ctx.host.prompter === null ? null : await ctx.host.prompter.ask('  Show seed? (y/N) ');
+  if (answer === null) throw new CancelledError('Cancelled: no answer to "Show seed?", so the seed was not shown. To print it without asking, add --json.');
+  if (answer.trim().toLowerCase() !== 'y') throw new CancelledError('Cancelled: the seed was not shown.');
 
   // Seed to stdout (pipeable)
   ctx.output.stdout(raw.seed + '\n');
@@ -413,14 +417,4 @@ async function walletProtect(args: ParsedArgs, ctx: WalletCommandContext): Promi
     else ctx.output.stderr(dim(`  ${item.subject}: already encrypted`) + '\n');
   }
   ctx.output.stderr('\n' + dim('  Keep the passphrase safe: without it, mn cannot open these wallets.') + '\n\n');
-}
-
-function confirm(prompt: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
-    rl.question(prompt, (answer: string) => {
-      rl.close();
-      resolve(answer.trim().toLowerCase() === 'y');
-    });
-  });
 }

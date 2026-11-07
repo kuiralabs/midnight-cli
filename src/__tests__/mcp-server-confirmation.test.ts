@@ -221,6 +221,7 @@ describe('midnight_wallet_generate with force', () => {
 
     expect(refused.pending).toBeUndefined();
     expect(String(refused.message)).toContain('Wallet "bob" already exists');
+    expect(refused.code).toBe('INVALID_ARGS');
   });
 });
 
@@ -241,6 +242,7 @@ describe('midnight_wallet_remove', () => {
 
     expect(refused.pending).toBeUndefined();
     expect(String(refused.message)).toContain('Cannot remove the active wallet "alice"');
+    expect(refused.code).toBe('INVALID_ARGS');
     expect(fs.existsSync(walletFile('alice'))).toBe(true);
   });
 
@@ -251,4 +253,33 @@ describe('midnight_wallet_remove', () => {
     expect(done).toMatchObject({ wallet: 'bob', removed: true });
     expect(fs.existsSync(walletFile('bob'))).toBe(false);
   });
+});
+
+// Mistakes in what the agent passed are INVALID_ARGS, as on the command line, not UNKNOWN.
+describe('an agent\'s mistakes', () => {
+  it('a confirmation token that was never given', async () => {
+    const refused = await call('midnight_confirm_operation', { token: 'not-a-token' });
+    expect(refused).toMatchObject({ error: true, code: 'INVALID_ARGS', message: expect.stringContaining('Unknown or expired confirmation token') });
+  });
+
+  it('a contract name the project does not have', async () => {
+    const refused = await call('midnight_contract_inspect', { path: dappDir, name: 'nope' });
+    expect(refused).toMatchObject({ error: true, code: 'INVALID_ARGS', message: expect.stringContaining('Contract "nope" not found') });
+  });
+});
+
+// The seed and mnemonic stay out of the agent's context: there is no tool that
+// reveals a seed, and generating one used to return both.
+describe('midnight_wallet_generate', () => {
+  it('returns no seed or mnemonic, says how the user sees them, and says it makes the wallet active', async () => {
+    const made = await call('midnight_wallet_generate', { name: 'erin' });
+    expect(made.error, String(made.message)).toBeUndefined();
+    expect(made).not.toHaveProperty('seed');
+    expect(made).not.toHaveProperty('mnemonic');
+    expect(JSON.stringify(made)).not.toMatch(/\b[0-9a-f]{64,}\b/);
+    expect(made).toMatchObject({ name: 'erin', active: true, seedShown: expect.stringContaining('midnight wallet seed erin') });
+    const { tools } = await client.listTools();
+    expect(tools.find((tool) => tool.name === 'midnight_wallet_generate')?.description).toContain('make it the active wallet');
+    await call('midnight_wallet_use', { name: 'alice' });
+  }, 60_000);
 });

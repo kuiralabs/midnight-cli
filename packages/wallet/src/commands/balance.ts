@@ -22,6 +22,9 @@ export default async function balanceCommand(args: ParsedArgs, ctx: CallContext)
 
 async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const address = args.subcommand!;
+  if (args.positionals.length > 0) {
+    throw new UsageError(`balance takes one address; also given: ${args.positionals.join(' ')}\nUsage: midnight balance [address]`);
+  }
   ctx.diagnostics.line('balance', `address=${address}`);
   const choice = networkChoiceFromArgs(args);
 

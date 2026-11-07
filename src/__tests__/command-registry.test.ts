@@ -118,10 +118,10 @@ describe('the dispatch (src/lib/command-dispatch.ts, from the registry)', () => 
     expect(protecting.call.ctx.protectors).toStrictEqual([protector]);
   });
 
-  it('refuses status, as the switch did, without loading it', async () => {
+  it('refuses status without loading it, as a usage error like a command not installed', async () => {
     const err = await dispatchCommand(registry, 'status', parseArgs(['status']), provisions).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(Error);
-    expect(isUsageError(err)).toBe(false);
+    expect(isUsageError(err)).toBe(true);
     expect((err as Error).message).toBe(STATUS_REFUSAL);
   });
 

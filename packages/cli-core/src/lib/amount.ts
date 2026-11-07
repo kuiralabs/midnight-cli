@@ -6,6 +6,9 @@ import { UsageError } from './errors.ts';
 const NIGHT_DECIMALS = 6;
 const MICRO_PER_NIGHT = 10n ** BigInt(NIGHT_DECIMALS);
 
+/** Every NIGHT there is, in micro-NIGHT: the ledger's MAX_SUPPLY (24 billion NIGHT), which its TypeScript API doesn't export. No amount of NIGHT is more. */
+export const NIGHT_SUPPLY_MICRO = 24_000_000_000n * MICRO_PER_NIGHT;
+
 /**
  * Convert NIGHT amount to micro-NIGHT (bigint), for amounts mn's own code
  * holds as numbers (a default, a count from a config). Rounds to 6 decimals.
@@ -46,6 +49,9 @@ export function parseAmount(amountStr: string): bigint {
   const micro = BigInt((match[1] || '0') + decimals.padEnd(NIGHT_DECIMALS, '0'));
   if (micro <= 0n) {
     throw new UsageError(`Invalid amount: "${amountStr}" — must be greater than 0`);
+  }
+  if (micro > NIGHT_SUPPLY_MICRO) {
+    throw new UsageError(`Invalid amount: "${amountStr}" — more than all the NIGHT there is (${nightAmountText(NIGHT_SUPPLY_MICRO)})`);
   }
   return micro;
 }
