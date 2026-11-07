@@ -326,10 +326,12 @@ export function createRpcServer(options: RpcServerOptions): RpcServer {
           connection.networkId = (result as any).networkId;
         }
 
+        // A response carries result or error: a handler that returns nothing answers null,
+        // where JSON.stringify would drop an undefined result and leave neither.
         const response: JsonRpcSuccessResponse = {
           jsonrpc: '2.0',
           id: request.id,
-          result,
+          result: result === undefined ? null : result,
         };
         ws.send(JSON.stringify(response, jsonReplacer));
         onResponse?.(connection, request, durationMs, result, undefined, context.metadata);

@@ -170,6 +170,18 @@ describe('ws-rpc', () => {
       }
     });
 
+    // Regression: a handler that returns nothing (hintUsage) was answered
+    // {"jsonrpc":"2.0","id":1}, neither result nor error, which JSON-RPC 2.0 forbids.
+    it('answers a handler that returns nothing with result null', async () => {
+      const port = nextPort();
+      server = serve({ host, port, handlers: { hintUsage: async () => undefined } });
+      const ws = await connectClient(port);
+      clients.push(ws);
+      const raw = new Promise<string>((resolve) => ws.once('message', (data: Buffer) => resolve(data.toString('utf-8'))));
+      sendRpc(ws, 1, 'hintUsage', { methodNames: ['getDustBalance'] });
+      expect(JSON.parse(await raw)).toStrictEqual({ jsonrpc: '2.0', id: 1, result: null });
+    });
+
     it('dispatches method calls to handlers', async () => {
       const port = nextPort();
       server = serve({

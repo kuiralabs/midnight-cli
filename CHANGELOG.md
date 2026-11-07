@@ -26,6 +26,7 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 
 ### Fixed
 
+- **mn serve's answer to a method that returns nothing** (`hintUsage`) carries `"result": null`; it was `{"jsonrpc":"2.0","id":1}`, neither result nor error, which JSON-RPC 2.0 forbids. The transport answers this way for every method.
 - **A `contract-info.json` the compiler didn't write** (not JSON, `{}`, a circuit or witness missing its arguments or result type) is refused with `CONTRACT_INFO_INVALID` naming what is missing, instead of a raw TypeError, or a contract with no circuits.
 - **mn serve's header** reads `Auto-approve balancing:  no`, its values lined up, not `Auto-approve balancing:no`.
 - **`inspect-cost`'s help** documents `--node` and `--proof-server`, which its usage listed.
