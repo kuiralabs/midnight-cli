@@ -6,11 +6,23 @@
 // Pure logic only: no I/O, no console. Callers decide when to collapse and how
 // to source the owned index set (owner-match during event replay).
 
-import * as ledger from '@midnightntwrk/ledger-v9';
+/**
+ * What the collapse needs of a Dust local state. Ledger 8's and ledger 9's
+ * `DustLocalState` both have it, so a forked chain's pre-fork state collapses
+ * the same way.
+ */
+export interface CollapsibleDustState<TState> {
+  readonly syncTime: Date;
+  readonly utxos: readonly unknown[];
+  walletBalance(time: Date): bigint;
+  generatingTreeRoot(): bigint | undefined;
+  collapseGenerationTree(generationIndexStart: bigint, generationIndexEnd: bigint): TState;
+  generationInfo(utxo: unknown): unknown;
+}
 
-export interface CollapseOutcome {
+export interface CollapseOutcome<TState> {
   /** The collapsed state, or the original state if collapse was skipped/rejected. */
-  state: ledger.DustLocalState;
+  state: TState;
   /** True iff a verified collapse was applied. */
   collapsed: boolean;
   /** Number of foreign ranges collapsed. */
@@ -53,11 +65,11 @@ export function computeForeignRanges(
  * is returned instead. A logic error can therefore only cost the size
  * optimization, never balance correctness or spendability.
  */
-export function collapseForeignGenerations(
-  state: ledger.DustLocalState,
+export function collapseForeignGenerations<TState extends CollapsibleDustState<TState>>(
+  state: TState,
   ownedIndices: Iterable<bigint>,
   frontier: bigint,
-): CollapseOutcome {
+): CollapseOutcome<TState> {
   const ranges = computeForeignRanges(ownedIndices, frontier);
   if (ranges.length === 0) {
     return { state, collapsed: false, rangesCollapsed: 0, reason: 'nothing-foreign' };

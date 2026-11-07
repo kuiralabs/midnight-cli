@@ -15,6 +15,7 @@ import { testHost } from '../../../../test-support/test-host.ts';
 import { UnsupportedLedgerError, type BalanceSummary } from '@kuiralabs/midnight-chain';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core';
 import type { DustDirectResult } from '../dust-direct.ts';
+import { emptyDustLedgerState } from '../dust-ledger-state.ts';
 
 // ── Test fixtures ─────────────────────────────────────────
 
@@ -54,7 +55,7 @@ function fakeDustResult(overrides: Partial<DustDirectResult> = {}): DustDirectRe
     eventCount: 0,
     ownedUtxoCount: 0,
     syncTime: state.syncTime,
-    state,
+    state: { ledgerVersion: 9, state },
     retention: { ownedGenerationIndices: [], generationFrontier: 0 },
     lastAppliedEventId: 5,
     partial: false,
@@ -249,6 +250,32 @@ describe('WalletDataRepository — dust reads', () => {
     expect(startIds).toEqual([0, 250, 500, 750]); // each call resumed from prior checkpoint
     expect(view.eventsApplied).toBe(1000);         // sum across 4 calls
     expect(view.fromCache).toBe(false);            // we started cold
+  });
+
+  it('hands each window the chain tip\'s protocol version, and the next window the ledger-8 checkpoint a forked chain\'s window stopped at', async () => {
+    // A forked chain's cold sync: the first window stops inside its ledger-8
+    // history, so its checkpoint is a ledger-8 state the next window resumes.
+    const seen: Array<{ startFromId: number; initialLedger: number | undefined; chainProtocolVersion: bigint | null }> = [];
+    const ledger8 = emptyDustLedgerState(8);
+    const repo = new WalletDataRepository(testHost(), { fetchProtocolVersion: async () => 2_001_100n,
+      now: () => 1_000_000,
+      fetchTip: async () => 'tip-A',
+      fetchChainId: async () => null,
+      fetchUnshielded: async () => fakeBalanceSummary(),
+      fetchDust: async (_seed, _net, opts) => {
+        seen.push({ startFromId: opts.startFromId, initialLedger: opts.initialState?.ledgerVersion, chainProtocolVersion: opts.chainProtocolVersion });
+        return seen.length === 1
+          ? fakeDustResult({ state: ledger8, lastAppliedEventId: 1_000, eventCount: 1_000, partial: true })
+          : fakeDustResult({ lastAppliedEventId: 2_000, eventCount: 1_000, partial: false });
+      },
+    });
+
+    const view = await repo.dust(SEED, NETWORK, { root: TMP, notice: dropNotice });
+    expect(seen).toEqual([
+      { startFromId: 0, initialLedger: undefined, chainProtocolVersion: 2_001_100n },
+      { startFromId: 1_001, initialLedger: 8, chainProtocolVersion: 2_001_100n },
+    ]);
+    expect(view.state.ledgerVersion).toBe(9);
   });
 
   // Blockfrost drops a reader slower than its stream after about 80 s: a cold

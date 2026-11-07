@@ -22,6 +22,7 @@ import { makeDefaultSubmissionService } from '@midnightntwrk/wallet-sdk/capabili
 import { FORK_SCHEDULE } from './fork-schedule.ts';
 import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from './derivation.ts';
 import { loadDustCache, dustPublicKeyHex, type DustCacheEntry } from './dust-direct-cache.ts';
+import { ledgerOfProtocolVersion, serializeDustLedgerState, type DustLedger } from './dust-ledger-state.ts';
 import { assertNetworkAnswers, isStreamEmpty } from '@kuiralabs/midnight-chain';
 import { readOpenOffers, type NetworkName } from '@kuiralabs/midnight-cli-core';
 import type { CoinPicking } from '@kuiralabs/midnight-cli-core/engine';
@@ -204,7 +205,8 @@ async function startFacade(bundle: FacadeBundle): Promise<void> {
 // Shape of the facade's serialized dust-wallet snapshot. See
 // dust-wallet/src/v2/Serialization.ts `SnapshotSchema` — JSON on disk with
 // BigInts rendered as decimal strings. The `state` field is a hex-encoded
-// `DustLocalState.serialize()` (ledger-v9) — the same blob the dust-direct
+// `DustLocalState.serialize()` of the ledger its `protocolVersion` falls in
+// (ledger 8 below the fork, ledger 9 from it) — the same blob the dust-direct
 // cache stores, which is why the two are interchangeable via the overlay below.
 export interface FacadeDustSnapshot {
   publicKey: { publicKey: string };
@@ -215,14 +217,35 @@ export interface FacadeDustSnapshot {
 }
 
 /**
+ * A Dust state that can't go into a facade snapshot: the wallet restores a
+ * snapshot onto the variant its protocol version names, and that variant reads
+ * only its own ledger's state.
+ */
+export class DustSnapshotLedgerMismatchError extends Error {
+  constructor(readonly stateLedger: DustLedger, readonly snapshotLedger: DustLedger, readonly lastAppliedEventId: number, snapshotProtocolVersion: string) {
+    super(
+      stateLedger === 8
+        ? `The Dust state read to event ${lastAppliedEventId} is still on ledger 8 (its sync stopped before the chain's fork to ledger 9), ` +
+          `and the wallet reads ledger 9 (protocol version ${snapshotProtocolVersion}). Run the command again to finish the Dust sync.`
+        : `Can't put a ledger-9 Dust state into a snapshot at protocol version ${snapshotProtocolVersion}: ` +
+          `the wallet would read it as ledger 8 (fork at ${FORK_SCHEDULE.v9}).`,
+    );
+    this.name = 'DustSnapshotLedgerMismatchError';
+    Object.setPrototypeOf(this, DustSnapshotLedgerMismatchError.prototype);
+  }
+}
+
+/**
  * Overlay a dust-direct checkpoint onto a facade dust snapshot: swap in the
- * `DustLocalState` from the indexer-direct reader and set the offset to its last
+ * Dust state from the indexer-direct reader and set the offset to its last
  * applied event id. Keeps publicKey/protocolVersion/networkId from the base
  * snapshot untouched. This is an UNCONDITIONAL overlay — whether the dust-direct
  * state is the one you want is the caller's policy (see `maybeBridgeDustCache`'s
  * freshness guard, and `dust export`'s "any events applied?" check). Overlaying
  * must not itself decide to skip: a base facade snapshot always carries
  * `offset:"0"`, which would otherwise collide with a genuine checkpoint at id 0.
+ * The one refusal is a state of the other ledger than the snapshot's
+ * (DustSnapshotLedgerMismatchError).
  *
  * This is the seam that lets a facade restore from the fast dust-direct sync:
  * `maybeBridgeDustCache` uses it to speed up write commands, and `dust export`
@@ -233,16 +256,13 @@ export function overlayDustDirectSnapshot(
   direct: Pick<DustCacheEntry, 'state' | 'lastAppliedEventId'>,
 ): string {
   const snapshot: FacadeDustSnapshot = JSON.parse(dustSnapshotJson);
-  // The wallet restores a snapshot onto the variant its protocolVersion names.
-  // A ledger-9 state in a snapshot stamped below the fork would be read by the
-  // ledger-8 variant (e.g. a facade that started on V1 when the probe failed).
-  if (BigInt(snapshot.protocolVersion) < FORK_SCHEDULE.v9) {
-    throw new Error(
-      `Can't put a ledger-9 dust state into a snapshot at protocol version ${snapshot.protocolVersion}: ` +
-      `the wallet would read it as ledger 8 (fork at ${FORK_SCHEDULE.v9}).`,
-    );
+  // The wallet restores a snapshot onto the variant its protocolVersion names
+  // (e.g. a facade that started on V1 when the probe failed reads ledger 8).
+  const snapshotLedger = ledgerOfProtocolVersion(BigInt(snapshot.protocolVersion));
+  if (direct.state.ledgerVersion !== snapshotLedger) {
+    throw new DustSnapshotLedgerMismatchError(direct.state.ledgerVersion, snapshotLedger, direct.lastAppliedEventId, snapshot.protocolVersion);
   }
-  snapshot.state = Buffer.from(direct.state.serialize()).toString('hex');
+  snapshot.state = Buffer.from(serializeDustLedgerState(direct.state)).toString('hex');
   snapshot.offset = direct.lastAppliedEventId.toString();
   return JSON.stringify(snapshot);
 }

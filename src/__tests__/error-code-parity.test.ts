@@ -80,7 +80,7 @@ const holding = (night: bigint) => createHost({
       fetchUnshielded: async () => ({ balances: new Map(night === 0n ? [] : [[NATIVE_TOKEN_TYPE, night]]), utxoCount: 1, txCount: 1, highestTxId: 1, registeredUtxos: 0, unregisteredUtxos: 1 }),
       fetchDust: async () => {
         const state = new ledger.DustLocalState(new ledger.DustParameters(5_000_000_000n, 8_267n, 10_800n));
-        return { balance: 0n, availableCoins: 0, eventCount: 0, ownedUtxoCount: 0, syncTime: state.syncTime, state, retention: { ownedGenerationIndices: [], generationFrontier: 0 }, lastAppliedEventId: 0, partial: false };
+        return { balance: 0n, availableCoins: 0, eventCount: 0, ownedUtxoCount: 0, syncTime: state.syncTime, state: { ledgerVersion: 9 as const, state }, retention: { ownedGenerationIndices: [], generationFrontier: 0 }, lastAppliedEventId: 0, partial: false };
       },
     },
   }),

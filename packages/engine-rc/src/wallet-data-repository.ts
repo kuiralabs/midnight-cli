@@ -20,7 +20,6 @@
 import { Buffer } from 'node:buffer';
 import { isColdStartRace, loadWalletCache, saveWalletCache, clearWalletCache, validateWalletCacheChainId, type WalletCacheData, bindCachesToIndexer, describeIndexerChange, type CachedReadOptions, type DustBalance, type EngineHost, type ReadOptions, type UnshieldedView } from '@kuiralabs/midnight-cli-core/engine';
 import { throwIfCancelled, type NetworkConfig, type NetworkName, isValidNetworkName, clearDustDirectCache, type VerboseLog, type NoticeSink } from '@kuiralabs/midnight-cli-core';
-import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { type FacadeState } from '@midnightntwrk/wallet-sdk/facade';
 import {
@@ -31,10 +30,12 @@ import {
   type FacadeBundle,
   type SyncMode,
   overlayDustDirectSnapshot,
+  DustSnapshotLedgerMismatchError,
 } from './facade.ts';
 import { loadDustCache, saveDustCache, dustPublicKeyHexFromSeed, validateDustCacheChainId } from './dust-direct-cache.ts';
-import { getChainGenesisHash, assertLedgerSupported, fetchProtocolVersion, checkBalance, type BalanceSummary, callNodeRpc, fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain';
+import { getChainGenesisHash, assertLedgerSupported, checkLedgerSupported, fetchProtocolVersion, checkBalance, type BalanceSummary, callNodeRpc, fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain';
 import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from './dust-direct.ts';
+import { dustKeysFromSeed, type DustLedgerState } from './dust-ledger-state.ts';
 import { nativeDustSyncAvailable, runDustSyncNative } from './dust-sync-native.ts';
 import { deriveDustSeed } from './derivation.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
@@ -43,7 +44,8 @@ export type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from
 // ── Public types ──────────────────────────────────────────
 
 export interface DustView extends DustBalance {
-  state: ledger.DustLocalState;
+  /** Ledger 9 once the read is past the chain's fork; a partial read that stopped before it is still ledger 8. */
+  state: DustLedgerState;
 }
 
 
@@ -110,12 +112,14 @@ export interface RepoDeps {
     network: NetworkConfig,
     opts: {
       startFromId: number;
-      initialState?: ledger.DustLocalState;
+      initialState?: DustLedgerState;
       initialRetention?: DustRetention;
+      /** The chain tip's protocol version, read before the sync; null when unknown. */
+      chainProtocolVersion: bigint | null;
       signal?: AbortSignal;
       onProgress?: (applied: number, max: number) => void;
       /** Repo passes a callback to persist incremental progress during long syncs. */
-      onCheckpoint?: (state: ledger.DustLocalState, lastAppliedEventId: number, retention: DustRetention) => void;
+      onCheckpoint?: (state: DustLedgerState, lastAppliedEventId: number, retention: DustRetention) => void;
       /** The state root of the caches; the native sidecar keeps its checkpoint beside them. */
       root: string;
       /** The call's verbose lines. */
@@ -227,6 +231,11 @@ export class WalletDataRepository {
       const { shielded, unshielded, dust } = fresh.facade as unknown as Record<'shielded' | 'unshielded' | 'dust', { serializeState(): Promise<string> }>;
       const [shieldedState, unshieldedState, dustState] = await Promise.all([shielded.serializeState(), unshielded.serializeState(), dust.serializeState()]);
       return { shielded: shieldedState, unshielded: unshieldedState, dust: overlayDustDirectSnapshot(dustState, checkpoint) };
+    } catch (err) {
+      // A checkpoint of the other ledger than the new wallet's (a sync that
+      // stopped before the fork): the wallet is built from its keys instead.
+      if (err instanceof DustSnapshotLedgerMismatchError) return null;
+      throw err;
     } finally {
       await stopFacade(fresh).catch(() => {});
     }
@@ -236,7 +245,10 @@ export class WalletDataRepository {
 
   async dust(seed: Buffer, network: NetworkConfig, opts: CachedReadOptions): Promise<DustView> {
     const networkName = networkNameOf(network);
-    await assertLedgerSupported(networkName, network, this.fetchProtocolVersion, opts.signal);
+    // The tip's version is read before any Dust event: a caught-up read on a
+    // chain past the fork then ends on ledger 9 (see dust-event-fold.ts).
+    const chainProtocolVersion = await this.fetchProtocolVersion(network.indexer, opts.signal);
+    checkLedgerSupported(networkName, chainProtocolVersion);
     const pubkeyHex = dustPublicKeyHexFromSeed(seed);
     const memoKey = `${networkName}:${pubkeyHex}`;
 
@@ -288,6 +300,7 @@ export class WalletDataRepository {
         startFromId,
         initialState: cached?.state,
         initialRetention: cached?.retention,
+        chainProtocolVersion,
         signal: opts.signal,
         log: opts.log,
         onProgress: (applied, max) => {
@@ -655,19 +668,18 @@ function defaultDustFetcher(
   network: NetworkConfig,
   opts: {
     startFromId: number;
-    initialState?: ledger.DustLocalState;
+    initialState?: DustLedgerState;
     initialRetention?: DustRetention;
+    chainProtocolVersion: bigint | null;
     signal?: AbortSignal;
     onProgress?: (applied: number, max: number) => void;
-    onCheckpoint?: (state: ledger.DustLocalState, lastAppliedEventId: number, retention: DustRetention) => void;
+    onCheckpoint?: (state: DustLedgerState, lastAppliedEventId: number, retention: DustRetention) => void;
     root: string;
     log?: VerboseLog;
   },
   collapse: boolean,
 ): Promise<DustDirectResult> {
-  const dustSeed = deriveDustSeed(seed);
-  const dustSecretKey = ledger.DustSecretKey.fromSeed(dustSeed);
-  return readDustBalanceDirect(dustSecretKey, network.indexerWS, { ...opts, collapse });
+  return readDustBalanceDirect(dustKeysFromSeed(deriveDustSeed(seed)), network.indexerWS, { ...opts, collapse, networkId: network.networkId });
 }
 
 /**

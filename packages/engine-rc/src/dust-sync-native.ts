@@ -16,6 +16,7 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 
 import { deriveDustSeed } from './derivation.ts';
 import { type DustDirectResult, type DustRetention } from './dust-direct.ts';
+import { type DustLedgerState } from './dust-ledger-state.ts';
 import { collapseForeignGenerations } from './dust-collapse.ts';
 import { dustPublicKeyHexFromSeed } from './dust-direct-cache.ts';
 
@@ -33,7 +34,7 @@ export interface SidecarCheckpoint {
 
 interface NativeFetchOptions {
   startFromId: number;
-  initialState?: ledger.DustLocalState;
+  initialState?: DustLedgerState;
   initialRetention?: DustRetention;
   signal?: AbortSignal;
   onProgress?: (applied: number, max: number) => void;
@@ -159,8 +160,11 @@ export function runDustSyncNative(
     const args = ['--indexer-ws', network.indexerWS, '--out', out];
     const decision = resumeDecision(readCheckpointCursor(out), opts.startFromId, !!opts.initialState);
     if (decision === 'seed') {
+      // The sidecar reads ledger-9 states only; a ledger-8 checkpoint (a forked
+      // chain's sync stopped before the fork) is left to the WASM reader.
+      if (opts.initialState!.ledgerVersion !== 9) { reject(new Error('dust-sync reads ledger-9 Dust states only')); return; }
       const seedCp: SidecarCheckpoint = {
-        dust_state: Buffer.from(opts.initialState!.serialize()).toString('hex'),
+        dust_state: Buffer.from(opts.initialState!.state.serialize()).toString('hex'),
         last_applied_event_id: opts.startFromId - 1,
         owned_generation_indices: opts.initialRetention?.ownedGenerationIndices ?? [],
         generation_frontier: opts.initialRetention?.generationFrontier ?? 0,
@@ -243,7 +247,7 @@ export function adaptResult(cp: SidecarCheckpoint, settings: Pick<Settings, 'isD
     eventCount: cp.events_applied,
     ownedUtxoCount: utxoCount,
     syncTime: state.syncTime instanceof Date ? state.syncTime : new Date(String(state.syncTime)),
-    state,
+    state: { ledgerVersion: 9, state },
     retention: {
       ownedGenerationIndices: cp.owned_generation_indices,
       generationFrontier: cp.generation_frontier,

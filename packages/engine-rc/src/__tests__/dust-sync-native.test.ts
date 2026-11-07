@@ -63,8 +63,9 @@ describe('adaptResult (sidecar checkpoint → DustDirectResult)', () => {
     expect(r.retention.ownedGenerationIndices).toEqual([3, 7]);
     expect(r.retention.generationFrontier).toBe(100);
     // State is a usable ledger object carrying the same UTXO the balance came from.
-    expect(r.state).toBeInstanceOf(ledger.DustLocalState);
-    expect(r.state.utxos.length).toBe(r.ownedUtxoCount);
+    expect(r.state.ledgerVersion).toBe(9);
+    expect(r.state.state).toBeInstanceOf(ledger.DustLocalState);
+    expect(r.state.state.utxos.length).toBe(r.ownedUtxoCount);
   });
 
   it('maps an empty state to a zero balance', () => {
@@ -212,7 +213,7 @@ describe('adaptResult — native-path generation-tree collapse', () => {
 
     expect(on.balance).toBe(off.balance);                                   // collapse never moves the balance
     expect(on.retention.ownedGenerationIndices).toEqual([3]);              // owned indices pass through
-    expect(on.state.generatingTreeRoot()).toBe(off.state.generatingTreeRoot()); // root invariant held
+    expect(on.state.state.generatingTreeRoot()).toBe(off.state.state.generatingTreeRoot()); // root invariant held
   });
 });
 

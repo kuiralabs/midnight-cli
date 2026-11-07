@@ -2,38 +2,23 @@
 //
 // Bypasses the dust-wallet SDK's sync machinery (which hangs on preprod due to
 // an `isConnected` predicate that never flips for idle wallets). Subscribes to
-// `dustLedgerEvents(id: 0)` ourselves, deserializes each raw hex event via
-// `ledger.Event.deserialize`, replays them into a fresh `DustLocalState`, then
-// reads `walletBalance(now)`.
+// `dustLedgerEvents(id: 0)` ourselves and folds the raw events into a Dust
+// local state (dust-event-fold.ts: ledger-8 events with ledger 8, migrating to
+// ledger 9 at the fork as the SDK's forking Dust wallet does), then reads
+// `walletBalance(now)`.
 //
 // The SDK's dust wallet does the same thing internally — we just don't wait on
 // the cosmetic `isConnected` flag.
 
-import WebSocket from 'ws';
-import * as ledger from '@midnightntwrk/ledger-v9';
-import { collapseForeignGenerations } from './dust-collapse.ts';
-import { INITIAL_NIGHT_DUST_RATIO, INITIAL_GENERATION_DECAY_RATE, INITIAL_DUST_GRACE_PERIOD_SECONDS } from '@kuiralabs/midnight-cli-core/engine';
 import { subscribeGraphqlWs } from '@kuiralabs/midnight-chain';
+import { DustEventFold, type DustFoldResult, type DustRetention, type RawDustEvent } from './dust-event-fold.ts';
+import { type DustKeys, type DustLedgerState } from './dust-ledger-state.ts';
+
+export type { DustRetention } from './dust-event-fold.ts';
 
 // MN_DISABLE_DUST_COLLAPSE=1 disables the dust generation-tree collapse (debugging / safety valve): the repository then passes `collapse: false`, read from its host's settings.
 
-/**
- * Data the collapse needs to keep working correctly across restarts: which
- * generation-tree leaves are ours (must never be collapsed) and how far the
- * tree has grown. Persisted alongside the dust state and fed back on resume.
- */
-export interface DustRetention {
-  /** Generation-tree indices owned by this wallet. */
-  ownedGenerationIndices: number[];
-  /** Next-free generation index reached (exclusive upper bound). */
-  generationFrontier: number;
-}
-
-// Initial dust parameters live in constants.ts (single source of truth).
-// `ParamChange` events in the replay stream update these to the chain's current
-// values before any UTXO events are applied, so the starting values only affect
-// state-construction, not results.
-
+// The protocol version tells the fold which ledger reads each event.
 const SUBSCRIPTION_QUERY = `
   subscription DustLedgerEvents($id: Int) {
     dustLedgerEvents(id: $id) {
@@ -41,38 +26,20 @@ const SUBSCRIPTION_QUERY = `
       id
       raw
       maxId
+      protocolVersion
     }
   }
 `;
 
-interface RawDustEvent {
-  type: string;
-  id: number;
-  raw: string;
-  maxId: number;
-}
-
-export interface DustDirectResult {
-  balance: bigint;
-  availableCoins: number;
-  eventCount: number;
-  ownedUtxoCount: number;
-  syncTime: Date;
-  /** Final DustLocalState — callers can serialize this for caching. */
-  state: ledger.DustLocalState;
-  /** Retention data to persist with the state (for correct resume + collapse). */
-  retention: DustRetention;
-  /** Id of the last event applied in this run. -1 if none arrived. */
-  lastAppliedEventId: number;
-  /**
-   * True iff the sync stopped before catching up to the indexer's tip
-   * (timeout or abort). The returned state + lastAppliedEventId are still
-   * valid — the caller should persist them and re-call to resume from the
-   * checkpoint. False means we caught up to the chain head (or there were
-   * no events to apply).
-   */
-  partial: boolean;
-}
+/**
+ * What a direct read returns. `state` is ledger 9 once the chain's Dust
+ * timeline (or tip) is past the fork; a partial read that stopped before the
+ * fork holds a ledger-8 state, which the next read resumes.
+ * `lastAppliedEventId` is -1 if no event arrived; `partial` is true iff the
+ * sync stopped before catching up to the indexer's tip (timeout or abort), and
+ * the state + cursor are still valid to persist and resume from.
+ */
+export type DustDirectResult = DustFoldResult;
 
 export interface DustDirectOptions {
   /** Called with (eventsApplied, maxIdSeen) whenever a new event arrives. */
@@ -84,7 +51,7 @@ export interface DustDirectOptions {
    * Note: invoked synchronously after `replayEvents`; keep the callback
    * cheap (file write is fine, network is not).
    */
-  onCheckpoint?: (state: ledger.DustLocalState, lastAppliedEventId: number, retention: DustRetention) => void;
+  onCheckpoint?: (state: DustLedgerState, lastAppliedEventId: number, retention: DustRetention) => void;
   /**
    * Soft ceiling for the whole subscription. On expiry the call resolves
    * with `partial: true` and whatever state has been applied so far —
@@ -103,35 +70,34 @@ export interface DustDirectOptions {
   /** Abort the subscription mid-flight. */
   signal?: AbortSignal;
   /** Resume from this cached state instead of building fresh. */
-  initialState?: ledger.DustLocalState;
+  initialState?: DustLedgerState;
   /** Subscribe starting at this event id (inclusive). Default: 0. */
   startFromId?: number;
   /** Retention data from a cached checkpoint, so resume keeps collapsing correctly. */
   initialRetention?: DustRetention;
   /** Collapse foreign generation ranges before checkpoint/return. Default: true. */
   collapse?: boolean;
-}
-
-function createInitialDustState(): ledger.DustLocalState {
-  const params = new ledger.DustParameters(
-    INITIAL_NIGHT_DUST_RATIO,
-    INITIAL_GENERATION_DECAY_RATE,
-    INITIAL_DUST_GRACE_PERIOD_SECONDS,
-  );
-  return new ledger.DustLocalState(params);
+  /** The network the wallet is on (the migration at the fork carries it). */
+  networkId: string;
+  /**
+   * The chain tip's protocol version, read before the subscription opens;
+   * null or absent when unknown. A caught-up read on a chain past the fork
+   * ends on ledger 9 even with no ledger-9 Dust event yet.
+   */
+  chainProtocolVersion?: bigint | null;
 }
 
 /**
- * Subscribe to all dust ledger events from the beginning of chain, deserialize,
- * replay into a fresh local state using the given dust secret key, and return
- * the resulting balance plus diagnostics.
+ * Subscribe to all dust ledger events from `startFromId`, fold them into the
+ * Dust state with the wallet's keys, and return the resulting balance plus
+ * diagnostics.
  *
  * "Caught up" is detected when the latest `id` received equals `maxId`.
  */
 export function readDustBalanceDirect(
-  dustSecretKey: ledger.DustSecretKey,
+  keys: DustKeys,
   indexerWS: string,
-  options: DustDirectOptions = {},
+  options: DustDirectOptions,
 ): Promise<DustDirectResult> {
   const {
     onProgress,
@@ -144,56 +110,23 @@ export function readDustBalanceDirect(
     startFromId = 0,
     initialRetention,
     collapse,
+    networkId,
+    chainProtocolVersion,
   } = options;
 
-  const collapseEnabled = collapse !== false;
-
-  // Apply events in chunks as they arrive so the final step is cheap and
-  // progress updates stay responsive. Replaying 100k events in a single
-  // synchronous WASM call blocks the event loop for tens of seconds.
-  const CHUNK_SIZE = 500;
-
-  let state = initialState ?? createInitialDustState();
-  const pending: ledger.Event[] = [];
-
-  // Retention tracking (owner-match): a generation leaf is ours iff its owner is
-  // our dust public key. Accumulate the owned index set + frontier as events
-  // arrive so we collapse only foreign ranges. Seeded from the cached checkpoint.
-  const myPubkey = dustSecretKey.publicKey;
-  const ownedGenIndices = new Set<bigint>((initialRetention?.ownedGenerationIndices ?? []).map(BigInt));
-  let frontier = BigInt(initialRetention?.generationFrontier ?? 0);
-  const trackRetention = (event: ledger.Event) => {
-    const content = event.content as { tag?: string; generationIndex?: bigint; generation?: { owner?: bigint } };
-    if (content?.tag !== 'dustInitialUtxo' || content.generationIndex === undefined) return;
-    const idx = content.generationIndex;
-    if (idx + 1n > frontier) frontier = idx + 1n;
-    if (content.generation?.owner === myPubkey) ownedGenIndices.add(idx);
-  };
-  const currentRetention = (): DustRetention => ({
-    ownedGenerationIndices: [...ownedGenIndices].map(Number),
-    generationFrontier: Number(frontier),
+  // Events are applied in chunks as they arrive so the final step is cheap and
+  // progress stays responsive (replaying 100k events in one synchronous WASM
+  // call blocks the event loop for tens of seconds), and each chunk is
+  // checkpointed so a timeout/abort doesn't lose the work.
+  const fold = new DustEventFold({
+    keys,
+    networkId,
+    initialState,
+    initialRetention,
+    startFromId,
+    collapse: collapse !== false,
+    onCheckpoint,
   });
-
-  let eventsAppliedCount = 0;
-  let lastEventId = startFromId - 1;
-  let maxIdSeen = -1;
-
-  // Replay accumulated events in chunks so the final step is cheap and the event
-  // loop can breathe between WASM calls; collapse foreign ranges and checkpoint
-  // after each chunk so a timeout/abort doesn't lose the work. lastEventId is
-  // updated before the flush so the checkpoint cursor matches the events applied.
-  const flushPending = () => {
-    if (pending.length === 0) return;
-    state = state.replayEvents(dustSecretKey, pending);
-    eventsAppliedCount += pending.length;
-    pending.length = 0;
-    if (collapseEnabled) {
-      state = collapseForeignGenerations(state, ownedGenIndices, frontier).state;
-    }
-    if (onCheckpoint && lastEventId >= 0) {
-      try { onCheckpoint(state, lastEventId, currentRetention()); } catch { /* best-effort */ }
-    }
-  };
 
   return subscribeGraphqlWs<DustDirectResult>(indexerWS, {
     query: SUBSCRIPTION_QUERY,
@@ -207,41 +140,14 @@ export function readDustBalanceDirect(
     onNext: (data) => {
       const evt = (data as { dustLedgerEvents?: RawDustEvent } | undefined)?.dustLedgerEvents;
       if (!evt) return false;
-      let event: ledger.Event;
-      try {
-        event = ledger.Event.deserialize(Buffer.from(evt.raw, 'hex'));
-      } catch (err) {
-        throw new Error(`Failed to deserialize dust event ${evt.id}: ${(err as Error).message}`);
-      }
-      trackRetention(event); // read owner/index before replayEvents consumes it
-      pending.push(event);
-      lastEventId = evt.id;
-      if (evt.maxId > maxIdSeen) maxIdSeen = evt.maxId;
-      if (pending.length >= CHUNK_SIZE) {
-        try { flushPending(); } catch (err) {
-          throw new Error(`Failed applying dust events: ${(err as Error).message}`);
-        }
-      }
-      onProgress?.(eventsAppliedCount + pending.length, maxIdSeen);
+      fold.push(evt);
+      onProgress?.(fold.eventsSeen, fold.maxIdSeen);
       // Caught up when we've received the final event in the current stream.
-      return lastEventId >= maxIdSeen;
+      return fold.caughtUp;
     },
     buildResult: (partial) => {
       try {
-        flushPending();
-        const now = new Date();
-        state = state.processTtls(now);
-        return {
-          balance: state.walletBalance(now),
-          availableCoins: state.utxos.length,
-          eventCount: eventsAppliedCount,
-          ownedUtxoCount: state.utxos.length,
-          syncTime: state.syncTime,
-          state,
-          retention: currentRetention(),
-          lastAppliedEventId: lastEventId,
-          partial,
-        };
+        return fold.finish({ partial, chainProtocolVersion, now: new Date() });
       } catch (err) {
         throw new Error(`Failed to build dust state: ${(err as Error).message}`);
       }

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { overlayDustDirectSnapshot } from '../facade.ts';
+import { overlayDustDirectSnapshot, DustSnapshotLedgerMismatchError } from '../facade.ts';
 import type { DustCacheEntry } from '../dust-direct-cache.ts';
+import { emptyDustLedgerState, type DustLedgerState } from '../dust-ledger-state.ts';
 import { DUST_STATE_OWNED_HEX } from './fixtures/dust-state-owned.ts';
 
 // overlayDustDirectSnapshot is the seam behind `dust export` (and the write-command
@@ -9,8 +10,9 @@ import { DUST_STATE_OWNED_HEX } from './fixtures/dust-state-owned.ts';
 // while preserving publicKey/protocolVersion/networkId. These are the invariants a
 // restore on another wallet depends on.
 
-function entry(state: ledger.DustLocalState, lastAppliedEventId: number): DustCacheEntry {
-  return { state, lastAppliedEventId, retention: { ownedGenerationIndices: [], generationFrontier: 0 } };
+function entry(state: ledger.DustLocalState | DustLedgerState, lastAppliedEventId: number): DustCacheEntry {
+  const tagged: DustLedgerState = state instanceof ledger.DustLocalState ? { ledgerVersion: 9, state } : state;
+  return { state: tagged, lastAppliedEventId, retention: { ownedGenerationIndices: [], generationFrontier: 0 } };
 }
 
 /** Protocol version a ledger-9 (V2) dust wallet stamps on its snapshot on the localnet. */
@@ -45,7 +47,22 @@ describe('overlayDustDirectSnapshot', () => {
     ['1000300', 'a snapshot stamped below the ledger-9 fork'],
   ])('refuses to put a ledger-9 state into %s (%s): the ledger-8 variant would read it', (version) => {
     expect(() => overlayDustDirectSnapshot(baseSnapshot('5', version), entry(ownedState, 100)))
-      .toThrow(/ledger-9 dust state.*protocol version/);
+      .toThrow(DustSnapshotLedgerMismatchError);
+    expect(() => overlayDustDirectSnapshot(baseSnapshot('5', version), entry(ownedState, 100)))
+      .toThrow(/ledger-9 Dust state.*protocol version/);
+  });
+
+  it('puts a ledger-8 state into a snapshot stamped below the fork, which the ledger-8 variant reads', () => {
+    const v8 = emptyDustLedgerState(8);
+    const out = JSON.parse(overlayDustDirectSnapshot(baseSnapshot('5', '1000300'), entry(v8, 1_623_186)));
+    expect(out.state).toBe(Buffer.from(v8.state.serialize()).toString('hex'));
+    expect(out.offset).toBe('1623186');
+  });
+
+  it('refuses a ledger-8 state (a sync that stopped before the fork) for a ledger-9 snapshot, saying to finish the sync', () => {
+    const attempt = () => overlayDustDirectSnapshot(baseSnapshot('5'), entry(emptyDustLedgerState(8), 1_000_000));
+    expect(attempt).toThrow(DustSnapshotLedgerMismatchError);
+    expect(attempt).toThrow(/event 1000000 is still on ledger 8.*Run the command again/);
   });
 
   it('overlays unconditionally — even when the base offset is already higher (the freshness guard lives in the caller)', () => {
@@ -114,10 +131,11 @@ let EXPORT_TMP: string;
 beforeEach(() => { EXPORT_TMP = mkdtempSync(join(tmpdir(), 'mn-export-test-')); });
 afterEach(() => { rmSync(EXPORT_TMP, { recursive: true, force: true }); });
 
-function fakeDust(state: ledger.DustLocalState, over: Partial<DustDirectResult> = {}): DustDirectResult {
+function fakeDust(state: ledger.DustLocalState | DustLedgerState, over: Partial<DustDirectResult> = {}): DustDirectResult {
+  const tagged: DustLedgerState = state instanceof ledger.DustLocalState ? { ledgerVersion: 9, state } : state;
   return {
     balance: 0n, availableCoins: 0, eventCount: 0, ownedUtxoCount: 0,
-    syncTime: state.syncTime, state,
+    syncTime: tagged.state.syncTime, state: tagged,
     retention: { ownedGenerationIndices: [], generationFrontier: 0 },
     lastAppliedEventId: 0, partial: false, ...over,
   };
@@ -168,6 +186,16 @@ describe('exportDustSnapshot', () => {
     expect(res.partial).toBe(false);
     expect(res.offset).toBe(100);
     expect(res.eventCount).toBe(100);
+  });
+
+  it('refuses to export a sync that stopped before the chain\'s fork (a ledger-8 state) into a ledger-9 snapshot', async () => {
+    const repo = fakeRepo(fakeDust(emptyDustLedgerState(8), { lastAppliedEventId: 900_000, partial: true }));
+    await expect(exportDustSnapshot(EXPORT_SEED, 'undeployed', EXPORT_NETWORK, {
+      root: EXPORT_TMP,
+      notice: () => {},
+      repository: repo,
+      buildBaseDust: async () => baseSnapshot('0'),
+    })).rejects.toThrow(DustSnapshotLedgerMismatchError);
   });
 
   it('leaves the base snapshot untouched for a wallet with no dust events (offset -1)', async () => {

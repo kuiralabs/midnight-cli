@@ -6,8 +6,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as ledger from '@midnightntwrk/ledger-v9';
+import * as ledgerV8 from '@midnight-ntwrk/ledger-v8';
 
 import { loadDustCache, saveDustCache, dustPublicKeyHex } from '../dust-direct-cache.ts';
+import { emptyDustLedgerState, type DustLedgerState } from '../dust-ledger-state.ts';
 import { clearDustDirectCache } from '@kuiralabs/midnight-cli-core';
 import { getDustCachePath } from '@kuiralabs/midnight-cli-core/engine';
 
@@ -15,10 +17,18 @@ const STATE_ROOT = path.join(os.tmpdir(), `midnight-dust-cache-test-${process.pi
 const NETWORK = 'undeployed';
 const SEED_HEX = '0000000000000000000000000000000000000000000000000000000000000042';
 
-// Build a real DustLocalState so we exercise the actual serialize/deserialize path.
-function freshDustState(): ledger.DustLocalState {
+// Build a real ledger-9 DustLocalState so we exercise the actual serialize/deserialize path.
+function freshDustState(): DustLedgerState {
   const params = new ledger.DustParameters(5_000_000_000n, 8_267n, 3n * 60n * 60n);
-  return new ledger.DustLocalState(params);
+  return { ledgerVersion: 9, state: new ledger.DustLocalState(params) };
+}
+
+/** Rewrite the saved entry on disk with `edit`. */
+function editEntry(pubkey: string, edit: (data: Record<string, unknown>) => void): void {
+  const filePath = getDustCachePath(NETWORK, pubkey, STATE_ROOT);
+  const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  edit(data);
+  fs.writeFileSync(filePath, JSON.stringify(data));
 }
 
 function testDustPubkeyHex(): string {
@@ -62,9 +72,35 @@ describe('dust-direct cache: round-trip', () => {
 
     expect(loaded).not.toBeNull();
     expect(loaded!.lastAppliedEventId).toBe(42);
-    expect(loaded!.state).toBeInstanceOf(ledger.DustLocalState);
+    expect(loaded!.state.ledgerVersion).toBe(9);
+    expect(loaded!.state.state).toBeInstanceOf(ledger.DustLocalState);
     // Structural check: a fresh state has empty utxos.
-    expect(loaded!.state.utxos).toEqual([]);
+    expect(loaded!.state.state.utxos).toEqual([]);
+  });
+
+  it('saves and loads a ledger-8 state (a forked chain synced short of its fork) as ledger 8', () => {
+    const pubkey = testDustPubkeyHex();
+    const state = emptyDustLedgerState(8);
+
+    saveDustCache(NETWORK, pubkey, state, 1_623_186, STATE_ROOT);
+    const loaded = loadDustCache(NETWORK, pubkey, STATE_ROOT);
+
+    expect(loaded!.state.ledgerVersion).toBe(8);
+    expect(loaded!.state.state).toBeInstanceOf(ledgerV8.DustLocalState);
+    expect(Buffer.from(loaded!.state.state.serialize()).toString('hex')).toBe(Buffer.from(state.state.serialize()).toString('hex'));
+    expect(loaded!.lastAppliedEventId).toBe(1_623_186);
+  });
+
+  it('reads an entry written before the ledger was recorded (v3, no ledger field) as a ledger-9 state', () => {
+    const pubkey = testDustPubkeyHex();
+    saveDustCache(NETWORK, pubkey, freshDustState(), 7, STATE_ROOT, undefined, { ownedGenerationIndices: [2], generationFrontier: 5 });
+    editEntry(pubkey, (data) => { data.version = 3; delete data.ledgerVersion; });
+
+    const loaded = loadDustCache(NETWORK, pubkey, STATE_ROOT);
+    expect(loaded!.state.ledgerVersion).toBe(9);
+    expect(loaded!.state.state).toBeInstanceOf(ledger.DustLocalState);
+    expect(loaded!.lastAppliedEventId).toBe(7);
+    expect(loaded!.retention).toEqual({ ownedGenerationIndices: [2], generationFrontier: 5 });
   });
 
   it('round-trips the retention data (owned indices + frontier)', () => {
@@ -141,6 +177,20 @@ describe('dust-direct cache: invalidation', () => {
     data.version = 2;
     fs.writeFileSync(filePath, JSON.stringify(data));
 
+    expect(loadDustCache(NETWORK, pubkey, STATE_ROOT)).toBeNull();
+  });
+
+  it('returns null for an entry whose ledger is neither 8 nor 9', () => {
+    const pubkey = testDustPubkeyHex();
+    saveDustCache(NETWORK, pubkey, freshDustState(), 1, STATE_ROOT);
+    editEntry(pubkey, (data) => { data.ledgerVersion = 10; });
+    expect(loadDustCache(NETWORK, pubkey, STATE_ROOT)).toBeNull();
+  });
+
+  it('returns null for a v4 entry with no ledger field', () => {
+    const pubkey = testDustPubkeyHex();
+    saveDustCache(NETWORK, pubkey, freshDustState(), 1, STATE_ROOT);
+    editEntry(pubkey, (data) => { delete data.ledgerVersion; });
     expect(loadDustCache(NETWORK, pubkey, STATE_ROOT)).toBeNull();
   });
 

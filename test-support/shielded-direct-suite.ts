@@ -3,8 +3,7 @@
 // engine-beta-shielded-direct.test.ts (beta).
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { WebSocketServer, type WebSocket as WsSocket } from 'ws';
-import type { AddressInfo } from 'node:net';
+import { startFakeEventIndexer, type FakeEventIndexer } from './fake-event-indexer.ts';
 import zswapEvents from './fixtures/zswap-events-localnet.json';
 
 /** An engine's reader, and a wallet's secret keys made with the engine's own ledger. */
@@ -39,46 +38,15 @@ const TEST_TOKEN_1 = '00'.repeat(31) + '01';
 const TEST_TOKEN_2 = '00'.repeat(31) + '02';
 const TOKENS_50M = 50_000_000_000_000n;
 
-/**
- * Minimal in-process indexer: speaks the graphql-transport-ws handshake and
- * replays the fixture's `zswapLedgerEvents` from the subscription's start index.
- * Stubs the external indexer boundary only — the reader under test is real.
- */
-function startFakeIndexer(events: { id: number; raw: string; maxId: number }[]): Promise<{ url: string; close: () => Promise<void> }> {
-  return new Promise((resolve) => {
-    const wss = new WebSocketServer({ host: '127.0.0.1', port: 0, handleProtocols: () => 'graphql-transport-ws' });
-    wss.on('connection', (socket: WsSocket) => {
-      socket.on('message', (data) => {
-        const msg = JSON.parse(data.toString());
-        if (msg.type === 'connection_init') {
-          socket.send(JSON.stringify({ type: 'connection_ack' }));
-          return;
-        }
-        if (msg.type === 'subscribe') {
-          const startId: number = msg.payload?.variables?.id ?? 0;
-          for (const e of events) {
-            if (e.id < startId) continue;
-            socket.send(JSON.stringify({ id: msg.id, type: 'next', payload: { data: { zswapLedgerEvents: e } } }));
-          }
-          // Leave the socket open; the reader finishes when it sees id >= maxId.
-        }
-      });
-    });
-    wss.on('listening', () => {
-      const port = (wss.address() as AddressInfo).port;
-      resolve({
-        url: `ws://127.0.0.1:${port}`,
-        close: () => new Promise((r) => wss.close(() => r())),
-      });
-    });
-  });
+function startFakeIndexer(events: { id: number; raw: string; maxId: number }[]): Promise<FakeEventIndexer> {
+  return startFakeEventIndexer('zswapLedgerEvents', events);
 }
 
 export function shieldedDirectSuite<Keys, State>(engine: ShieldedDirectEngine<Keys, State>): void {
   const { secretKeysFor, readShieldedBalanceDirect } = engine;
 
   describe(`readShieldedBalanceDirect (${engine.set} engine)`, () => {
-    let indexer: { url: string; close: () => Promise<void> };
+    let indexer: FakeEventIndexer;
 
     beforeAll(async () => { indexer = await startFakeIndexer(zswapEvents as any); });
     afterAll(async () => { await indexer.close(); });

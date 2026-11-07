@@ -35,7 +35,7 @@ afterEach(() => { rmSync(root, { recursive: true, force: true }); });
 describe('walletStateToRestore', () => {
   it('with no saved wallet, starts the Dust wallet at the checkpoint the direct reader holds', async () => {
     const checkpoint = ledger.DustLocalState.deserialize(Buffer.from(DUST_STATE_OWNED_HEX, 'hex'));
-    saveDustCache('undeployed', dustPublicKeyHexFromSeed(SEED), checkpoint, 395_185, root);
+    saveDustCache('undeployed', dustPublicKeyHexFromSeed(SEED), { ledgerVersion: 9, state: checkpoint }, 395_185, root);
 
     const state = await new WalletDataRepository(testHost()).walletStateToRestore(SEED, NETWORK, 'undeployed', root, () => {});
 
