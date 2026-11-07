@@ -146,7 +146,7 @@ export const swapDefinition: CommandDefinition = {
       txHash: 'The swap\'s transaction identifier (take), or the cancel\'s (cancel; null when the offer was taken already); midnight tx status takes it',
       receipt: 'The transaction once the indexer lists it: blockHeight, blockHash, blockTime, fee (DUST, exact), feeSpecks, result; null when it has not within 60 s (take, and cancel when submitted)',
       receiptMissing: 'Why receipt is null; check later with midnight tx status <txHash>',
-      cancelled: 'Whether a cancel was submitted; false when the offer was taken already (cancel)',
+      cancelled: 'True: the cancel was submitted (cancel). An offer taken first fails with OFFER_TAKEN instead',
       split: 'The split made first when no free coin was worth exactly the amount given: txHash, and receipt or receiptMissing as above; absent when none was needed (make)',
       offers: 'The wallet\'s open offers, each with whether it is expired or taken (list)',
     },
@@ -154,7 +154,7 @@ export const swapDefinition: CommandDefinition = {
   intro: { brief: 'Private swaps through offer files', order: 12.5 },
   needsWalletSdk: true,
   shell: { payer: true },
-  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'NO_PAYER', 'OFFER_EXPIRED'] },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'NO_PAYER', 'OFFER_EXPIRED', 'OFFER_TAKEN'] },
   load: () => import('./swap.ts'),
   mcp: {
     tools: [

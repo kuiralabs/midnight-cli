@@ -4,12 +4,12 @@
 // free coin is worth exactly what it gives, the wallet first splits one (a
 // transfer to itself), and the offer holds only the coin the split made.
 
-import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, type SwapTerms, type VerboseLog, UsageError, InsufficientBalanceError, type WalletSession, type SwapLeg } from '@kuiralabs/midnight-cli-core';
+import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, type SwapTerms, type VerboseLog, UsageError, type WalletSession, type SwapLeg } from '@kuiralabs/midnight-cli-core';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
 import type { PaidCallOptions } from '../wallet/paid-call.ts';
 import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
 import { receiptOfSubmitted } from '../wallet/submit-steps.ts';
-import { awaitFreeCoin, makeOffer } from './offers.ts';
+import { awaitFreeCoin, makeOffer, shieldedHeld, shortOf } from './offers.ts';
 import { offerWalletAddress, withSwapSession } from './swap-session.ts';
 
 /** The swap's network is known: its wallet opens next. */
@@ -66,12 +66,9 @@ function assertExpiryAhead(expiresAt: Date, now: Date): void {
  * picking refuses the offers' coins with OFFER_COINS_IN_USE.
  */
 async function assertHolds(session: WalletSession, give: SwapLeg, log: VerboseLog | undefined): Promise<void> {
-  const { shielded } = await session.balances();
-  const held = Object.entries(shielded).reduce((sum, [token, amount]) => (token.toLowerCase() === give.token ? sum + amount : sum), 0n);
+  const held = await shieldedHeld(session, give.token);
   log?.('swap', `make: wallet holds ${held} of ${give.token}, the offer gives ${give.amount}`);
-  if (held < give.amount) {
-    throw new InsufficientBalanceError(`The wallet holds ${held} of the shielded token ${give.token}, and the offer gives ${give.amount}: it is short by ${give.amount - held}. Receive more of it first.`);
-  }
+  if (held < give.amount) throw shortOf(give, held, 'the offer gives');
 }
 
 /**

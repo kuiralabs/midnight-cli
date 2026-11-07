@@ -44,6 +44,11 @@ export interface CancelledSwapOffer {
     readonly network: NetworkName;
     readonly id: string;
     readonly cancelled: boolean;
+    readonly reason?: 'taken';
+    readonly takenIn?: {
+        readonly txHash: string;
+        readonly blockHeight: number;
+    };
     readonly txHash?: string;
     readonly receipt?: Receipt;
 }
@@ -102,7 +107,10 @@ export declare function cancelOffer(session: WalletSession, root: string, networ
 export interface CancelOutcome {
     txHash: string | undefined;
     cancelled: OpenOffer[];
-    alreadyTaken: OpenOffer[];
+    alreadyTaken: Array<{
+        offer: OpenOffer;
+        spends: CoinSpend[];
+    }>;
 }
 export interface MadeOffer {
     envelope: OfferEnvelope;
@@ -385,6 +393,13 @@ export declare const walletCodes: readonly [
         readonly order: 20;
         readonly summary: "Named wallet doesn't exist on disk.";
         readonly recovery: "`midnight_wallet_list()` — user may have removed it.";
+    },
+    {
+        readonly code: "OFFER_TAKEN";
+        readonly exitCode: 2;
+        readonly order: 355;
+        readonly summary: "A swap offer's coins are already spent: it was taken, or its maker cancelled it, first (also when the node refuses a take or a cancel for that).";
+        readonly recovery: "Don't retry. Taking: ask the maker for a new offer. Cancelling: nothing is left to do; mn's record of the offer is closed.";
     }
 ];
 export declare const walletDefinition: CommandDefinition;

@@ -36,6 +36,7 @@ Each error carries a `code`, and `classifyError(err, registry)` gives its code a
 | Code | Exit | What went wrong | What to do |
 |------|------|-----------------|------------|
 | `WALLET_NOT_FOUND` | 3 | Named wallet doesn't exist on disk. | `midnight_wallet_list()` — user may have removed it. |
+| `OFFER_TAKEN` | 2 | A swap offer's coins are already spent: it was taken, or its maker cancelled it, first (also when the node refuses a take or a cancel for that). | Don't retry. Taking: ask the maker for a new offer. Cancelling: nothing is left to do; mn's record of the offer is closed. |
 <!-- codes: end -->
 
 ## Mounting its commands

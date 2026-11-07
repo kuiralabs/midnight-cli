@@ -16,7 +16,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { WebSocketServer } from 'ws';
-import { createHost, type Host, saveCliConfig, type ConnectOptions, type Payer, type PayingTarget, encodeOfferEnvelope, readOpenOffers, recordOpenOffer, type OpenOffer, type WalletSession } from '@kuiralabs/midnight-cli-core';
+import { asReported, createHost, type Host, saveCliConfig, type ConnectOptions, type Payer, type PayingTarget, encodeOfferEnvelope, readOpenOffers, recordOpenOffer, type OpenOffer, type WalletSession } from '@kuiralabs/midnight-cli-core';
 import { rcEngine, rcKeys } from '../../../../test-support/rc-engine.ts';
 import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 import { makeSwapOffer } from '../lib/swap/make.ts';
@@ -24,6 +24,7 @@ import { inspectSwapOffer } from '../lib/swap/inspect.ts';
 import { takeSwapOffer } from '../lib/swap/take.ts';
 import { cancelSwapOffer } from '../lib/swap/cancel.ts';
 import { listSwapOffers } from '../lib/swap/list.ts';
+import { refusedByNode, spendsAfterRefusal } from '../lib/swap/offers.ts';
 import { saveWalletConfig } from '../../../../test-support/plain-wallet.ts';
 import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from '../../../../test-support/fixtures/swap-offer.ts';
 
@@ -377,5 +378,120 @@ describe('listSwapOffers', () => {
     await expect(listSwapOffers(host, { ...on(), signal: AbortSignal.abort(), onProgress: (event) => said.push(event) })).rejects.toMatchObject({ code: 'CANCELLED' });
     expect(said).toEqual([]);
     expect(indexer.asked).toEqual([]);
+  });
+});
+
+// Two wallets racing on one offer: the node refuses the loser's transaction
+// for spending the offer's coin a second time (ledger 9's Zswap
+// NullifierAlreadyPresent, "Custom error: 239").
+describe('losing a race for an offer', () => {
+  /** The node's refusal as the connector forwards it. */
+  const refusal = () => new Error('Transaction submission failed: Transaction submission error: 1010: Invalid Transaction: Custom error: 239');
+
+  /** A payer whose session builds the take and the cancel, and whose submit the node refuses once another transaction spent the offer's coin. */
+  function racingPayer(spent: string[], refuse: () => Error = refusal) {
+    const unused = async (): Promise<never> => { throw new Error('not used'); };
+    const session: WalletSession = {
+      network: 'undeployed', addresses: unused, balanceTransaction: unused, swap: unused, makeOffer: unused,
+      // Enough of what the offer wants.
+      balances: async () => ({ unshielded: {}, shielded: { [OFFER.terms.want.token]: OFFER.terms.want.amount }, dust: 0n }),
+      takeOffer: async () => 'swap-tx',
+      cancelOffers: async () => 'cancel-tx',
+      holdsFreeCoin: unused, splitCoin: unused, sign: unused, readTransaction: unused,
+      // The other transaction lands first: its spend is on chain when the node refuses this one.
+      submit: async () => { spent.push(OFFER.nullifiers[0]!); throw refuse(); },
+      close: async () => {},
+    };
+    const payer: Payer = { assertCanPay: unused, serve: unused, connect: async () => session };
+    return payer;
+  }
+
+  // Regression: the taker got the node's raw "TX_REJECTED 1010 … Custom error: 239".
+  it('a take refused because the offer was taken or cancelled first fails with OFFER_TAKEN, naming the transaction that spent it', async () => {
+    const spent: string[] = [];
+    indexer = await startOfferIndexer(spent);
+    const err = await takeSwapOffer(host, { ...on(), offer: offerText(), agreed: TERMS, now: NOW, payer: racingPayer(spent), receiptWaitMs: 0 }).catch((e: Error) => e);
+    expect(err).toMatchObject({ code: 'OFFER_TAKEN', name: 'OfferTakenError', spentIn: { transactionHash: SPENT_IN, blockHeight: 800 } });
+    expect((err as Error).message).toContain(`spent in transaction ${SPENT_IN} (block 800). It was taken, or its maker cancelled it, first.`);
+    expect((err as Error).message).toContain('The node refused this swap for it.');
+    // Reported as itself: a node's refusal among its causes would be reported in its place.
+    expect(asReported(err as Error)).toBe(err);
+  });
+
+  it('a take refused for anything else keeps the node\'s refusal', async () => {
+    const spent: string[] = [];
+    indexer = await startOfferIndexer(spent);
+    const other = () => new Error('Transaction submission failed: 1010: Invalid Transaction: Custom error: 170');
+    await expect(takeSwapOffer(host, { ...on(), offer: offerText(), agreed: TERMS, now: NOW, payer: racingPayer(spent, other), receiptWaitMs: 0 }))
+      .rejects.toThrow('Custom error: 170');
+  });
+
+  // Regression: a cancel that lost the race to a taker failed with the node's raw refusal.
+  it('a cancel refused because the offer was taken first is no cancel: the reason and the taking transaction, mn\'s record closed', async () => {
+    alice();
+    recordOpenOffer(root, 'undeployed', ADDRESS, { ...openOffer(OFFER.id, OFFER.nullifiers[0]!), terms: OFFER.terms });
+    const spent: string[] = [];
+    indexer = await startOfferIndexer(spent);
+    const outcome = await cancelSwapOffer(host, { ...on(), id: OFFER.id.slice(0, 8), payer: racingPayer(spent), receiptWaitMs: 0 });
+    expect(outcome).toEqual({ network: 'undeployed', id: OFFER.id, cancelled: false, reason: 'taken', takenIn: { txHash: SPENT_IN, blockHeight: 800 } });
+    expect(readOpenOffers(root, 'undeployed', ADDRESS)).toEqual([]);
+  });
+
+  it('a cancel of an offer the indexer already lists as taken sends nothing, and says so the same way', async () => {
+    alice();
+    recordOpenOffer(root, 'undeployed', ADDRESS, { ...openOffer(OFFER.id, OFFER.nullifiers[0]!), terms: OFFER.terms });
+    const spent = [OFFER.nullifiers[0]!];
+    indexer = await startOfferIndexer(spent);
+    const outcome = await cancelSwapOffer(host, { ...on(), id: OFFER.id.slice(0, 8), payer: racingPayer([]), receiptWaitMs: 0 });
+    expect(outcome).toEqual({ network: 'undeployed', id: OFFER.id, cancelled: false, reason: 'taken', takenIn: { txHash: SPENT_IN, blockHeight: 800 } });
+    expect(readOpenOffers(root, 'undeployed', ADDRESS)).toEqual([]);
+  });
+
+  // As the live race on the local chain reported the loser: in the pool, then invalid once the other landed.
+  const invalidInPool = () => Object.assign(new Error('The node refused the transaction: Transaction is invalid and was rejected by the node'), { code: 'TX_REJECTED' });
+
+  it('a take refused as invalid once the other transaction landed fails with OFFER_TAKEN too', async () => {
+    const spent: string[] = [];
+    indexer = await startOfferIndexer(spent);
+    await expect(takeSwapOffer(host, { ...on(), offer: offerText(), agreed: TERMS, now: NOW, payer: racingPayer(spent, invalidInPool), receiptWaitMs: 0 }))
+      .rejects.toMatchObject({ code: 'OFFER_TAKEN', spentIn: { transactionHash: SPENT_IN, blockHeight: 800 } });
+  });
+
+  it('reads a node\'s refusal in the error or any of its causes, and nothing else', () => {
+    expect(refusedByNode(refusal())).toBe(true);
+    expect(refusedByNode(new Error('wrapped', { cause: refusal() }))).toBe(true);
+    expect(refusedByNode(invalidInPool())).toBe(true);
+    expect(refusedByNode(Object.assign(new Error('stale'), { code: 'STALE_UTXO' }))).toBe(true);
+    expect(refusedByNode(new Error('1010: Invalid Transaction: Custom error: 2390'))).toBe(false);
+    expect(refusedByNode(Object.assign(new Error('proof'), { code: 'PROOF_FAILURE' }))).toBe(false);
+    expect(refusedByNode('Custom error: 239')).toBe(false);
+  });
+
+  it('finds no spend when the coin the node found spent is not the offer\'s, after its wait', async () => {
+    indexer = await startOfferIndexer([]);
+    const endpoints = { indexer: indexer.url.replace(/^ws/, 'http').replace(/\/ws$/, ''), indexerWS: indexer.url };
+    expect(await spendsAfterRefusal(refusal(), endpoints, OFFER.nullifiers, undefined, 0)).toEqual([]);
+    expect(indexer.asked).toHaveLength(1);
+  });
+});
+
+describe('taking with less than the offer wants', () => {
+  // Regression: the take was built and proved, then failed with the SDK's "Insufficient funds", naming nothing.
+  it('refuses with INSUFFICIENT_BALANCE, naming the token and both amounts, before the take is built', async () => {
+    indexer = await startOfferIndexer([]);
+    const calls: string[] = [];
+    const unused = async (): Promise<never> => { throw new Error('not used'); };
+    const want = OFFER.terms.want;
+    const session: WalletSession = {
+      network: 'undeployed', addresses: unused, balanceTransaction: unused, swap: unused, makeOffer: unused, cancelOffers: unused,
+      holdsFreeCoin: unused, splitCoin: unused, sign: unused, readTransaction: unused, submit: unused,
+      balances: async () => ({ unshielded: {}, shielded: { [want.token.toUpperCase()]: want.amount - 1n, ['ff'.repeat(32)]: 1_000n }, dust: 0n }),
+      takeOffer: async () => { calls.push('takeOffer'); return 'swap-tx'; },
+      close: async () => {},
+    };
+    const payer: Payer = { assertCanPay: unused, serve: unused, connect: async () => session };
+    await expect(takeSwapOffer(host, { ...on(), offer: offerText(), agreed: TERMS, now: NOW, payer, receiptWaitMs: 0 }))
+      .rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE', message: `The wallet holds ${want.amount - 1n} of the shielded token ${want.token}, and the offer wants ${want.amount}: it is short by 1. Receive more of it first.` });
+    expect(calls).toEqual([]);
   });
 });

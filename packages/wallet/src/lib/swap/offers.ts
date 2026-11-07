@@ -5,7 +5,7 @@
 // what the file says, that the terms are the agreed ones, that the maker's
 // expiry hasn't passed, and that none of its coins is spent.
 
-import { sdkSetOf, sleep, SyncTimeoutError, type SwapLeg, type Engine, type HostEngines, type NetworkConfig, type NetworkName, type WalletSession, UsageError, checkTerms, type OfferContents, type SwapTerms, assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope, type OfferEnvelope, closeOpenOffers, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
+import { sdkSetOf, sleep, SyncTimeoutError, type SwapLeg, type Engine, type HostEngines, type NetworkConfig, type NetworkName, type WalletSession, UsageError, InsufficientBalanceError, checkTerms, type OfferContents, type SwapTerms, assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope, type OfferEnvelope, closeOpenOffers, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
 import { spendsOf, type CoinSpend } from '@kuiralabs/midnight-chain';
 
 /** An offer made: its file's text and what it is. */
@@ -79,26 +79,101 @@ export async function standingOf(offer: ReadOffer, networkConfig: NetworkConfig,
   return { expired: now.getTime() >= offer.envelope.expiresAt.getTime(), spends };
 }
 
-/** The offer's coins are spent: it was taken, or its maker cancelled it. */
-export class OfferTakenError extends UsageError {
-  constructor(id: string, spends: readonly CoinSpend[]) {
-    super(`The offer ${id.slice(0, 16)}… is no longer live: its coins were spent in transaction ${spends[0]!.transactionHash} (block ${spends[0]!.blockHeight}). It was taken, or its maker cancelled it.`);
+/** The offer's coins are spent: it was taken, or its maker cancelled it, first. */
+export class OfferTakenError extends Error {
+  readonly code = 'OFFER_TAKEN';
+  /** The transaction that spent the offer's coins (took or cancelled it), and its block. */
+  readonly spentIn: { readonly transactionHash: string; readonly blockHeight: number };
+  constructor(id: string, spentIn: { readonly transactionHash: string; readonly blockHeight: number }, options: { note?: string } = {}) {
+    super(
+      `The offer ${id.slice(0, 16)}… is no longer live: its coins were spent in transaction ${spentIn.transactionHash} (block ${spentIn.blockHeight}). `
+      + `It was taken, or its maker cancelled it, first.${options.note === undefined ? '' : ` ${options.note}`}`,
+    );
     this.name = 'OfferTakenError';
+    this.spentIn = { transactionHash: spentIn.transactionHash, blockHeight: spentIn.blockHeight };
+    Object.setPrototypeOf(this, OfferTakenError.prototype);
   }
+}
+
+/** How long to wait for the indexer to list the spend of an offer's coin once the node refused a transaction spending it, in milliseconds. */
+export const SPENT_COIN_WAIT_MS = 15_000;
+/** How often the indexer is asked meanwhile, in milliseconds. */
+const SPENT_COIN_POLL_MS = 1_000;
+
+/** The codes a node's refusal of a transaction is reported with (the engine's, from the node's words). */
+const NODE_REFUSAL_CODES: ReadonlySet<string> = new Set(['TX_REJECTED', 'STALE_UTXO']);
+
+/**
+ * Whether the node refused the transaction, in the error or any of its
+ * causes: reported with a refusal's code, or in the node's words for a
+ * shielded coin spent already (ledger 9's Zswap NullifierAlreadyPresent,
+ * "Custom error: 239"). A transaction that lost a race for a coin is refused
+ * either at once with those words, or, once in the node's pool, as "invalid"
+ * when the other one lands.
+ */
+export function refusedByNode(err: unknown): boolean {
+  const seen = new Set<unknown>();
+  for (let current: unknown = err; current instanceof Error && !seen.has(current); current = current.cause) {
+    seen.add(current);
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === 'string' && NODE_REFUSAL_CODES.has(code)) return true;
+    if (/custom error:\s*239\b/i.test(current.message)) return true;
+  }
+  return false;
+}
+
+/**
+ * When the node refused a transaction spending `nullifiers`, the spends of
+ * those coins by another transaction, once the indexer lists them (asked
+ * every second, up to `waitMs`): the race it lost. Empty for any other
+ * failure, and when none of these coins was spent.
+ */
+export async function spendsAfterRefusal(err: unknown, networkConfig: Pick<NetworkConfig, 'indexer' | 'indexerWS'>, nullifiers: readonly string[], signal?: AbortSignal, waitMs: number = SPENT_COIN_WAIT_MS): Promise<CoinSpend[]> {
+  if (!refusedByNode(err)) return [];
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const spends = await spendsOf(networkConfig, nullifiers, { signal });
+    if (spends.length > 0 || Date.now() >= deadline) return spends;
+    await sleep(SPENT_COIN_POLL_MS, signal);
+  }
+}
+
+/** How much of the shielded token `token` the session's wallet holds. */
+export async function shieldedHeld(session: WalletSession, token: string): Promise<bigint> {
+  const { shielded } = await session.balances();
+  return Object.entries(shielded).reduce((sum, [held, amount]) => (held.toLowerCase() === token.toLowerCase() ? sum + amount : sum), 0n);
+}
+
+/** The wallet holds `held` of `leg`'s token, less than `leg` (what `role` names): by how much, and what to do. */
+export function shortOf(leg: SwapLeg, held: bigint, role: string): InsufficientBalanceError {
+  return new InsufficientBalanceError(`The wallet holds ${held} of the shielded token ${leg.token}, and ${role} ${leg.amount}: it is short by ${leg.amount - held}. Receive more of it first.`);
 }
 
 /**
  * Takes an offer with the session's wallet once every check passes: the
- * agreed terms, the expiry, and that the offer is live. Submits the swap and
- * returns its hash.
+ * agreed terms, the expiry, that the offer is live, and that the wallet holds
+ * what the maker wants (INSUFFICIENT_BALANCE before anything is proved,
+ * naming the token and both amounts). Submits the swap and returns its hash. An offer taken or cancelled first, found before the swap
+ * is built or when the node refuses it, is refused with OfferTakenError.
  */
 export async function takeOffer(session: WalletSession, offer: ReadOffer, agreed: SwapTerms, networkConfig: NetworkConfig, now: Date = new Date(), signal?: AbortSignal): Promise<string> {
   checkTerms(offer.contents.terms, agreed);
   assertOfferUnexpired(offer.envelope, now);
   const { spends } = await standingOf(offer, networkConfig, now, signal);
-  if (spends.length > 0) throw new OfferTakenError(offer.envelope.id, spends);
+  if (spends.length > 0) throw new OfferTakenError(offer.envelope.id, spends[0]!);
+  const { want } = offer.contents.terms;
+  const held = await shieldedHeld(session, want.token);
+  if (held < want.amount) throw shortOf(want, held, 'the offer wants');
   const swap = await session.takeOffer(offer.envelope.tx);
-  return session.submit(swap);
+  try {
+    return await session.submit(swap);
+  } catch (err) {
+    // Another taker, or the maker's cancel, reached the node first.
+    const spentFirst = await spendsAfterRefusal(err, networkConfig, offer.contents.nullifiers, signal);
+    // Not as its cause: mn reports a node's refusal found among an error's causes in place of the error.
+    if (spentFirst.length > 0) throw new OfferTakenError(offer.envelope.id, spentFirst[0]!, { note: 'The node refused this swap for it.' });
+    throw err;
+  }
 }
 
 /** An open offer of the wallet's, and whether it has been taken since. */
@@ -160,11 +235,11 @@ export class OwnOfferError extends UsageError {
   }
 }
 
-/** What cancelling did: the cancel's transaction, if one was needed, and the offers found already taken. */
+/** What cancelling did: the cancel's transaction, if one was needed, and the offers found already taken with the spends of their coins. */
 export interface CancelOutcome {
   txHash: string | undefined;
   cancelled: OpenOffer[];
-  alreadyTaken: OpenOffer[];
+  alreadyTaken: Array<{ offer: OpenOffer; spends: CoinSpend[] }>;
 }
 
 /**
@@ -175,13 +250,22 @@ export interface CancelOutcome {
  */
 export async function cancelOffer(session: WalletSession, root: string, networkConfig: NetworkConfig, walletAddress: string, id: string, signal?: AbortSignal): Promise<CancelOutcome> {
   const offer = findOpenOffer(root, session.network, walletAddress, id);
-  const spends = await spendsOf(networkConfig, offer.nullifiers, { signal });
-  if (spends.length > 0) {
+  const takenWith = (spends: CoinSpend[]): CancelOutcome => {
     closeOpenOffers(root, session.network, walletAddress, [offer.id]);
-    return { txHash: undefined, cancelled: [], alreadyTaken: [offer] };
-  }
+    return { txHash: undefined, cancelled: [], alreadyTaken: [{ offer, spends }] };
+  };
+  const spends = await spendsOf(networkConfig, offer.nullifiers, { signal });
+  if (spends.length > 0) return takenWith(spends);
   const cancel = await session.cancelOffers([offer]);
-  const txHash = await session.submit(cancel);
+  let txHash: string;
+  try {
+    txHash = await session.submit(cancel);
+  } catch (err) {
+    // A taker reached the node first.
+    const spentFirst = await spendsAfterRefusal(err, networkConfig, offer.nullifiers, signal);
+    if (spentFirst.length > 0) return takenWith(spentFirst);
+    throw err;
+  }
   closeOpenOffers(root, session.network, walletAddress, [offer.id]);
   return { txHash, cancelled: [offer], alreadyTaken: [] };
 }

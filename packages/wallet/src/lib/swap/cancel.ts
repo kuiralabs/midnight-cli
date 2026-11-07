@@ -25,6 +25,10 @@ export interface CancelledSwapOffer {
   readonly id: string;
   /** Its coins were spent back to the wallet; false when it was found taken already (it is only closed in mn's record). */
   readonly cancelled: boolean;
+  /** Why it was not cancelled: its coins were spent first, taken by a taker or cancelled from another copy of the wallet. Absent when it was cancelled. */
+  readonly reason?: 'taken';
+  /** With `reason`: the transaction that spent its coins, and its block. */
+  readonly takenIn?: { readonly txHash: string; readonly blockHeight: number };
   /** The cancel's transaction, when one was needed. */
   readonly txHash?: string;
   /** The cancel once the indexer lists it, or why it is missing; absent with no cancel, or when `receiptWaitMs` is 0. */
@@ -35,7 +39,9 @@ export interface CancelledSwapOffer {
  * Cancels the payer's wallet's open offer `id` (a prefix of 8 characters at
  * least names it): spends its coins back to the wallet, waits for the indexer
  * to list the cancel, and closes the offer in mn's record. An offer found
- * taken already is only closed. An id that is not one, or names no open
+ * taken already, before the cancel is built or when the node refuses it for
+ * that, is only closed: `cancelled` is false, with the reason and the
+ * transaction that took it. An id that is not one, or names no open
  * offer, or more than one, is refused from mn's record before the wallet opens.
  */
 export async function cancelSwapOffer(host: Host, options: CancelSwapOfferOptions): Promise<CancelledSwapOffer> {
@@ -53,12 +59,16 @@ export async function cancelSwapOffer(host: Host, options: CancelSwapOfferOption
     const steps = progressSteps(onProgress);
     steps.start('Spending the offer\'s coins back to this wallet...');
     const outcome = await cancelOffer(session, root, networkConfig, address, options.id, signal);
-    const { id } = [...outcome.cancelled, ...outcome.alreadyTaken][0]!;
-    if (outcome.txHash === undefined) {
+    const taken = outcome.alreadyTaken[0];
+    if (taken !== undefined) {
       steps.done('It was taken already');
-      return { network, id, cancelled: false };
+      const spend = taken.spends[0]!;
+      return { network, id: taken.offer.id, cancelled: false, reason: 'taken', takenIn: { txHash: spend.transactionHash, blockHeight: spend.blockHeight } };
     }
-    const receipt = await receiptOfSubmitted(networkConfig.indexer, outcome.txHash, steps, signal, receiptWaitMs, 'Offer cancelled');
-    return { network, id, cancelled: true, txHash: outcome.txHash, ...(receipt === undefined ? {} : { receipt }) };
+    // Not taken: cancelled, by the cancel's transaction.
+    const { id } = outcome.cancelled[0]!;
+    const txHash = outcome.txHash!;
+    const receipt = await receiptOfSubmitted(networkConfig.indexer, txHash, steps, signal, receiptWaitMs, 'Offer cancelled');
+    return { network, id, cancelled: true, txHash, ...(receipt === undefined ? {} : { receipt }) };
   }));
 }

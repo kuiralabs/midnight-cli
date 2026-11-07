@@ -138,7 +138,9 @@ Stable identifiers used in error messages and structured error objects, with the
 | `NOT_AN_OFFER` | 2 | The bytes given as a swap offer are not one. |
 | `TERMS_MISMATCH` | 2 | A swap offer's own terms differ from the agreed ones. |
 | `OFFER_EXPIRED` | 2 | A swap offer is past the expiry its maker set. |
+| `OFFER_TAKEN` | 2 | A swap offer's coins are already spent: it was taken, or its maker cancelled it, first (also when the node refuses a take or a cancel for that). |
 | `OFFER_COINS_IN_USE` | 2 | A spend would use coins an open swap offer of this wallet's holds, cancelling it. |
+| `OFFER_RECORD_UNREADABLE` | 1 | mn's record of a wallet's open swap offers (`~/.midnight/swap-offers/<network>/<address>.json`) can't be read: not JSON, or not the shape mn writes. |
 | `CANCELLED` | 7 | Operation was aborted (SIGINT, or the MCP call was cancelled). |
 | `UNKNOWN` | 1 | Error didn't match any known classifier. |
 <!-- error codes: end -->

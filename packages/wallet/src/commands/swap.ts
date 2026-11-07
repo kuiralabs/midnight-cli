@@ -12,6 +12,7 @@ import { makeSwapOffer } from '../lib/swap/make.ts';
 import { inspectSwapOffer } from '../lib/swap/inspect.ts';
 import { takeSwapOffer } from '../lib/swap/take.ts';
 import { cancelSwapOffer } from '../lib/swap/cancel.ts';
+import { OfferTakenError } from '../lib/swap/offers.ts';
 import { listSwapOffers } from '../lib/swap/list.ts';
 import { makeTermsOf, readOfferText, termsOf } from '../lib/swap/request.ts';
 import { receiptJson } from '@kuiralabs/midnight-chain';
@@ -115,6 +116,10 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
       const id = args.positionals[0];
       if (id === undefined) throw new UsageError('swap cancel needs the offer\'s id (8 characters of it at least): midnight swap cancel <id>');
       const outcome = await cancelSwapOffer(ctx.host, { ...paid, payer: payerFor('swap cancel', ctx), id, onProgress: (event) => showPaidStep(progress, event) });
+      // Taken first: nothing to cancel. A failure, as an offer that isn't open is.
+      if (outcome.takenIn !== undefined) {
+        throw new OfferTakenError(outcome.id, { transactionHash: outcome.takenIn.txHash, blockHeight: outcome.takenIn.blockHeight }, { note: "Nothing was cancelled or sent; mn's record of the offer is closed." });
+      }
       const { txHash, receipt } = outcome;
       if (jsonMode) {
         ctx.output.result({ subcommand: 'cancel', network: outcome.network, id: outcome.id, cancelled: outcome.cancelled, txHash: txHash ?? null, ...(receipt === undefined ? {} : receiptJson(receipt)) });
@@ -124,7 +129,6 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
         ctx.output.stdout(txHash + '\n');
         if (receipt !== undefined) ctx.output.stderr('\n' + receiptText(receipt, txHash) + '\n');
       }
-      else ctx.output.stderr('\n' + dim(`  ${outcome.id.slice(0, 16)}… was taken before it could be cancelled; it is closed.`) + '\n\n');
       return;
     }
 

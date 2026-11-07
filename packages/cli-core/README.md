@@ -59,6 +59,7 @@ Each error a package throws carries a `code`; `classifyError(err, registry)` giv
 | `TERMS_MISMATCH` | 2 | A swap offer's own terms differ from the agreed ones. | Don't take it; agree the terms again with the maker. |
 | `OFFER_EXPIRED` | 2 | A swap offer is past the expiry its maker set. | Ask the maker for a new one. |
 | `OFFER_COINS_IN_USE` | 2 | A spend would use coins an open swap offer of this wallet's holds, cancelling it. | Cancel the offer first (`mn swap cancel`), or wait until it is taken. |
+| `OFFER_RECORD_UNREADABLE` | 1 | mn's record of a wallet's open swap offers (`~/.midnight/swap-offers/<network>/<address>.json`) can't be read: not JSON, or not the shape mn writes. | Show the message: it names the file. Ask the user to restore it, or to move it aside (mn then forgets those offers). Don't retry until they have. |
 | `CANCELLED` | 7 | Operation was aborted (SIGINT, or the MCP call was cancelled). | A transaction already submitted may still have landed: read the state first (`midnight_grant_status`, `midnight_balance`). Don't retry without confirming with the user. |
 | `UNKNOWN` | 1 | Error didn't match any known classifier. | Surface the message to the user. If reproducible, a new code may be warranted. |
 <!-- codes: end -->

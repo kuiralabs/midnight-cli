@@ -183,7 +183,9 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 | `NOT_AN_OFFER` | The bytes given as a swap offer are not one. | Ask the maker for the offer again. |
 | `TERMS_MISMATCH` | A swap offer's own terms differ from the agreed ones. | Don't take it; agree the terms again with the maker. |
 | `OFFER_EXPIRED` | A swap offer is past the expiry its maker set. | Ask the maker for a new one. |
+| `OFFER_TAKEN` | A swap offer's coins are already spent: it was taken, or its maker cancelled it, first (also when the node refuses a take or a cancel for that). | Don't retry. Taking: ask the maker for a new offer. Cancelling: nothing is left to do; mn's record of the offer is closed. |
 | `OFFER_COINS_IN_USE` | A spend would use coins an open swap offer of this wallet's holds, cancelling it. | Cancel the offer first (`mn swap cancel`), or wait until it is taken. |
+| `OFFER_RECORD_UNREADABLE` | mn's record of a wallet's open swap offers (`~/.midnight/swap-offers/<network>/<address>.json`) can't be read: not JSON, or not the shape mn writes. | Show the message: it names the file. Ask the user to restore it, or to move it aside (mn then forgets those offers). Don't retry until they have. |
 | `CANCELLED` | Operation was aborted (SIGINT, or the MCP call was cancelled). | A transaction already submitted may still have landed: read the state first (`midnight_grant_status`, `midnight_balance`). Don't retry without confirming with the user. |
 | `UNKNOWN` | Error didn't match any known classifier. | Surface the message to the user. If reproducible, a new code may be warranted. |
 
@@ -195,7 +197,7 @@ A tool's description ends with the codes it can fail with: its own, and sets of 
 | wallet | `WALLET_NOT_FOUND`, `WRONG_PASSPHRASE`, `PASSPHRASE_REQUIRED` |
 | engine | `OTHER_SDK_SET`, `MIXED_SDK_LAYOUT` |
 | sync | `NETWORK_ERROR`, `SYNC_TIMEOUT`, `STALE_CACHE` |
-| paying | `TX_REJECTED`, `STALE_UTXO`, `INVALID_DUST_PROOF`, `PROOF_TIMEOUT`, `PROOF_FAILURE`, `DUST_REQUIRED`, `DUST_GENERATING`, `INSUFFICIENT_BALANCE`, `OFFER_COINS_IN_USE` |
+| paying | `TX_REJECTED`, `STALE_UTXO`, `INVALID_DUST_PROOF`, `PROOF_TIMEOUT`, `PROOF_FAILURE`, `DUST_REQUIRED`, `DUST_GENERATING`, `INSUFFICIENT_BALANCE`, `OFFER_COINS_IN_USE`, `OFFER_RECORD_UNREADABLE` |
 | offers | `NOT_AN_OFFER`, `TERMS_MISMATCH` |
 | chain | `UNSUPPORTED_LEDGER`, `LOCAL_STACK_UNREACHABLE` |
 | contract | `CONTRACT_NOT_COMPILED`, `CONTRACT_INFO_INVALID`, `NO_NODE_RUNTIME` |
