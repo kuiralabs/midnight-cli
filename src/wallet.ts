@@ -13,12 +13,16 @@ import { ensureHeapForSync } from './lib/heap-guard.ts';
 import { assertNodeSupported } from './lib/node-version.ts';
 import { hideProjectIdsInOutput } from './lib/output-redaction.ts';
 import { createCliHost } from './lib/cli-host.ts';
+import { ignoreClosedReaders } from './lib/closed-reader.ts';
 
 // --mcp: start MCP server instead of CLI (for: npx midnight-wallet-cli --mcp)
 if (process.argv.includes('--mcp')) {
   await ensureHeapForSync(); // MCP server runs facades on demand — give it the same headroom
   await import('./mcp-server.ts');
 } else {
+
+// A reader that closes early (| head, | grep -q) is not a failure: see lib/closed-reader.ts.
+ignoreClosedReaders();
 
 const args = parseArgs();
 const jsonMode = hasFlag(args, 'json');
