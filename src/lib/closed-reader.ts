@@ -10,12 +10,12 @@
 // better finished than cut off between submitting and its receipt.
 
 /** Errors a write to a reader that has gone away fails with: the pipe's EPIPE, and the closed stream's own refusal of the writes after it. */
-const CLOSED_READER_CODES = new Set(['EPIPE', 'ERR_STREAM_DESTROYED']);
+const CLOSED_READER_CODES: readonly string[] = ['EPIPE', 'ERR_STREAM_DESTROYED'];
 
 /** Whether `err` is a write to a reader that has gone away. */
 export function isClosedReaderError(err: unknown): boolean {
   const code = err !== null && typeof err === 'object' ? (err as { code?: unknown }).code : undefined;
-  return typeof code === 'string' && CLOSED_READER_CODES.has(code);
+  return typeof code === 'string' && CLOSED_READER_CODES.includes(code);
 }
 
 /**

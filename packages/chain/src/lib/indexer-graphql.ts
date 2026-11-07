@@ -1,6 +1,6 @@
 // One GraphQL query to the indexer's HTTP endpoint.
 
-import { assertEndpointUsable, endpointRefusal, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { assertEndpointUsable, endpointRefusal, endpointUnreachable, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 
 /** The indexer could not answer a query: unreachable, an HTTP error, a non-JSON body, or GraphQL errors. */
 export class IndexerQueryError extends Error {
@@ -11,7 +11,7 @@ export class IndexerQueryError extends Error {
   }
 }
 
-/** The indexer could not be reached (refused, no such host, timed out): fetch's own words, and fetch's error as the cause. */
+/** The indexer could not be reached (refused, no such host, timed out): its URL, why, and what to check, with fetch's error as the cause. */
 export class IndexerUnreachableError extends IndexerQueryError {
   readonly code = 'NETWORK_ERROR';
 
@@ -46,7 +46,7 @@ export async function queryIndexer<TData>(
     });
   } catch (err) {
     throwIfCancelled(signal);
-    throw new IndexerUnreachableError((err as Error).message, { cause: err });
+    throw new IndexerUnreachableError(endpointUnreachable('indexer', indexerHttpUrl, err).message, { cause: err });
   }
   if (!res.ok) throw endpointRefusal(indexerHttpUrl, res.status) ?? new IndexerQueryError(`HTTP ${res.status} ${res.statusText}`.trim());
   let body: { data?: TData | null; errors?: Array<{ message: string }> };

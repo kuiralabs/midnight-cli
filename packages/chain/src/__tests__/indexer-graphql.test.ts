@@ -5,11 +5,20 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { IndexerQueryError, queryIndexer } from '../lib/indexer-graphql.ts';
 import { startLocalIndexer, type LocalIndexer } from '../../../../test-support/local-indexer.ts';
+import { closedPort } from '../../../../test-support/closed-port.ts';
 
 let indexer: LocalIndexer | undefined;
 afterEach(async () => { await indexer?.close(); indexer = undefined; });
 
 describe('queryIndexer', () => {
+  it('names the indexer it could not reach, why, and what to set, as NETWORK_ERROR (not fetch\'s bare "fetch failed")', async () => {
+    const url = `http://127.0.0.1:${await closedPort()}/api/v4/graphql`;
+    await expect(queryIndexer(url, '{ x }', undefined, 5_000)).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+      message: `Cannot reach the indexer at ${url}: connection refused.\nCheck that it is running and that the URL is right (--indexer-ws, or: midnight config set indexer-ws <url>).`,
+    });
+  });
+
   it('returns the data, sending the query and its variables', async () => {
     indexer = await startLocalIndexer(() => JSON.stringify({ data: { block: { protocolVersion: 2001000 } } }));
 

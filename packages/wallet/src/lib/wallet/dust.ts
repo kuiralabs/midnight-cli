@@ -3,7 +3,7 @@
 // restores from instead of syncing it cold.
 
 import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, type DustExportResult } from '@kuiralabs/midnight-cli-core';
-import { checkBalance, type Receipt, RECEIPT_WAIT_MS, receiptOf } from '@kuiralabs/midnight-chain';
+import { assertEndpointsReachable, assertNetworkReady, checkBalance, endpointsOf, explainProofFailure, type Receipt, RECEIPT_WAIT_MS, receiptOf } from '@kuiralabs/midnight-chain';
 import { seedOf, type WalletSource } from '../seed-resolver.ts';
 import { networkChoiceOf, unshieldedAddressOf, type WalletCallOptions, type WalletOpened } from './wallet-call.ts';
 
@@ -58,6 +58,8 @@ export async function readDustStatus(host: Host, source: WalletSource, options: 
 
   // Registration first, from the indexer's coins alone: a wallet with none registered has no Dust to read.
   steps.start(`Checking registration on ${network}...`);
+  // A read needs the indexer alone.
+  await assertEndpointsReachable(endpointsOf(networkConfig, { node: false }), { signal });
   const { registeredUtxos, unregisteredUtxos } = await checkBalance(address, networkConfig.indexerWS, (current, highest) => {
     if (highest > 0) {
       const pct = Math.min(Math.round((current / highest) * 100), 100);
@@ -126,6 +128,8 @@ export async function registerDust(host: Host, source: WalletSource, options: Re
   onProgress?.({ kind: 'wallet-opened', network, address });
 
   steps.start('Syncing wallet...');
+  // Registering syncs, proves and submits: a ledger-9 chain, and the indexer, the node and the proof server answer first.
+  await assertNetworkReady(network, networkConfig, { proofServer: true }, { signal });
   const result = await withCallSdkWarnings(host.sdkWarnings, options.sdkWarnings, async (sdkWarnings) => (await host.engines.for(network)).wallet.registerDust(wallet.seed, networkConfig, {
     root,
     notice: host.notice,
@@ -141,7 +145,7 @@ export async function registerDust(host: Host, source: WalletSource, options: Re
     },
     onSyncDetail: (detail) => steps.update(`Syncing wallet... (waiting on: ${detail})`),
     onSyncWarning: (_tag, message) => steps.update(`Syncing wallet... (${message}, retrying)`),
-  }));
+  })).catch(async (err: unknown) => { throw await explainProofFailure(err, networkConfig.proofServer, signal); });
   let receipt: Receipt | undefined;
   if (result.txHash && receiptWaitMs > 0) {
     steps.update('Waiting for the indexer to list it...');
@@ -174,6 +178,8 @@ export async function exportDustSnapshot(host: Host, source: WalletSource, optio
     try {
       const wallet = await seedOf(host, source);
       steps.start(`Reading dust events from ${network}...`);
+      // A read needs the indexer alone.
+      await assertEndpointsReachable(endpointsOf(networkConfig, { node: false }), { signal });
       const result = await (await host.engines.for(network)).wallet.exportDust(wallet.seed, network, networkConfig, {
         root,
         notice: host.notice,

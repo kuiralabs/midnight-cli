@@ -796,6 +796,16 @@ export declare class TermsMismatchError extends Error {
 }
 export declare function isTransportFailure(failure: unknown): boolean;
 export declare function withTransportCode(err: unknown): unknown;
+export type EndpointRole = 'node' | 'indexer' | 'proof server';
+export declare class EndpointUnreachableError extends NetworkError {
+    readonly endpoint: EndpointRole;
+    readonly url: string;
+    constructor(endpoint: EndpointRole, url: string, reason: string, options?: {
+        cause?: unknown;
+    });
+}
+export declare function endpointUnreachable(endpoint: EndpointRole, url: string, failure: unknown): EndpointUnreachableError;
+export declare function transportReason(failure: unknown): string;
 export type VerboseLog = (phase: string, message: string) => void;
 export declare function clearWalletCache(address: string | undefined, network: string | undefined, root: string): void;
 export declare function openWalletSession(options: OpenWalletSessionOptions): Promise<WalletSession>;

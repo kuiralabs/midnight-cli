@@ -130,7 +130,12 @@ export interface Ledger8Indexer {
 }
 
 /** An indexer whose chain is on ledger 8 (protocol version 1000000): every query is answered with that block. */
-export async function startLedger8Indexer(): Promise<Ledger8Indexer> {
+export function startLedger8Indexer(): Promise<Ledger8Indexer> {
+  return startIndexerOnProtocol(1_000_000);
+}
+
+/** An indexer whose chain's tip is at `protocolVersion` (ledger 9 from 2000000): every query is answered with that block. */
+export async function startIndexerOnProtocol(protocolVersion: number): Promise<Ledger8Indexer> {
   const queries: string[] = [];
   const server = createHttpServer((req, res) => {
     let body = '';
@@ -138,7 +143,7 @@ export async function startLedger8Indexer(): Promise<Ledger8Indexer> {
     req.on('end', () => {
       queries.push((JSON.parse(body) as { query: string }).query);
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ data: { block: { protocolVersion: 1_000_000 } } }));
+      res.end(JSON.stringify({ data: { block: { protocolVersion } } }));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

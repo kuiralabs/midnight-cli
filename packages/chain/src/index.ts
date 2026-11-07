@@ -7,7 +7,7 @@
 export { type BalanceSummary, checkBalance, isNativeToken } from './lib/balance-subscription.ts';
 export { assertChainClockCurrent, ChainClockBehindError, fetchChainTime } from './lib/chain-clock.ts';
 export { getChainGenesisHash } from './lib/chain-id.ts';
-export { assertNetworkAnswers } from './lib/endpoint-check.ts';
+export { assertEndpointsReachable, assertNetworkAnswers, assertNetworkReady, endpointsOf, type NeededEndpoints, REACHABILITY_TIMEOUT_MS, type ReachabilityOptions } from './lib/endpoint-check.ts';
 export { fetchEventTip, isCursorBeyondTip, isStreamEmpty, type LedgerEventStream } from './lib/event-tip.ts';
 export { subscribeGraphqlWs } from './lib/graphql-ws-subscription.ts';
 export { queryIndexer } from './lib/indexer-graphql.ts';
@@ -19,6 +19,7 @@ export {
 export { waitForFirstBlock } from './lib/node-ready.ts';
 export { callNodeRpc } from './lib/node-rpc.ts';
 export { type CoinSpend, spendsOf } from './lib/offer-liveness.ts';
+export { explainProofFailure } from './lib/proof-failure.ts';
 export { waitForProofServerReady } from './lib/proof-server-ready.ts';
 export { type Receipt, RECEIPT_WAIT_MS, receiptJson, receiptOf } from './lib/tx-receipt.ts';
 export { fetchPartialSuccessSegments, type SegmentResult } from './lib/tx-segments.ts';

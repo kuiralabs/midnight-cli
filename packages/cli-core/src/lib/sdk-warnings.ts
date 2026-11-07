@@ -101,6 +101,8 @@ export function withCallSdkWarnings<T>(calls: SdkWarningCalls, given: CallSdkWar
 
 /** What a transient warning says when the SDK gives no message. */
 const TRANSIENT_FALLBACK_MESSAGE = 'transient error';
+/** What a warning says when the SDK lost its connection's error (an ErrorEvent turned into a string). */
+const LOST_CONNECTION_MESSAGE = 'a connection to the indexer or the node failed (the wallet SDK gave no details)';
 /** The tag a bare-string Wallet.* trace is reported under. */
 const STRING_TRACE_TAG = 'Wallet.Sync';
 
@@ -114,5 +116,9 @@ export function sdkTransientWarning(value: unknown): { tag: string; message: str
   if (typeof value !== 'object' || value === null || !('_tag' in value)) return null;
   const { _tag: tag, message } = value as { _tag: unknown; message?: unknown };
   if (typeof tag !== 'string' || !tag.startsWith('Wallet.')) return null;
-  return { tag, message: typeof message === 'string' ? message : TRANSIENT_FALLBACK_MESSAGE };
+  if (typeof message !== 'string') return { tag, message: TRANSIENT_FALLBACK_MESSAGE };
+  // The SDK's sync wraps a WebSocket's ErrorEvent with no message of its own
+  // and no cause: its message is "[object ErrorEvent]", or empty. Said in words.
+  if (message.trim() === '' || /^\[object \w+\]$/.test(message.trim())) return { tag, message: LOST_CONNECTION_MESSAGE };
+  return { tag, message };
 }

@@ -4,7 +4,7 @@
 // shielded faucet (or when asked).
 
 import { type Host, throwIfCancelled, UsageError, detectNetworkFromAddress, isNamedOnlyNetwork, NetworkNotNamedError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core';
-import { checkLedgerSupported, fetchProtocolVersion, getChainGenesisHash } from '@kuiralabs/midnight-chain';
+import { assertEndpointsReachable, checkLedgerSupported, endpointsOf, fetchProtocolVersion, getChainGenesisHash } from '@kuiralabs/midnight-chain';
 import { saveShieldedAddress } from '../wallet-config.ts';
 import { seedOf, type WalletSource } from '../seed-resolver.ts';
 import { createEtaEstimator, formatSyncStatus } from '../sync-eta.ts';
@@ -117,6 +117,8 @@ export async function readWalletBalance(host: Host, source: WalletSource, option
   const { network, networkConfig, root } = networkTargetOf(host, networkChoiceOf(options));
   log?.('balance', `network=${network} indexerWS=${networkConfig.indexerWS}`);
   const wallet = await seedOf(host, source);
+  // A read needs the indexer alone.
+  await assertEndpointsReachable(endpointsOf(networkConfig, { node: false }), { signal });
   log?.('balance', `wallet path=${wallet.walletPath ?? '(from --seed/MN_SEED)'}`);
   const engine = await host.engines.for(network);
   const address = await unshieldedAddressOf(wallet, network, host.engines);
