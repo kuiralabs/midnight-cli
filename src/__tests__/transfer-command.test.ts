@@ -192,6 +192,6 @@ describe('transfer command — shielded flag', () => {
     saveWalletConfig(config, walletFile);
 
     const args = parseArgs(['transfer', 'mn_shield-addr_preprod1someaddr', '100', '--shielded', '--wallet', walletFile, '--network', 'preprod']);
-    await expect(cliCall(transferCommand, args)).rejects.toThrow(/Shielded is unavailable on preprod/);
+    await expect(cliCall(transferCommand, args)).rejects.toThrow(/Shielded is not read on preprod by default/);
   });
 });

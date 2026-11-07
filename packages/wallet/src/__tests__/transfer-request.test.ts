@@ -110,7 +110,7 @@ describe('resolveTransferRequest', () => {
 
   it('refuses a shielded transfer where shielded is off before reading the address', async () => {
     await expect(request('mn_shield-addr_preprod1garbage', '1', '--wallet', 'sender', '--shielded', '--network', 'preprod'))
-      .rejects.toThrow(/Shielded is unavailable on preprod/);
+      .rejects.toThrow(/Shielded is not read on preprod by default/);
   });
 });
 

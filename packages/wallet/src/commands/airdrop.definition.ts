@@ -12,6 +12,7 @@ export const airdropDefinition: CommandDefinition = {
     {
       name: 'network',
       takesValue: true,
+      help: ['--network <name>     Network to fund on (default: the selected one; only undeployed has a genesis wallet)'],
       agent: { ...NETWORK_PARAM, description: 'Network to fund on (default: the selected one; only undeployed has a genesis wallet)' },
     },
     {
@@ -29,6 +30,7 @@ export const airdropDefinition: CommandDefinition = {
     {
       name: 'verbose',
       takesValue: false,
+      help: ['--verbose            Print diagnostic lines about the sync to stderr'],
       // Its lines go to the server's stderr, which no agent reads.
       agent: { notForAgents: 'diagnostics for a person at a terminal' },
     },
@@ -42,17 +44,22 @@ export const airdropDefinition: CommandDefinition = {
       ],
       agent: { type: 'string', description: 'Destination: wallet name, JSON path, or bech32m address' },
     },
-    { name: 'node', takesValue: true, agent: ENDPOINT_PARAMS.node },
-    { name: 'indexer-ws', takesValue: true, agent: ENDPOINT_PARAMS['indexer-ws'] },
-    { name: 'proof-server', takesValue: true, agent: ENDPOINT_PARAMS['proof-server'] },
+    { name: 'node', takesValue: true, help: ['--node <url>         Node RPC endpoint'], agent: ENDPOINT_PARAMS.node },
+    { name: 'indexer-ws', takesValue: true, help: ['--indexer-ws <url>   Indexer WebSocket endpoint'], agent: ENDPOINT_PARAMS['indexer-ws'] },
+    { name: 'proof-server', takesValue: true, help: ['--proof-server <url> Proof server endpoint'], agent: ENDPOINT_PARAMS['proof-server'] },
   ],
   help: {
     description: 'Fund a wallet from the genesis wallet (undeployed network only)',
-    usage: 'midnight airdrop <amount> [--shielded] [--wallet <name|file|address>]',
+    usage: 'midnight airdrop <amount> [--shielded] [--wallet <name|file|address>] [--network <name>] [--node <url>] [--indexer-ws <url>] [--proof-server <url>] [--verbose]',
     flags: [
       '<amount>             Amount in NIGHT to airdrop',
       { flag: 'shielded' },
       { flag: 'wallet' },
+      { flag: 'network' },
+      { flag: 'node' },
+      { flag: 'indexer-ws' },
+      { flag: 'proof-server' },
+      { flag: 'verbose' },
     ],
     examples: [
       'midnight airdrop 1000',
@@ -66,8 +73,8 @@ export const airdropDefinition: CommandDefinition = {
       receipt: 'The transaction once the indexer lists it: blockHeight, blockHash, blockTime, fee (DUST, exact), feeSpecks, result; null when it has not within 60 s',
       receiptMissing: 'Why receipt is null; check later with midnight tx status <txHash>',
       amount: 'Amount airdropped (NIGHT string)',
-      recipient: 'Recipient address (unshielded airdrop)',
-      shieldedAddress: 'Shielded address (--shielded airdrop)',
+      recipient: 'Recipient address (the shielded address with --shielded)',
+      shieldedAddress: 'The same shielded address as recipient (--shielded airdrop; kept for older readers)',
       network: 'Network name',
     },
   },

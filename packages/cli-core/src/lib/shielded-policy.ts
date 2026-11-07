@@ -1,17 +1,17 @@
-// Shielded-sync policy. Shielded (zswap) sync is the slow part of a facade sync,
-// and on preview, preprod and stagenet it is pointless: there is no shielded faucet, so a
-// wallet can never hold shielded funds there. Skipping it makes those networks
-// fast (unshielded is GraphQL, dust is already optimized) without hiding
-// anything real. `undeployed` (localnet genesis) and any future funded network
-// keep shielded on. Overridable with `--force-shielded` for the rare case a
-// wallet did receive shielded funds out of band.
+// Shielded-sync policy. Shielded (zswap) sync is the slow part of a wallet's
+// first read on the hosted test networks (preview, preprod, stagenet), so it is
+// off there by default: those networks have no shielded faucet, and most
+// wallets hold nothing shielded. A wallet can still hold shielded tokens there
+// (contracts mint them), so `--force-shielded` reads them, and what is skipped
+// is said so, never shown as nothing held. `undeployed` (localnet genesis) and
+// any future funded network keep shielded on.
 
 import type { NetworkName } from './network.ts';
 
-/** Networks with no shielded faucet — shielded sync is skipped by default. */
+/** The networks with no shielded faucet, where shielded sync is off by default. */
 const NO_SHIELDED_FAUCET: readonly NetworkName[] = ['preview', 'preprod', 'stagenet'];
 
-/** True when shielded funds are actually reachable on this network. */
+/** True when shielded is synced on this network by default. */
 export function networkHasShielded(network: NetworkName): boolean {
   return !NO_SHIELDED_FAUCET.includes(network);
 }
@@ -24,7 +24,7 @@ export function shieldedSyncEnabled(network: NetworkName, force = false): boolea
   return networkHasShielded(network) || force;
 }
 
-/** One-line reason shown when a shielded op is skipped/blocked. */
+/** One-line reason shown when the shielded wallet is not read, or a shielded transfer refused, by default. */
 export function shieldedDisabledReason(network: NetworkName): string {
-  return `Shielded is unavailable on ${network} (no faucet). Use --force-shielded to sync anyway, or --network undeployed.`;
+  return `Shielded is not read on ${network} by default (its first read takes a while), though a wallet can hold shielded tokens there. Pass --force-shielded to read it.`;
 }

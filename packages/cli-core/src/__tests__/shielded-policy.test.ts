@@ -28,4 +28,11 @@ describe('shielded-policy', () => {
     expect(reason).toContain('preprod');
     expect(reason).toContain('--force-shielded');
   });
+
+  // Regression: the reason said shielded was "unavailable (no faucet)" on preview, where wallets hold minted shielded tokens.
+  it('says the balance is not read, not that there is none to hold', () => {
+    const reason = shieldedDisabledReason('preview');
+    expect(reason).not.toMatch(/unavailable|no faucet/);
+    expect(reason).toContain('a wallet can hold shielded tokens there');
+  });
 });
