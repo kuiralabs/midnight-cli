@@ -9,14 +9,14 @@ let savedIsTTY: boolean | undefined;
 
 beforeEach(() => {
   process.env.NO_COLOR = '';
-  savedIsTTY = process.stderr.isTTY;
-  Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true });
+  savedIsTTY = process.stdout.isTTY;
+  Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
   io = captureOutput();
 });
 
 afterEach(() => {
   delete process.env.NO_COLOR;
-  Object.defineProperty(process.stderr, 'isTTY', { value: savedIsTTY, configurable: true });
+  Object.defineProperty(process.stdout, 'isTTY', { value: savedIsTTY, configurable: true });
   io.restore();
 });
 
@@ -174,7 +174,7 @@ describe('help screen — mentions --json and --agent', () => {
   it('TTY help mentions --json flag', async () => {
     const args = parseArgs(['help']);
     await cliCall(helpCommand, args);
-    const err = io.stderr();
+    const err = io.stdout();
 
     expect(err).toContain('--json');
   });
@@ -182,25 +182,25 @@ describe('help screen — mentions --json and --agent', () => {
   it('TTY help mentions --agent manual', async () => {
     const args = parseArgs(['help']);
     await cliCall(helpCommand, args);
-    const err = io.stderr();
+    const err = io.stdout();
 
     expect(err).toContain('--agent');
   });
 
   it('non-TTY help mentions --json flag', async () => {
-    Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: undefined, configurable: true });
     const args = parseArgs(['help']);
     await cliCall(helpCommand, args);
-    const err = io.stderr();
+    const err = io.stdout();
 
     expect(err).toContain('--json');
   });
 
   it('non-TTY help mentions --agent manual', async () => {
-    Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: undefined, configurable: true });
     const args = parseArgs(['help']);
     await cliCall(helpCommand, args);
-    const err = io.stderr();
+    const err = io.stdout();
 
     expect(err).toContain('--agent');
   });
