@@ -41,7 +41,7 @@ describe('help --agent', () => {
 
   it("names each command's own error codes under its usage", async () => {
     await cliCall(helpCommand, parseArgs(['help', '--agent']));
-    expect(io.stdout()).toContain('\n  tx\n  midnight tx status <hash or identifier> [options]\n  Error codes: NETWORK_ERROR; sets: network\n  JSON fields:\n');
+    expect(io.stdout()).toContain('\n  tx\n  midnight tx status <hash or identifier> [options]\n  Error codes: NETWORK_ERROR, SYNC_TIMEOUT; sets: network\n  JSON fields:\n');
     expect(io.stdout()).toContain('\n  config\n  midnight config <get|set|unset> <key> [value] [--network <name>]\n  Error codes: none; sets: network\n');
   });
 

@@ -11,8 +11,8 @@ export const txDefinition: CommandDefinition = {
     {
       name: 'wait',
       takesValue: false,
-      help: ['--wait                        Wait until the transaction is on chain, up to --timeout'],
-      agent: { type: 'boolean', description: 'Wait until the transaction is on chain, up to timeout' },
+      help: ['--wait                        Wait until the transaction is on chain, up to --timeout;', '                              still not listed then: SYNC_TIMEOUT (exit 4)'],
+      agent: { type: 'boolean', description: 'Wait until the transaction is on chain, up to timeout; still not listed then, the call fails with SYNC_TIMEOUT' },
     },
     {
       name: 'timeout',
@@ -68,7 +68,7 @@ export const txDefinition: CommandDefinition = {
       subcommand: 'The tx subcommand that ran',
       network: 'Network name',
       transaction: 'The hash or identifier asked about',
-      state: '"final" (in a finalized block) or "notFound"',
+      state: '"final" (in a finalized block) or "notFound" (without --wait; a --wait that ends without it is SYNC_TIMEOUT, exit 4)',
       kind: '"regular" or "system" (final)',
       hash: 'The transaction\'s hash (final)',
       identifiers: 'The transaction\'s identifiers (final, regular)',
@@ -84,13 +84,13 @@ export const txDefinition: CommandDefinition = {
   intro: { brief: 'What became of a transaction', order: 12.6 },
   needsWalletSdk: false,
   shell: {},
-  errors: { codes: [RESOLVES_NETWORK, 'NETWORK_ERROR'] },
+  errors: { codes: [RESOLVES_NETWORK, 'NETWORK_ERROR', 'SYNC_TIMEOUT'] },
   load: () => import('./tx.ts'),
   mcp: {
     tools: [
       {
         name: 'midnight_tx_status',
-        description: 'What became of a transaction, by its hash or identifier (the txHash a submit returns): its block, time, fee in DUST and result. Found means final; notFound means not on chain yet, dropped, or never sent.',
+        description: 'What became of a transaction, by its hash or identifier (the txHash a submit returns): its block, time, fee in DUST and result. Found means final; notFound means not on chain yet, dropped, or never sent. With wait, a transaction still not listed when the wait ends is SYNC_TIMEOUT, not notFound.',
         annotations: { readOnlyHint: true, openWorldHint: true },
         params: [
           { name: 'transaction', schema: { type: 'string', description: 'The transaction\'s hash (64 hex) or identifier (66 hex)' } },

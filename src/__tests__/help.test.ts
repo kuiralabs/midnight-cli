@@ -225,6 +225,7 @@ describe('help — the lists come from the registry', () => {
     expect(out.indexOf('Errors:')).toBeGreaterThan(out.indexOf('Examples:'));
     expect(out.split('Errors:\n')[1]).toBe([
       '  NETWORK_ERROR                  4  Indexer/node/proof-server connection refused or DNS failure.',
+      '  SYNC_TIMEOUT                   4  Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync.',
       '  Also: the network codes, and INVALID_ARGS, CANCELLED, UNKNOWN, UNSUPPORTED_NODE, NO_STATE_ROOT (mn manual lists them all).',
       '',
       '',
@@ -248,6 +249,7 @@ describe('help — the lists come from the registry', () => {
     const tx = manifest.commands.find((c) => c.name === 'tx')!;
     expect(tx.errorCodes).toStrictEqual([
       { code: 'NETWORK_ERROR', exitCode: 4 },
+      { code: 'SYNC_TIMEOUT', exitCode: 4 },
       { code: 'AMBIGUOUS_LOCAL_STACKS', exitCode: 4 },
       { code: 'BLOCKFROST_PROJECT_ID_REQUIRED', exitCode: 4 },
       { code: 'BLOCKFROST_PROJECT_ID_REJECTED', exitCode: 4 },
