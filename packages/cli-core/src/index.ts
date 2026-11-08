@@ -64,11 +64,12 @@ export {
   defineCodeSet
 } from './lib/error-codes.ts';
 export { trimAgentMessage } from './lib/error-trim.ts';
+export { stateDecodeFailureOf } from './lib/contract-state-errors.ts';
 export {
   ACCOUNT_ARTIFACTS_KEY, type AccountArtifactsSource, checkAccountArtifactsSource, InvalidAccountArtifactsSourceError, resolveAccountArtifactsSource
 } from './lib/account-artifacts.ts';
 export {
-  asReported, CANCELLED_MESSAGE, CancelledError, CommandFailedError, DustRequiredError,
+  asReported, CANCELLED_MESSAGE, CancelledError, CommandFailedError, ContractStateUnreadableError, DustRequiredError,
   FeeRepricedError, FeeTooLowError, InsufficientBalanceError, isUsageError, NetworkError, ProofFailureError, SyncTimeoutError,
   throwIfCancelled, TransactionRefusedError, UsageError
 } from './lib/errors.ts';

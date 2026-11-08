@@ -445,6 +445,7 @@ export interface CodeSet {
 export declare function defineCodes<const T extends readonly CodeDefinition[]>(codes: T): T;
 export declare function defineCodeSet(name: string, codes: readonly string[]): CodeSet;
 export declare function trimAgentMessage(raw: string): string;
+export declare function stateDecodeFailureOf(err: unknown): string | undefined;
 export declare const ACCOUNT_ARTIFACTS_KEY = "account-artifacts";
 export interface AccountArtifactsSource {
     source: string | undefined;
@@ -468,6 +469,14 @@ export declare class CommandFailedError extends Error {
     readonly exitCode: number;
     readonly result: Readonly<Record<string, unknown>>;
     constructor(command: string, exitCode: number, result: Readonly<Record<string, unknown>>);
+}
+export declare class ContractStateUnreadableError extends Error {
+    readonly code = "CONTRACT_STATE_UNREADABLE";
+    readonly address: string;
+    readonly reason: string;
+    constructor(address: string, reason: string, options?: {
+        cause?: unknown;
+    });
 }
 export declare class DustRequiredError extends Error {
     readonly code = "DUST_REQUIRED";
@@ -1110,6 +1119,13 @@ export declare const coreCodes: readonly [
         readonly order: 40;
         readonly summary: "Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync.";
         readonly recovery: "Retry; the cache resumes from the last applied event so progress is preserved.";
+    },
+    {
+        readonly code: "CONTRACT_STATE_UNREADABLE";
+        readonly exitCode: 1;
+        readonly order: 114;
+        readonly summary: "A contract's state on chain can't be decoded by this mn's ledger: the state the chain holds is at fault, not the user's setup. The message names the contract and includes what the ledger said.";
+        readonly recovery: "Tell the user the contract's on-chain state is unreadable (show the message); don't retry, and don't suggest clearing caches or changing endpoints. Reading or calling that contract can't work until its state is fixed on chain.";
     },
     {
         readonly code: "FEE_TOO_LOW";

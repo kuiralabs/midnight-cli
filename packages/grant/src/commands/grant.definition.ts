@@ -187,7 +187,7 @@ export const grantDefinition: CommandDefinition = {
   intro: { brief: 'Grants that let agents spend', order: 12 },
   needsWalletSdk: true,
   shell: { payer: true },
-  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, ACTS_ON_ACCOUNT, 'CHAIN_CLOCK_BEHIND', 'NO_PAYER', 'MAINNET_REFUSED'] },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, ACTS_ON_ACCOUNT, 'CHAIN_CLOCK_BEHIND', 'CONTRACT_STATE_UNREADABLE', 'NO_PAYER', 'MAINNET_REFUSED'] },
   load: () => import('./grant.ts'),
   mcp: {
     tools: [

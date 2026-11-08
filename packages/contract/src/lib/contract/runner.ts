@@ -11,7 +11,7 @@ import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdir
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { assertEndpointUsable, type ContractKeys, type NetworkConfig, type NetworkName, sdkSetOf, type EngineContractScripts, type HostEngines, type ScriptParts, CancelledError, throwIfCancelled, isTransportFailure, sleep } from '@kuiralabs/midnight-cli-core';
+import { assertEndpointUsable, type ContractKeys, type NetworkConfig, type NetworkName, sdkSetOf, type EngineContractScripts, type HostEngines, type ScriptParts, CancelledError, throwIfCancelled, isTransportFailure, sleep, stateDecodeFailureOf, ContractStateUnreadableError } from '@kuiralabs/midnight-cli-core';
 import { findContractInfo } from './inspect.ts';
 import { assertContractRunsOn } from './runtime-check.ts';
 import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
@@ -153,7 +153,8 @@ export async function runState(options: StateOptions): Promise<StateResult> {
   const engine = await options.engines.load(sdkSetOf(options.network, options.root));
   const scripts = { ...engine.contracts.scripts, set: engine.set };
   const script = scripts.state(options, SCRIPT_PARTS);
-  const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal });
+  const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env: indexerEnvironment(options.networkConfig), signal: options.signal })
+    .catch((err: unknown) => { throw namingUnreadableState(err, options.contractAddress); });
   try {
     return JSON.parse(result) as StateResult;
   } catch {
@@ -217,6 +218,8 @@ export async function runCall(options: CallOptions): Promise<CallResult> {
   let result: string;
   try {
     result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, env, signal: options.signal });
+  } catch (err) {
+    throw namingUnreadableState(err, options.contractAddress);
   } finally {
     release();
   }
@@ -331,6 +334,13 @@ export const SCRIPT_ERROR_MARKER = '__MN_ERROR__';
 // it could not make (to mn serve, the indexer, the proof server) itself.
 const TRANSPORT_FAILURE_FN = `\nconst isTransportFailure = (${isTransportFailure.toString()});\n`;
 
+// stateDecodeFailureOf serialized for the generated script, the same way: a
+// contract state the ledger can't decode is reported with what the ledger said.
+const STATE_DECODE_FAILURE_FN = `\nconst stateDecodeFailureOf = (${stateDecodeFailureOf.toString()});\n`;
+
+/** The code a script reports a contract state the ledger can't decode with: the runner names the contract (ContractStateUnreadableError). */
+const CONTRACT_STATE_UNREADABLE = 'CONTRACT_STATE_UNREADABLE';
+
 /**
  * First in every generated script: report any failure (a rejected top-level
  * await included) as one marked line, its message and its code, then exit 1:
@@ -345,11 +355,13 @@ const TRANSPORT_FAILURE_FN = `\nconst isTransportFailure = (${isTransportFailure
  * keeps the last refusal it received (rpcClientCode), and a failure of the
  * providers backed by mn serve is reported as that refusal.
  */
-export const SCRIPT_PRELUDE = `${TRANSPORT_FAILURE_FN}
+export const SCRIPT_PRELUDE = `${TRANSPORT_FAILURE_FN}${STATE_DECODE_FAILURE_FN}
 const SERVE_BACKED_PROVIDER_METHODS = ['balanceTx', 'submitTx'];
 const fail = (e) => {
   const refusal = globalThis.mnServeRefusal;
   if (e?.name === 'ProviderFailedError' && SERVE_BACKED_PROVIDER_METHODS.includes(e.method) && refusal) e = refusal;
+  const unreadable = stateDecodeFailureOf(e);
+  if (unreadable !== undefined) e = Object.assign(new Error(unreadable), { code: '${CONTRACT_STATE_UNREADABLE}' });
   const carried = typeof e?.code === 'string' && !isTransportFailure({ code: e.code }) ? e.code : undefined;
   const code = carried ?? (isTransportFailure(e) ? 'NETWORK_ERROR' : undefined);
   const failure = { message: String(e?.message ?? e), ...(code === undefined ? {} : { code }) };
@@ -397,6 +409,11 @@ export class ContractScriptError extends Error {
 }
 
 export { ContractStateBusyError };
+
+/** A script's report of a contract state the ledger can't decode, as ContractStateUnreadableError naming the contract at `address`; any other failure as it is. */
+export function namingUnreadableState(err: unknown, address: string): unknown {
+  return (err as { code?: unknown } | null)?.code === CONTRACT_STATE_UNREADABLE && err instanceof Error ? new ContractStateUnreadableError(address, err.message, { cause: err }) : err;
+}
 
 /** The error a script's reported failure is: ContractStateBusyError for a store that stayed busy, else a ContractScriptError. */
 export function scriptErrorOf(failure: ScriptFailure): ContractScriptError | ContractStateBusyError {

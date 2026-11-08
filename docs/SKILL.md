@@ -153,6 +153,7 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 | `PROOF_TIMEOUT` | ZK proof generation didn't finish within the deadline. | Retry — proofs can be slow under load. |
 | `PROOF_FAILURE` | Proof server rejected or failed to generate the ZK proof. Often a stale commitment tree or unreachable proof server. | Check that the proof server is running (`midnight_localnet_status()`, or the endpoint the user configured); if it is, `midnight_cache_clear({ wallet: "<name>" })` then retry. |
 | `INVALID_DUST_PROOF` | Chain rejected the dust spend proof as malformed (substrate "Custom error 170"). Stale commitment tree. | `midnight_cache_clear({ wallet: "<name>" })` then retry. |
+| `CONTRACT_STATE_UNREADABLE` | A contract's state on chain can't be decoded by this mn's ledger: the state the chain holds is at fault, not the user's setup. The message names the contract and includes what the ledger said. | Tell the user the contract's on-chain state is unreadable (show the message); don't retry, and don't suggest clearing caches or changing endpoints. Reading or calling that contract can't work until its state is fixed on chain. |
 | `FEE_TOO_LOW` | The node refused the fee as too low even after mn priced it again with its largest margin (8 blocks of rising prices): prices are climbing faster than that, as when blocks are full one after another. | Nothing was spent. Wait a minute and retry; don't retry in a loop. |
 | `FEE_REPRICED` | mn serve's node refused a transaction's fee as too low; mn serve now prices fees with more margin. The transaction keeps its old fee. | Balance the transaction again and submit it (`mn contract deploy` and `call` do this themselves). Nothing was spent. |
 | `DUST_REQUIRED` | Wallet has NIGHT but not enough DUST for the fee. | Not registered (`midnight_dust_status()` shows `registered: false`): run `midnight_dust_register()`. Registered: its NIGHT is still generating the fee, which happens with time. mn has already waited when the fee was a few minutes away; the message says how long the rest takes ("generates the rest in about 4 minutes"). Wait that long and retry, don't retry at once. |
@@ -202,7 +203,7 @@ A tool's description ends with the codes it can fail with: its own, and sets of 
 | paying | `TX_REJECTED`, `STALE_UTXO`, `INVALID_DUST_PROOF`, `FEE_TOO_LOW`, `FEE_REPRICED`, `PROOF_TIMEOUT`, `PROOF_FAILURE`, `DUST_REQUIRED`, `DUST_GENERATING`, `INSUFFICIENT_BALANCE`, `OFFER_COINS_IN_USE`, `OFFER_RECORD_UNREADABLE` |
 | offers | `NOT_AN_OFFER`, `TERMS_MISMATCH` |
 | chain | `UNSUPPORTED_LEDGER`, `LOCAL_STACK_UNREACHABLE` |
-| contract | `CONTRACT_NOT_COMPILED`, `CONTRACT_INFO_INVALID`, `NO_NODE_RUNTIME`, `CONTRACT_STATE_BUSY` |
+| contract | `CONTRACT_NOT_COMPILED`, `CONTRACT_INFO_INVALID`, `NO_NODE_RUNTIME`, `CONTRACT_STATE_BUSY`, `CONTRACT_STATE_UNREADABLE` |
 | account | `NO_ACCOUNT`, `ACCOUNT_KEYS_UNAVAILABLE` |
 
 ## When to use which network

@@ -118,7 +118,8 @@ export const walletDefinition: CommandDefinition = {
   intro: { brief: 'Manage named wallets', order: 1 },
   needsWalletSdk: false,
   shell: { protectors: true },
-  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, 'NETWORK_ERROR'] },
+  // CONTRACT_STATE_UNREADABLE: protect opens grant's accounts, whose reader decodes an account's state.
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, 'NETWORK_ERROR', 'CONTRACT_STATE_UNREADABLE'] },
   load: () => import('./wallet.ts'),
   mcp: {
     tools: [

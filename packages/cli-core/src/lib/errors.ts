@@ -205,6 +205,30 @@ export class FeeRepricedError extends Error {
   }
 }
 
+/**
+ * A contract's state on chain that this mn's ledger can't decode: the bytes
+ * the chain holds for the contract are at fault, not the user's setup, and
+ * no command can read the contract or call it until they are.
+ */
+export class ContractStateUnreadableError extends Error {
+  readonly code = 'CONTRACT_STATE_UNREADABLE';
+  readonly address: string;
+  /** What the ledger said as it failed to decode the state. */
+  readonly reason: string;
+
+  constructor(address: string, reason: string, options?: { cause?: unknown }) {
+    super(
+      `Contract ${address}'s state on chain can't be decoded by this mn's ledger (ledger 9): ${reason}. `
+      + "That is the state the chain holds for the contract, not something in your setup: neither a read of its state nor a call of it can work until it is fixed on chain.",
+      options,
+    );
+    this.name = 'ContractStateUnreadableError';
+    this.address = address;
+    this.reason = reason;
+    Object.setPrototypeOf(this, ContractStateUnreadableError.prototype);
+  }
+}
+
 /** Not enough NIGHT for the amount asked for: raised by the engines with the message the command gives them. */
 export class InsufficientBalanceError extends Error {
   readonly code = 'INSUFFICIENT_BALANCE';

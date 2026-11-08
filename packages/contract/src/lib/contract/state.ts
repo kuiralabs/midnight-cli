@@ -3,7 +3,7 @@
 // that can't run (no compiled contract there, a script that fails), the
 // untyped state tree the indexer holds for the address.
 
-import { type Host, CancelledError, throwIfCancelled, type NetworkName, networkTargetOf, type NetworkChoice, progressSteps, type ProgressEvent, untilCancelled, type RawStateValue } from '@kuiralabs/midnight-cli-core';
+import { type Host, CancelledError, ContractStateUnreadableError, throwIfCancelled, type NetworkName, networkTargetOf, type NetworkChoice, progressSteps, type ProgressEvent, untilCancelled, type RawStateValue } from '@kuiralabs/midnight-cli-core';
 import { networkChoiceOf } from '@kuiralabs/midnight-wallet';
 import { assertEndpointsReachable, endpointsOf } from '@kuiralabs/midnight-chain';
 import { findContractInfo } from './inspect.ts';
@@ -90,8 +90,8 @@ export async function readContractState(host: Host, options: ReadContractStateOp
     steps.done('State retrieved');
     return { kind: 'parsed', network, address, fields, maps };
   } catch (err) {
-    // A cancelled read stops here; it doesn't fall back to the raw state.
-    if (err instanceof CancelledError) throw err;
+    // A cancelled read stops here; it doesn't fall back to the raw state, nor does a state the ledger can't decode (the raw read would fail the same).
+    if (err instanceof CancelledError || err instanceof ContractStateUnreadableError) throw err;
     throwIfCancelled(signal);
     onProgress?.({ kind: 'fallback', reason: err instanceof Error ? err.message : String(err) });
   }

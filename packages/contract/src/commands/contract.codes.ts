@@ -9,5 +9,5 @@ export const contractCodes = defineCodes([
   { code: 'CONTRACT_STATE_BUSY', exitCode: EXIT_GENERAL_ERROR, order: 207, summary: "A contract's private-state store stayed in use by another process (another mn running a call of the same contract) for the 3 minutes a call waits for it. The message names the contract and, when it is an mn, its pid and command.", recovery: 'Let the other mn finish, or stop it if it is stuck. A call reads the store before it submits and writes it after, so read the contract state (`midnight_contract_state`) to see whether the call landed before retrying it.' },
 ]);
 
-/** Running a compiled contract's script: no compiled contract, a contract-info.json no compiler wrote, no Node.js to run it with, a private-state store that stayed in use. */
-export const RUNS_CONTRACTS = defineCodeSet('contract', ['CONTRACT_NOT_COMPILED', 'CONTRACT_INFO_INVALID', 'NO_NODE_RUNTIME', 'CONTRACT_STATE_BUSY']);
+/** Running a compiled contract's script: no compiled contract, a contract-info.json no compiler wrote, no Node.js to run it with, a private-state store that stayed in use, a state on chain the ledger can't decode. */
+export const RUNS_CONTRACTS = defineCodeSet('contract', ['CONTRACT_NOT_COMPILED', 'CONTRACT_INFO_INVALID', 'NO_NODE_RUNTIME', 'CONTRACT_STATE_BUSY', 'CONTRACT_STATE_UNREADABLE']);

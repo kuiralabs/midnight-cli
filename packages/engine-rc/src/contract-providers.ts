@@ -3,7 +3,7 @@
 
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import type { RawStateValue } from '@kuiralabs/midnight-cli-core/engine';
-import { assertEndpointUsable, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
+import { assertEndpointUsable, ContractStateUnreadableError, stateDecodeFailureOf, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
 import { ContractState } from '@midnightntwrk/ledger-v9';
 import { ContractState as ContractStateV8 } from '@midnight-ntwrk/ledger-v8';
 import { describeRawState } from './raw-state.ts';
@@ -29,5 +29,13 @@ export function buildStateProvider(networkConfig: NetworkConfig) {
 export async function rawContractState(networkConfig: NetworkConfig, address: string): Promise<RawStateValue | null> {
   const found = await buildStateProvider(networkConfig).queryContractState(address);
   if (!found) return null;
-  return describeRawState(found.contractState.deserialize({ v9: ContractState, v8: ContractStateV8 }).data.state);
+  let decoded;
+  try {
+    decoded = found.contractState.deserialize({ v9: ContractState, v8: ContractStateV8 });
+  } catch (err) {
+    // The bytes the chain holds don't decode: named, with what the ledger said.
+    const reason = stateDecodeFailureOf(err);
+    throw reason === undefined ? err : new ContractStateUnreadableError(address, reason, { cause: err });
+  }
+  return describeRawState(decoded.data.state);
 }
