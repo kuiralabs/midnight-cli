@@ -589,6 +589,11 @@ export interface FeeLimits {
 }
 export declare function parseFeeLimits(maxFee: string | undefined, maxPending: string | undefined): FeeLimits;
 export declare const DUST_FEE_MARGIN_STEPS: readonly number[];
+export declare const FEE_REPRICED_CODE = "FEE_REPRICED";
+export declare const FEE_TOO_LOW_CODE = "FEE_TOO_LOW";
+export declare function isFeeRepriced(err: unknown): boolean;
+export declare const RERUN_REPRICED_STATUS = "The node refused the fee as too low: running it again with the larger margin the wallet now prices with...";
+export declare function rerunWhenRepriced<T>(pay: () => Promise<T>, rerunAfter: (err: unknown) => boolean, onStatus: (message: string) => void, signal: AbortSignal | undefined): Promise<T>;
 export declare function createHost(options?: HostOptions): Host;
 export declare function defineHostSlot<T>(name: string, init: () => T): HostSlot<T>;
 export interface Host {

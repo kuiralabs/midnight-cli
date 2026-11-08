@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { ContractScriptError } from '../lib/contract/runner.ts';
 import { runRepricing } from '../lib/contract/served-wallet.ts';
+import { RERUN_REPRICED_STATUS } from '@kuiralabs/midnight-cli-core';
 
 const repriced = () => new ContractScriptError({ message: 'The node refused the fee as too low (priced with 3 blocks of margin). The wallet now prices fees with 5 blocks: balance the transaction again and submit it.', code: 'FEE_REPRICED' });
 
@@ -30,8 +31,8 @@ describe('runRepricing', () => {
 
     expect(script.runs()).toBe(3);
     expect(statuses).toEqual([
-      'The node refused the fee as too low: running it again with the larger margin mn serve now prices with...',
-      'The node refused the fee as too low: running it again with the larger margin mn serve now prices with...',
+      RERUN_REPRICED_STATUS,
+      RERUN_REPRICED_STATUS,
     ]);
   });
 

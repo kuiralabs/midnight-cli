@@ -75,7 +75,7 @@ export {
   EXIT_INVALID_ARGS, EXIT_NETWORK_ERROR, EXIT_TX_REJECTED, EXIT_WALLET_NOT_FOUND, humanizeNetworkError
 } from './lib/exit-codes.ts';
 export { type FeeLimits, parseFeeLimits } from './lib/fee-limits.ts';
-export { DUST_FEE_MARGIN_STEPS } from './lib/fee-margin.ts';
+export { DUST_FEE_MARGIN_STEPS, FEE_REPRICED_CODE, FEE_TOO_LOW_CODE, isFeeRepriced, RERUN_REPRICED_STATUS, rerunWhenRepriced } from './lib/fee-margin.ts';
 export { createHost, defineHostSlot, type Host, type HostOptions } from './lib/host.ts';
 export { writeJsonError, writeJsonResult } from './lib/json-output.ts';
 export {

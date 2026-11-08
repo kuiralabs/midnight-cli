@@ -14,7 +14,7 @@
 // to tell the two apart.
 
 import { BALANCE_OVERSPEND_ERROR_CODE, DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN } from './constants.ts';
-import { FeeTooLowError } from './errors.ts';
+import { FeeTooLowError, throwIfCancelled } from './errors.ts';
 import { nodeRefusalOf } from './sdk-errors.ts';
 
 /** The margins, in blocks, a fee is priced with in turn: the first, then one more each time the node refuses the fee as too low. */
@@ -108,4 +108,36 @@ export async function repriceAfterFeeRefusal(pricing: FeePricing, check: () => P
 /** What a paying path says while it prices a refused fee again. */
 export function repricingStatus(step: { fromBlocks: number; toBlocks: number }): string {
   return `The node refused the fee as too low (priced with ${step.fromBlocks} blocks of margin): pricing it with ${step.toBlocks} and submitting again...`;
+}
+
+/** The code mn serve refuses a submit with when the node refused its fee as too low and it now prices with a larger margin (FeeRepricedError). */
+export const FEE_REPRICED_CODE = 'FEE_REPRICED';
+
+/** The code of a fee refused as too low past the largest margin (FeeTooLowError). */
+export const FEE_TOO_LOW_CODE = 'FEE_TOO_LOW';
+
+/** Whether `err` is mn serve's FEE_REPRICED, by the code it carries. */
+export function isFeeRepriced(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === FEE_REPRICED_CODE;
+}
+
+/** What a paying command says while it runs a payment again after FEE_REPRICED. */
+export const RERUN_REPRICED_STATUS = 'The node refused the fee as too low: running it again with the larger margin the wallet now prices with...';
+
+/**
+ * Runs `pay`, and again after each failure `rerunAfter` accepts (a payment mn
+ * serve answered with FEE_REPRICED: nothing was spent, and its next balance is
+ * priced with the larger margin), saying so through `onStatus`. Any other
+ * failure is the payment's. `rerunAfter` holds the bound on how many times.
+ */
+export async function rerunWhenRepriced<T>(pay: () => Promise<T>, rerunAfter: (err: unknown) => boolean, onStatus: (message: string) => void, signal: AbortSignal | undefined): Promise<T> {
+  for (;;) {
+    throwIfCancelled(signal);
+    try {
+      return await pay();
+    } catch (err) {
+      if (!rerunAfter(err)) throw err;
+      onStatus(RERUN_REPRICED_STATUS);
+    }
+  }
 }

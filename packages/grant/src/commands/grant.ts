@@ -147,6 +147,8 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
     throwIfCancelled(ctx.signal);
     return paying;
   };
+  // A payment, run again at the wallet's larger margin when the node refused its fee as too low.
+  const paid = async <T>(pay: () => Promise<T>): Promise<T> => (await payingWallet()).repricing(pay, (message) => spinner.update(message), ctx.signal);
   // The owner's session, paid by the wallet.
   const ownerSession = async () => {
     const { connectOver, openSessionOver } = owned.chain.owner;
@@ -174,7 +176,8 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         // The device the records hold, or for a new account a key made here, on the k1 arm and
         // independent of any other (MIP-0013), kept sealed before the deploy is submitted.
         const device = () => owned.keys.read() ?? owned.keys.keep(freshOwnerDevice('k1'));
-        const outcome = await deployOwnerAccount(owned.context, feeWallet, owned.store, owned.location, device);
+        // Run again after a refused fee, the account package carries on from the step it recorded.
+        const outcome = await paid(() => deployOwnerAccount(owned.context, feeWallet, owned.store, owned.location, device));
         spinner.stop(outcome.resumed ? 'Account ready' : 'Account deployed');
         if (jsonMode) {
           ctx.output.result({ ...common, ...outcome });
@@ -196,9 +199,11 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         const value = BigInt(request.value);
         const held = await wallet.shieldedBalance(token ?? NATIVE_TOKEN_TYPE);
         if (held < value) throw token === undefined ? shortOfShieldedNight(held, value) : shortOfShieldedToken(token, held, value);
-        const connection = await connectOver(owned.context, account.address, wallet.feeWallet, owned.location, async () => {});
-        // NIGHT is the package's default color; another token's color is its raw type's 32 bytes.
-        const { result } = await (token === undefined ? depositShielded(connection, value) : depositShielded(connection, value, new Uint8Array(Buffer.from(token, 'hex'))));
+        const { result } = await paid(async () => {
+          const connection = await connectOver(owned.context, account.address, wallet.feeWallet, owned.location, async () => {});
+          // NIGHT is the package's default color; another token's color is its raw type's 32 bytes.
+          return token === undefined ? depositShielded(connection, value) : depositShielded(connection, value, new Uint8Array(Buffer.from(token, 'hex')));
+        });
         const outcome = { address: account.address, value: request.value, ...(token === undefined ? {} : { token }), txHash: result.public.txHash, blockHeight: Number(result.public.blockHeight) };
         spinner.stop('Deposited');
         if (jsonMode) {
@@ -230,14 +235,14 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
           report(issuePreview(grantRequest, request.limits, owned.context.clock(), owned.chain));
           return;
         }
-        report(await issue(await ownerSession(), grantRequest, request.limits, owned.context.clock(), owned.chain));
+        report(await paid(async () => issue(await ownerSession(), grantRequest, request.limits, owned.context.clock(), owned.chain)));
         return;
       }
       case 'revoke':
-        report(await revoke(await ownerSession(), request.target, owned.chain));
+        report(await paid(async () => revoke(await ownerSession(), request.target, owned.chain)));
         return;
       case 'revoke-all':
-        report(await revokeAll(await ownerSession(), owned.chain));
+        report(await paid(async () => revokeAll(await ownerSession(), owned.chain)));
         return;
       case 'device': {
         if (owned.protection !== 'sealed') throw new UsageError('The account is not protected: its devices are managed once it is. Encrypt it first: midnight wallet protect');
@@ -264,7 +269,8 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
           }
           // The backup is checked before the device is added, so the add never lands with nowhere to write it.
           if (request.backup !== undefined && existsSync(request.backup)) throw new UsageError(`${request.backup} already exists; a backup is never written over a file.`);
-          await addOwnerDevice(await ownerSession(), named.attestation);
+          const { attestation } = named;
+          await paid(async () => addOwnerDevice(await ownerSession(), attestation));
           const added = identityCodeOf(request.code);
           devices.write([...known.filter((code) => identityCodeOf(code) !== added), added]);
           const written = request.backup === undefined ? undefined : await exportAccount(recordsDir, target.network, passphrase, request.backup, ctx.host.engines, { forDevice: named });
@@ -282,7 +288,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
         const { removeOwnerDevice } = owned.chain.owner;
         const removing = identityCodeOf(request.code);
         if (removing === own) throw new UsageError('A device does not remove itself: remove this one from another device on the account.');
-        const { removed } = await removeOwnerDevice(await ownerSession(), deviceKeyOf(named), named.readKey);
+        const { removed } = await paid(async () => removeOwnerDevice(await ownerSession(), deviceKeyOf(named), named.readKey));
         devices.write(known.filter((code) => identityCodeOf(code) !== removing));
         spinner.stop(removed ? 'Device removed' : 'Already removed');
         if (jsonMode) ctx.output.result({ ...common, action: 'remove', code: request.code, removed });

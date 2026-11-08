@@ -4,7 +4,7 @@
 // refused as too low runs again: mn serve then prices with a larger margin
 // (FEE_REPRICED), until it has none larger left (FEE_TOO_LOW).
 
-import { type Payer, type PayingTarget, type CallSdkWarnings, type ServedWallet, DUST_FEE_MARGIN_STEPS, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { type Payer, type PayingTarget, type CallSdkWarnings, type ServedWallet, DUST_FEE_MARGIN_STEPS, isFeeRepriced, rerunWhenRepriced, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 
 export interface ServedWalletParams {
@@ -49,9 +49,6 @@ export async function withServedWallet<T>(
   }
 }
 
-/** The code mn serve refuses a submit with when the node refused its fee as too low and it now prices with a larger margin. */
-const FEE_REPRICED = 'FEE_REPRICED';
-
 /**
  * Runs `run`, and again each time it fails with FEE_REPRICED, at most once per
  * margin mn serve can move to: nothing was spent, and the next balance is
@@ -59,14 +56,6 @@ const FEE_REPRICED = 'FEE_REPRICED';
  * the run's.
  */
 export async function runRepricing<T>(run: () => Promise<T>, onStatus: (message: string) => void, signal: AbortSignal | undefined): Promise<T> {
-  for (let repriced = 0; ; repriced++) {
-    throwIfCancelled(signal);
-    try {
-      return await run();
-    } catch (err) {
-      const code = (err as { code?: unknown } | null)?.code;
-      if (code !== FEE_REPRICED || repriced >= DUST_FEE_MARGIN_STEPS.length - 1) throw err;
-      onStatus('The node refused the fee as too low: running it again with the larger margin mn serve now prices with...');
-    }
-  }
+  let reruns = 0;
+  return rerunWhenRepriced(run, (err) => isFeeRepriced(err) && reruns++ < DUST_FEE_MARGIN_STEPS.length - 1, onStatus, signal);
 }
