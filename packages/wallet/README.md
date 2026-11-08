@@ -23,7 +23,7 @@ Every export and its signature is in [api-report.md](https://github.com/kuiralab
 
 - `createWallet`, `listWallets`, `setActiveWallet`, `unlockWallet`, `walletAddress`: wallet files under your state root.
 - `readWalletBalance`, `readAddressBalance`: balances, as bigints in each token's smallest unit.
-- `transferNight`, `airdropNight`: send NIGHT, shielded or not; `airdropNight` on a local network.
+- `transferNight`, `airdropNight`: send NIGHT, shielded or not; `transferNight` to one recipient or to several in one transaction (`recipients`, at most `MAX_TRANSFER_RECIPIENTS`), `airdropNight` on a local network.
 - `registerDust`, `readDustStatus`, `exportDustSnapshot`: Dust for fees.
 - `makeSwapOffer`, `inspectSwapOffer`, `takeSwapOffer`, `cancelSwapOffer`, `listSwapOffers`: swap offers, each paid through a payer you pass.
 - `establishPassphrase`, `unlockPassphrase`, `checkPassphrase`: mn's passphrase, asked through your host's prompter or read from `MN_PASSPHRASE`.

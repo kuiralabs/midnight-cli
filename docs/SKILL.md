@@ -49,6 +49,7 @@ Midnight shut its own preprod and mainnet indexers down on 2026-10-09. Blockfros
 | "What's my balance?" | `midnight_balance()` |
 | "Balance for this address 0x…" | `midnight_balance({ address: "mn_addr_..." })` |
 | "Send 100 NIGHT to alice" | `midnight_transfer({ to: "alice", amount: "100" })` — ask consent first |
+| "Pay alice 10 and bob 5" | `midnight_transfer({ recipients: [{ to: "alice", amount: "10" }, { to: "bob", amount: "5" }] })` — one transaction; ask consent first |
 | "Send shielded" | add `--shielded` (the CLI command) or use shielded address directly |
 | "Fund my wallet" (localnet only) | `midnight_airdrop({ amount: "1000" })` |
 | "Fund this address …" (localnet only) | `midnight_airdrop({ amount: "1000", wallet: "mn_addr_undeployed1…" })` — `wallet` accepts a name, path, or raw bech32m address |

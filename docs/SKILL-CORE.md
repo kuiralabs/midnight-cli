@@ -14,6 +14,7 @@ You have access to the `midnight-wallet-cli` MCP server. This is the **core** sk
 | "What's my balance?" | `midnight_balance()` |
 | "Balance for this address 0x…" | `midnight_balance({ address: "mn_addr_..." })` |
 | "Send 100 NIGHT to alice" | `midnight_transfer({ to: "alice", amount: "100" })` — ask consent first |
+| "Pay alice 10 and bob 5" | `midnight_transfer({ recipients: [{ to: "alice", amount: "10" }, { to: "bob", amount: "5" }] })` — one transaction; ask consent first |
 | "Send shielded" | use the shielded address directly, or pass `--shielded` via the CLI |
 | "Fund my wallet" (localnet only) | `midnight_airdrop({ amount: "1000" })` |
 | "Register dust" / "I need fees" | `midnight_dust_register()` |

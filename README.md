@@ -41,7 +41,7 @@ Install the prerelease with npm 11 or older (or run it with `npx`; with npm 12, 
 | `midnight genesis-address [--network <name>]` | Display the genesis wallet address (seed 0x01) for a network |
 | `midnight inspect-cost [--network <name>] [--node <url>] [--indexer-ws <url>] [--proof-server <url>]` | Display the chain's current block limits, from its latest block's ledger parameters |
 | `midnight airdrop <amount> [--shielded] [--wallet <name\|file\|address>] [--network <name>] [--node <url>] [--indexer-ws <url>] [--proof-server <url>] [--verbose]` | Fund a wallet from the genesis wallet (undeployed network only) |
-| `midnight transfer <to> <amount> [--shielded [--force-shielded]] [--wallet <name\|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--verbose]` | Send NIGHT tokens to another address (unshielded or --shielded) |
+| `midnight transfer <to> <amount> [<to> <amount> ...] \| --to-file <file> [--shielded [--force-shielded]] [--wallet <name\|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--verbose]` | Send NIGHT tokens to another address, or to several in one transaction (unshielded or --shielded) |
 | `midnight dust <register\|status\|export> [--wallet <name\|file>] [--seed <hex> (export only)] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--no-cache (status only)]` | Register UTXOs for dust (fee token) generation, check status, or export a restorable snapshot |
 | `midnight config get [key] [--network <name>] \| midnight config <set\|unset> <key> [value] [--network <name>]` | Manage persistent config (default network, endpoints, etc.) |
 | `midnight cache clear [--network <name>] [--wallet <name\|file>]` | Manage wallet state cache (clear cached sync data) |
@@ -104,6 +104,18 @@ midnight dust register
 midnight balance
 midnight transfer mn_addr_preprod1... 100
 ```
+
+### Paying several recipients at once
+
+One `transfer` can pay several recipients in a single transaction, so the payer signs, proves and pays a fee once. Give `<to> <amount>` pairs, each recipient a wallet name or an address, or a JSON file of them:
+
+```bash
+midnight transfer alice 10 bob 5 mn_addr_undeployed1... 2.5
+midnight transfer --to-file payments.json
+# payments.json: [{"to": "alice", "amount": "10"}, {"to": "mn_addr_...", "amount": "2.5"}]
+```
+
+Every flag applies to the whole transaction (`--shielded` pays every recipient shielded NIGHT). A transfer takes at most 50 recipients; a recipient listed twice is paid twice. A mistake in one entry (an unknown recipient, an amount that isn't one) is refused before anything is sent, naming the entry, and the balance is checked against the total. On a local network, three recipients in one transaction cost 0.92 DUST against 0.55 DUST for each single transfer.
 
 ## Supported Networks
 
@@ -202,7 +214,10 @@ midnight balance --json
 # → {"address":"mn_addr_...","shieldedAddress":"mn_shield-addr_...","network":"undeployed","unshielded":{"NIGHT":"1000.000000","utxoCount":1},"shielded":{"NIGHT":"10.000000","availableCoins":1,"pendingCoins":0}}
 
 midnight transfer alice 100 --json
-# → {"txHash":"00ab...","amount":100,"recipient":"mn_addr_...","network":"undeployed"}
+# → {"txHash":"00ab...","amount":"100","recipient":"mn_addr_...","network":"undeployed"}
+
+midnight transfer alice 10 bob 5 --json
+# → {"txHash":"00cd...","amount":"15","recipients":[{"recipient":"mn_addr_...","amount":"10"},{"recipient":"mn_addr_...","amount":"5"}],"network":"undeployed"}
 ```
 
 When `--json` is active:

@@ -264,6 +264,8 @@ token that the agent must show to the user for consent, then redeem via
 midnight_confirm_operation to actually execute.
 
   Call 1:  midnight_transfer({ to, amount, wallet, network })
+           or, several recipients in one transaction:
+           midnight_transfer({ recipients: [{ to, amount }, ...], wallet, network })
            → { pending: true, token, description, expiresAt, nextStep }
   Show:    the description to the user verbatim.
   Call 2:  midnight_confirm_operation({ token })

@@ -48,6 +48,12 @@ proofs. The CLI provides full shielded support:
     midnight transfer mn_shield-addr_... 50 --shielded --json
     → { txHash, amount, recipient, network, type: "shielded" }
 
+  Several recipients in one transaction (one fee, up to 50; --shielded too):
+    midnight transfer alice 10 bob 5 mn_addr_... 2.5 --json
+    midnight transfer --to-file payments.json --json
+      payments.json: [{"to": "alice", "amount": "10"}, {"to": "mn_addr_...", "amount": "2.5"}]
+    → { txHash, amount (the total), recipients: [{ recipient, amount }], network }
+
   Positional address balance (unshielded only, fast GraphQL):
     midnight balance mn_addr_... --json
     → { address, network, balances, utxoCount, txCount }
@@ -161,6 +167,7 @@ included), it's used as an address directly.
 | "What's my balance?" | \`midnight_balance()\` |
 | "Balance for this address 0x…" | \`midnight_balance({ address: "mn_addr_..." })\` |
 | "Send 100 NIGHT to alice" | \`midnight_transfer({ to: "alice", amount: "100" })\` — ask consent first |
+| "Pay alice 10 and bob 5" | \`midnight_transfer({ recipients: [{ to: "alice", amount: "10" }, { to: "bob", amount: "5" }] })\` — one transaction; ask consent first |
 | "Send shielded" | use the shielded address directly, or pass \`--shielded\` via the CLI |
 | "Fund my wallet" (localnet only) | \`midnight_airdrop({ amount: "1000" })\` |
 | "Register dust" / "I need fees" | \`midnight_dust_register()\` |
@@ -177,6 +184,7 @@ included), it's used as an address directly.
 | "What's my balance?" | \`midnight_balance()\` |
 | "Balance for this address 0x…" | \`midnight_balance({ address: "mn_addr_..." })\` |
 | "Send 100 NIGHT to alice" | \`midnight_transfer({ to: "alice", amount: "100" })\` — ask consent first |
+| "Pay alice 10 and bob 5" | \`midnight_transfer({ recipients: [{ to: "alice", amount: "10" }, { to: "bob", amount: "5" }] })\` — one transaction; ask consent first |
 | "Send shielded" | add \`--shielded\` (the CLI command) or use shielded address directly |
 | "Fund my wallet" (localnet only) | \`midnight_airdrop({ amount: "1000" })\` |
 | "Fund this address …" (localnet only) | \`midnight_airdrop({ amount: "1000", wallet: "mn_addr_undeployed1…" })\` — \`wallet\` accepts a name, path, or raw bech32m address |
