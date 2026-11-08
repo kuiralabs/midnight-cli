@@ -14,7 +14,7 @@ import {
   protectAllWallets,
   setActiveWallet,
   listWallets,
-  removeWallet,
+  removeWalletAndCaches,
   resolveWalletPath,
   getActiveWalletName,
 } from '../lib/wallet-config.ts';
@@ -312,10 +312,14 @@ async function walletRemove(args: ParsedArgs, ctx: CallContext): Promise<void> {
     );
   }
 
-  removeWallet(ctx.config.paths.stateRoot, name);
+  // Opened with mn's passphrase first, for the reader caches named by keys from its seed.
+  const { readerCachesCleared } = await removeWalletAndCaches(ctx.host, ctx.config.paths.stateRoot, name);
+  if (!readerCachesCleared) {
+    ctx.warn(`The Dust and shielded reader caches of wallet "${name}" were left: they are named by keys from its seed, which can't be opened without mn's passphrase (set MN_PASSPHRASE, or run at a terminal). Clear them with: midnight cache clear --network <name>, for each network the wallet was used on.`);
+  }
 
   if (hasFlag(args, 'json')) {
-    ctx.output.result({ wallet: name, removed: true });
+    ctx.output.result({ wallet: name, removed: true, readerCachesCleared });
     return;
   }
 

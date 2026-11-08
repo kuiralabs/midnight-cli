@@ -29,6 +29,7 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 
 ### Fixed
 
+- **`wallet remove` takes the wallet's reader caches with it.** It opens the wallet with mn's passphrase (asked at a terminal, or `MN_PASSPHRASE`) and removes its Dust and shielded readers' caches on every network, which are named by keys from its seed, besides the wallet file and its sync caches. With no passphrase to be had it still removes the wallet and its sync caches, and says which caches were left and to clear them with `mn cache clear --network <name>` (in `warnings` with `--json`, which gains `readerCachesCleared`); a wrong passphrase removes nothing.
 - **Progress written to a file or a pipe is plain lines.** Off a terminal, a step's progress still carried carriage returns and the erase-line code `ESC[K` (colour was already off): a program's log, or `mn … 2> file`, now gets one line per step as it ends (`✓ Wallet synced`), with no escape code.
 - **`mn test run`'s `cache-clear` step clears only the caches of the wallets the run uses**: the active wallet's and, on a local network, the genesis wallet's (the airdrop pays from it). It cleared every wallet's sync cache for the network, so each of them synced from the start again.
 - **`config get` with no key lists the whole config**, each value as `config get <key>` shows it (the Blockfrost project id masked); with `--network`, the values that network scopes; `--json` gives them as `values`. It was a usage error. `midnight_config_get` takes no key for the same.

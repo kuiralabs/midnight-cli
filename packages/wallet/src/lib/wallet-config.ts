@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, narrowToOwnerOnly, isValidNetworkName, clearWalletCache, assertValidWalletName, isValidWalletName, InvalidWalletNameError, DEFAULT_CONFIG_FILENAME, UsageError, getValidNetworkNames, type NetworkName, loadCliConfig, saveCliConfig, type EngineKeys, type HostEngines, isSealedSecret, openSecret, sealSecret, FileExistsError, writeJsonDurably, defineHostSlot, type Host, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { DEFAULT_WALLET_FILENAME, WALLETS_DIR_NAME, DEFAULT_WALLET_NAME, FILE_MODE, narrowToOwnerOnly, isValidNetworkName, clearWalletCache, assertValidWalletName, isValidWalletName, InvalidWalletNameError, DEFAULT_CONFIG_FILENAME, UsageError, getValidNetworkNames, type NetworkName, loadCliConfig, saveCliConfig, type EngineKeys, type HostEngines, isSealedSecret, openSecret, sealSecret, FileExistsError, writeJsonDurably, defineHostSlot, type Host, throwIfCancelled, clearDustDirectCache, clearNativeDustCheckpoint, clearShieldedDirectCache } from '@kuiralabs/midnight-cli-core';
 import { getWalletsDir } from './wallet-paths.ts';
-import { type PassphraseHost, type PassphraseSource, unlockPassphrase } from './passphrase.ts';
+import { NoPassphraseError, type PassphraseHost, type PassphraseSource, unlockPassphrase } from './passphrase.ts';
 
 /** No wallet by that name, or no wallet file at that path; the message says how to list or make one. */
 export class WalletNotFoundError extends Error {
@@ -331,6 +331,47 @@ export function removeWallet(root: string, name: string): void {
   for (const [network, address] of Object.entries(addresses)) {
     if (isValidNetworkName(network) && typeof address === 'string') clearWalletCache(address, network, root);
   }
+}
+
+/** What removing a wallet with its caches did. */
+export interface RemovedWallet {
+  /**
+   * Its Dust and shielded readers' caches (named by keys from its seed) were
+   * removed on every network; false when its seed couldn't be opened (no
+   * passphrase to be had), so they were left.
+   */
+  readonly readerCachesCleared: boolean;
+}
+
+/**
+ * Removes the wallet `name` under the state root `root`, its sync caches
+ * (named by its addresses), and its Dust and shielded readers' caches on
+ * every network, which are named by keys from its seed: it is opened with
+ * mn's passphrase for them. With no passphrase to be had (no terminal, no
+ * MN_PASSPHRASE) the wallet and its sync caches still go and the reader
+ * caches are left (`readerCachesCleared` false); a wrong passphrase removes
+ * nothing.
+ */
+export async function removeWalletAndCaches(host: UnlockHost, root: string, name: string): Promise<RemovedWallet> {
+  const file = assertWalletRemovable(root, name);
+  let seed: Buffer | undefined;
+  try {
+    seed = Buffer.from((await unlockWallet(file, { root, host })).seed, 'hex');
+  } catch (err) {
+    if (!(err instanceof NoPassphraseError)) throw err;
+  }
+  // The reader caches' keys, derived before the file goes. Every SDK set derives them alike from a seed.
+  const keys = seed === undefined ? undefined : (await host.engines.any()).keys;
+  removeWallet(root, name);
+  if (seed === undefined || keys === undefined) return { readerCachesCleared: false };
+  const dust = keys.dustPublicKeyHex(seed);
+  const shielded = keys.shieldedCoinPublicKeyHex(seed);
+  for (const network of getValidNetworkNames()) {
+    clearDustDirectCache(network, dust, root);
+    clearNativeDustCheckpoint(network, dust, root);
+    clearShieldedDirectCache(network, shielded, root);
+  }
+  return { readerCachesCleared: true };
 }
 
 /** Throws, with how to make one, when there is no wallet file at `resolvedPath`. */
