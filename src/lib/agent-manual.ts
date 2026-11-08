@@ -78,10 +78,9 @@ blockchain. It manages wallets, balances, transfers (unshielded and
 shielded), dust fees, a DApp connector server, contract inspection,
 E2E testing, and a local devnet — all from the terminal.
 
-Wallets are network-agnostic: one seed derives addresses for all five
-networks (undeployed, preprod, preview, stagenet, mainnet). Network is chosen
-at runtime. Stagenet is Sig Network's chain on the beta SDK set; mn runs it
-through its own engine, picked by the network.
+Wallets are network-agnostic: one seed derives addresses for all four
+networks (undeployed, preprod, preview, mainnet). Network is chosen
+at runtime.
 
 Mainnet moves real value. mn reaches it only when a call names it
 (--network mainnet, or a tool's network parameter): it can't be the saved

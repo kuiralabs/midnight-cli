@@ -88,7 +88,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
   // `connector.hasPendingTxs()` check below).
 
   const spinner = ctx.progress.start('Syncing wallet...');
-  // Where shielded is off by default (preview, preprod, stagenet), serve is
+  // Where shielded is off by default (preview, preprod), serve is
   // ready once unshielded and Dust are synced; the shielded wallet keeps
   // syncing behind, so its balances may be short until it catches up.
   const syncMode = shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded')) ? 'full' : 'lite';

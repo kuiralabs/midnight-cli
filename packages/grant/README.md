@@ -1,6 +1,6 @@
 # @kuiralabs/midnight-grant
 
-Grants for the Midnight CLI packages: `mn grant`, the wallet owner's side of an account (`@kuiralabs/midnight-account-chain`) and the grants that let an agent spend from it, its owner devices and backups; and the protector `wallet protect` seals the accounts' records with. The account package runs through the loaded engine, so the same commands work on each engine's networks.
+Grants for the Midnight CLI packages: `mn grant`, the wallet owner's side of an account (`@kuiralabs/midnight-account-chain`) and the grants that let an agent spend from it, its owner devices and backups; and the protector `wallet protect` seals the accounts' records with. The account package runs through the loaded engine, on the SDK set the engine installs.
 
 ## Install
 
@@ -8,7 +8,7 @@ Grants for the Midnight CLI packages: `mn grant`, the wallet owner's side of an 
 npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-wallet@next @kuiralabs/midnight-grant@next @kuiralabs/midnight-connect@next @kuiralabs/midnight-engine-rc@next
 ```
 
-Every package is a release candidate on the `next` tag. Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): each engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it. A program that runs the SDK installs an engine: `@kuiralabs/midnight-engine-rc` for preprod, preview and a local network, `@kuiralabs/midnight-engine-beta` for stagenet. How a program sets up its process for the SDK (the rejection guard, the heap, Ctrl-C, ending) is in [core's README](https://github.com/kuiralabs/midnight-cli/blob/main/packages/cli-core/README.md#your-process-what-mns-shell-does-that-you-must-do).
+Every package is a release candidate on the `next` tag. Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): the engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it. A program that runs the SDK installs the engine, `@kuiralabs/midnight-engine-rc`, for every network. How a program sets up its process for the SDK (the rejection guard, the heap, Ctrl-C, ending) is in [core's README](https://github.com/kuiralabs/midnight-cli/blob/main/packages/cli-core/README.md#your-process-what-mns-shell-does-that-you-must-do).
 
 ## Entry points
 
@@ -32,7 +32,6 @@ Each error carries a `code`, and `classifyError(err, registry)` gives its code a
 | Code | Exit | What went wrong | What to do |
 |------|------|-----------------|------------|
 | `NO_ACCOUNT` | 1 | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. | Offer `midnight_grant_deploy()`, after telling the user how its owner key is kept (see the allowance flow). |
-| `CALLER_PIN_UNSUPPORTED` | 2 | A grant request pins the contract that calls the account, and the account on this network (stagenet) has no caller pin; nothing was submitted. | Tell the user; ask the agent for a grant request that names no calling contract, or issue it on undeployed. |
 | `ACCOUNT_KEYS_UNAVAILABLE` | 1 | A proving key of the account contract couldn't be had: the installed account build's keys are not published (HTTP 404), or fetching them failed. Nothing was submitted. | Show the message: it names the key and the build. Not published: tell the user mn grant needs an mn release whose account keys are published; don't retry. A failed fetch: retry once. |
 <!-- codes: end -->
 

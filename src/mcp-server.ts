@@ -17,7 +17,6 @@ import {
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { servePayer } from '@kuiralabs/midnight-connect';
 import { classifyError, asReported, trimAgentMessage, needsConfirmation, type CommandRun, type Host, UsageError } from '@kuiralabs/midnight-cli-core';
-import { withServerAdvice } from './lib/mcp/server-advice.ts';
 import { PKG_VERSION } from './lib/pkg.ts';
 import { createConfirmationStore } from './lib/mcp/confirmation.ts';
 import { assertKnownParams, assertParamTypes } from './lib/mcp/known-params.ts';
@@ -217,7 +216,7 @@ async function executeTool(name: string, params: Record<string, unknown>, call: 
 
 function errorResponse(thrown: Error, call: CommandRun) {
   // A node's refusal is reported in the node's words, also when a command wrapped it.
-  const error = withServerAdvice(asReported(thrown), call.host.paths().stateRoot);
+  const error = asReported(thrown);
   const { errorCode } = classifyError(error, installedCommands);
   return {
     content: [{

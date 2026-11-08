@@ -79,7 +79,7 @@ describe('deriveUnshieldedAddress', () => {
 describe('deriveAllShieldedAddresses', () => {
   it('returns one shielded address per supported network', () => {
     const out = deriveAllShieldedAddresses(genesisSeedBuffer);
-    expect(Object.keys(out).sort()).toEqual(['mainnet', 'preprod', 'preview', 'stagenet', 'undeployed']);
+    expect(Object.keys(out).sort()).toEqual(['mainnet', 'preprod', 'preview', 'undeployed']);
   });
 
   it('each address has the correct network prefix', () => {

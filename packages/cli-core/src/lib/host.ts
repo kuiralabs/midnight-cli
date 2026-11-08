@@ -2,8 +2,7 @@
 // paths (the state root and the user's home), where its notices go, who
 // answers its questions, its SDK engine, where the SDK's warnings go, and the
 // state the libraries keep for it (the slots). A program creates one and
-// passes it in; two hosts in one process share nothing of it but the SDK set
-// the process runs (two sets' ledgers can't share a process).
+// passes it in; two hosts in one process share nothing of it.
 //
 // mn's shell builds one at start, its MCP server one for all its calls.
 
@@ -12,7 +11,7 @@ import { NoStateRootError } from './state-root.ts';
 import { settingsFromEnvironment, type Settings } from './settings.ts';
 import type { Prompter } from './prompter.ts';
 import { createSdkWarningRouter, sdkWarningCallsOn, type CallSdkWarnings, type SdkWarningCalls } from './sdk-warnings.ts';
-import { claimSdkSet, OtherSdkSetError, sdkSetOf, type Engine, type EngineLoader, type HostEngines, type SdkSet } from './engine.ts';
+import { sdkSetOf, type Engine, type EngineLoader, type HostEngines, type SdkSet } from './engine.ts';
 import type { NetworkName } from './network.ts';
 
 /** A piece of state a library keeps per host, named by the library that owns it. */
@@ -109,12 +108,9 @@ function hostEngines(host: () => Host, loader: EngineLoader | undefined): HostEn
   const load = async (set: SdkSet): Promise<Engine> => {
     if (loaded === undefined) {
       if (loader === undefined) throw new Error('No SDK engine is installed: the host is given an engine loader (createHost\'s engineLoader)');
-      claimSdkSet(set);
       loaded = loader(set, host());
     }
-    const engine = await loaded;
-    if (engine.set !== set) throw new OtherSdkSetError(engine.set, set);
-    return engine;
+    return loaded;
   };
   return {
     load,

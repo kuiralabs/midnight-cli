@@ -10,7 +10,6 @@ import { type AccountChain, accountChainFor } from './account-chain.ts';
 import { assertAccountNetwork, assertNodeRunsAccount } from './account.ts';
 import { NoAccountError } from './account-errors.ts';
 import { accountRecordsDir, accountWalletName, ensureAccountRecordsDir } from './account-records.ts';
-import { assertCallerPinnable } from './owner-commands.ts';
 import { type GrantRequest, resolveGrantRequest } from './request.ts';
 import { contractAddressOnRecord } from './sealed-account.ts';
 
@@ -49,7 +48,7 @@ export async function prepareGrant(args: ParsedArgs, root: string, host: Host): 
   assertNodeRunsAccount();
   const target = resolvePayingTarget(args, 'grant', request.subcommand, root, host);
   // Refuses a network the account can't reach before anything is created.
-  refuseOnMainnet(target.network, 'mn grant', "the account contract's current build has no released key set for mainnet", 'Use mn grant on undeployed (a local ledger-9 network) or stagenet.');
+  refuseOnMainnet(target.network, 'mn grant', "the account contract's current build has no released key set for mainnet", 'Use mn grant on undeployed (a local ledger-9 network).');
   const network = assertAccountNetwork(target.networkConfig);
   const chain = () => accountChainFor(host.engines, network);
   const walletName = accountWalletName(getFlag(args, 'wallet'), () => getActiveWalletName(root));
@@ -65,7 +64,6 @@ export async function prepareGrant(args: ParsedArgs, root: string, host: Host): 
   if (request.subcommand !== 'deploy' && request.subcommand !== 'import' && !makesItsOwn && account === null) {
     throw new NoAccountError(walletName, target.network);
   }
-  if (request.subcommand === 'issue') await assertCallerPinnable(request.link, target.network, await chain());
   // Only a command that writes an account's first records makes their folder,
   // and only for a wallet there is: a command refused leaves nothing behind.
   if (account === null) {

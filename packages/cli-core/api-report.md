@@ -122,6 +122,7 @@ export declare class SecondResultError extends Error {
 }
 export interface CliConfig {
     network: NetworkName;
+    retiredNetwork?: string;
     networks?: Partial<Record<NetworkName, NetworkSettings>>;
     'proof-server'?: string;
     node?: string;
@@ -387,12 +388,6 @@ export interface OpenedConnector {
     connector: DAppConnector;
     stop(): Promise<void>;
 }
-export declare class OtherSdkSetError extends Error {
-    readonly code = "OTHER_SDK_SET";
-    readonly loadedSet: SdkSet;
-    readonly wantedSet: SdkSet;
-    constructor(loadedSet: SdkSet, wantedSet: SdkSet, message?: string);
-}
 export type RawStateValue = {
     type: 'null';
 } | {
@@ -423,7 +418,7 @@ export interface ScriptParts {
     readonly indexerUrlEnv: string;
     readonly indexerWsUrlEnv: string;
 }
-export type SdkSet = 'rc' | 'beta';
+export type SdkSet = 'rc';
 export declare function sdkSetOf(network: NetworkName, root: string): SdkSet;
 export interface CodeDefinition {
     readonly code: string;
@@ -542,12 +537,10 @@ export declare const ERROR_CODES: {
     readonly AMBIGUOUS_LOCAL_STACKS: "AMBIGUOUS_LOCAL_STACKS";
     readonly UNSUPPORTED_NODE: "UNSUPPORTED_NODE";
     readonly NO_ACCOUNT: "NO_ACCOUNT";
-    readonly CALLER_PIN_UNSUPPORTED: "CALLER_PIN_UNSUPPORTED";
     readonly BLOCKFROST_PROJECT_ID_REQUIRED: "BLOCKFROST_PROJECT_ID_REQUIRED";
     readonly BLOCKFROST_PROJECT_ID_REJECTED: "BLOCKFROST_PROJECT_ID_REJECTED";
     readonly BLOCKFROST_LIMIT_REACHED: "BLOCKFROST_LIMIT_REACHED";
     readonly ENDPOINT_SHUT_DOWN: "ENDPOINT_SHUT_DOWN";
-    readonly OTHER_SDK_SET: "OTHER_SDK_SET";
     readonly MIXED_SDK_LAYOUT: "MIXED_SDK_LAYOUT";
     readonly NOT_AN_OFFER: "NOT_AN_OFFER";
     readonly TERMS_MISMATCH: "TERMS_MISMATCH";
@@ -663,13 +656,14 @@ export interface NetworkConfig {
     proofServer: string;
     networkId: string;
 }
-export type NetworkName = 'mainnet' | 'preprod' | 'preview' | 'stagenet' | 'undeployed';
+export type NetworkName = 'mainnet' | 'preprod' | 'preview' | 'undeployed';
 export declare class NetworkNotNamedError extends UsageError {
     constructor(network: NetworkName, asked: string);
 }
-export declare function networksOnSdkSet(set: SdkSet, root: string): NetworkName[];
 export declare function resolveNetworkConfig(name: NetworkName, options?: ResolveNetworkConfigOptions): NetworkConfig;
-export declare function sdkSetOfNetwork(name: NetworkName, root: string): SdkSet;
+export declare class RetiredNetworkError extends UsageError {
+    constructor(name: string, asked: string);
+}
 export interface NetworkChoice extends EndpointOverrides {
     network?: NetworkName;
 }
@@ -985,17 +979,10 @@ export declare const coreCodes: readonly [
         readonly recovery: "A transaction already submitted may still have landed: read the state first (`midnight_grant_status`, `midnight_balance`). Don't retry without confirming with the user.";
     },
     {
-        readonly code: "OTHER_SDK_SET";
-        readonly exitCode: 1;
-        readonly order: 280;
-        readonly summary: "The process runs one SDK set's engine and the network runs on the other (an MCP server that served rc asked for stagenet).";
-        readonly recovery: "Make the call in a process of its own: ask the user to start an MCP server for that network.";
-    },
-    {
         readonly code: "MIXED_SDK_LAYOUT";
         readonly exitCode: 1;
         readonly order: 290;
-        readonly summary: "mn's packages were installed without each engine's shrinkwrap (bun's installer): an engine's SDK tree isn't the one it was tested with.";
+        readonly summary: "mn's packages were installed without the engine's shrinkwrap (bun's installer): the engine's SDK tree isn't the one it was tested with.";
         readonly recovery: "Ask the user to install mn with npm.";
     },
     {

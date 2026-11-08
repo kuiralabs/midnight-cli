@@ -1,7 +1,7 @@
 // What a wallet with no saved state restores from: a new wallet's state on the
 // Dust checkpoint the direct reader holds, so the SDK doesn't replay the
 // chain's whole Dust history. `mn contract`'s served wallet once skipped this
-// and timed out on stagenet, 226k of 395k Dust events in. A temporary state
+// and timed out on a hosted network, 226k of 395k Dust events in. A temporary state
 // root. Live (`npm run test:live`): a new wallet reads the chain's protocol
 // version from undeployed's indexer (its saved endpoints or the defaults), and
 // a ledger-9 checkpoint only goes into a wallet on ledger 9.

@@ -151,7 +151,7 @@ export const walletDefinition: CommandDefinition = {
       },
       {
         name: 'midnight_wallet_list',
-        description: 'List wallets. Default: per-wallet { name, active, network, address, shieldedAddress } scoped to the active network. Pass { full: true } for the addresses + shieldedAddresses maps of every network (undeployed, preprod, preview, stagenet, mainnet).',
+        description: 'List wallets. Default: per-wallet { name, active, network, address, shieldedAddress } scoped to the active network. Pass { full: true } for the addresses + shieldedAddresses maps of every network (undeployed, preprod, preview, mainnet).',
         annotations: { readOnlyHint: true, idempotentHint: true },
         params: [
           {

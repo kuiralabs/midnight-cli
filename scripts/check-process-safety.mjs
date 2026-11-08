@@ -25,8 +25,8 @@
 //   - library, ui and command code exports no setter of host state: no
 //     function named set…Source, set…Sink, setPrompter or setEngineLoader, and
 //     no exported function that assigns a module-level `let` or `var`. What a
-//     library needs from its host comes in through the host it is passed; the
-//     one process guard allowed is named below, with its reason.
+//     library needs from its host comes in through the host it is passed; a
+//     setter allowed is named below, with its reason (none is today).
 //
 // Usage: node scripts/check-process-safety.mjs
 // Exits 1 when a library does something the rules above forbid, or any code
@@ -101,18 +101,11 @@ export const ALLOWED = {
 export const ALLOWED_STATE = {
   // Shared on purpose: none holds a call's state.
   'lib/chain-id.ts': { CHAIN_ID_MEMO: 'shared on purpose: the chain-id memo, by endpoint' },
-  'lib/engine.ts': {
-    loadedSet: 'shared on purpose: the SDK set this process loads, whichever host loads it (two WASM ledgers cannot share a process)',
-  },
 };
 
 // Exported functions that set module state, which the setter rule allows, by
 // file and name, and why. Host state is never one: a host passes it in.
-export const ALLOWED_SETTERS = {
-  'lib/engine.ts': {
-    claimSdkSet: 'the process guard, approved by the owner: records the one SDK set this process loads, whichever host loads it, and refuses the other (two WASM ledgers cannot share a process)',
-  },
-};
+export const ALLOWED_SETTERS = {};
 
 // The names a setter of host state goes by, whatever it assigns.
 const SETTER_NAME = /^(set\w*Source|set\w*Sink|setPrompter|setEngineLoader)$/;

@@ -159,7 +159,7 @@ export async function readWalletBalance(host: Host, source: WalletSource, option
       onProgress?.({ kind: 'unshielded-read', ...unshielded });
 
       // The shielded read is the slow part; it is skipped where shielded is off
-      // by default (preview, preprod, stagenet), and the caller says so.
+      // by default (preview, preprod), and the caller says so.
       if (!shieldedSyncEnabled(network, options.forceShielded)) {
         return { network, address, ...(savedShieldedAddress === undefined ? {} : { shieldedAddress: savedShieldedAddress }), unshielded, shielded: null };
       }

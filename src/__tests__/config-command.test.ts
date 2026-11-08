@@ -68,7 +68,6 @@ describe('config command — error handling', () => {
       ['indexer-ws', '(not set)'],
       ['wallet', '(not set)'],
       ['blockfrost-project-id', expect.stringMatching(/^nightpreprod.*\(preprod\)$/)],
-      ['sdk-set', '(not set)'],
     ]);
     // Each as `config get <key>` shows it.
     io.clearStdout();
@@ -83,7 +82,7 @@ describe('config command — error handling', () => {
     expect(JSON.parse(io.stdout())).toMatchObject({ action: 'get', values: { network: 'undeployed', node: '(not set)', wallet: '(not set)' } });
     io.clearStdout();
     await cliCall(configCommand, parseArgs(['config', 'get', '--network', 'preview', '--json']));
-    expect(JSON.parse(io.stdout())).toEqual({ action: 'get', network: 'preview', values: { 'proof-server': '(not set)', node: 'ws://n.example', 'indexer-ws': '(not set)', 'blockfrost-project-id': '(not set)', 'sdk-set': '(not set)' } });
+    expect(JSON.parse(io.stdout())).toEqual({ action: 'get', network: 'preview', values: { 'proof-server': '(not set)', node: 'ws://n.example', 'indexer-ws': '(not set)', 'blockfrost-project-id': '(not set)' } });
   });
 
   it('throws when key is missing for set', async () => {

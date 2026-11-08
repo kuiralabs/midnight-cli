@@ -13,10 +13,10 @@ export const balanceDefinition: CommandDefinition = {
       name: 'force-shielded',
       takesValue: false,
       help: [
-        '--force-shielded    Read the shielded balance on preview, preprod and stagenet too: not read there by',
+        '--force-shielded    Read the shielded balance on preview and preprod too: not read there by',
         '                    default, since the first read takes a while; a wallet can hold shielded tokens there',
       ],
-      agent: { type: 'boolean', description: 'Read the shielded balance on preview, preprod and stagenet too (not read there by default, since the first read takes a while; a wallet can hold shielded tokens there, minted by contracts)' },
+      agent: { type: 'boolean', description: 'Read the shielded balance on preview and preprod too (not read there by default, since the first read takes a while; a wallet can hold shielded tokens there, minted by contracts)' },
     },
     { name: 'network', takesValue: true, help: ['--network <name>    Override network'], agent: NETWORK_PARAM },
     {

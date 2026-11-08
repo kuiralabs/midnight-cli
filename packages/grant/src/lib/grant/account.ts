@@ -34,10 +34,9 @@ import { accountArtifactsDir } from './account-records.ts';
 
 /**
  * The networks the account package acts on, by the network id midnight-js
- * keeps (mn's own, lower-cased): ledger 9's, a local network on the release
- * candidates' set and stagenet on its beta set.
+ * keeps (mn's own, lower-cased): ledger 9's, a local network.
  */
-const ACCOUNT_NETWORKS: readonly NetworkName[] = ['undeployed', 'stagenet'];
+const ACCOUNT_NETWORKS: readonly NetworkName[] = ['undeployed'];
 
 /** The private state's database, store and password, as every account so far was made with them. */
 const PRIVATE_STATE_STORE = 'midnight-bench-account';

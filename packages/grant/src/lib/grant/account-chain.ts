@@ -1,11 +1,8 @@
 // The account package (@kuiralabs/midnight-account-chain) as grant reaches
-// it: through the engine of the network's SDK set, which installs the copy
-// whose Midnight libraries are that set's. That copy runs the contract build
-// for the set: the release candidates' (with the caller pin) on a local
-// network, the stagenet build (without it) on stagenet. Grant never imports
-// the package's code itself, only its types here: a copy it imported would
-// resolve the package's libraries from grant's own folder, whatever the
-// network's set.
+// it: through the engine, which installs the copy whose Midnight libraries
+// (peer dependencies) are the engine's own SDK set. Grant never imports the
+// package's code itself, only its types here: a copy it imported would
+// resolve the package's libraries from grant's own folder.
 
 import type * as Artefacts from '@kuiralabs/midnight-account-chain/artefacts';
 import type * as Connector from '@kuiralabs/midnight-account-chain/connector';

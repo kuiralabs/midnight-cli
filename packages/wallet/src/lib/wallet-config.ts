@@ -107,6 +107,15 @@ function missingNetworks(map: Partial<Record<NetworkName, string>> | undefined):
   return (getValidNetworkNames() as NetworkName[]).filter((network) => typeof map?.[network] !== 'string' || map[network] === '');
 }
 
+/**
+ * A wallet file's address map, keeping only the networks mn runs on: a file an
+ * earlier mn wrote also holds a stagenet address, which is never shown or
+ * matched (it stays in the file until mn next writes the file's addresses).
+ */
+function ofKnownNetworks<T extends Record<string, string>>(map: T): Record<NetworkName, string> {
+  return Object.fromEntries(Object.entries(map).filter(([network]) => isValidNetworkName(network))) as Record<NetworkName, string>;
+}
+
 /** The wallet's address maps with every network's address, derived from its seed (by an engine of `engines`) where missing; null when none was missing. */
 async function completedAddresses(config: WalletConfig, seed: Buffer, engines: HostEngines): Promise<Pick<WalletConfig, 'addresses' | 'shieldedAddresses'> | null> {
   const lacksUnshielded = missingNetworks(config.addresses).length > 0;
@@ -204,7 +213,7 @@ export async function listWallets(root: string, engines: HostEngines): Promise<W
       // Support both old format (address/network) and new format (addresses)
       let addresses: Record<NetworkName, string>;
       if (content.addresses) {
-        addresses = content.addresses;
+        addresses = ofKnownNetworks(content.addresses);
       } else if (content.address && content.seed) {
         // Old format — derive all addresses from seed
         try {
@@ -219,7 +228,7 @@ export async function listWallets(root: string, engines: HostEngines): Promise<W
       // Resolve shielded addresses map — prefer new field, fall back to seed derivation
       let shieldedAddresses: Record<NetworkName, string> | undefined;
       if (content.shieldedAddresses && typeof content.shieldedAddresses === 'object') {
-        shieldedAddresses = content.shieldedAddresses;
+        shieldedAddresses = ofKnownNetworks(content.shieldedAddresses);
       } else if (content.seed) {
         try {
           shieldedAddresses = (await engineKeys()).shieldedAddresses(Buffer.from(content.seed, 'hex'));
@@ -414,8 +423,8 @@ export async function loadWalletConfig(walletPath: string, engines: HostEngines)
     if (!raw.addresses || typeof raw.addresses !== 'object' || typeof raw.createdAt !== 'string') {
       throw new UsageError(`Wallet file is missing required fields (addresses, createdAt): ${resolvedPath}`);
     }
-    const sealedConfig: WalletConfig = { addresses: raw.addresses, createdAt: raw.createdAt, isSealed: true };
-    if (raw.shieldedAddresses && typeof raw.shieldedAddresses === 'object') sealedConfig.shieldedAddresses = raw.shieldedAddresses;
+    const sealedConfig: WalletConfig = { addresses: ofKnownNetworks(raw.addresses), createdAt: raw.createdAt, isSealed: true };
+    if (raw.shieldedAddresses && typeof raw.shieldedAddresses === 'object') sealedConfig.shieldedAddresses = ofKnownNetworks(raw.shieldedAddresses);
     return sealedConfig;
   }
 
@@ -479,7 +488,7 @@ export async function loadWalletConfig(walletPath: string, engines: HostEngines)
 
   const seedBuffer = Buffer.from(raw.seed, 'hex');
   const config: WalletConfig = {
-    addresses: raw.addresses,
+    addresses: ofKnownNetworks(raw.addresses),
     createdAt: raw.createdAt,
     isSealed: false,
   };
@@ -537,7 +546,7 @@ async function resolveShieldedAddresses(
   const storedRaw = raw.shieldedAddresses;
   const stored = (storedRaw && typeof storedRaw === 'object') ? storedRaw as Record<string, string> : null;
   const validStored = stored
-    ? Object.fromEntries(Object.entries(stored).filter(([, v]) => typeof v === 'string' && v.length > 0))
+    ? Object.fromEntries(Object.entries(stored).filter(([network, v]) => isValidNetworkName(network) && typeof v === 'string' && v.length > 0))
     : {};
 
   if (!derived) {

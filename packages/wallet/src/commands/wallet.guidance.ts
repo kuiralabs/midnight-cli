@@ -57,7 +57,7 @@ proofs. The CLI provides full shielded support:
   address is one of your wallets, it maps to that wallet's full sync;
   otherwise it errors and points you to --wallet <name> --shielded.
 
-  On preview, preprod and stagenet the shielded balance is not read by
+  On preview and preprod the shielded balance is not read by
   default: the first read takes a while. A wallet can still hold shielded
   tokens there (contracts mint them, others send them). midnight balance
   --force-shielded reads it, and midnight transfer --shielded needs
@@ -116,9 +116,6 @@ included), it's used as an address directly.
   4. midnight_dust_register        → Register for fees
   5. midnight_balance              → Check balance
   6. midnight_transfer → midnight_confirm_operation → transfer
-
-  Stagenet (Sig Network's testnet, on the beta SDK set): the same steps
-  with value "stagenet", funded at https://faucet.stagenet.shielded.tools/.
 
   Mainnet (real value; never the saved network): pass network: "mainnet"
   on every call instead of setting it. Needs the user's mainnet Blockfrost

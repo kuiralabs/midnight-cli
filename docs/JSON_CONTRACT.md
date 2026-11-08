@@ -31,7 +31,7 @@ field involved.
 ### Network names
 
 ```
-"undeployed" | "preprod" | "preview" | "stagenet" | "mainnet"
+"undeployed" | "preprod" | "preview" | "mainnet"
 ```
 
 These values are stable. Adding a new network (e.g. `mainnet`)
@@ -120,7 +120,6 @@ Stable identifiers used in error messages and structured error objects, with the
 | `CONTRACT_NOT_COMPILED` | 1 | No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json). |
 | `CONTRACT_INFO_INVALID` | 1 | A compiled contract's contract-info.json is not what the Compact compiler writes (not JSON, or its circuits or witnesses missing or malformed). |
 | `NO_ACCOUNT` | 1 | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. |
-| `CALLER_PIN_UNSUPPORTED` | 2 | A grant request pins the contract that calls the account, and the account on this network (stagenet) has no caller pin; nothing was submitted. |
 | `ACCOUNT_KEYS_UNAVAILABLE` | 1 | A proving key of the account contract couldn't be had: the installed account build's keys are not published (HTTP 404), or fetching them failed. Nothing was submitted. |
 | `WRONG_PASSPHRASE` | 2 | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. |
 | `PASSPHRASE_REQUIRED` | 2 | A tool needed a secret (a wallet's seed, an account's owner key) and no passphrase could be had: `MN_PASSPHRASE` is unset and there is no terminal to ask at (the MCP server has none). |
@@ -129,8 +128,7 @@ Stable identifiers used in error messages and structured error objects, with the
 | `BLOCKFROST_LIMIT_REACHED` | 4 | Blockfrost's plan limit or rate limit. |
 | `ENDPOINT_SHUT_DOWN` | 4 | An endpoint set by flag or config was shut down by its operator (the old preprod indexer, mainnet's old Midnight-hosted indexer and node). |
 | `MAINNET_REFUSED` | 2 | The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (no released account build there). |
-| `OTHER_SDK_SET` | 1 | The process runs one SDK set's engine and the network runs on the other (an MCP server that served rc asked for stagenet). |
-| `MIXED_SDK_LAYOUT` | 1 | mn's packages were installed without each engine's shrinkwrap (bun's installer): an engine's SDK tree isn't the one it was tested with. |
+| `MIXED_SDK_LAYOUT` | 1 | mn's packages were installed without the engine's shrinkwrap (bun's installer): the engine's SDK tree isn't the one it was tested with. |
 | `NO_STATE_ROOT` | 1 | The host gave mn no place to keep its state (a program's `createHost` without paths). |
 | `NO_PAYER` | 1 | A command that submits a transaction was called without a payer. |
 | `SERVE_PORT_IN_USE` | 1 | The port mn serve was to use is taken by a process that can't serve this command (another program, or an mn serve for another network, chain or wallet). |

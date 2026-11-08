@@ -12,7 +12,6 @@ import { type GrantRequest, grantRequestFromLink, sealedResponseLink } from '@ku
 import type { OwnerView, Session } from '@kuiralabs/midnight-account-chain/owner';
 import { UsageError } from '@kuiralabs/midnight-cli-core';
 import type { AccountChain } from './account-chain.ts';
-import { CallerPinUnavailableError } from './account-errors.ts';
 import type { GrantLimits as RequestedLimits } from './request.ts';
 
 /** What a command gives: its result, and the lines a person reads. */
@@ -101,18 +100,6 @@ export function grantRequestOf(link: string): GrantRequest {
   } catch (err) {
     throw new UsageError(err instanceof Error ? err.message : String(err));
   }
-}
-
-/**
- * Refuses the request in `link` when it pins the contract that calls the
- * account and `chain`'s build (the network's) has no caller pin: before any
- * wallet is opened. Where the build pins callers, the link is left to be read
- * where it always is.
- */
-export async function assertCallerPinnable(link: string, network: string, chain: AccountChain): Promise<void> {
-  if (chain.contract.supportsCallerPin()) return;
-  const { caller } = grantRequestOf(link);
-  if (caller !== undefined) throw new CallerPinUnavailableError(network, hexOf(caller));
 }
 
 /** The limits an issue sets: those given, mn's defaults for the rest. */

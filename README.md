@@ -13,7 +13,7 @@ A standalone CLI wallet for the Midnight blockchain. Manage wallets, check balan
 Built for two audiences: **beginners** starting their first Midnight project (a local chain + funded wallets + contract deploy in minutes), and **AI agents** (Cursor, Claude Code, any MCP client) using the same primitives via a built-in MCP server.
 
 > [!IMPORTANT]
-> **0.6.0 (prerelease, `npm install -g midnight-wallet-cli@next`) is ledger-9 only.** It is built on wallet-sdk 2.0.0, ledger-v9 1.0.0, midnight-js 5.0.0 and compact-runtime 0.21.0 (contracts compiled with Compact 0.36 / language 0.28). `stagenet` runs on the beta set instead (wallet-sdk 5.0 beta split packages, ledger-v9 1.0.0-rc.3, midnight-js 5.0.0-beta.6, compact-runtime 0.18.0-rc.1, contracts compiled with compactc 0.33), which mn loads for that network alone. It refuses any chain still on ledger 8 up front (`UNSUPPORTED_LEDGER`): stay on 0.5.x (`npm install -g midnight-wallet-cli@latest`) for such a chain. `preview` and `mainnet` run ledger 9.
+> **0.6.0 (prerelease, `npm install -g midnight-wallet-cli@next`) is ledger-9 only.** It is built on wallet-sdk 2.0.0, ledger-v9 1.0.0, midnight-js 5.0.0 and compact-runtime 0.21.0 (contracts compiled with Compact 0.36 / language 0.28). It refuses any chain still on ledger 8 up front (`UNSUPPORTED_LEDGER`): stay on 0.5.x (`npm install -g midnight-wallet-cli@latest`) for such a chain. `preview` and `mainnet` run ledger 9.
 >
 > `midnight localnet up` starts a ledger-9 stack (node 2.1.0-rc.4, indexer 4.4.0-rc.6, proof server 9.0.0). To use another ledger-9 stack instead: on the default ports (node 9944, indexer 8088, proof server 6300) `--network undeployed` reaches it with no configuration. On other ports pass `--node`, `--indexer-ws` and `--proof-server` per command, or save them once with `midnight config set node <url>`, `midnight config set indexer-ws <url>` and `midnight config set proof-server <url>`.
 
@@ -26,7 +26,7 @@ npm install -g midnight-wallet-cli@next   # this ledger-9 prerelease
 
 This installs two commands: `midnight` (or `mn` for short) and `midnight-wallet-mcp`.
 
-Install the prerelease with npm 11 or older (or run it with `npx`; with npm 12, `npx -y npm@11 install -g midnight-wallet-cli@next`). Each engine ships an `npm-shrinkwrap.json` that pins the SDK set it was tested with; npm 12 and bun's installer ignore it and resolve the packages again, so an engine either installed is refused before any SDK loads, saying so (`MIXED_SDK_LAYOUT`). bun can run what npm installed.
+Install the prerelease with npm 11 or older (or run it with `npx`; with npm 12, `npx -y npm@11 install -g midnight-wallet-cli@next`). The engine ships an `npm-shrinkwrap.json` that pins the SDK set it was tested with; npm 12 and bun's installer ignore it and resolve the packages again, so the engine either installed is refused before any SDK loads, saying so (`MIXED_SDK_LAYOUT`). bun can run what npm installed.
 
 ## Commands
 
@@ -112,10 +112,9 @@ midnight transfer mn_addr_preprod1... 100
 | `undeployed` | Local network (`midnight localnet up` starts it) |
 | `preprod` | Midnight pre-production testnet (refused by this build while it is on ledger 8; use 0.5.x there). Its indexer and node are served by Blockfrost: needs a project id |
 | `preview` | Midnight preview testnet (ledger 9) |
-| `stagenet` | Sig Network's testnet, on the beta SDK set: mn runs it through its beta engine, picked by the network. NIGHT from https://faucet.stagenet.shielded.tools; no shielded faucet. As on preview and preprod, the shielded balance is not read by default (the first read takes a while): `--force-shielded` reads it. Its proof server must match its node (`midnightntwrk/proof-server:9.0.0-rc.5_experimental`). `mn grant` is refused there for now |
-| `mainnet` | Midnight Mainnet (ledger 9, on the rc SDK set). Reached only through Blockfrost, with a mainnet project id (it starts with `nightmainnet`); the proof server is your local one. No faucet. Real value: it must be named on every command with `--network mainnet` (it can't be the saved network), and `airdrop`, `mn test` and `mn grant` are refused there with `MAINNET_REFUSED`. Its addresses have no network segment: `mn_addr1…`, `mn_shield-addr1…` |
+| `mainnet` | Midnight Mainnet (ledger 9). Reached only through Blockfrost, with a mainnet project id (it starts with `nightmainnet`); the proof server is your local one. No faucet. Real value: it must be named on every command with `--network mainnet` (it can't be the saved network), and `airdrop`, `mn test` and `mn grant` are refused there with `MAINNET_REFUSED`. Its addresses have no network segment: `mn_addr1…`, `mn_shield-addr1…` |
 
-Wallets are network-agnostic — one seed derives addresses for all five networks. Use `--network <name>` on any command, or persist a test network with `midnight config set network preview` (mainnet is never persisted).
+Wallets are network-agnostic — one seed derives addresses for all four networks. Use `--network <name>` on any command, or persist a test network with `midnight config set network preview` (mainnet is never persisted).
 
 ### Mainnet
 
@@ -371,7 +370,7 @@ Every tool error returns `{ error: true, code: <CODE>, message: <human prose> }`
 
 ## Using mn's packages in your program
 
-mn is built from packages a program can install on its own: `@kuiralabs/midnight-cli-core` (the host, typed errors and codes, running a command), `@kuiralabs/midnight-chain`, `@kuiralabs/midnight-wallet` (with swap), `@kuiralabs/midnight-contract`, `@kuiralabs/midnight-connect`, `@kuiralabs/midnight-dev`, `@kuiralabs/midnight-grant`, and the two SDK engines, `@kuiralabs/midnight-engine-rc` and `@kuiralabs/midnight-engine-beta`. A program calls their functions with plain values (bigint amounts, typed results and receipts), or mounts their commands in its own command line or MCP server, with its own state root, settings, prompter and output; errors carry a `code` it can act on without reading messages. All are release candidates on the `next` tag; install them with npm.
+mn is built from packages a program can install on its own: `@kuiralabs/midnight-cli-core` (the host, typed errors and codes, running a command), `@kuiralabs/midnight-chain`, `@kuiralabs/midnight-wallet` (with swap), `@kuiralabs/midnight-contract`, `@kuiralabs/midnight-connect`, `@kuiralabs/midnight-dev`, `@kuiralabs/midnight-grant`, and the SDK engine, `@kuiralabs/midnight-engine-rc`. A program calls their functions with plain values (bigint amounts, typed results and receipts), or mounts their commands in its own command line or MCP server, with its own state root, settings, prompter and output; errors carry a `code` it can act on without reading messages. All are release candidates on the `next` tag; install them with npm.
 
 Start with [core's README](packages/cli-core/README.md): mounting commands, and what a program does to its own process for the wallet SDK. Each package's README lists its entry points, its codes and one example, and its `api-report.md` lists every export.
 

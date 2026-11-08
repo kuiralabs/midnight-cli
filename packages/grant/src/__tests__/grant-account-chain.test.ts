@@ -1,9 +1,7 @@
-// Grant reaches the account package through the engine of the network's SDK
-// set. On a local network that is the rc engine: its copy of the package,
-// whose Midnight libraries resolve to the rc set, runs the release
+// Grant reaches the account package through the engine: its copy of the
+// package, whose Midnight libraries resolve to the rc set, runs the release
 // candidates' contract build, which pins callers, so a request that pins its
 // calling contract is prepared as it always was. Nothing here reaches a chain.
-// (The beta engine's copy: engine-beta-account-chain.test.ts.)
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';

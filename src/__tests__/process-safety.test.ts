@@ -286,21 +286,22 @@ describe('the process-safety check finds a library exporting a setter of host st
     expect(setters(file)).toEqual([]);
   });
 
-  it('allows claimSdkSet, the process guard, only where the allowlist names it, and reports an entry whose setter is gone', () => {
+  it('allows a setter only where the allowlist names it, and reports an entry whose setter is gone', () => {
+    const allowlist = { 'lib/engine.ts': { claimSdkSet: 'a process guard' } };
     const guard = plant('lib/engine.ts', [
-      "let loadedSet: 'rc' | 'beta' | undefined;",
-      "export function claimSdkSet(set: 'rc' | 'beta'): void {",
+      'let loadedSet: string | undefined;',
+      'export function claimSdkSet(set: string): void {',
       '  if (loadedSet !== undefined && loadedSet !== set) throw new Error(set);',
       '  loadedSet = set;',
       '}',
     ]);
-    expect(setters(guard)).toEqual([]);
+    expect(setters(guard, allowlist)).toEqual([]);
     expect(setters(guard, {})).toEqual(['2 exports a setter of host state claimSdkSet']);
     const elsewhere = plant('lib/other.ts', [
-      "let loadedSet: 'rc' | 'beta' | undefined;",
-      "export function claimSdkSet(set: 'rc' | 'beta'): void { loadedSet = set; }",
+      'let loadedSet: string | undefined;',
+      'export function claimSdkSet(set: string): void { loadedSet = set; }',
     ]);
-    expect(setters(elsewhere)).toEqual(['2 exports a setter of host state claimSdkSet']);
-    expect(setters(plant('lib/engine.ts', ['export const NONE = 1;']))).toEqual(['0 allowlists a setter it no longer exports claimSdkSet']);
+    expect(setters(elsewhere, allowlist)).toEqual(['2 exports a setter of host state claimSdkSet']);
+    expect(setters(plant('lib/engine.ts', ['export const NONE = 1;']), allowlist)).toEqual(['0 allowlists a setter it no longer exports claimSdkSet']);
   });
 });

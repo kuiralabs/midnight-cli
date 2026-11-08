@@ -33,7 +33,7 @@ describe('open offers', () => {
   it('records an offer per wallet and network, in mn\'s state, readable only by its owner', () => {
     recordOpenOffer(root, 'undeployed', WALLET, offer('a1', ['n1']));
     expect(readOpenOffers(root, 'undeployed', WALLET)).toEqual([offer('a1', ['n1'])]);
-    expect(readOpenOffers(root, 'stagenet', WALLET)).toEqual([]);
+    expect(readOpenOffers(root, 'preview', WALLET)).toEqual([]);
     expect(openOffersFile(root, 'undeployed', WALLET)).toBe(join(root, 'swap-offers', 'undeployed', `${WALLET}.json`));
     expect(statSync(openOffersFile(root, 'undeployed', WALLET)).mode & 0o077).toBe(0);
   });

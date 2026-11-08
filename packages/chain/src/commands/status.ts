@@ -144,7 +144,7 @@ async function tryDetectNetwork(args: ParsedArgs, root: string): Promise<string 
   try {
     const { loadCliConfig } = await import('@kuiralabs/midnight-cli-core');
     const config = loadCliConfig(root);
-    if (config.network && isValidNetworkName(config.network)) return config.network;
+    if (config.retiredNetwork === undefined && config.network && isValidNetworkName(config.network)) return config.network;
   } catch {
     // fall through
   }

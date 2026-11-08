@@ -1,6 +1,6 @@
 // The README's "Your process" setup runs as it is written: its code block, in
 // a child process of its own, with only the engine standing in. The stand-in
-// is the real beta engine whose openConnector, instead of syncing a wallet,
+// is the real rc engine whose openConnector, instead of syncing a wallet,
 // lets a transient Wallet.Sync rejection escape (as the SDK does mid-sync) and
 // hands back a connector answering the balance reads. The program must survive
 // the rejection, see it as its session's warning, print the balances, stop the
@@ -14,8 +14,8 @@ import { join, resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 const README = resolve(import.meta.dirname, '..', '..', 'README.md');
-const BETA_ENGINE = join(ROOT, 'packages', 'engine-beta', 'src', 'index.ts');
-const ENGINE_SPECIFIER = '@kuiralabs/midnight-engine-beta';
+const RC_ENGINE = join(ROOT, 'packages', 'engine-rc', 'src', 'index.ts');
+const ENGINE_SPECIFIER = '@kuiralabs/midnight-engine-rc';
 const NIGHT = '00'.repeat(32);
 
 /** The README's setup block: the first js block under "### The setup". */
@@ -27,10 +27,10 @@ function setupBlock(): string {
   return block[1]!;
 }
 
-/** The beta engine, its openConnector standing in for a wallet sync. */
+/** The rc engine, its openConnector standing in for a wallet sync. */
 const STAND_IN_ENGINE = `
-import { createBetaEngine as createRealEngine } from ${JSON.stringify(BETA_ENGINE)};
-export function createBetaEngine(host) {
+import { createRcEngine as createRealEngine } from ${JSON.stringify(RC_ENGINE)};
+export function createRcEngine(host) {
   const engine = createRealEngine(host);
   return { ...engine, wallet: { ...engine.wallet, async openConnector(options) {
     // The SDK's transient failure, escaping as an unhandled rejection while it syncs.
@@ -82,7 +82,7 @@ describe("the README's process setup", () => {
     expect(code, stderr).toBe(0);
     expect(stdout).toContain(`'${NIGHT}': 5n`);
     expect(stdout).toContain('dust: 1n');
-    expect(stderr).toContain('stand-in wallet opened for stagenet');
+    expect(stderr).toContain('stand-in wallet opened for preview');
     expect(stderr).toContain('SDK: Internal Server Error');
     expect(stderr).not.toContain('Unhandled rejection');
     expect(stderr).toContain('stand-in wallet stopped');

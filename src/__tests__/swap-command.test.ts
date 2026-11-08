@@ -1,6 +1,6 @@
 // What `swap take` asks of its payer: a wallet session whose shielded side is
-// synced, on every network (a swap spends shielded coins only, and stagenet
-// skips the shielded sync by default). Nothing reaches a chain: the payer is
+// synced, on every network (a swap spends shielded coins only, and preview and
+// preprod skip the shielded sync by default). Nothing reaches a chain: the payer is
 // the program's own and opens no wallet.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

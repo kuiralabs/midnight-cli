@@ -7,7 +7,7 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import { CACHE_VERSION, CACHE_DIR_NAME, FILE_MODE } from './constants.ts';
 import { ensureOwnerOnlyDir } from './owner-only.ts';
-import { assertValidNetworkName, defaultSdkSetOf, sdkSetOfNetwork } from './network.ts';
+import { assertValidNetworkName } from './network.ts';
 
 export interface WalletCacheData {
   shielded: string;
@@ -36,17 +36,13 @@ export function cacheRootDir(root: string): string {
 }
 
 /**
- * A network's folder under the cache folder: the network's name, or
- * `<network>.<set>` while `midnight config set sdk-set` runs it on another SDK
- * set, so one set never reads the state the other wrote. The set is the one
- * the config under the state root `root` gives. Any other name is refused
- * (InvalidNetworkError): it would name a folder anywhere (`..`, `../wallets`),
- * and clearing a cache deletes the `.json` files in it.
+ * A network's folder under the cache folder: the network's name. Any other
+ * name is refused (InvalidNetworkError): it would name a folder anywhere
+ * (`..`, `../wallets`), and clearing a cache deletes the `.json` files in it.
  */
 export function networkCacheFolder(network: string, root: string): string {
   assertValidNetworkName(network);
-  const set = sdkSetOfNetwork(network, root);
-  return set === defaultSdkSetOf(network) ? network : `${network}.${set}`;
+  return network;
 }
 
 /** How much of a public key (hex) names its Dust or shielded cache file: enough to keep keys apart, short enough for any filesystem. */

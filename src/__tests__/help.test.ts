@@ -209,7 +209,7 @@ describe('help — the lists come from the registry', () => {
     expect(manifest.globalFlags).toStrictEqual([
       { name: '--json', description: 'Output structured JSON to stdout (suppresses all stderr)' },
       { name: '--wallet <name|file>', description: 'Wallet name or path' },
-      { name: '--network <name>', description: 'Override network (mainnet, preprod, preview, stagenet, undeployed)' },
+      { name: '--network <name>', description: 'Override network (mainnet, preprod, preview, undeployed)' },
       { name: '--version, -v', description: 'Print CLI version' },
       { name: '--help, -h', description: 'Show help' },
     ]);

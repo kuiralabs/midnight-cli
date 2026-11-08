@@ -16,7 +16,7 @@ export interface PayingWallet {
 
 /**
  * The payer's wallet for `target`, as the fee wallet of the account package's `connector` (the network engine's), keeping the SDK's warnings to the paying call's `sdkWarnings`. Stopping it stops the wallet.
- * `options` asks for the shielded side to be synced, which a deposit spends from (stagenet skips it otherwise).
+ * `options` asks for the shielded side to be synced, which a deposit spends from (a network without shielded sync by default skips it otherwise).
  */
 export async function openPayingWallet(payer: Payer, target: PayingTarget, connector: AccountChain['connector'], wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined, options?: ConnectOptions): Promise<PayingWallet> {
   const { feeWalletOver } = connector;

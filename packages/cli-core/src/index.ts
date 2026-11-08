@@ -57,7 +57,7 @@ export { dustShortError, OWN_COMMAND_DUST_WAIT_MS } from './lib/dust-wait.ts';
 export {
   type BalanceSummary, type DAppConnector, type DAppConnectorCallbacks, type DustExportResult,
   type Engine, type EngineContractScripts, type EngineKeys, type HostEngines, type OpenedConnector,
-  OtherSdkSetError, type RawStateValue, type ScriptParts, type SdkSet, sdkSetOf
+  type RawStateValue, type ScriptParts, type SdkSet, sdkSetOf
 } from './lib/engine.ts';
 export {
   type CodeDefinition, CodeDefinitionError, type CodeRegistry, type CodeSet, defineCodes,
@@ -86,8 +86,7 @@ export {
   addressPrefix, AmbiguousLocalStacksError, applyEndpointOverrides, assertValidNetworkName, detectLocalStacks, detectNetworkFromAddress,
   endpointFlags, type EndpointOverrides, getNetworkConfig, getValidNetworkNames, isNamedOnlyNetwork,
   InvalidNetworkError, isValidNetworkName, LEDGER_9_FORK_VERSION, looksLikeShieldedAddress, looksLikeUnshieldedAddress,
-  type NetworkConfig, type NetworkName, NetworkNotNamedError, networksOnSdkSet, resolveNetworkConfig,
-  sdkSetOfNetwork
+  type NetworkConfig, type NetworkName, NetworkNotNamedError, resolveNetworkConfig, RetiredNetworkError
 } from './lib/network.ts';
 export { type NetworkChoice, networkChoiceFromArgs, networkTargetOf } from './lib/network-target.ts';
 export { type NoticeSink } from './lib/notices.ts';

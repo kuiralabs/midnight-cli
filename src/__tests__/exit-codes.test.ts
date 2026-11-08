@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { classifyError, humanizeNetworkError, ERROR_CODES, EXIT_GENERAL_ERROR, EXIT_NETWORK_ERROR, EXIT_INVALID_ARGS, WrongPassphraseError, OtherSdkSetError, UsageError } from '@kuiralabs/midnight-cli-core';
+import { classifyError, humanizeNetworkError, ERROR_CODES, EXIT_GENERAL_ERROR, EXIT_NETWORK_ERROR, EXIT_INVALID_ARGS, WrongPassphraseError, UsageError } from '@kuiralabs/midnight-cli-core';
 import { MixedSdkLayoutError, toEngineError } from '@kuiralabs/midnight-cli-core/engine';
-import { CallerPinUnavailableError, NoAccountError, NodeTooOldForAccountError, UnreachableByAccountError } from '@kuiralabs/midnight-grant';
-import { CallerPinUnsupportedError } from '@kuiralabs/midnight-account-chain/errors';
+import { NoAccountError, NodeTooOldForAccountError, UnreachableByAccountError } from '@kuiralabs/midnight-grant';
 import { NoPassphraseError } from '@kuiralabs/midnight-wallet';
 import { installedCommands } from '../lib/installed-commands.ts';
 
@@ -74,18 +73,12 @@ describe('classifyError: mn grant', () => {
     expect(classifyError(new NoAccountError('alice', 'undeployed'), installedCommands)).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.NO_ACCOUNT });
   });
 
-  it('counts a caller pin the network\'s account can\'t hold as the caller\'s to fix: grant\'s refusal, and the account package\'s own by its code', () => {
-    expect(classifyError(new CallerPinUnavailableError('stagenet', 'c4'.repeat(32)), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.CALLER_PIN_UNSUPPORTED });
-    expect(classifyError(new CallerPinUnsupportedError('this build of the account (AccountStagenet) pins no caller'), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.CALLER_PIN_UNSUPPORTED });
-  });
-
   it('counts a network the account package can\'t reach as the caller\'s to fix', () => {
     expect(classifyError(new UnreachableByAccountError('PreProd'), installedCommands)).toEqual({ exitCode: EXIT_INVALID_ARGS, errorCode: ERROR_CODES.INVALID_ARGS });
   });
 
-  it('names a call on the other SDK set\'s network, and an install that mixes an engine\'s SDK copies', () => {
-    expect(classifyError(new OtherSdkSetError('rc', 'beta'), installedCommands)).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.OTHER_SDK_SET });
-    expect(classifyError(new MixedSdkLayoutError("mn's beta engine", '@midnightntwrk/ledger-v9', ['/a', '/b']), installedCommands)).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.MIXED_SDK_LAYOUT });
+  it('names an install that mixes the engine\'s SDK copies', () => {
+    expect(classifyError(new MixedSdkLayoutError("mn's rc engine", '@midnightntwrk/ledger-v9', ['/a', '/b']), installedCommands)).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: ERROR_CODES.MIXED_SDK_LAYOUT });
   });
 
   it('says a Node.js too old for the account package is an unsupported Node.js', () => {

@@ -229,36 +229,33 @@ describe('matchWalletAddress', () => {
   });
 });
 
-describe('a wallet written before stagenet', () => {
-  // The addresses an earlier mn wrote: every network but stagenet.
-  const { stagenet: stagenetAddress, ...earlierAddresses } = VALID_ADDRESSES;
-  const { stagenet: stagenetShielded, ...earlierShielded } = rcKeys.shieldedAddresses(Buffer.from(VALID_SEED, 'hex'));
+describe('a wallet an earlier mn wrote with a stagenet address, which mn no longer runs on', () => {
+  // As an earlier mn wrote them: every network's addresses, stagenet's too.
+  const STAGENET_ADDRESS = `mn_addr_stagenet1${'q'.repeat(58)}`;
+  const STAGENET_SHIELDED = `mn_shield-addr_stagenet1${'q'.repeat(150)}`;
+  const shielded = rcKeys.shieldedAddresses(Buffer.from(VALID_SEED, 'hex'));
+  const written = { addresses: { ...VALID_ADDRESSES, stagenet: STAGENET_ADDRESS }, shieldedAddresses: { ...shielded, stagenet: STAGENET_SHIELDED } };
 
-  it('gets its stagenet address derived and saved when a plain-text wallet is read', async () => {
+  it('loads a plain-text one with its other addresses, the stagenet one neither shown nor matched', async () => {
     const filePath = path.join(TEST_DIR, 'plain.json');
-    fs.writeFileSync(filePath, JSON.stringify({ seed: VALID_SEED, addresses: earlierAddresses, createdAt: VALID_CONFIG.createdAt }));
+    fs.writeFileSync(filePath, JSON.stringify({ seed: VALID_SEED, ...written, createdAt: VALID_CONFIG.createdAt }));
     const config = await loadWalletConfig(filePath, host.engines);
-    expect(config.addresses.stagenet).toBe(stagenetAddress);
-    expect(JSON.parse(fs.readFileSync(filePath, 'utf-8')).addresses).toEqual(VALID_ADDRESSES);
-    expect(await walletAddress(filePath, 'stagenet', stateRootIn(TEST_DIR), host)).toBe(stagenetAddress);
+    expect(config.addresses).toStrictEqual(VALID_ADDRESSES);
+    expect(config.shieldedAddresses).toStrictEqual(shielded);
+    const wallet: WalletInfo = { name: 'alice', addresses: config.addresses, shieldedAddresses: config.shieldedAddresses, isActive: true, file: filePath };
+    expect(matchWalletAddress([wallet], STAGENET_ADDRESS)).toBeUndefined();
+    expect(await walletAddress(filePath, 'undeployed', stateRootIn(TEST_DIR), host)).toBe(VALID_ADDRESSES.undeployed);
   });
 
-  it('keeps a sealed wallet as written until it is unlocked, then derives and saves its stagenet addresses beside the sealed secret', async () => {
+  it('loads and unlocks a sealed one, the stagenet address left out of what it shows', async () => {
     const filePath = path.join(TEST_DIR, 'sealed.json');
-    writeSealedWallet(filePath, { addresses: earlierAddresses as typeof VALID_ADDRESSES, shieldedAddresses: earlierShielded as typeof VALID_ADDRESSES, createdAt: VALID_CONFIG.createdAt }, { seed: VALID_SEED }, PASSPHRASE);
-    const sealedBefore = JSON.parse(fs.readFileSync(filePath, 'utf-8')).sealed;
-
-    expect((await loadWalletConfig(filePath, host.engines)).addresses.stagenet).toBeUndefined();
-
+    writeSealedWallet(filePath, { ...written, createdAt: VALID_CONFIG.createdAt }, { seed: VALID_SEED }, PASSPHRASE);
+    const config = await loadWalletConfig(filePath, host.engines);
+    expect(config.addresses).toStrictEqual(VALID_ADDRESSES);
+    expect(config.shieldedAddresses).toStrictEqual(shielded);
     const unlocked = await unlockWallet(filePath, UNLOCK);
-    expect(unlocked.addresses.stagenet).toBe(stagenetAddress);
-    expect(unlocked.shieldedAddresses?.stagenet).toBe(stagenetShielded);
-    const saved = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    expect(saved.addresses).toEqual(VALID_ADDRESSES);
-    expect(saved.shieldedAddresses.stagenet).toBe(stagenetShielded);
-    expect(saved.sealed).toEqual(sealedBefore);
-    expect(saved.seed).toBeUndefined();
-    expect((await loadWalletConfig(filePath, host.engines)).addresses.stagenet).toBe(stagenetAddress);
+    expect(unlocked.seed).toBe(VALID_SEED);
+    expect(unlocked.addresses).toStrictEqual(VALID_ADDRESSES);
   });
 });
 

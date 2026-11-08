@@ -4,8 +4,7 @@ import { DEFAULT_CONFIG_FILENAME, FILE_MODE, WALLETS_DIR_NAME } from './constant
 import { ensureOwnerOnlyDir, narrowToOwnerOnly } from './owner-only.ts';
 import { assertValidWalletName } from './wallet-name.ts';
 import { blockfrostNetworks, checkProjectId, maskProjectId, networkOfProjectId } from './blockfrost.ts';
-import { InvalidNetworkError, type NetworkName, NetworkNotNamedError, SDK_SETS, getValidNetworkNames, isNamedOnlyNetwork, isValidNetworkName } from './network.ts';
-import type { SdkSet } from './engine.ts';
+import { InvalidNetworkError, type NetworkName, NetworkNotNamedError, RetiredNetworkError, getValidNetworkNames, isNamedOnlyNetwork, isRetiredNetworkName, isValidNetworkName } from './network.ts';
 import { UsageError } from './errors.ts';
 
 /** mn's config file can't be read as one: mn neither guesses its settings nor writes over it. */
@@ -27,19 +26,21 @@ export interface NetworkEndpointOverrides {
   'indexer-ws'?: string;
 }
 
-/** What is kept per network: endpoint overrides, the Blockfrost project id of a network Blockfrost serves, and the SDK set it runs on when not the network's own. */
+/** What is kept per network: endpoint overrides, and the Blockfrost project id of a network Blockfrost serves. */
 export interface NetworkSettings extends NetworkEndpointOverrides {
   'blockfrost-project-id'?: string;
-  'sdk-set'?: SdkSet;
 }
 
 const PROJECT_ID_KEY = 'blockfrost-project-id';
-const SDK_SET_KEY = 'sdk-set';
-
-const isSdkSet = (value: unknown): value is SdkSet => typeof value === 'string' && (SDK_SETS as readonly string[]).includes(value);
 
 export interface CliConfig {
   network: NetworkName;
+  /**
+   * The saved network when it is one mn no longer runs on (stagenet). `network`
+   * is then the default, which commands don't fall back to: they refuse until
+   * another network is saved. Saved back as the network, unless one is set.
+   */
+  retiredNetwork?: string;
   /**
    * Per-network endpoint overrides — the canonical home for custom URLs.
    * Endpoints are inherently network-specific; scoping them prevents a
@@ -62,7 +63,7 @@ const DEFAULT_CLI_CONFIG: CliConfig = {
   network: 'undeployed',
 };
 
-const VALID_CONFIG_KEYS: readonly string[] = ['network', 'proof-server', 'node', 'indexer-ws', 'wallet', PROJECT_ID_KEY, SDK_SET_KEY] as const;
+const VALID_CONFIG_KEYS: readonly string[] = ['network', 'proof-server', 'node', 'indexer-ws', 'wallet', PROJECT_ID_KEY] as const;
 
 /**
  * Aliases mapped to canonical config keys. Keeps integrations that learned
@@ -142,14 +143,19 @@ export function loadCliConfig(configDir: string): CliConfig {
       ? parsed.network
       : DEFAULT_CLI_CONFIG.network,
   };
+  // A network mn no longer runs on is kept as said, so a command refuses it
+  // rather than run on the default; the legacy flat endpoints were set under
+  // it, and never apply to another network.
+  const retired = typeof parsed.network === 'string' && isRetiredNetworkName(parsed.network);
+  if (retired) config.retiredNetwork = parsed.network;
 
-  if (parsed['proof-server'] && typeof parsed['proof-server'] === 'string') {
+  if (!retired && parsed['proof-server'] && typeof parsed['proof-server'] === 'string') {
     config['proof-server'] = parsed['proof-server'];
   }
-  if (parsed.node && typeof parsed.node === 'string') {
+  if (!retired && parsed.node && typeof parsed.node === 'string') {
     config.node = parsed.node;
   }
-  if (parsed['indexer-ws'] && typeof parsed['indexer-ws'] === 'string') {
+  if (!retired && parsed['indexer-ws'] && typeof parsed['indexer-ws'] === 'string') {
     config['indexer-ws'] = parsed['indexer-ws'];
   }
   if (parsed.wallet && typeof parsed.wallet === 'string') {
@@ -173,8 +179,6 @@ export function loadCliConfig(configDir: string): CliConfig {
       // A project id is kept only under the network its prefix names.
       const projectId = (overrides as Record<string, unknown>)[PROJECT_ID_KEY];
       if (typeof projectId === 'string' && networkOfProjectId(projectId) === name) scoped[PROJECT_ID_KEY] = projectId;
-      const sdkSet = (overrides as Record<string, unknown>)[SDK_SET_KEY];
-      if (isSdkSet(sdkSet)) scoped[SDK_SET_KEY] = sdkSet;
       if (Object.keys(scoped).length > 0) networks[name] = scoped;
     }
     if (Object.keys(networks).length > 0) config.networks = networks;
@@ -203,11 +207,6 @@ export function getEndpointOverridesForNetwork(
   };
 }
 
-/** The SDK set `midnight config set sdk-set` gave `networkName`, if any. */
-export function getSdkSetOverride(config: CliConfig, networkName: NetworkName): SdkSet | undefined {
-  return config.networks?.[networkName]?.[SDK_SET_KEY];
-}
-
 /** The Blockfrost project id set for `networkName`, if any. */
 export function getBlockfrostProjectId(config: CliConfig, networkName: NetworkName): string | undefined {
   return config.networks?.[networkName]?.[PROJECT_ID_KEY];
@@ -220,7 +219,9 @@ export function getBlockfrostProjectId(config: CliConfig, networkName: NetworkNa
 export function saveCliConfig(config: CliConfig, configDir: string): void {
   ensureOwnerOnlyDir(configDir);
   const configPath = getConfigPath(configDir);
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', { mode: FILE_MODE });
+  const { retiredNetwork, ...saved } = config;
+  if (retiredNetwork !== undefined) (saved as Record<string, unknown>).network = retiredNetwork;
+  fs.writeFileSync(configPath, JSON.stringify(saved, null, 2) + '\n', { mode: FILE_MODE });
   // It can hold a Blockfrost project id: a file an earlier mn left readable to others is narrowed.
   narrowToOwnerOnly(configPath);
 }
@@ -235,7 +236,7 @@ export function getConfigValue(key: string, configDir: string, scope?: NetworkNa
   const config = loadCliConfig(configDir);
   assertScopeApplies(canonical, scope);
 
-  if (canonical === 'network') return config.network;
+  if (canonical === 'network') return config.retiredNetwork ?? config.network;
   if (canonical === 'wallet') return config.wallet ?? '(not set)';
   if (canonical === PROJECT_ID_KEY) {
     // A secret: shown masked, and by network, since each network has its own.
@@ -245,7 +246,6 @@ export function getConfigValue(key: string, configDir: string, scope?: NetworkNa
     });
     return set.length > 0 ? set.join(', ') : '(not set)';
   }
-  if (canonical === SDK_SET_KEY) return getSdkSetOverride(config, scope ?? config.network) ?? '(not set)';
   if (ENDPOINT_KEYS.has(canonical)) {
     const overrides = getEndpointOverridesForNetwork(config, scope ?? config.network);
     const value = overrides[canonical as keyof NetworkEndpointOverrides];
@@ -294,10 +294,12 @@ export function setConfigValue(key: string, value: string, configDir: string, sc
 
   if (canonical === 'network') {
     // The saved network can't be one a command must name (mainnet), so the networks offered leave it out.
+    if (isRetiredNetworkName(value)) throw new RetiredNetworkError(value, 'given as the saved network, which was left as it was');
     if (!isValidNetworkName(value)) throw new InvalidNetworkError(value, getValidNetworkNames().filter((name) => !isNamedOnlyNetwork(name)));
     if (isNamedOnlyNetwork(value)) throw new NetworkNotNamedError(value, 'it can\'t be the saved network, which was left as it was');
     migrateFlatEndpointsToScope(config, config.network);
     config.network = value;
+    delete config.retiredNetwork;
   } else if (canonical === 'wallet') {
     assertValidWalletName(value);
     // Refused like `midnight wallet use`: an active wallet with no file fails every command that opens it.
@@ -310,10 +312,6 @@ export function setConfigValue(key: string, value: string, configDir: string, sc
     const { projectId, network } = checkProjectId(value);
     if (scope !== undefined && scope !== network) throw new UsageError(`That is a ${network} project id, and --network says ${scope}.`);
     config.networks = { ...(config.networks ?? {}), [network]: { ...(config.networks?.[network] ?? {}), [PROJECT_ID_KEY]: projectId } };
-  } else if (canonical === SDK_SET_KEY) {
-    if (!isSdkSet(value)) throw new UsageError(`Invalid SDK set: "${value}"\nValid SDK sets: ${SDK_SETS.join(', ')}`);
-    const target = scope ?? config.network;
-    config.networks = { ...(config.networks ?? {}), [target]: { ...(config.networks?.[target] ?? {}), [SDK_SET_KEY]: value } };
   } else if (ENDPOINT_KEYS.has(canonical)) {
     assertEndpointUrl(canonical as keyof NetworkEndpointOverrides, value);
     const k = canonical as keyof NetworkEndpointOverrides;
@@ -346,6 +344,7 @@ export function unsetConfigValue(key: string, configDir: string, scope?: Network
 
   if (canonical === 'network') {
     config.network = DEFAULT_CLI_CONFIG.network;
+    delete config.retiredNetwork;
   } else if (canonical === 'wallet') {
     delete config.wallet;
   } else if (canonical === PROJECT_ID_KEY) {
@@ -357,14 +356,6 @@ export function unsetConfigValue(key: string, configDir: string, scope?: Network
       if (Object.keys(scoped).length === 0) delete config.networks![network];
     }
     if (config.networks && Object.keys(config.networks).length === 0) delete config.networks;
-  } else if (canonical === SDK_SET_KEY) {
-    const target = scope ?? config.network;
-    const scoped = config.networks?.[target];
-    if (scoped) {
-      delete scoped[SDK_SET_KEY];
-      if (Object.keys(scoped).length === 0) delete config.networks![target];
-      if (Object.keys(config.networks!).length === 0) delete config.networks;
-    }
   } else if (ENDPOINT_KEYS.has(canonical)) {
     const k = canonical as keyof NetworkEndpointOverrides;
     const target = scope ?? config.network;
@@ -388,18 +379,18 @@ export function unsetConfigValue(key: string, configDir: string, scope?: Network
 
 /** A network scope (`--network`) only means something for the keys kept per network. */
 function assertScopeApplies(canonical: string, scope: NetworkName | undefined): void {
-  if (scope !== undefined && !ENDPOINT_KEYS.has(canonical) && canonical !== PROJECT_ID_KEY && canonical !== SDK_SET_KEY) {
-    throw new UsageError(`--network only applies to the endpoint keys (${[...ENDPOINT_KEYS].join(', ')}), ${PROJECT_ID_KEY} and ${SDK_SET_KEY}, not "${canonical}".`);
+  if (scope !== undefined && !ENDPOINT_KEYS.has(canonical) && canonical !== PROJECT_ID_KEY) {
+    throw new UsageError(`--network only applies to the endpoint keys (${[...ENDPOINT_KEYS].join(', ')}) and ${PROJECT_ID_KEY}, not "${canonical}".`);
   }
 }
 
 /**
  * Every config value as `getConfigValue` shows it (the Blockfrost project id
  * masked), key by key. With `scope`, only the keys a network scopes
- * (endpoints, the project id, the SDK set), for that network.
+ * (endpoints, the project id), for that network.
  */
 export function listConfigValues(configDir: string, scope?: NetworkName): Record<string, string> {
-  const keys = VALID_CONFIG_KEYS.filter((key) => scope === undefined || ENDPOINT_KEYS.has(key) || key === PROJECT_ID_KEY || key === SDK_SET_KEY);
+  const keys = VALID_CONFIG_KEYS.filter((key) => scope === undefined || ENDPOINT_KEYS.has(key) || key === PROJECT_ID_KEY);
   return Object.fromEntries(keys.map((key) => [key, getConfigValue(key, configDir, scope)]));
 }
 

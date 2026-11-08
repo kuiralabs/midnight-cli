@@ -52,8 +52,6 @@ export const ERROR_CODES = {
   UNSUPPORTED_NODE: 'UNSUPPORTED_NODE',
   /** `mn grant`: the wallet has no account on this network yet. Recovery: `mn grant deploy`. */
   NO_ACCOUNT: 'NO_ACCOUNT',
-  /** `mn grant issue`: the request pins its calling contract, and the network's account build (stagenet's) has no caller pin. Recovery: a request that names no calling contract. */
-  CALLER_PIN_UNSUPPORTED: 'CALLER_PIN_UNSUPPORTED',
   /** The network is served by Blockfrost and no project id is set. Recovery: `mn config set blockfrost-project-id <project id>`. */
   BLOCKFROST_PROJECT_ID_REQUIRED: 'BLOCKFROST_PROJECT_ID_REQUIRED',
   /** Blockfrost refused the project id. Recovery: check it at blockfrost.io and set it again. */
@@ -62,9 +60,7 @@ export const ERROR_CODES = {
   BLOCKFROST_LIMIT_REACHED: 'BLOCKFROST_LIMIT_REACHED',
   /** An endpoint set by flag or config was shut down by its operator. Recovery: unset it (`mn config unset indexer-ws`). */
   ENDPOINT_SHUT_DOWN: 'ENDPOINT_SHUT_DOWN',
-  /** The process has loaded one SDK set's engine and the call's network runs on the other. Recovery: run the call in a process of its own (for MCP, a server for that network). */
-  OTHER_SDK_SET: 'OTHER_SDK_SET',
-  /** An engine's SDK packages reach more than one copy of its ledger: mn was installed without its shrinkwrap (bun's installer). Recovery: install mn with npm. */
+  /** The engine's SDK packages reach more than one copy of its ledger: mn was installed without its shrinkwrap (bun's installer). Recovery: install mn with npm. */
   MIXED_SDK_LAYOUT: 'MIXED_SDK_LAYOUT',
   /** Bytes given as a swap offer are not one: not a sealed ledger-9 transaction, or not a shielded half swap. Recovery: ask the maker for the offer again. */
   NOT_AN_OFFER: 'NOT_AN_OFFER',

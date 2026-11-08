@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { captureCommand, createHost, type Host, parseArgs, MIDNIGHT_DIR, loadCliConfig, sdkSetOf, readOpenOffers, recordOpenOffer, type OpenOffer, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
+import { captureCommand, createHost, type Host, parseArgs, MIDNIGHT_DIR, loadCliConfig, readOpenOffers, recordOpenOffer, type OpenOffer, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
 import { cacheRootDir, getCachePath, networkCacheFolder, walletCacheFileName } from '@kuiralabs/midnight-cli-core/engine';
 import { configDefinition } from '@kuiralabs/midnight-cli-core/commands';
 import { ownCall } from './helpers/own-call.ts';
@@ -101,19 +101,16 @@ describe('two hosts with different state roots', () => {
     expect(fs.existsSync(path.join(rootB, 'swap-offers'))).toBe(false);
   });
 
-  it('each keep their wallet caches in their own folder, named by their own config\'s SDK set', async () => {
+  it('each keep their wallet caches in their own folder', async () => {
     const address = 'mn_addr_undeployed1abcdefghijklmnopqrst';
-    await captureCommand(configDefinition, parseArgs(['config', 'set', 'sdk-set', 'beta', '--network', 'undeployed']), ownCall({ host: hostA }));
 
     expect(cacheRootDir(rootA)).toBe(path.join(rootA, 'cache'));
     expect(cacheRootDir(rootB)).toBe(path.join(rootB, 'cache'));
-    expect(sdkSetOf('undeployed', rootA)).toBe('beta');
-    expect(sdkSetOf('undeployed', rootB)).toBe('rc');
-    expect(networkCacheFolder('undeployed', rootA)).toBe('undeployed.beta');
+    expect(networkCacheFolder('undeployed', rootA)).toBe('undeployed');
     expect(networkCacheFolder('undeployed', rootB)).toBe('undeployed');
     const cacheA = getCachePath(address, 'undeployed', rootA);
     const cacheB = getCachePath(address, 'undeployed', rootB);
-    expect(cacheA).toBe(path.join(rootA, 'cache', 'undeployed.beta', walletCacheFileName(address)));
+    expect(cacheA).toBe(path.join(rootA, 'cache', 'undeployed', walletCacheFileName(address)));
     expect(cacheB).toBe(path.join(rootB, 'cache', 'undeployed', walletCacheFileName(address)));
 
     // Clearing one host's caches leaves the other's.

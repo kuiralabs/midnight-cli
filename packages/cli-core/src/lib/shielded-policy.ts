@@ -1,5 +1,5 @@
 // Shielded-sync policy. Shielded (zswap) sync is the slow part of a wallet's
-// first read on the hosted test networks (preview, preprod, stagenet), so it is
+// first read on the hosted test networks (preview, preprod), so it is
 // off there by default: those networks have no shielded faucet, and most
 // wallets hold nothing shielded. A wallet can still hold shielded tokens there
 // (contracts mint them), so `--force-shielded` reads them, and what is skipped
@@ -9,7 +9,7 @@
 import type { NetworkName } from './network.ts';
 
 /** The networks with no shielded faucet, where shielded sync is off by default. */
-const NO_SHIELDED_FAUCET: readonly NetworkName[] = ['preview', 'preprod', 'stagenet'];
+const NO_SHIELDED_FAUCET: readonly NetworkName[] = ['preview', 'preprod'];
 
 /** True when shielded is synced on this network by default. */
 export function networkHasShielded(network: NetworkName): boolean {

@@ -141,7 +141,7 @@ describe('fundShieldedHint', () => {
   it('points at the airdrop on undeployed only, and at a shielded transfer elsewhere', async () => {
     const { fundShieldedHint } = await import('../lib/wallet/transfer.ts');
     expect(fundShieldedHint('undeployed', '5')).toBe('Fund the shielded balance: midnight airdrop 5 --shielded');
-    for (const network of ['preview', 'preprod', 'stagenet', 'mainnet'] as const) {
+    for (const network of ['preview', 'preprod', 'mainnet'] as const) {
       expect(fundShieldedHint(network, '5')).not.toContain('airdrop');
       expect(fundShieldedHint(network, '5')).toContain('shielded transfer from another wallet');
     }

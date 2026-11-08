@@ -30,7 +30,7 @@ describe('the offer file', () => {
     ['a version this mn does not read', JSON.stringify({ ...JSON.parse(encodeOfferEnvelope(ENVELOPE)), version: 2 }), 'version 2'],
     ['a leg with no amount', JSON.stringify({ ...JSON.parse(encodeOfferEnvelope(ENVELOPE)), terms: { give: { token: A }, want: { token: B, amount: '1' } } }), "give is not a token and a whole amount"],
     ['an expiry that is not a date', JSON.stringify({ ...JSON.parse(encodeOfferEnvelope(ENVELOPE)), expiresAt: 'soon' }), 'not a date'],
-    ['a network mn does not know', JSON.stringify({ ...JSON.parse(encodeOfferEnvelope(ENVELOPE)), network: 'mars' }), 'the offer file names a network mn does not know ("mars"): it reads offers for mainnet, preprod, preview, stagenet, undeployed'],
+    ['a network mn does not know', JSON.stringify({ ...JSON.parse(encodeOfferEnvelope(ENVELOPE)), network: 'mars' }), 'the offer file names a network mn does not know ("mars"): it reads offers for mainnet, preprod, preview, undeployed'],
     ['a network that is not a name', JSON.stringify({ ...JSON.parse(encodeOfferEnvelope(ENVELOPE)), network: 'x'.repeat(500) }), '("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…")'],
   ])('refuses %s as no offer', (_case, text, reason) => {
     expect(() => decodeOfferEnvelope(text)).toThrow(NotAnOfferError);

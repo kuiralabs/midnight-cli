@@ -8,7 +8,7 @@ The base of the Midnight CLI packages: the host a program passes to them, typed 
 npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-engine-rc@next
 ```
 
-Every package is a release candidate on the `next` tag. Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): each engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it. bun's installer ignores it and resolves the packages again, so an engine bun installed refuses to load, before any SDK module does, with `MIXED_SDK_LAYOUT` and the npm command; bun runs what npm installed. A program that runs the SDK installs an engine too: `@kuiralabs/midnight-engine-rc` for preprod, preview and a local network, `@kuiralabs/midnight-engine-beta` for stagenet.
+Every package is a release candidate on the `next` tag. Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): the engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it. bun's installer ignores it and resolves the packages again, so an engine bun installed refuses to load, before any SDK module does, with `MIXED_SDK_LAYOUT` and the npm command; bun runs what npm installed. A program that runs the SDK installs the engine too, `@kuiralabs/midnight-engine-rc`, for every network.
 
 ## Entry points
 
@@ -50,8 +50,7 @@ Each error a package throws carries a `code`; `classifyError(err, registry)` giv
 | `BLOCKFROST_LIMIT_REACHED` | 4 | Blockfrost's plan limit or rate limit. | Wait and retry once; if it persists, tell the user it is their Blockfrost plan. |
 | `ENDPOINT_SHUT_DOWN` | 4 | An endpoint set by flag or config was shut down by its operator (the old preprod indexer, mainnet's old Midnight-hosted indexer and node). | `midnight_config_unset({ key: "indexer-ws" })` (and `node` if set), then retry. |
 | `MAINNET_REFUSED` | 2 | The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (no released account build there). | Tell the user why (the message says) and don't retry on mainnet; offer undeployed or a test network instead. |
-| `OTHER_SDK_SET` | 1 | The process runs one SDK set's engine and the network runs on the other (an MCP server that served rc asked for stagenet). | Make the call in a process of its own: ask the user to start an MCP server for that network. |
-| `MIXED_SDK_LAYOUT` | 1 | mn's packages were installed without each engine's shrinkwrap (bun's installer): an engine's SDK tree isn't the one it was tested with. | Ask the user to install mn with npm. |
+| `MIXED_SDK_LAYOUT` | 1 | mn's packages were installed without the engine's shrinkwrap (bun's installer): the engine's SDK tree isn't the one it was tested with. | Ask the user to install mn with npm. |
 | `NO_STATE_ROOT` | 1 | The host gave mn no place to keep its state (a program's `createHost` without paths). | Give the host its paths (`createHost({ paths })`). |
 | `NO_PAYER` | 1 | A command that submits a transaction was called without a payer. | Give the call a payer. |
 | `COMMAND_FAILED` | 1 | A command ended with a non-zero exit code without throwing (an MCP test run whose tests failed); the message carries its result. | Read the command's result in the message. |
@@ -110,17 +109,17 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createHost, openWalletSession } from '@kuiralabs/midnight-cli-core';
 import { installSdkProcessGuard, syncHeapAdvice } from '@kuiralabs/midnight-cli-core/process';
-import { createBetaEngine } from '@kuiralabs/midnight-engine-beta';
+import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
 
 const guard = installSdkProcessGuard();
 const heap = syncHeapAdvice();
 if (heap) console.error(`A first sync may need more heap: start with NODE_OPTIONS=${heap.nodeOptions}`);
 const stateRoot = join(homedir(), '.my-app');
-const host = createHost({ paths: { stateRoot, home: homedir() }, notice: (line) => console.error(line), sdkWarnings: guard.calls, engineLoader: async (_set, host) => createBetaEngine(host) });
+const host = createHost({ paths: { stateRoot, home: homedir() }, notice: (line) => console.error(line), sdkWarnings: guard.calls, engineLoader: async (_set, host) => createRcEngine(host) });
 const cancel = new AbortController();
 process.once('SIGINT', () => cancel.abort());
 
-const session = await guard.calls.run((sdkWarnings) => openWalletSession({ seed: Buffer.from(process.env.WALLET_SEED, 'hex'), network: 'stagenet', root: stateRoot, notice: host.notice, engines: host.engines, sdkWarnings, signal: cancel.signal, onMessage: (line) => console.error(line) }));
+const session = await guard.calls.run((sdkWarnings) => openWalletSession({ seed: Buffer.from(process.env.WALLET_SEED, 'hex'), network: 'preview', root: stateRoot, notice: host.notice, engines: host.engines, sdkWarnings, signal: cancel.signal, onMessage: (line) => console.error(line) }));
 try {
   console.log(await session.balances());
 } finally {
@@ -128,7 +127,7 @@ try {
 }
 ```
 
-This opens a wallet on stagenet (which runs the beta SDK set, so the program loads the beta engine; preprod, preview and a local network run the rc engine, `createRcEngine` from `@kuiralabs/midnight-engine-rc`), prints what it holds, closes it, and ends by itself. `WALLET_SEED` is the wallet's seed in hex: 64 bytes from a mnemonic, or 32 raw. A test in this package runs the block above as it is written here, with only the engine standing in.
+This opens a wallet on preview, prints what it holds, closes it, and ends by itself. `WALLET_SEED` is the wallet's seed in hex: 64 bytes from a mnemonic, or 32 raw. A test in this package runs the block above as it is written here, with only the engine standing in.
 
 ### What each part does
 
@@ -157,5 +156,4 @@ The heap advice is Node's: under bun `syncHeapAdvice()` returns null, because bu
 - **`Unhandled rejection:` with a `Wallet.Sync` error, then exit 1.** The guard isn't installed, or it was installed with `outsideCalls: 'exit'` and no call was listening. Install it before the first sync, and open the session inside `guard.calls.run` with `sdkWarnings`.
 - **`JavaScript heap out of memory` during the first sync.** Start with the `NODE_OPTIONS` that `syncHeapAdvice()` names. Later syncs start from the cache and need far less.
 - **The program doesn't end after it is done.** A session was not closed: every `openWalletSession` needs its `await session.close()`, also when the work in between threw (use `finally`). On Node, `process.getActiveResourcesInfo()` lists what is still open. If the SDK's wallets don't stop within 5 seconds the engine gives up waiting and what they hold stays open; then exit explicitly, as mn does.
-- **`OtherSdkSetError`.** One process runs one SDK set: stagenet is on the beta set, the other networks on rc. A program that needs both runs two processes.
 - **Warnings reach the console while a session is open.** Without `console: true` the guard leaves the console alone, so the SDK's traces print there; pass `console: true` to keep them off while a call listens.

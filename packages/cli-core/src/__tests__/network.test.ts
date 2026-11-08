@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { addressPrefix, defaultSdkSetOf, detectNetworkFromAddress, isNamedOnlyNetwork, isValidNetworkName, getNetworkConfig, getValidNetworkNames, looksLikeShieldedAddress, looksLikeUnshieldedAddress, NetworkNotNamedError, resolveNetworkConfig, applyEndpointOverrides, indexerHttpFromWs } from '../lib/network.ts';
+import { addressPrefix, assertValidNetworkName, detectNetworkFromAddress, isNamedOnlyNetwork, isValidNetworkName, getNetworkConfig, getValidNetworkNames, looksLikeShieldedAddress, looksLikeUnshieldedAddress, NetworkNotNamedError, resolveNetworkConfig, applyEndpointOverrides, indexerHttpFromWs, RetiredNetworkError, InvalidNetworkError } from '../lib/network.ts';
 import { UsageError } from '../lib/errors.ts';
 import { ProjectIdNetworkMismatchError } from '../lib/blockfrost.ts';
 
@@ -25,7 +25,11 @@ describe('detectNetworkFromAddress', () => {
 
   it('keeps mainnet apart from every network whose prefix has a segment', () => {
     expect(detectNetworkFromAddress('mn_addr_preprod1qqqqqq...')).not.toBe('mainnet');
-    expect(detectNetworkFromAddress('mn_addr_stagenet1qqqqqq...')).toBe('stagenet');
+    expect(detectNetworkFromAddress('mn_addr_preview1qqqqqq...')).toBe('preview');
+  });
+
+  it('names no network for a stagenet address: mn no longer runs on stagenet', () => {
+    expect(detectNetworkFromAddress('mn_addr_stagenet1qqqqqq...')).toBeNull();
   });
 
   it('returns null for unknown prefix', () => {
@@ -123,14 +127,15 @@ describe('getNetworkConfig', () => {
 });
 
 describe('getValidNetworkNames', () => {
-  it('returns all five networks', () => {
-    const names = getValidNetworkNames();
-    expect(names).toContain('mainnet');
-    expect(names).toContain('preprod');
-    expect(names).toContain('preview');
-    expect(names).toContain('stagenet');
-    expect(names).toContain('undeployed');
-    expect(names).toHaveLength(5);
+  it('returns all four networks', () => {
+    expect(getValidNetworkNames()).toStrictEqual(['mainnet', 'preprod', 'preview', 'undeployed']);
+  });
+
+  it('refuses stagenet as no longer supported, not as unknown, naming the networks there are', () => {
+    expect(isValidNetworkName('stagenet')).toBe(false);
+    expect(() => assertValidNetworkName('stagenet')).toThrow(RetiredNetworkError);
+    expect(() => assertValidNetworkName('stagenet')).toThrow('stagenet is no longer supported (given as the network): mn runs on mainnet, preprod, preview, undeployed.');
+    expect(() => assertValidNetworkName('mars')).toThrow(InvalidNetworkError);
   });
 
   it('agrees with isValidNetworkName', () => {
@@ -200,13 +205,9 @@ describe('resolveNetworkConfig', () => {
 });
 
 describe('mainnet', () => {
-  it('runs on the rc SDK set', () => {
-    expect(defaultSdkSetOf('mainnet')).toBe('rc');
-  });
-
   it('is the one network a command must name itself', () => {
     expect(isNamedOnlyNetwork('mainnet')).toBe(true);
-    for (const name of ['preprod', 'preview', 'stagenet', 'undeployed']) expect(isNamedOnlyNetwork(name)).toBe(false);
+    for (const name of ['preprod', 'preview', 'undeployed']) expect(isNamedOnlyNetwork(name)).toBe(false);
   });
 
   it('says how to name it when it was not, as a usage mistake', () => {

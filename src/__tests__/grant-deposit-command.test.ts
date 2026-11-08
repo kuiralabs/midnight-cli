@@ -98,7 +98,7 @@ function payerHolding(shielded: Record<string, bigint>): Payer {
   };
 }
 
-/** What each connect was asked for: a deposit spends shielded coins, so it asks for the shielded side synced (stagenet skips it otherwise). */
+/** What each connect was asked for: a deposit spends shielded coins, so it asks for the shielded side synced (a network that skips the shielded sync by default would read none otherwise). */
 const connectOptions: unknown[] = [];
 
 const deposit = (payer: Payer, ...argv: string[]) =>
@@ -108,7 +108,7 @@ const deposit = (payer: Payer, ...argv: string[]) =>
 const resultLine = (): Record<string, unknown> => JSON.parse(io.stdout().trim().split('\n').at(-1)!) as Record<string, unknown>;
 
 describe('grant deposit --token', () => {
-  it('asks its wallet for the shielded side synced: the coins it deposits are shielded (regression: stagenet read 0)', async () => {
+  it('asks its wallet for the shielded side synced: the coins it deposits are shielded (regression: a network that skips the shielded sync read 0)', async () => {
     connectOptions.length = 0;
     await deposit(payerHolding({ [NATIVE_TOKEN_TYPE]: 0n, [TOKEN]: 10n }), '5', '--token', TOKEN);
     expect(connectOptions).toEqual([{ shielded: true }]);

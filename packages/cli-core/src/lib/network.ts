@@ -1,12 +1,11 @@
 import { blockfrostEndpoints, usesBlockfrost } from './blockfrost.ts';
 import { execSync } from 'child_process';
-import { loadCliConfig, getEndpointOverridesForNetwork, getSdkSetOverride } from './cli-config.ts';
+import { loadCliConfig, getEndpointOverridesForNetwork } from './cli-config.ts';
 import { INDEXER_GRAPHQL_PATH, INDEXER_GRAPHQL_WS_PATH } from './constants.ts';
 import type { Settings } from './settings.ts';
-import type { SdkSet } from './engine.ts';
 import { UsageError } from './errors.ts';
 
-export type NetworkName = 'mainnet' | 'preprod' | 'preview' | 'stagenet' | 'undeployed';
+export type NetworkName = 'mainnet' | 'preprod' | 'preview' | 'undeployed';
 
 /**
  * The protocol version ledger 9 starts at on the chains this build targets:
@@ -46,14 +45,6 @@ const NETWORK_CONFIGS: Record<NetworkName, NetworkConfig> = {
     proofServer: 'http://localhost:6300',
     networkId: 'Preview',
   },
-  // Sig Network's stagenet, which runs the beta SDK set.
-  stagenet: {
-    indexer: `https://indexer.stagenet.shielded.tools${INDEXER_GRAPHQL_PATH}`,
-    indexerWS: `wss://indexer.stagenet.shielded.tools${INDEXER_GRAPHQL_WS_PATH}`,
-    node: 'wss://rpc.stagenet.shielded.tools',
-    proofServer: 'http://localhost:6300',
-    networkId: 'StageNet',
-  },
   undeployed: {
     indexer: `http://localhost:8088${INDEXER_GRAPHQL_PATH}`,
     indexerWS: `ws://localhost:8088${INDEXER_GRAPHQL_WS_PATH}`,
@@ -63,34 +54,28 @@ const NETWORK_CONFIGS: Record<NetworkName, NetworkConfig> = {
   },
 };
 
-/** The SDK set each network runs on, whose engine a call on it loads (D28). */
-const NETWORK_SDK_SETS: Record<NetworkName, SdkSet> = {
-  mainnet: 'rc',
-  preprod: 'rc',
-  preview: 'rc',
-  stagenet: 'beta',
-  undeployed: 'rc',
-};
+const VALID_NETWORK_NAMES: readonly NetworkName[] = ['mainnet', 'preprod', 'preview', 'undeployed'] as const;
 
-/** Every SDK set mn has an engine for. */
-export const SDK_SETS: readonly SdkSet[] = ['rc', 'beta'];
+/** Networks an earlier mn ran on and this one no longer does: named, they are refused with that said, not as unknown. */
+const RETIRED_NETWORK_NAMES: readonly string[] = ['stagenet'];
 
-/** The SDK set the network table names for a network. */
-export function defaultSdkSetOf(name: NetworkName): SdkSet {
-  return NETWORK_SDK_SETS[name];
+/** Whether `name` is a network an earlier mn ran on and this one no longer does. */
+export function isRetiredNetworkName(name: string): boolean {
+  return RETIRED_NETWORK_NAMES.includes(name);
 }
 
-/** The networks that run on `set` now, by the config under the state root `root`. */
-export function networksOnSdkSet(set: SdkSet, root: string): NetworkName[] {
-  return VALID_NETWORK_NAMES.filter((name) => sdkSetOfNetwork(name, root) === set);
+/** A network an earlier mn ran on and this one no longer does, given on a command or saved in the config. `asked` says where it came from. */
+export class RetiredNetworkError extends UsageError {
+  constructor(name: string, asked: string) {
+    const savable = VALID_NETWORK_NAMES.filter((network) => !NAMED_ONLY_NETWORKS.includes(network));
+    super(
+      `${name} is no longer supported (${asked}): mn runs on ${VALID_NETWORK_NAMES.join(', ')}.\n`
+      + `Pick another network: --network <name> on the command, or save one with: midnight config set network <${savable.join('|')}>`,
+    );
+    this.name = 'RetiredNetworkError';
+    Object.setPrototypeOf(this, RetiredNetworkError.prototype);
+  }
 }
-
-/** The SDK set a network runs on: the one `midnight config set sdk-set` gave it under the state root `root`, else the table's. */
-export function sdkSetOfNetwork(name: NetworkName, root: string): SdkSet {
-  return getSdkSetOverride(loadCliConfig(root), name) ?? NETWORK_SDK_SETS[name];
-}
-
-const VALID_NETWORK_NAMES: readonly NetworkName[] = ['mainnet', 'preprod', 'preview', 'stagenet', 'undeployed'] as const;
 
 export function isValidNetworkName(name: string): name is NetworkName {
   return VALID_NETWORK_NAMES.includes(name as NetworkName);
@@ -105,8 +90,9 @@ export class InvalidNetworkError extends UsageError {
   }
 }
 
-/** Throws InvalidNetworkError unless `name` is a network mn knows. */
+/** Throws InvalidNetworkError unless `name` is a network mn knows (RetiredNetworkError for one it no longer runs on). */
 export function assertValidNetworkName(name: string): asserts name is NetworkName {
+  if (isRetiredNetworkName(name)) throw new RetiredNetworkError(name, 'given as the network');
   if (!isValidNetworkName(name)) throw new InvalidNetworkError(name);
 }
 
@@ -151,7 +137,6 @@ export function detectNetworkFromAddress(address: string): NetworkName | null {
   if (address.startsWith('mn_addr1')) return 'mainnet';
   if (address.startsWith('mn_addr_preprod1')) return 'preprod';
   if (address.startsWith('mn_addr_preview1')) return 'preview';
-  if (address.startsWith('mn_addr_stagenet1')) return 'stagenet';
   if (address.startsWith('mn_addr_undeployed1')) return 'undeployed';
   return null;
 }

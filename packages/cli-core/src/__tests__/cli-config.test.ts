@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { CorruptConfigError, loadCliConfig, saveCliConfig, getConfigValue, setConfigValue, unsetConfigValue, getValidConfigKeys, getBlockfrostProjectId, getSdkSetOverride } from '../lib/cli-config.ts';
-import { NetworkNotNamedError, sdkSetOfNetwork } from '../lib/network.ts';
+import { CorruptConfigError, loadCliConfig, saveCliConfig, getConfigValue, setConfigValue, unsetConfigValue, getValidConfigKeys, getBlockfrostProjectId } from '../lib/cli-config.ts';
+import { NetworkNotNamedError, RetiredNetworkError } from '../lib/network.ts';
 import { resolveNetworkName } from '../lib/resolve-network.ts';
 import { getCachePath, networkCacheFolder, walletCacheFileName } from '../lib/wallet-cache.ts';
 import { getDustCachePath } from '../lib/reader-cache-files.ts';
@@ -657,48 +657,71 @@ describe('endpoint keys for a network other than the selected one (--network)', 
   });
 });
 
-describe('the sdk-set key', () => {
-  it('sets, reads and unsets a network\'s SDK set, the selected network\'s unless --network says', () => {
-    expect(getConfigValue('sdk-set', TEST_DIR)).toBe('(not set)');
-    setConfigValue('sdk-set', 'beta', TEST_DIR);
-    setConfigValue('sdk-set', 'rc', TEST_DIR, 'stagenet');
-    expect(getConfigValue('sdk-set', TEST_DIR)).toBe('beta');
-    expect(getConfigValue('sdk-set', TEST_DIR, 'stagenet')).toBe('rc');
-    expect(getSdkSetOverride(loadCliConfig(TEST_DIR), 'undeployed')).toBe('beta');
-    unsetConfigValue('sdk-set', TEST_DIR);
-    expect(getConfigValue('sdk-set', TEST_DIR)).toBe('(not set)');
-    expect(getConfigValue('sdk-set', TEST_DIR, 'stagenet')).toBe('rc');
-  });
-
-  it('refuses a set mn has no engine for', () => {
-    expect(() => setConfigValue('sdk-set', 'mainnet', TEST_DIR)).toThrow('Invalid SDK set: "mainnet"\nValid SDK sets: rc, beta');
-  });
-
-  it('drops a set it doesn\'t know from a hand-edited file', () => {
-    fs.writeFileSync(path.join(TEST_DIR, 'config.json'), JSON.stringify({ network: 'undeployed', networks: { undeployed: { 'sdk-set': 'gamma' } } }));
-    expect(getSdkSetOverride(loadCliConfig(TEST_DIR), 'undeployed')).toBeUndefined();
-  });
-});
-
-describe('the SDK set a network runs on', () => {
+describe('a config an earlier mn wrote with stagenet, which mn no longer runs on', () => {
   const root = path.join(TEST_DIR, 'state');
+  const writeConfig = (config: object) => {
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(path.join(root, 'config.json'), JSON.stringify(config));
+  };
+  const savedFile = () => JSON.parse(fs.readFileSync(path.join(root, 'config.json'), 'utf-8'));
+  const args = (flags: Record<string, string>) => ({ command: 'balance', subcommand: undefined, positionals: [], flags });
 
-  it('is the table\'s until config gives the network another, and the caches follow it to a folder of the set\'s own', () => {
-    expect(sdkSetOfNetwork('undeployed', root)).toBe('rc');
+  it('loads, and a command on the saved network refuses it, saying it is no longer supported and how to pick another', () => {
+    writeConfig({ network: 'stagenet', node: 'wss://rpc.stagenet.example' });
+    expect(loadCliConfig(root)).toMatchObject({ network: 'undeployed', retiredNetwork: 'stagenet' });
+    const refusal = (() => { try { resolveNetworkName({ args: args({}), configDir: root }); } catch (error) { return error; } })();
+    expect(refusal).toBeInstanceOf(RetiredNetworkError);
+    expect(refusal).toMatchObject({ code: 'INVALID_ARGS' });
+    expect((refusal as Error).message).toBe(
+      'stagenet is no longer supported (the saved network): mn runs on mainnet, preprod, preview, undeployed.\n'
+      + 'Pick another network: --network <name> on the command, or save one with: midnight config set network <preprod|preview|undeployed>',
+    );
+  });
+
+  it('runs a command that names its network, without the flat endpoints set under stagenet', () => {
+    writeConfig({ network: 'stagenet', node: 'wss://rpc.stagenet.example', 'indexer-ws': 'wss://indexer.stagenet.example/api/v4/graphql/ws' });
+    expect(resolveNetworkName({ args: args({ network: 'undeployed' }), configDir: root })).toBe('undeployed');
+    expect(getConfigValue('node', root, 'undeployed')).toBe('(not set)');
+  });
+
+  it('shows stagenet as the saved network, and keeps it through another key\'s write', () => {
+    writeConfig({ network: 'stagenet' });
+    expect(getConfigValue('network', root)).toBe('stagenet');
+    setConfigValue('proof-server', 'http://localhost:6300', root, 'undeployed');
+    expect(savedFile().network).toBe('stagenet');
+  });
+
+  it('is gone once another network is saved, or the network is unset', () => {
+    writeConfig({ network: 'stagenet' });
+    setConfigValue('network', 'preview', root);
+    expect(savedFile().network).toBe('preview');
+    expect(resolveNetworkName({ args: args({}), configDir: root })).toBe('preview');
+
+    writeConfig({ network: 'stagenet' });
+    unsetConfigValue('network', root);
+    expect(savedFile().network).toBe('undeployed');
+    expect(loadCliConfig(root).retiredNetwork).toBeUndefined();
+  });
+
+  it('refuses stagenet as a network to save, given on a command, or as a scope, leaving the file as it was', () => {
+    writeConfig({ network: 'preview' });
+    expect(() => setConfigValue('network', 'stagenet', root)).toThrow(RetiredNetworkError);
+    expect(savedFile().network).toBe('preview');
+    expect(() => resolveNetworkName({ args: args({ network: 'stagenet' }), configDir: root })).toThrow('stagenet is no longer supported (given as the network)');
+    expect(() => networkCacheFolder('stagenet', root)).toThrow(RetiredNetworkError);
+  });
+
+  it('drops the sdk-set key an earlier mn kept per network, which is no longer a key', () => {
+    writeConfig({ network: 'undeployed', networks: { undeployed: { 'sdk-set': 'beta', node: 'ws://localhost:9944' } } });
+    expect(loadCliConfig(root).networks).toStrictEqual({ undeployed: { node: 'ws://localhost:9944' } });
+    expect(() => setConfigValue('sdk-set', 'rc', root)).toThrow('Unknown config key: "sdk-set"');
+    expect(getValidConfigKeys()).not.toContain('sdk-set');
+  });
+
+  it('keeps every cache in the network\'s own folder', () => {
     expect(networkCacheFolder('undeployed', root)).toBe('undeployed');
     expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)).toBe(path.join(root, 'cache', 'undeployed', walletCacheFileName('mn_addr_undeployed1abcdefghijklmnopqrst')));
-
-    setConfigValue('sdk-set', 'beta', root, 'undeployed');
-    expect(sdkSetOfNetwork('undeployed', root)).toBe('beta');
-    expect(networkCacheFolder('undeployed', root)).toBe('undeployed.beta');
-    expect(getCachePath('mn_addr_undeployed1abcdefghijklmnopqrst', 'undeployed', root)).toBe(path.join(root, 'cache', 'undeployed.beta', walletCacheFileName('mn_addr_undeployed1abcdefghijklmnopqrst')));
-    expect(getDustCachePath('undeployed', 'ab'.repeat(32), root)).toBe(path.join(root, 'cache', 'undeployed.beta', `dust-${'ab'.repeat(10)}.json`));
-
-    // Back on the network's own set, the caches it kept there are the ones read.
-    unsetConfigValue('sdk-set', root, 'undeployed');
-    expect(networkCacheFolder('undeployed', root)).toBe('undeployed');
-    expect(sdkSetOfNetwork('stagenet', root)).toBe('beta');
-    expect(networkCacheFolder('stagenet', root)).toBe('stagenet');
+    expect(getDustCachePath('undeployed', 'ab'.repeat(32), root)).toBe(path.join(root, 'cache', 'undeployed', `dust-${'ab'.repeat(10)}.json`));
   });
 });
 

@@ -29,8 +29,7 @@ export const coreCodes = defineCodes([
   { code: 'ENDPOINT_SHUT_DOWN', exitCode: EXIT_NETWORK_ERROR, order: 270, summary: "An endpoint set by flag or config was shut down by its operator (the old preprod indexer, mainnet's old Midnight-hosted indexer and node).", recovery: '`midnight_config_unset({ key: "indexer-ws" })` (and `node` if set), then retry.' },
   { code: 'MAINNET_REFUSED', exitCode: EXIT_INVALID_ARGS, order: 275, summary: 'The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (no released account build there).', recovery: "Tell the user why (the message says) and don't retry on mainnet; offer undeployed or a test network instead." },
   { code: 'CANCELLED', exitCode: EXIT_CANCELLED, order: 370, summary: 'Operation was aborted (SIGINT, or the MCP call was cancelled).', recovery: "A transaction already submitted may still have landed: read the state first (`midnight_grant_status`, `midnight_balance`). Don't retry without confirming with the user." },
-  { code: 'OTHER_SDK_SET', exitCode: EXIT_GENERAL_ERROR, order: 280, summary: "The process runs one SDK set's engine and the network runs on the other (an MCP server that served rc asked for stagenet).", recovery: 'Make the call in a process of its own: ask the user to start an MCP server for that network.' },
-  { code: 'MIXED_SDK_LAYOUT', exitCode: EXIT_GENERAL_ERROR, order: 290, summary: "mn's packages were installed without each engine's shrinkwrap (bun's installer): an engine's SDK tree isn't the one it was tested with.", recovery: 'Ask the user to install mn with npm.' },
+  { code: 'MIXED_SDK_LAYOUT', exitCode: EXIT_GENERAL_ERROR, order: 290, summary: "mn's packages were installed without the engine's shrinkwrap (bun's installer): the engine's SDK tree isn't the one it was tested with.", recovery: 'Ask the user to install mn with npm.' },
   { code: 'UNSUPPORTED_NODE', exitCode: EXIT_GENERAL_ERROR, order: 190, summary: 'Node.js is older than 22 (22.18 for mn grant).', recovery: 'Ask the user to install a current Node.js.' },
   { code: 'NO_STATE_ROOT', exitCode: EXIT_GENERAL_ERROR, order: 300, summary: "The host gave mn no place to keep its state (a program's `createHost` without paths).", recovery: "Give the host its paths (`createHost({ paths })`)." },
   { code: 'NO_PAYER', exitCode: EXIT_GENERAL_ERROR, order: 310, summary: 'A command that submits a transaction was called without a payer.', recovery: 'Give the call a payer.' },
@@ -61,8 +60,8 @@ export const EVERY_COMMAND = ['INVALID_ARGS', 'CANCELLED', 'UNKNOWN', 'UNSUPPORT
 /** Resolving a network and its endpoints: several local stacks, Blockfrost's project id and limits, an endpoint shut down. */
 export const RESOLVES_NETWORK = defineCodeSet('network', ['AMBIGUOUS_LOCAL_STACKS', 'BLOCKFROST_PROJECT_ID_REQUIRED', 'BLOCKFROST_PROJECT_ID_REJECTED', 'BLOCKFROST_LIMIT_REACHED', 'ENDPOINT_SHUT_DOWN']);
 
-/** Asking the host for an engine: the other SDK set loaded in the process, or an install without its shrinkwrap. */
-export const LOADS_ENGINE = defineCodeSet('engine', ['OTHER_SDK_SET', 'MIXED_SDK_LAYOUT']);
+/** Asking the host for an engine: an install without its shrinkwrap. */
+export const LOADS_ENGINE = defineCodeSet('engine', ['MIXED_SDK_LAYOUT']);
 
 /** Syncing a wallet through an engine: a connection that failed, a sync past its deadline, a cache the chain no longer fits. */
 export const ENGINE_SYNC = defineCodeSet('sync', ['NETWORK_ERROR', 'SYNC_TIMEOUT', 'STALE_CACHE']);

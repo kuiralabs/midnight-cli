@@ -35,7 +35,7 @@ can connect to it — no browser extension needed.
     send no Origin and always connect. A refused page gets HTTP 403, and
     serve prints the origin it refused. --approve-all with an allowed
     origin prints a warning: any script on that page can spend and sign
-  - Shielded wallet on preview, preprod and stagenet: serve is ready
+  - Shielded wallet on preview and preprod: serve is ready
     without waiting for the shielded sync, which goes on behind it, so
     shielded balances it reports may be incomplete until it catches up.
     --force-shielded waits for the full shielded sync first; a dApp that
@@ -77,7 +77,7 @@ DApp developers connect via the midnight-wallet-connector npm package:
   import { createWalletClient } from 'midnight-wallet-connector';
   const wallet = await createWalletClient({
     url: 'ws://localhost:9932',
-    networkId: 'undeployed',  // or 'preprod', 'preview', 'stagenet', 'mainnet' — lowercase per @midnightntwrk/wallet-sdk
+    networkId: 'undeployed',  // or 'preprod', 'preview', 'mainnet' — lowercase per @midnightntwrk/wallet-sdk
   });
   const balances = await wallet.getUnshieldedBalances();
 

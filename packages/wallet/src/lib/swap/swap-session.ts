@@ -6,7 +6,7 @@ import type { Host, NetworkName, ConnectOptions, PayingTarget, CallSdkWarnings, 
 import { resolveWalletPath, walletAddress } from '../wallet-config.ts';
 import { stepSpinner, type PaidCallOptions } from '../wallet/paid-call.ts';
 
-// A swap spends shielded coins only: its wallet syncs the shielded side on every network, stagenet included.
+// A swap spends shielded coins only: its wallet syncs the shielded side on every network, preview and preprod included.
 const SHIELDED: ConnectOptions = { shielded: true };
 
 /** The unshielded address on `network` of mn's wallet `wallet` (a name or path; the active one when not given), which keys its open offers. */

@@ -13,10 +13,10 @@ export const transferDefinition: CommandDefinition = {
       name: 'force-shielded',
       takesValue: false,
       help: [
-        '--force-shielded    Allow --shielded on preview, preprod and stagenet, where the shielded',
+        '--force-shielded    Allow --shielded on preview and preprod, where the shielded',
         '                    wallet is not synced by default (the first sync takes a while)',
       ],
-      agent: { type: 'boolean', description: 'With shielded: allow it on preview, preprod and stagenet, where the shielded wallet is not synced by default (the first sync takes a while)' },
+      agent: { type: 'boolean', description: 'With shielded: allow it on preview and preprod, where the shielded wallet is not synced by default (the first sync takes a while)' },
     },
     {
       name: 'network',

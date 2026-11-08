@@ -1,13 +1,13 @@
 // The Midnight SDK, behind one interface. Everything that touches an SDK set
 // is an engine's; the rest of mn reaches it through the engine for its
-// network, and names no SDK type. Which engines there are is the host's: its
+// network, and names no SDK type. Which engine there is is the host's: its
 // engine loader makes each host an engine of its own (the shell's loader, the
-// engines it ships). Loading an engine loads its SDK, so the loader imports it
-// only when asked. What stays process-wide is which SDK set the process runs.
+// engine it ships). Loading an engine loads its SDK, so the loader imports it
+// only when asked.
 
 import type { OfferContents } from './swap-offer.ts';
 import type { OpenOffer } from './open-offers.ts';
-import { sdkSetOfNetwork, type NetworkConfig, type NetworkName } from './network.ts';
+import type { NetworkConfig, NetworkName } from './network.ts';
 import type { CallSdkWarnings } from './sdk-warnings.ts';
 import type { VerboseLog } from './verbose.ts';
 import type { ApprovalOptions } from './approval.ts';
@@ -17,8 +17,8 @@ import type { RpcHandler } from './connector-api.ts';
 import type { Spinner } from '../ui/spinner.ts';
 import type { Host } from './host.ts';
 
-/** An SDK set mn runs on: the SDK's release candidates, or the beta set stagenet runs. */
-export type SdkSet = 'rc' | 'beta';
+/** The SDK set mn runs on: the SDK's release candidates. */
+export type SdkSet = 'rc';
 
 /** A wallet's keys and addresses, derived from its seed. Every set derives the same ones. */
 export interface EngineKeys {
@@ -501,9 +501,9 @@ export interface Engine {
   account(): Promise<EngineAccountPackage>;
 }
 
-/** The SDK set a network runs on, as the network table and the config under the state root `root` name it. */
+/** The SDK set a network runs on: every network runs on the rc set. */
 export function sdkSetOf(network: NetworkName, root: string): SdkSet {
-  return sdkSetOfNetwork(network, root);
+  return 'rc';
 }
 
 /** What an engine takes from the host that loads it: its settings, and where its notices go. */
@@ -514,9 +514,9 @@ export type EngineLoader = (set: SdkSet, host: Host) => Promise<Engine>;
 
 /** A host's engines: one engine of the host's own, loaded on first use. */
 export interface HostEngines {
-  /** The engine for an SDK set. Rejects with OtherSdkSetError when this host or this process has the other set. */
+  /** The engine for an SDK set. */
   load(set: SdkSet): Promise<Engine>;
-  /** The engine for a network's SDK set, by the network table and the config under the host's state root. */
+  /** The engine for a network's SDK set. */
   for(network: NetworkName): Promise<Engine>;
   /**
    * An engine for work every set does alike, such as deriving addresses: the
@@ -526,31 +526,4 @@ export interface HostEngines {
   any(): Promise<Engine>;
   /** The network a call is for, whose set any() loads while the host has loaded none. */
   prefer(network: NetworkName): void;
-}
-
-/** A call on a network whose SDK set isn't the one this process has loaded. */
-export class OtherSdkSetError extends Error {
-  readonly code = 'OTHER_SDK_SET';
-  readonly loadedSet: SdkSet;
-  readonly wantedSet: SdkSet;
-  constructor(
-    loadedSet: SdkSet,
-    wantedSet: SdkSet,
-    message = `This process runs the ${loadedSet} SDK set and can't load the ${wantedSet} one beside it: two sets' ledgers can't share a process. Run the call in a process of its own.`,
-  ) {
-    super(message);
-    this.name = 'OtherSdkSetError';
-    this.loadedSet = loadedSet;
-    this.wantedSet = wantedSet;
-  }
-}
-
-// The SDK set this process loads, whichever host loaded it first: two sets'
-// WASM ledgers can't share a process, so it is the process's, not a host's.
-let loadedSet: SdkSet | undefined;
-
-/** Records that this process loads `set`; throws OtherSdkSetError when it has loaded the other. */
-export function claimSdkSet(set: SdkSet): void {
-  if (loadedSet !== undefined && loadedSet !== set) throw new OtherSdkSetError(loadedSet, set);
-  loadedSet = set;
 }

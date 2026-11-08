@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { classifyError, CancelledError, CommandFailedError, DustRequiredError, InsufficientBalanceError, SyncTimeoutError, TransactionRefusedError, UsageError, withTransportCode, parseArgs, requireFlag, dustShortError, ProgramTimedOutError, NATIVE_TOKEN_TYPE, type NetworkConfig, type CommandHandler, createHost, payerFor, openSecret, sealSecret, checkTerms, assertOfferUnexpired, OfferCoinsInUseError, AmbiguousLocalStacksError, BlockfrostLimitError, BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, EndpointShutDownError, OtherSdkSetError } from '@kuiralabs/midnight-cli-core';
+import { classifyError, CancelledError, CommandFailedError, DustRequiredError, InsufficientBalanceError, SyncTimeoutError, TransactionRefusedError, UsageError, withTransportCode, parseArgs, requireFlag, dustShortError, ProgramTimedOutError, NATIVE_TOKEN_TYPE, type NetworkConfig, type CommandHandler, createHost, payerFor, openSecret, sealSecret, checkTerms, assertOfferUnexpired, OfferCoinsInUseError, AmbiguousLocalStacksError, BlockfrostLimitError, BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, EndpointShutDownError } from '@kuiralabs/midnight-cli-core';
 import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
 import { ProofTimeoutError, NotAnOfferError, MixedSdkLayoutError, DustFeeNotGeneratedError, planRegistration } from '@kuiralabs/midnight-cli-core/engine';
 import { Effect } from 'effect';
@@ -202,7 +202,7 @@ const ROWS: Row[] = [
   ["a saved state the indexer's events don't fit, through the engine", throughRcEngine(() => Promise.reject(new Error('Failed applying dust events: commitment inserted non-linearly'))), as('STALE_CACHE', 6), as('STALE_CACHE', 6)],
   ['a wallet sync past its deadline, in the engine', () => { throw new SyncTimeoutError('Wallet sync timed out'); }, as('SYNC_TIMEOUT', 4), as('SYNC_TIMEOUT', 4)],
   ['a ZK proof that timed out, in the engine (approved Y54: was UNKNOWN)', () => { throw new ProofTimeoutError(); }, as('UNKNOWN', 1), as('PROOF_TIMEOUT', 6)],
-  // A program's wallet session (the connector in this process) and an escaped stale cache are the engines' own errors: their rows are in each engine's tests (wallet-session.test.ts, stale-cache.test.ts).
+  // A program's wallet session (the connector in this process) and an escaped stale cache are the engines' own errors: their rows are in the engine's tests (wallet-session.test.ts, stale-cache.test.ts).
   // A contract script's failures (a connection it could not make, no Node.js to run it) and a contract run's at mn serve (the connector, the wire, the script's process) are the contract runner's: their rows are in the contract package's tests (contract-script-errors.test.ts).
 
   // Cancelled: exit 7.
@@ -212,7 +212,6 @@ const ROWS: Row[] = [
   ['an old Node.js', () => { throw new UnsupportedNodeError('20.10.0'); }, as('UNSUPPORTED_NODE', 1), as('UNSUPPORTED_NODE', 1)],
   ['an old Node.js for the account', () => { throw new NodeTooOldForAccountError('22.0.0'); }, as('UNSUPPORTED_NODE', 1), as('UNSUPPORTED_NODE', 1)],
   ['two copies of a ledger', () => { throw new MixedSdkLayoutError('rc', '@midnight-ntwrk/ledger-v8', ['a', 'b']); }, as('MIXED_SDK_LAYOUT', 1), as('MIXED_SDK_LAYOUT', 1)],
-  ['the other SDK set', () => { throw new OtherSdkSetError('rc', 'beta'); }, as('OTHER_SDK_SET', 1), as('OTHER_SDK_SET', 1)],
   ['no account', () => { throw new NoAccountError('alice', 'undeployed'); }, as('NO_ACCOUNT', 1), as('NO_ACCOUNT', 1)],
   ['no state root (approved: was UNKNOWN)', () => createHost().paths(), as('UNKNOWN', 1), as('NO_STATE_ROOT', 1)],
   ['no payer (approved: was UNKNOWN)', () => payerFor('transfer', undefined), as('UNKNOWN', 1), as('NO_PAYER', 1)],

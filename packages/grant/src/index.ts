@@ -10,5 +10,5 @@
 // says. The grant command, its codes and guidance are "./commands".
 
 export { accountProtector } from './lib/grant/account-protector.ts';
-export { CallerPinUnavailableError, NoAccountError, NodeTooOldForAccountError, UnreachableByAccountError } from './lib/grant/account-errors.ts';
+export { NoAccountError, NodeTooOldForAccountError, UnreachableByAccountError } from './lib/grant/account-errors.ts';
 export { accountArtifactsDir, accountRecordsDir } from './lib/grant/account-records.ts';

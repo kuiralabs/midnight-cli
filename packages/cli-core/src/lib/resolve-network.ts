@@ -9,6 +9,7 @@ import {
   type NetworkConfig,
   isValidNetworkName,
   assertValidNetworkName,
+  RetiredNetworkError,
   resolveNetworkConfig,
   type EndpointOverrides,
 } from './network.ts';
@@ -30,7 +31,8 @@ export interface NetworkResolutionContext {
 
 /**
  * Resolve the network name using the 3-step priority chain.
- * Throws if --network flag is provided but invalid.
+ * Throws if --network flag is provided but invalid, and when the saved
+ * network is one mn no longer runs on (RetiredNetworkError).
  */
 export function resolveNetworkName(ctx: NetworkResolutionContext): NetworkName {
   // 1. Explicit --network flag
@@ -42,6 +44,7 @@ export function resolveNetworkName(ctx: NetworkResolutionContext): NetworkName {
 
   // 2. Default from ~/.midnight/config.json
   const cliConfig = loadCliConfig(ctx.configDir);
+  if (cliConfig.retiredNetwork !== undefined) throw new RetiredNetworkError(cliConfig.retiredNetwork, 'the saved network');
   if (cliConfig.network && isValidNetworkName(cliConfig.network)) {
     return cliConfig.network;
   }
