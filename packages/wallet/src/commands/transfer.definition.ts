@@ -1,9 +1,10 @@
 // The `transfer` command, described once.
 
-import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget } from '@kuiralabs/midnight-cli-core';
+import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM, confirmationTarget, nightAmountText, parseAmount, UsageError } from '@kuiralabs/midnight-cli-core';
 import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
 import { OPENS_WALLET } from './wallet.codes.ts';
+import { assertRecipientCount, MAX_TRANSFER_RECIPIENTS } from '../lib/transfer-recipients.ts';
 
 export const transferDefinition: CommandDefinition = {
   name: 'transfer',
@@ -35,6 +36,16 @@ export const transferDefinition: CommandDefinition = {
       takesValue: false,
       help: ['--shielded          Send from shielded balance to a shielded address'],
       agent: { type: 'boolean', description: 'Send from the shielded balance to a shielded address' },
+    },
+    {
+      name: 'to-file',
+      takesValue: true,
+      help: [
+        '--to-file <file>    Read the recipients from a JSON file instead of pairs:',
+        '                    [{"to": "alice", "amount": "10"}, {"to": "mn_addr_...", "amount": "2.5"}]',
+      ],
+      // The tool takes the list itself, as recipients.
+      agent: { notForAgents: 'midnight_transfer takes the list as its recipients parameter' },
     },
     {
       name: 'verbose',
@@ -69,11 +80,13 @@ export const transferDefinition: CommandDefinition = {
     },
   ],
   help: {
-    description: 'Send NIGHT tokens to another address (unshielded or --shielded)',
-    usage: 'midnight transfer <to> <amount> [--shielded [--force-shielded]] [--wallet <name|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--verbose]',
+    description: 'Send NIGHT tokens to another address, or to several in one transaction (unshielded or --shielded)',
+    usage: 'midnight transfer <to> <amount> [<to> <amount> ...] | --to-file <file> [--shielded [--force-shielded]] [--wallet <name|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--verbose]',
     flags: [
-      '<to>                Recipient bech32m address (unshielded or shielded)',
+      '<to>                Recipient: a bech32m address (unshielded or shielded) or a wallet name',
       '<amount>            Amount in NIGHT to send',
+      `<to> <amount> ...   More pairs pay more recipients in the same transaction (at most ${MAX_TRANSFER_RECIPIENTS})`,
+      { flag: 'to-file' },
       { flag: 'shielded' },
       { flag: 'force-shielded' },
       { flag: 'wallet' },
@@ -86,16 +99,19 @@ export const transferDefinition: CommandDefinition = {
     examples: [
       'midnight transfer mn_addr_undeployed1... 100',
       'midnight transfer mn_shield-addr_undeployed1... 50 --shielded',
+      'midnight transfer alice 10 bob 5 mn_addr_undeployed1... 2.5',
+      'midnight transfer --to-file payments.json',
     ],
     jsonFields: {
       txHash: 'The transaction\'s identifier (midnight tx status takes it)',
       receipt: 'The transaction once the indexer lists it: blockHeight, blockHash, blockTime, fee (DUST, exact), feeSpecks, result; null when it has not within 60 s',
       receiptMissing: 'Why receipt is null; check later with midnight tx status <txHash>',
-      amount: 'Amount transferred (NIGHT string)',
-      recipient: 'Recipient address (bech32m)',
+      amount: 'Amount transferred (NIGHT string); with several recipients, their total',
+      recipient: 'Recipient address (bech32m); with one recipient only',
+      recipients: 'With several recipients: each as { recipient, amount }, in order, plus selfTransfer: true on one that is the sending wallet itself',
       network: 'Network name',
-      selfTransfer: 'true when the recipient is the sending wallet itself (absent otherwise)',
-      note: 'With selfTransfer: the NIGHT stays in the wallet and the transfer only spends a fee',
+      selfTransfer: 'With one recipient: true when it is the sending wallet itself (absent otherwise)',
+      note: 'With selfTransfer: the NIGHT paid to the sending wallet itself stays in it',
     },
   },
   intro: { brief: 'Send NIGHT tokens', order: 8 },
@@ -112,16 +128,33 @@ export const transferDefinition: CommandDefinition = {
         params: [
           { name: 'to', schema: { type: 'string', description: 'bech32m' } },
           { name: 'amount', schema: { type: 'string', description: 'NIGHT' } },
+          {
+            name: 'recipients',
+            schema: {
+              type: 'array',
+              description: `Instead of to/amount: up to ${MAX_TRANSFER_RECIPIENTS}, one tx`,
+              items: { type: 'object', properties: { to: { type: 'string' }, amount: { type: 'string' } }, required: ['to', 'amount'] },
+            },
+          },
           { flag: 'wallet' },
         ],
-        required: ['to', 'amount'],
-        argv: { subcommand: { param: 'to' }, positionals: ['amount'], flags: 'rest' },
+        argv: { subcommand: { param: 'to' }, positionals: ['amount'], pairs: { param: 'recipients', fields: ['to', 'amount'] }, flags: 'rest' },
         confirmation: {
           describe: (params) => {
             const { network, wallet } = confirmationTarget(params);
-            return `Send ${params.amount} NIGHT from ${wallet} to ${params.to} on ${network}`;
+            const recipients = params.recipients as readonly { to: unknown; amount: unknown }[] | undefined;
+            if (recipients === undefined) return `Send ${params.amount} NIGHT from ${wallet} to ${params.to} on ${network}`;
+            // The check parsed every amount before this runs.
+            const total = recipients.reduce((sum, { amount }) => sum + parseAmount(String(amount)), 0n);
+            const each = recipients.map(({ to, amount }) => `${amount} NIGHT to ${to}`).join(', ');
+            return `Send ${nightAmountText(total)} NIGHT in all from ${wallet} on ${network}, in one transaction: ${each}`;
           },
-          async check(_params, call) {
+          async check(params, call) {
+            if (params.recipients !== undefined && (params.to !== undefined || params.amount !== undefined)) {
+              throw new UsageError('Give either to and amount, or recipients, not both.');
+            }
+            // An empty list maps to no words, which the command would call a missing recipient.
+            if (Array.isArray(params.recipients)) assertRecipientCount(params.recipients.length);
             const { resolveTransferRequest } = await import('../lib/transfer-request.ts');
             await resolveTransferRequest(call.argv(), call.host.paths().stateRoot, call.host);
           },

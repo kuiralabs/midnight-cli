@@ -6,52 +6,87 @@ import * as fs from 'node:fs';
 import { type ParsedArgs, getFlag, hasFlag, UsageError, resolveNetworkName, sdkSetOf, type EngineKeys, parseAmount, type NetworkName, looksLikeShieldedAddress, looksLikeUnshieldedAddress } from '@kuiralabs/midnight-cli-core';
 import { loadWalletConfig, resolveWalletPath, walletAddress, walletShieldedAddress, type UnlockHost, type WalletConfig } from './wallet-config.ts';
 import { assertShieldedTransferAllowed } from './wallet/transfer.ts';
+import { assertRecipientCount, readRecipientsFile, recipientLabel, recipientPairsOf, type RecipientEntry } from './transfer-recipients.ts';
+
+/** One recipient of a transfer, resolved. */
+export interface TransferRequestRecipient {
+  /** As written: a wallet name or an address. */
+  input: string;
+  /** The recipient's bech32m address; a wallet name given as the recipient is resolved to it. */
+  address: string;
+  /** In NIGHT's smallest unit, exactly as written. */
+  amount: bigint;
+}
 
 export interface TransferRequest {
   walletPath: string;
   walletConfig: WalletConfig;
   networkName: NetworkName;
-  /** The recipient's bech32m address; a wallet name given as the recipient is resolved to it. */
-  recipientAddress: string;
-  /** In NIGHT's smallest unit, exactly as written. */
-  amount: bigint;
+  /** Who is paid, in order: one output each, in one transaction. A recipient listed twice is paid twice. */
+  recipients: TransferRequestRecipient[];
+  /** What all the recipients are paid together, in NIGHT's smallest unit. */
+  total: bigint;
   shielded: boolean;
 }
 
-/** `transfer <to> <amount> [--shielded] [--wallet] [--network]`, checked without touching the chain, against the wallets and config under the state root `root`; a sealed recipient wallet is unlocked through `host`, and the recipient checked by its engine for the network. */
+/**
+ * `transfer <to> <amount> [<to> <amount> ...] [--to-file <file>] [--shielded]
+ * [--wallet] [--network]`, checked without touching the chain, against the
+ * wallets and config under the state root `root`; a sealed recipient wallet
+ * is unlocked through `host`, and each recipient checked by its engine for
+ * the network. With several recipients a refusal names the entry.
+ */
 export async function resolveTransferRequest(args: ParsedArgs, root: string, host: UnlockHost): Promise<TransferRequest> {
-  const recipientInput = args.subcommand;
-  const amountStr = args.positionals[0];
-
-  if (!recipientInput) {
-    throw new UsageError(
-      'Missing recipient address.\n' +
-      'Usage: midnight transfer <to> <amount>\n' +
-      'Example: midnight transfer mn_addr_undeployed1... 100\n' +
-      'Example: midnight transfer alice 100'
-    );
-  }
-
-  if (!amountStr) {
-    throw new UsageError(
-      'Missing amount.\n' +
-      'Usage: midnight transfer <to> <amount>\n' +
-      'Example: midnight transfer mn_addr_undeployed1... 100'
-    );
-  }
+  const entries = recipientEntriesOf(args);
+  assertRecipientCount(entries.length);
 
   const shielded = hasFlag(args, 'shielded');
-  const recipientAddress = await resolveRecipient(recipientInput, args, shielded, root, host);
-  const amount = parseAmount(amountStr);
   const walletPath = resolveWalletPath(root, getFlag(args, 'wallet'));
   const walletConfig = await loadWalletConfig(walletPath, host.engines);
   const networkName = resolveNetworkName({ args, configDir: root });
 
   // transferNight refuses it too; refused here before the wallet is opened, and before MCP issues a confirmation.
   if (shielded) assertShieldedTransferAllowed(networkName, hasFlag(args, 'force-shielded'));
-  assertRecipient((await host.engines.load(sdkSetOf(networkName, root))).keys, recipientAddress, shielded, networkName);
+  const keys = (await host.engines.load(sdkSetOf(networkName, root))).keys;
 
-  return { walletPath, walletConfig, networkName, recipientAddress, amount, shielded };
+  const recipients: TransferRequestRecipient[] = [];
+  for (const [index, entry] of entries.entries()) {
+    recipients.push(await naming(index, entries.length, entry.to, async () => {
+      const address = await resolveRecipient(entry.to, args, shielded, root, host);
+      const amount = parseAmount(entry.amount);
+      assertRecipient(keys, address, shielded, networkName);
+      return { input: entry.to, address, amount };
+    }));
+  }
+  const total = recipients.reduce((sum, recipient) => sum + recipient.amount, 0n);
+  return { walletPath, walletConfig, networkName, recipients, total, shielded };
+}
+
+/** The recipients as written: from --to-file, or the `<to> <amount>` pairs after the command; both together is refused. */
+function recipientEntriesOf(args: ParsedArgs): RecipientEntry[] {
+  const words = [...(args.subcommand === undefined ? [] : [args.subcommand]), ...args.positionals];
+  // A bare --to-file is refused by getFlag as needing a value.
+  const file = getFlag(args, 'to-file');
+  if (file === undefined) return recipientPairsOf(words);
+  if (file === '') {
+    throw new UsageError('--to-file needs the path of a JSON file of recipients.\nExample: midnight transfer --to-file payments.json');
+  }
+  if (words.length > 0) {
+    throw new UsageError(
+      `Give the recipients either as <to> <amount> pairs or with --to-file, not both (got ${words.map((word) => `"${word}"`).join(' ')} and --to-file ${file}).`
+    );
+  }
+  return readRecipientsFile(file);
+}
+
+/** Runs one entry's checks; with several recipients a usage mistake names the entry. */
+async function naming<T>(index: number, count: number, to: string, check: () => Promise<T>): Promise<T> {
+  try {
+    return await check();
+  } catch (err) {
+    if (count === 1 || !(err instanceof UsageError)) throw err;
+    throw new UsageError(`${recipientLabel(index, count, to)}: ${err.message}`);
+  }
 }
 
 /** Refuses, as a usage mistake, a recipient that is not an address of that kind on the network. */

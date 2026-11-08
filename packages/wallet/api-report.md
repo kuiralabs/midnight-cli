@@ -252,6 +252,10 @@ export interface StepFailed {
     readonly message: string;
 }
 export declare function stepSpinner(onProgress: ((event: ProgressEvent | StepFailed) => void) | undefined, message: string): Spinner;
+export interface NightPayment {
+    readonly recipient: string;
+    readonly amount: bigint;
+}
 export interface NightTransfer {
     readonly network: NetworkName;
     readonly txHash: string;
@@ -259,12 +263,14 @@ export interface NightTransfer {
 }
 export declare function transferNight(host: Host, source: WalletSource, options: TransferNightOptions): Promise<NightTransfer>;
 export interface TransferNightOptions extends WalletCallOptions<WalletOpened> {
-    recipient: string;
-    amount: bigint;
+    recipient?: string;
+    amount?: bigint;
+    recipients?: readonly NightPayment[];
     shielded?: boolean;
     forceShielded?: boolean;
     receiptWaitMs?: number;
 }
+export declare const MAX_TRANSFER_RECIPIENTS = 50;
 export declare function networkChoiceOf(options: NetworkChoice): NetworkChoice;
 export interface WalletCallOptions<Event = never> extends NetworkChoice {
     signal?: AbortSignal;

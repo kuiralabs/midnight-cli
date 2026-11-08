@@ -142,6 +142,34 @@ describe('transferNight', () => {
     expect(said[0]).toMatchObject({ kind: 'wallet-opened', network: 'preprod' });
   });
 
+  it('pays several recipients in one call: opened and on to the chain, unshielded and shielded', async () => {
+    const host = programHost('a');
+    aliceOf(host, SEED_A);
+    const said: Said[] = [];
+    const recipients = [{ recipient: RECIPIENT, amount: 1_000_000n }, { recipient: RECIPIENT, amount: LARGE }];
+    await expect(transferNight(host, { wallet: 'alice' }, { ...endpoints(), recipients, onProgress: (event) => said.push(event) })).rejects.toMatchObject({ code: 'UNSUPPORTED_LEDGER' });
+    expect(said.slice(0, 2).map((event) => event.kind)).toEqual(['wallet-opened', 'start']);
+    const shielded = [{ recipient: RECIPIENT_SHIELDED, amount: 1n }, { recipient: RECIPIENT_SHIELDED, amount: 2n }];
+    await expect(transferNight(host, { wallet: 'alice' }, { ...endpoints(), recipients: shielded, shielded: true })).rejects.toMatchObject({ code: 'UNSUPPORTED_LEDGER' });
+  });
+
+  it.each([
+    ['recipient and amount with recipients', { recipient: RECIPIENT, amount: 1n, recipients: [{ recipient: RECIPIENT, amount: 1n }] }, 'Give either recipient and amount, or recipients, not both.'],
+    ['neither', {}, 'A transfer needs recipient and amount, or recipients.'],
+    ['an empty list', { recipients: [] }, 'The transfer lists no recipients'],
+    ['one past the cap', { recipients: Array.from({ length: 51 }, () => ({ recipient: RECIPIENT, amount: 1n })) }, 'Too many recipients: 51, at most 50 in one transfer.'],
+    ['an amount of 0 in the list, named by its place', { recipients: [{ recipient: RECIPIENT, amount: 1n }, { recipient: RECIPIENT, amount: 0n }] }, `Recipient 2 of 2 ("${RECIPIENT}"): Invalid amount: 0 NIGHT — must be greater than 0`],
+  ])('refuses %s with INVALID_ARGS, before the wallet unlocks', async (_case, payments, message) => {
+    const host = programHost('a');
+    aliceOf(host, SEED_A);
+    const said: Said[] = [];
+    const refused = transferNight(host, { wallet: 'alice' }, { ...endpoints(), ...payments, onProgress: (event) => said.push(event) });
+    await expect(refused).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+    await expect(refused).rejects.toThrow(message);
+    expect(host.asked()).toBe(0);
+    expect(said).toEqual([]);
+  });
+
   it('refuses a network that is not one, naming the networks, before the wallet unlocks', async () => {
     const host = programHost('a');
     aliceOf(host, SEED_A);

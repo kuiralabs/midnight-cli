@@ -210,3 +210,40 @@ describe('transfer command — to the sending wallet itself', () => {
     expect(io.stderr()).toContain('Warning: The recipient is this wallet itself: the NIGHT stays in it, and the transfer only spends a fee.');
   });
 });
+
+describe('transfer command — several recipients', () => {
+  it('heads the output with each recipient, its amount and the total, warning on the one that is this wallet itself', async () => {
+    const walletFile = path.join(TEST_DIR, 'wallet.json');
+    const addresses = rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex'));
+    saveWalletConfig({ seed: TEST_SEED, addresses, createdAt: new Date().toISOString() }, walletFile);
+    const other = rcKeys.unshieldedAddress(Buffer.from(GENESIS_SEED, 'hex'), 'undeployed');
+    const { closedPort } = await import('../../test-support/closed-port.ts');
+    const port = await closedPort();
+    const args = parseArgs(['transfer', other, '10', addresses.undeployed, '2.5', other, '0.000001', '--wallet', walletFile, '--network', 'undeployed',
+      '--indexer-ws', `ws://127.0.0.1:${port}/api/v4/graphql/ws`, '--node', `ws://127.0.0.1:${port}`, '--proof-server', `http://127.0.0.1:${port}`]);
+    await expect(cliCall(transferCommand, args)).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+    const said = io.stderr();
+    expect(said).toContain('To:             3 recipients');
+    const short = (address: string) => address.slice(0, 10) + '…' + address.slice(-8);
+    const lines = said.split('\n');
+    const listed = lines.filter((line) => line.startsWith('    ') && !line.includes('Warning'));
+    expect(listed).toEqual([
+      `    ${short(other)}  10 NIGHT`,
+      `    ${short(addresses.undeployed)}  2.5 NIGHT`,
+      `    ${short(other)}  0.000001 NIGHT`,
+    ]);
+    expect(said).toContain('      Warning: recipient 2 is this wallet itself: its NIGHT stays in it.');
+    expect(said.match(/Warning/g)).toHaveLength(1);
+    expect(said).toContain('Total:          12.500001 NIGHT');
+  });
+
+  it('refuses positional pairs with --to-file before any wallet starts', async () => {
+    const walletFile = path.join(TEST_DIR, 'wallet.json');
+    saveWalletConfig({ seed: TEST_SEED, addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')), createdAt: new Date().toISOString() }, walletFile);
+    const file = path.join(TEST_DIR, 'payments.json');
+    fs.writeFileSync(file, '[]');
+    const args = parseArgs(['transfer', 'alice', '1', '--to-file', file, '--wallet', walletFile]);
+    await expect(cliCall(transferCommand, args)).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('not both') });
+    expect(io.stderr()).toBe('');
+  });
+});

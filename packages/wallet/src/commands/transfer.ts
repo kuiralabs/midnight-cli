@@ -1,5 +1,5 @@
-// transfer command — send NIGHT from my wallet to another address
-// Usage: midnight transfer <to> <amount> [--shielded]
+// transfer command — send NIGHT from my wallet to other addresses, in one transaction
+// Usage: midnight transfer <to> <amount> [<to> <amount> ...] [--to-file <file>] [--shielded]
 
 import { type ParsedArgs, hasFlag, rejectNoCacheForWrites, networkChoiceFromArgs, nightAmountJson, nightAmountText, type CallContext } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, divider, formatAddress, successMessage, bold, dim, yellow, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
@@ -15,13 +15,14 @@ export default async function transferCommand(args: ParsedArgs, ctx: CallContext
   const jsonMode = hasFlag(args, 'json');
   // --json shows no step and no heading on the terminal.
   const progress = spinnerReporter(ctx.progress, jsonMode);
-  // A transfer to the sending wallet itself goes through (it only pays a fee): warned, not refused.
-  let toSelf = false;
+  // A transfer to the sending wallet itself goes through (it only pays a fee): warned, not refused, for each recipient that is.
+  let toSelf: boolean[] = request.recipients.map(() => false);
   try {
     const result = await transferNight(ctx.host, { wallet: request.walletPath }, {
       ...networkChoiceFromArgs(args),
-      recipient: request.recipientAddress,
-      amount: request.amount,
+      ...(request.recipients.length === 1
+        ? { recipient: request.recipients[0]!.address, amount: request.recipients[0]!.amount }
+        : { recipients: request.recipients.map(({ address, amount }) => ({ recipient: address, amount })) }),
       shielded: request.shielded,
       forceShielded: hasFlag(args, 'force-shielded'),
       signal: ctx.signal,
@@ -32,7 +33,7 @@ export default async function transferCommand(args: ParsedArgs, ctx: CallContext
           progress.report(event);
           return;
         }
-        toSelf = isOwnAddress(event, request.recipientAddress);
+        toSelf = request.recipients.map(({ address }) => isOwnAddress(event, address));
         if (!jsonMode) printHeading(event, request, toSelf, ctx);
       },
     });
@@ -46,39 +47,62 @@ export default async function transferCommand(args: ParsedArgs, ctx: CallContext
 /** What a transfer to the sending wallet itself says. */
 const SELF_TRANSFER_NOTE = 'The recipient is this wallet itself: the NIGHT stays in it, and the transfer only spends a fee.';
 
+/** What a transfer to several recipients says when one or more of them (selfTransfer) is the sending wallet itself. */
+const SELF_RECIPIENT_NOTE = 'A recipient marked selfTransfer is this wallet itself: the NIGHT paid to it stays in it.';
+
 /** Whether `recipient` is the opened wallet's own address on the network, unshielded or shielded. */
 function isOwnAddress(opened: WalletOpened, recipient: string): boolean {
   return recipient === opened.address || (opened.shieldedAddress !== undefined && recipient === opened.shieldedAddress);
 }
 
 /** Heads the output once the wallet is open: what goes where, before the wallet syncs. */
-function printHeading(opened: WalletOpened, { recipientAddress, amount, shielded }: TransferRequest, toSelf: boolean, ctx: CallContext): void {
-  const text = nightAmountText(amount);
+function printHeading(opened: WalletOpened, { recipients, total, shielded }: TransferRequest, toSelf: readonly boolean[], ctx: CallContext): void {
+  const unit = shielded ? ' NIGHT (shielded)' : ' NIGHT';
   ctx.output.stderr('\n' + header(shielded ? 'Shielded Transfer' : 'Transfer') + '\n\n');
   ctx.output.stderr(keyValue('Network', opened.network) + '\n');
   if (!shielded) ctx.output.stderr(keyValue('From', formatAddress(opened.address, true)) + '\n');
-  ctx.output.stderr(keyValue('To', formatAddress(recipientAddress, true)) + '\n');
-  ctx.output.stderr(keyValue('Amount', bold(text + (shielded ? ' NIGHT (shielded)' : ' NIGHT'))) + '\n');
-  if (toSelf) ctx.output.stderr('\n' + yellow(`  Warning: ${SELF_TRANSFER_NOTE}`) + '\n');
+  if (recipients.length === 1) {
+    ctx.output.stderr(keyValue('To', formatAddress(recipients[0]!.address, true)) + '\n');
+    ctx.output.stderr(keyValue('Amount', bold(nightAmountText(total) + unit)) + '\n');
+    if (toSelf[0]) ctx.output.stderr('\n' + yellow(`  Warning: ${SELF_TRANSFER_NOTE}`) + '\n');
+    ctx.output.stderr('\n');
+    return;
+  }
+  ctx.output.stderr(keyValue('To', `${recipients.length} recipients`) + '\n');
+  recipients.forEach(({ input, address, amount }, index) => {
+    const named = input === address ? '' : dim(` (${input})`);
+    ctx.output.stderr(`    ${formatAddress(address, true)}${named}  ${bold(nightAmountText(amount) + ' NIGHT')}\n`);
+    if (toSelf[index]) ctx.output.stderr(yellow(`      Warning: recipient ${index + 1} is this wallet itself: its NIGHT stays in it.`) + '\n');
+  });
+  ctx.output.stderr(keyValue('Total', bold(nightAmountText(total) + unit)) + '\n');
   ctx.output.stderr('\n');
 }
 
-function printTransfer({ network, txHash, receipt }: NightTransfer, { recipientAddress, amount, shielded }: TransferRequest, jsonMode: boolean, toSelf: boolean, ctx: CallContext): void {
+function printTransfer({ network, txHash, receipt }: NightTransfer, { recipients, total, shielded }: TransferRequest, jsonMode: boolean, toSelf: readonly boolean[], ctx: CallContext): void {
   if (jsonMode) {
+    // One recipient: today's fields exactly. Several: each in `recipients`, and `amount` their total.
+    const paid = recipients.length === 1
+      ? { recipient: recipients[0]!.address }
+      : { recipients: recipients.map(({ address, amount }, index) => ({ recipient: address, amount: nightAmountJson(amount), ...(toSelf[index] ? { selfTransfer: true } : {}) })) };
+    const self = recipients.length === 1
+      ? (toSelf[0] ? { selfTransfer: true, note: SELF_TRANSFER_NOTE } : {})
+      : (toSelf.some(Boolean) ? { note: SELF_RECIPIENT_NOTE } : {});
     ctx.output.result({
       txHash,
-      amount: nightAmountJson(amount),
-      recipient: recipientAddress,
+      amount: nightAmountJson(total),
+      ...paid,
       network,
       ...(shielded ? { type: 'shielded' } : {}),
-      ...(toSelf ? { selfTransfer: true, note: SELF_TRANSFER_NOTE } : {}),
+      ...self,
       ...(receipt ? receiptJson(receipt) : {}),
     });
     return;
   }
 
+  const what = shielded ? 'shielded NIGHT' : 'NIGHT';
+  const to = recipients.length === 1 ? '' : ` to ${recipients.length} recipients`;
   ctx.output.stdout(txHash + '\n');
-  ctx.output.stderr('\n' + successMessage(`Transferred ${nightAmountText(amount)} ${shielded ? 'shielded NIGHT' : 'NIGHT'}`, txHash) + '\n');
+  ctx.output.stderr('\n' + successMessage(`Transferred ${nightAmountText(total)} ${what}${to}`, txHash) + '\n');
   if (receipt) ctx.output.stderr(receiptText(receipt, txHash));
   ctx.output.stderr('\n' + divider() + '\n');
   ctx.output.stderr(dim(shielded ? '  Verify: midnight balance --shielded' : '  Verify: midnight balance') + '\n\n');

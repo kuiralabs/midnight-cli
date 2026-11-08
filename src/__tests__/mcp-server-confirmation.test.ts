@@ -98,6 +98,8 @@ describe('every tool that acts answers with a token, and does nothing until it i
   ));
   const cases: Array<[string, () => Record<string, unknown>, () => string | RegExp]> = [
     ['midnight_transfer', () => ({ to: 'carol', amount: '5', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => 'Send 5 NIGHT from alice to carol on undeployed' + VIA],
+    ['midnight_transfer', () => ({ recipients: [{ to: 'carol', amount: '5' }, { to: 'bob', amount: '2.5' }, { to: 'carol', amount: '1' }], wallet: 'alice', network: 'undeployed', ...ENDPOINTS }),
+      () => 'Send 8.5 NIGHT in all from alice on undeployed, in one transaction: 5 NIGHT to carol, 2.5 NIGHT to bob, 1 NIGHT to carol' + VIA],
     ['midnight_contract_deploy', () => ({ path: dappDir, wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => `Deploy contract from ${dappDir} as alice on undeployed` + VIA],
     ['midnight_contract_call', () => ({ path: dappDir, address: ADDRESS, circuit: 'increment', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => `Call circuit increment on contract ${ADDRESS} as alice on undeployed` + VIA],
     ['midnight_grant_deploy', () => ({ wallet: 'carol', network: 'undeployed', ...ENDPOINTS }), () => "Deploy an account for carol on undeployed; its owner key is made on this machine and kept encrypted under mn's passphrase" + VIA],
@@ -311,6 +313,21 @@ describe('midnight_wallet_remove', () => {
     expect(done).toMatchObject({ wallet: 'bob', removed: true });
     expect(fs.existsSync(walletFile('bob'))).toBe(false);
   });
+});
+
+describe('midnight_transfer with recipients', () => {
+  it.each([
+    ['to and amount with recipients', { to: 'bob', amount: '1', recipients: [{ to: 'carol', amount: '5' }] }, 'Give either to and amount, or recipients, not both.'],
+    ['an empty list', { recipients: [] }, 'The transfer lists no recipients'],
+    ['an unknown recipient, named by its place', { recipients: [{ to: 'carol', amount: '5' }, { to: 'nobody', amount: '1' }] }, 'Recipient 2 of 2 ("nobody"): Unknown recipient "nobody"'],
+    ['an amount that is not one, named by its place', { recipients: [{ to: 'carol', amount: 'ten' }, { to: 'bob', amount: '1' }] }, 'Recipient 1 of 2 ("carol"): Invalid amount: "ten"'],
+    ['an item without an amount', { recipients: [{ to: 'carol' }] }, 'recipients item 1 has no amount'],
+    ['an item with a field it does not take', { recipients: [{ to: 'carol', amount: '1', memo: 'x' }] }, 'recipients item 1 has memo'],
+  ])('refuses %s before any token is given', async (_case, params, message) => {
+    const refused = await call('midnight_transfer', { ...params, wallet: 'alice', network: 'undeployed', ...ENDPOINTS });
+    expect(refused).toMatchObject({ error: true, code: 'INVALID_ARGS', message: expect.stringContaining(message) });
+    expect(refused.token).toBeUndefined();
+  }, 60_000);
 });
 
 // Mistakes in what the agent passed are INVALID_ARGS, as on the command line, not UNKNOWN.

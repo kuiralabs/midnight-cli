@@ -55,7 +55,7 @@ afterEach(() => {
 describe('resolveTransferRequest', () => {
   it('takes an address and an amount, on the network asked for', async () => {
     const r = await request(RECIPIENT.preprod, '1.5', '--wallet', 'sender', '--network', 'preprod');
-    expect(r).toMatchObject({ recipientAddress: RECIPIENT.preprod, amount: 1_500_000n, shielded: false, networkName: 'preprod' });
+    expect(r).toMatchObject({ recipients: [{ input: RECIPIENT.preprod, address: RECIPIENT.preprod, amount: 1_500_000n }], total: 1_500_000n, shielded: false, networkName: 'preprod' });
     expect(r.walletPath).toBe(path.join(WALLETS, 'sender.json'));
     // The request is checked without the passphrase: it carries the wallet's addresses, never its seed.
     expect(r.walletConfig).not.toHaveProperty('seed');
@@ -63,16 +63,16 @@ describe('resolveTransferRequest', () => {
 
   it('resolves a wallet name given as the recipient to that wallet\'s address on the network', async () => {
     saveWallet('bob', RECIPIENT_SEED, true);
-    expect((await request('bob', '2', '--wallet', 'sender')).recipientAddress).toBe(RECIPIENT.undeployed);
-    expect((await request('bob', '2', '--wallet', 'sender', '--shielded')).recipientAddress).toBe(RECIPIENT_SHIELDED.undeployed);
+    expect((await request('bob', '2', '--wallet', 'sender')).recipients[0]!.address).toBe(RECIPIENT.undeployed);
+    expect((await request('bob', '2', '--wallet', 'sender', '--shielded')).recipients[0]!.address).toBe(RECIPIENT_SHIELDED.undeployed);
   });
 
   it('takes a mainnet address, whose prefix has no network segment, as an address on mainnet', async () => {
     expect(RECIPIENT.mainnet.startsWith('mn_addr1')).toBe(true);
     const r = await request(RECIPIENT.mainnet, '1', '--wallet', 'sender', '--network', 'mainnet');
-    expect(r).toMatchObject({ recipientAddress: RECIPIENT.mainnet, networkName: 'mainnet' });
+    expect(r).toMatchObject({ recipients: [{ address: RECIPIENT.mainnet }], networkName: 'mainnet' });
     saveWallet('bob', RECIPIENT_SEED, true);
-    expect((await request('bob', '1', '--wallet', 'sender', '--network', 'mainnet')).recipientAddress).toBe(RECIPIENT.mainnet);
+    expect((await request('bob', '1', '--wallet', 'sender', '--network', 'mainnet')).recipients[0]!.address).toBe(RECIPIENT.mainnet);
   });
 
   it('refuses a mainnet address on another network as the wrong address, not as a missing wallet', async () => {
@@ -134,6 +134,59 @@ describe('resolveTransferRequest — a recipient that does not fit', () => {
   it('says to add --shielded for a shielded address given without it', async () => {
     await expect(request(RECIPIENT_SHIELDED.undeployed, '1', '--wallet', 'sender', '--network', 'undeployed'))
       .rejects.toThrow(`${RECIPIENT_SHIELDED.undeployed} is a shielded address: add --shielded to send it shielded NIGHT.`);
+  });
+});
+
+describe('resolveTransferRequest — several recipients', () => {
+  const OTHER = rcKeys.unshieldedAddresses(Buffer.from('00'.repeat(31) + '33', 'hex'));
+
+  it('takes pairs in order, a wallet name resolved, a recipient listed twice paid twice, and totals them', async () => {
+    saveWallet('bob', RECIPIENT_SEED);
+    const r = await request('bob', '10', OTHER.undeployed, '2.5', 'bob', '1', '--wallet', 'sender');
+    expect(r.recipients).toStrictEqual([
+      { input: 'bob', address: RECIPIENT.undeployed, amount: 10_000_000n },
+      { input: OTHER.undeployed, address: OTHER.undeployed, amount: 2_500_000n },
+      { input: 'bob', address: RECIPIENT.undeployed, amount: 1_000_000n },
+    ]);
+    expect(r.total).toBe(13_500_000n);
+  });
+
+  it('takes the recipients from --to-file, shielded with --shielded', async () => {
+    saveWallet('bob', RECIPIENT_SEED, true);
+    const file = path.join(HOME, 'payments.json');
+    fs.writeFileSync(file, JSON.stringify([{ to: 'bob', amount: '3' }, { to: RECIPIENT_SHIELDED.undeployed, amount: '0.5' }]));
+    const r = await request('--to-file', file, '--wallet', 'sender', '--shielded');
+    expect(r.recipients.map(({ address, amount }) => [address, amount])).toStrictEqual([[RECIPIENT_SHIELDED.undeployed, 3_000_000n], [RECIPIENT_SHIELDED.undeployed, 500_000n]]);
+    expect(r).toMatchObject({ total: 3_500_000n, shielded: true });
+  });
+
+  it.each([
+    [['bob', '1', 'carol'], 'Recipient 2 of 2 ("carol") has no amount'],
+    [['bob', '1', 'nobody', '2'], 'Recipient 2 of 2 ("nobody"): Unknown recipient "nobody": it is neither an address nor one of your wallets'],
+    [['bob', 'ten', 'bob', '2'], 'Recipient 1 of 2 ("bob"): Invalid amount: "ten"'],
+    [['bob', '1', 'bob', '0'], 'Recipient 2 of 2 ("bob"): Invalid amount: "0" — must be greater than 0'],
+    [['bob', '1', RECIPIENT.preprod, '2'], `Recipient 2 of 2 ("${RECIPIENT.preprod}"): Invalid recipient address`],
+    [['bob', '1', '--to-file', 'payments.json'], 'Give the recipients either as <to> <amount> pairs or with --to-file, not both'],
+    [['--to-file', '/no/such/payments.json'], 'Cannot read the recipients file /no/such/payments.json: no such file'],
+    [['--to-file'], '--to-file needs a value'],
+  ])('refuses %j as a usage mistake, which an agent sees as INVALID_ARGS', async (argv, message) => {
+    saveWallet('bob', RECIPIENT_SEED);
+    let err: unknown;
+    try { await request(...argv, '--wallet', 'sender'); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(UsageError);
+    expect((err as Error).message).toContain(message);
+    expect(classifyError(err as Error, codeRegistry(coreCodes, walletCodes)).errorCode).toBe('INVALID_ARGS');
+  });
+
+  it('refuses one recipient past the cap, from the command line and from a file', async () => {
+    const { MAX_TRANSFER_RECIPIENTS } = await import('../lib/transfer-recipients.ts');
+    const words = Array.from({ length: MAX_TRANSFER_RECIPIENTS + 1 }, () => [OTHER.undeployed, '1']).flat();
+    await expect(request(...words, '--wallet', 'sender')).rejects.toThrow(`Too many recipients: ${MAX_TRANSFER_RECIPIENTS + 1}`);
+    const file = path.join(HOME, 'payments.json');
+    fs.writeFileSync(file, JSON.stringify(Array.from({ length: MAX_TRANSFER_RECIPIENTS + 1 }, () => ({ to: OTHER.undeployed, amount: '1' }))));
+    await expect(request('--to-file', file, '--wallet', 'sender')).rejects.toThrow(`Too many recipients: ${MAX_TRANSFER_RECIPIENTS + 1}`);
+    // At the cap it is taken.
+    expect((await request(...words.slice(2), '--wallet', 'sender')).recipients).toHaveLength(MAX_TRANSFER_RECIPIENTS);
   });
 });
 

@@ -48,12 +48,18 @@ describe('a tool\'s schema, generated from its command\'s flags', () => {
     const { tools } = await client.listTools();
     const transfer = tools.find((tool) => tool.name === 'midnight_transfer')!;
     expect(Object.keys(transfer.inputSchema.properties ?? {})).toStrictEqual([
-      'to', 'amount', 'wallet', 'force-shielded', 'network', 'shielded', 'node', 'indexer-ws', 'proof-server',
+      'to', 'amount', 'recipients', 'wallet', 'force-shielded', 'network', 'shielded', 'node', 'indexer-ws', 'proof-server',
     ]);
     expect(transfer.inputSchema.properties!.network).toStrictEqual({
       type: 'string', enum: ['mainnet', 'preprod', 'preview', 'undeployed'], description: 'Network to send on (default: the selected one)',
     });
-    expect(transfer.inputSchema.required).toStrictEqual(['to', 'amount']);
+    // to and amount, or recipients: the schema requires neither, the command refuses a call with none.
+    expect(transfer.inputSchema.required).toBeUndefined();
+    expect(transfer.inputSchema.properties!.recipients).toStrictEqual({
+      type: 'array',
+      description: 'Instead of to/amount: up to 50, one tx',
+      items: { type: 'object', properties: { to: { type: 'string' }, amount: { type: 'string' } }, required: ['to', 'amount'] },
+    });
   }, 60_000);
 
   it('lets midnight_balance read the shielded balance where it is not read by default (force-shielded)', async () => {
@@ -111,7 +117,7 @@ describe('a tool parameter outside the tool\'s schema', () => {
     // network is in the schema: transfer accepts --network and the tool passes it on.
     expect(body.message).toBe(
       'Unknown parameter for midnight_transfer: nodes\n' +
-      'Its parameters: to, amount, wallet, force-shielded, network, shielded, node, indexer-ws, proof-server',
+      'Its parameters: to, amount, recipients, wallet, force-shielded, network, shielded, node, indexer-ws, proof-server',
     );
     expect(body.token).toBeUndefined();
     expect(body.pending).toBeUndefined();
@@ -173,6 +179,18 @@ describe('a tool parameter of the wrong type', () => {
       code: 'INVALID_ARGS',
       message: 'Invalid parameters for midnight_address: network must be one of mainnet, preprod, preview, undeployed, not "testnet"; index must be a string, not {"n":1}',
     });
+  }, 60_000);
+
+  it.each([
+    ['not an array', 'carol', 'recipients must be an array, not "carol"'],
+    ['an item that is not an object', ['carol'], 'recipients item 1 must be an object, not "carol"'],
+    ['an item without a field it requires', [{ to: 'carol', amount: '1' }, { to: 'bob' }], 'recipients item 2 has no amount'],
+    ['an item with a field it does not take', [{ to: 'carol', amount: '1', memo: 'rent' }], 'recipients item 1 has memo, which it doesn\'t take (its fields: to, amount)'],
+    ['an item whose field is not a string', [{ to: 'carol', amount: { n: 1 } }], 'recipients item 1: amount must be a string, not {"n":1}'],
+  ])('refuses an array parameter that is %s, before a token is given', async (_case, recipients, why) => {
+    const { body } = await call('midnight_transfer', { recipients, network: 'undeployed', ...CLOSED });
+    expect(body).toMatchObject({ error: true, code: 'INVALID_ARGS', message: `Invalid parameter for midnight_transfer: ${why}` });
+    expect(body.token).toBeUndefined();
   }, 60_000);
 
   it('takes a number for a string parameter as its digits', async () => {

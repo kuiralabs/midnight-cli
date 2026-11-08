@@ -301,6 +301,9 @@ describe('the MCP tools, generated from the registry', () => {
     ['midnight_airdrop', { amount: '10', wallet: 'bob', shielded: true }, args('airdrop', '10', [], { wallet: 'bob', shielded: true })],
     ['midnight_transfer', { to: 'bob', amount: '1', wallet: 'alice', network: 'undeployed' }, args('transfer', 'bob', ['1'], { wallet: 'alice', network: 'undeployed' })],
     ['midnight_transfer', { to: 'bob' }, args('transfer', 'bob', [], {})],
+    // Added since the registry: recipients, each a <to> <amount> pair after the command, the first to filling the subcommand slot.
+    ['midnight_transfer', { recipients: [{ to: 'bob', amount: '1' }, { to: 'mn_addr_undeployed1x', amount: 2.5 }], wallet: 'alice' }, args('transfer', 'bob', ['1', 'mn_addr_undeployed1x', '2.5'], { wallet: 'alice' })],
+    ['midnight_transfer', { recipients: [] }, args('transfer', undefined, [], {})],
     ['midnight_dust_register', { wallet: 'alice' }, args('dust', 'register', [], { wallet: 'alice' })],
     ['midnight_dust_status', { 'no-cache': true, node: 'ws://n', full: true }, args('dust', 'status', [], { 'no-cache': true, node: 'ws://n', [FULL_FLAG]: true })],
     ['midnight_config_get', { key: 'node', network: 'preview' }, args('config', 'get', ['node'], { network: 'preview' })],

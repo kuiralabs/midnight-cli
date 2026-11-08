@@ -121,7 +121,7 @@ describe('the accepted flags match the code', () => {
     // The call's diagnostics are verbose when its --verbose is given: a command that writes them, or hands them to a library, reads it.
     'ctx.diagnostics.': ['verbose'],
     'rejectNoCacheForWrites(': ['no-cache'],
-    'resolveTransferRequest(': ['shielded', 'force-shielded', 'wallet', 'network'],
+    'resolveTransferRequest(': ['shielded', 'force-shielded', 'wallet', 'network', 'to-file'],
     'resolveScanDir(': ['managed', 'path'],
     'resolveDappDir(': ['path'],
     'resolveContractDeployRequest(': ['path', 'managed', 'name', 'args', 'secret-key'],

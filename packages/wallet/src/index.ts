@@ -42,7 +42,8 @@ export {
   type RegisterDustOptions
 } from './lib/wallet/dust.ts';
 export { type PaidCallOptions, type StepFailed, stepSpinner } from './lib/wallet/paid-call.ts';
-export { type NightTransfer, transferNight, type TransferNightOptions } from './lib/wallet/transfer.ts';
+export { type NightPayment, type NightTransfer, transferNight, type TransferNightOptions } from './lib/wallet/transfer.ts';
+export { MAX_TRANSFER_RECIPIENTS } from './lib/transfer-recipients.ts';
 export { networkChoiceOf, type WalletCallOptions, type WalletOpened } from './lib/wallet/wallet-call.ts';
 export { assertWalletCanPay } from './lib/wallet-can-pay.ts';
 export {
