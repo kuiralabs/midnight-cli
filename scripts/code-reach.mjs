@@ -91,12 +91,12 @@ export const DYNAMIC_MODULES = {
   },
 };
 
-/** The engines this build ships, each a workspace package with the same modules. */
-const ENGINE_SETS = ['rc', 'beta'];
+/** The engines this build ships, each a workspace package. */
+const ENGINE_SETS = ['rc'];
 
 /**
  * The parts of an Engine and the modules of an engine's package each is made
- * of (its assembler, <set>-engine.ts, puts them together); a test holds this to both engines.
+ * of (its assembler, <set>-engine.ts, puts them together); a test holds this to the engine.
  */
 export const ENGINE_PARTS = {
   keys: ['derive-address.ts', 'addresses.ts', 'dust-direct-cache.ts', 'shielded-direct-cache.ts'],

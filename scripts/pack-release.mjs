@@ -1,5 +1,5 @@
 // mn as a release publishes it, packed into a folder: the workspace packages
-// mn depends on (each engine and grant with its shrinkwrap, each with the manifest it is
+// mn depends on (the engine and grant with its shrinkwrap, each with the manifest it is
 // published with: scripts/publish-manifest.mjs), and mn with the shrinkwrap
 // the release job writes, its workspace packages' tarballs and integrity as a
 // local registry on `port` serves them (scripts/local-registry.mjs). Until those packages are on npm, a
@@ -24,7 +24,7 @@ const repo = fileURLToPath(new URL('..', import.meta.url));
 const run = (command, args, cwd) => execFileSync(command, args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
 
 /**
- * Whether a workspace package ships a shrinkwrap of its own: each engine (its
+ * Whether a workspace package ships a shrinkwrap of its own: the engine (its
  * SDK set) and grant (the account chain, built on the rc set), as the release
  * job writes them.
  */
@@ -54,7 +54,7 @@ export async function packRelease(dir, port = 0) {
 
   const shrinkwrapPath = join(repo, 'npm-shrinkwrap.json');
   try {
-    // Each engine and grant with the shrinkwrap the release job writes for it.
+    // The engine and grant with the shrinkwrap the release job writes for it.
     for (const { folder, name } of workspaces) {
       const shrinkwrapped = shipsShrinkwrap(name);
       if (shrinkwrapped) makeShrinkwrap({ dir: folder, dist });

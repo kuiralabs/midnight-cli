@@ -22,7 +22,7 @@
 // its own package relatively and every other package by entry point; a script
 // imports a package by entry point. A test of a package's internals lives in
 // that package. test-support/ holds what tests of several packages share (the
-// suites both engines run, the test host, stand-in servers); it is published
+// engine suites, the test host, stand-in servers); it is published
 // with nothing. Any test may import it; it imports a package by entry point
 // only, and of mn's own code only the shell's list of engines, which the test
 // host makes its engines with.
@@ -183,7 +183,6 @@ export const WORKSPACE_PACKAGES = [
   { name: '@kuiralabs/midnight-grant', root: join(ROOT, 'packages', 'grant'), dir: join(ROOT, 'packages', 'grant', 'src'), home: 'grant' },
   // The rc engine: its files read as engine/rc/<file>, its index the package itself.
   { name: '@kuiralabs/midnight-engine-rc', root: join(ROOT, 'packages', 'engine-rc'), dir: join(ROOT, 'packages', 'engine-rc', 'src'), prefix: 'engine/rc/', home: 'engine' },
-  { name: '@kuiralabs/midnight-engine-beta', root: join(ROOT, 'packages', 'engine-beta'), dir: join(ROOT, 'packages', 'engine-beta', 'src'), prefix: 'engine/beta/', home: 'engine' },
 ];
 
 /** The package source folder a file is in, or undefined for one under src/. */

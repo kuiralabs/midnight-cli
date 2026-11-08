@@ -133,9 +133,9 @@ describe("the scan's tables", () => {
     expect(DYNAMIC_CLASSES.PrepStepFailedError!.codes).toStrictEqual([]);
   });
 
-  it("split each engine's assembler into the parts it puts together, every module it imports in one of them", () => {
+  it("split the engine's assembler into the parts it puts together, every module it imports in one of them", () => {
     const parts = new Set(Object.values(ENGINE_PARTS).flat());
-    for (const set of ['rc', 'beta']) {
+    for (const set of ['rc']) {
       const index = join(ROOT, 'packages', `engine-${set}`, 'src', `${set}-engine.ts`);
       const own = importsOf(index).filter((each) => !each.typeOnly && each.specifier.startsWith('./')).map((each) => importTarget(index, each.specifier)!.slice(join(ROOT, 'packages', `engine-${set}`, 'src').length + 1));
       expect(new Set(own), set).toStrictEqual(parts);

@@ -63,7 +63,7 @@ describe('the layering', () => {
 
   it("lets only an engine, and core's wallet session and Dust wait, read the SDK's errors", () => {
     expect(importRule('engine/rc/transfer.ts', 'lib/sdk-errors.ts')).toBeUndefined();
-    expect(importRule('engine/beta/dapp-connector.ts', 'lib/sdk-errors.ts')).toBeUndefined();
+    expect(importRule('engine/rc/dapp-connector.ts', 'lib/sdk-errors.ts')).toBeUndefined();
     expect(importRule('lib/wallet-session.ts', 'lib/sdk-errors.ts')).toBeUndefined();
     expect(importRule('lib/dust-wait.ts', 'lib/sdk-errors.ts')).toBeUndefined();
     expect(importRule('wallet.ts', 'lib/sdk-errors.ts')).toBe("shell → the SDK's errors (only an engine reads them)");

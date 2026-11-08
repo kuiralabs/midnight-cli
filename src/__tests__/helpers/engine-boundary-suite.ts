@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-// The wallet SDK's copy of Effect (both engines' SDKs share it).
+// The wallet SDK's copy of Effect.
 import { Effect } from 'effect';
 import { type Engine, type NetworkConfig, createHost, classifyError, DustRequiredError, InsufficientBalanceError, ProofFailureError, TransactionRefusedError } from '@kuiralabs/midnight-cli-core';
 import type { EngineHost } from '@kuiralabs/midnight-cli-core/engine';

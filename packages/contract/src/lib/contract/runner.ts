@@ -408,7 +408,7 @@ type ScriptPackages = Pick<EngineContractScripts, 'packages' | 'packageFolder'> 
  * The installed copy of each scope the script packages use (`@midnight-ntwrk`,
  * …), and the node_modules holding them: each only when it holds every script
  * package of its kind. An install can hoist some of an engine's packages away
- * from the rest (a workspace puts a package both engines share at its root),
+ * from the rest (a workspace puts a package the engine shares with others at its root),
  * and a tree linked whole must then not stand in for the packages it lacks.
  */
 function installedTrees({ packages, packageFolder }: ScriptPackages): { root: string | null; scopes: Map<string, string> } {

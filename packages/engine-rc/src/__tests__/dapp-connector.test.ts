@@ -1,5 +1,5 @@
 // The DApp connector's tests over the rc engine (preprod, preview, undeployed).
-// The tests are the suite both engines run: helpers/connector-suite.ts.
+// The tests are the shared suite: test-support/connector-suite.ts.
 
 import { createDAppConnector, signatureScheme, toHistoryEntry } from '../dapp-connector.ts';
 import { PartlySignedTransactionError } from '../sign-recipe.ts';
@@ -27,7 +27,5 @@ connectorSuite({
   createKeystore,
   SubmissionError,
   ledger9ProtocolVersion: FORK_SCHEDULE.v9,
-  // The rc SDK reads a dApp's transaction through adoptTransaction, which the stub answers with its stage and hex.
-  readsThroughFacade: true,
   handleHex: (handle: { hex?: string; serialize?: () => Uint8Array }) => handle.hex ?? Buffer.from(handle.serialize!()).toString('hex'),
 });

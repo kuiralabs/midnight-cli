@@ -16,7 +16,7 @@ import { closedPort } from '../../test-support/closed-port.ts';
 
 const ROOT = resolve(import.meta.dirname, '..', '..');
 const readme = (dir: string): string => readFileSync(join(ROOT, 'packages', dir, 'README.md'), 'utf8');
-const ENGINES = ['engine-rc', 'engine-beta'];
+const ENGINES = ['engine-rc'];
 
 /** The first js block under the heading `heading`. */
 function blockUnder(text: string, heading: string): string {
@@ -139,7 +139,7 @@ describe('each README\'s example, run as it is written', () => {
     expect(result.stderr.startsWith('NO_ACCOUNT: ')).toBe(true);
   }, 120_000);
 
-  it.each([['engine-rc', 'rc', 'mn_addr_undeployed1'], ['engine-beta', 'beta', 'mn_addr_stagenet1']])('%s: loads its engine by the network\'s set and derives the address', async (pkg, set, prefix) => {
+  it.each([['engine-rc', 'rc', 'mn_addr_undeployed1']])('%s: loads its engine and derives the address', async (pkg, set, prefix) => {
     const result = await run(pkg, []);
     expect(result.code, result.stderr).toBe(0);
     const [printedSet, address] = result.stdout.trim().split(' ');

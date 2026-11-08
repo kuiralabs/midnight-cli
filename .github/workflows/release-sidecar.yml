@@ -133,7 +133,7 @@ jobs:
         with:
           bun-version-file: .bun-version
       # OIDC trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.x. Held at npm 11: npm 12 neither packs
-      # nor reads npm-shrinkwrap.json, which each engine and grant ship (and mn's own).
+      # nor reads npm-shrinkwrap.json, which the engine and grant ship (and mn's own).
       - name: Upgrade npm for OIDC trusted publishing
         run: npm install -g npm@11
       - run: npm ci
@@ -184,8 +184,8 @@ jobs:
               echo "skipping $pkg: published already"
             fi
           done
-      # mn depends on its workspace packages (core, chain, one engine per SDK
-      # set, wallet, connect, contract, dev, grant) at exact versions: each publishes first, unless that version is
+      # mn depends on its workspace packages (core, chain, the engine,
+      # wallet, connect, contract, dev, grant) at exact versions: each publishes first, unless that version is
       # on npm already, under the same dist-tag as mn, in dependency order (a package after those it declares).
       - run: npm run build
       - name: Publish the workspace packages mn depends on
@@ -194,13 +194,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for dir in packages/cli-core packages/chain packages/engine-rc packages/engine-beta packages/wallet packages/connect packages/contract packages/dev packages/grant; do
+          for dir in packages/cli-core packages/chain packages/engine-rc packages/wallet packages/connect packages/contract packages/dev packages/grant; do
             name="$(node -p "require('./$dir/package.json').name")"
             version="$(node -p "require('./$dir/package.json').version")"
             if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "$name@$version is published already"
             else
-              # An engine ships the SDK set the tests ran on, for a program that installs it without mn; so does
+              # The engine ships the SDK set the tests ran on, for a program that installs it without mn; so does
               # grant, whose account chain is built on the rc set.
               case "$name" in @kuiralabs/midnight-engine-*|@kuiralabs/midnight-grant) node scripts/make-shrinkwrap.mjs --package "$dir" ;; esac
               # Packed with the manifest it is published with: no exports entry names a source file.
@@ -209,7 +209,7 @@ jobs:
             fi
           done
       # The tree the tests ran on, shipped with mn so a user's npm installs it
-      # (each engine's SDK set kept apart). Written only here, never committed.
+      # (one copy of each WASM package). Written only here, never committed.
       - name: Write the shrinkwrap mn ships
         run: node scripts/make-shrinkwrap.mjs
       - name: Publish main package

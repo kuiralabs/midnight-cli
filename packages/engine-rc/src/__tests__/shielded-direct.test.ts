@@ -1,5 +1,5 @@
 // The indexer-direct shielded reader on the rc engine. The tests are the
-// suite both engines run: helpers/shielded-direct-suite.ts.
+// shared suite: test-support/shielded-direct-suite.ts.
 
 import { readShieldedBalanceDirect } from '../shielded-direct.ts';
 import { deriveShieldedSeed } from '../derivation.ts';

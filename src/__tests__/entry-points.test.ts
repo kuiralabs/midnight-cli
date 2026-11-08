@@ -15,7 +15,6 @@ const ENTRY_POINTS: Record<string, string[]> = {
   'cli-core': ['.', './engine', './ui', './commands', './process'],
   chain: ['.', './commands'],
   'engine-rc': ['.'],
-  'engine-beta': ['.'],
   wallet: ['.', './commands'],
   contract: ['.', './commands'],
   connect: ['.', './commands'],

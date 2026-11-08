@@ -1,5 +1,5 @@
 // A stopped wallet facade leaves nothing that keeps the process up: a program
-// that closed its wallet ends by itself, without process.exit. Each engine
+// that closed its wallet ends by itself, without process.exit. The engine
 // runs this suite with its own facade module.
 //
 // The program runs in a child process (what keeps a process up shows only from

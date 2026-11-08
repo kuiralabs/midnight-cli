@@ -29,7 +29,6 @@
     "packages/cli-core",
     "packages/chain",
     "packages/engine-rc",
-    "packages/engine-beta",
     "packages/wallet",
     "packages/contract",
     "packages/connect",
@@ -55,13 +54,11 @@
   },
   "scripts": {
     "wallet": "tsx --conditions=midnight-cli-source src/wallet.ts",
-    "build": "npm run build -w @kuiralabs/midnight-cli-core && npm run build -w @kuiralabs/midnight-chain && npm run build -w @kuiralabs/midnight-engine-rc && npm run build -w @kuiralabs/midnight-engine-beta && npm run build -w @kuiralabs/midnight-wallet && npm run build -w @kuiralabs/midnight-contract && npm run build -w @kuiralabs/midnight-connect && npm run build -w @kuiralabs/midnight-dev && npm run build -w @kuiralabs/midnight-grant && node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && bun build src/wallet.ts src/mcp-server.ts --outdir dist --splitting --target node --format esm --packages external --minify --banner \"#!/usr/bin/env node\"",
+    "build": "npm run build -w @kuiralabs/midnight-cli-core && npm run build -w @kuiralabs/midnight-chain && npm run build -w @kuiralabs/midnight-engine-rc && npm run build -w @kuiralabs/midnight-wallet && npm run build -w @kuiralabs/midnight-contract && npm run build -w @kuiralabs/midnight-connect && npm run build -w @kuiralabs/midnight-dev && npm run build -w @kuiralabs/midnight-grant && node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && bun build src/wallet.ts src/mcp-server.ts --outdir dist --splitting --target node --format esm --packages external --minify --banner \"#!/usr/bin/env node\"",
     "mcp": "tsx --conditions=midnight-cli-source src/mcp-server.ts",
     "link": "bun link",
     "prepublishOnly": "npm run build && npm run test",
     "test": "vitest run",
-    "test:rc": "vitest run --exclude '**/src/__tests__/engine-beta*.test.ts' --exclude 'packages/engine-beta/**'",
-    "test:beta": "vitest run src/__tests__/engine-beta packages/engine-beta",
     "test:live": "vitest run --config vitest.live.config.ts",
     "test:watch": "vitest",
     "api-report": "node scripts/api-report.mjs write",
@@ -76,7 +73,6 @@
     "@kuiralabs/midnight-connect": "0.1.0-rc.3",
     "@kuiralabs/midnight-contract": "0.1.0-rc.3",
     "@kuiralabs/midnight-dev": "0.1.0-rc.3",
-    "@kuiralabs/midnight-engine-beta": "0.1.0-rc.3",
     "@kuiralabs/midnight-engine-rc": "0.1.0-rc.3",
     "@kuiralabs/midnight-grant": "0.1.0-rc.3",
     "@kuiralabs/midnight-wallet": "0.1.0-rc.3",
@@ -89,8 +85,5 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
-  },
-  "overrides": {
-    "@midnightntwrk/wallet-sdk-node-client@2.0.0-beta.2": "2.0.0-beta.4"
   }
 }

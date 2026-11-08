@@ -8,7 +8,7 @@ The Midnight CLI's engine for the SDK's release candidates (wallet SDK 2.0 rc, l
 npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-engine-rc@next
 ```
 
-Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): this package ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it, so it gets exactly the SDK it was tested with (one copy of each ledger). An install that isn't that tree (bun's installer ignores the shrinkwrap and resolves the packages again) is refused before any SDK module loads, with `MIXED_SDK_LAYOUT` and the npm command; bun can run what npm installed. A program that also uses stagenet (`@kuiralabs/midnight-engine-beta`) installs both; a process loads one of them.
+Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): this package ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it, so it gets exactly the SDK it was tested with (one copy of each ledger). An install that isn't that tree (bun's installer ignores the shrinkwrap and resolves the packages again) is refused before any SDK module loads, with `MIXED_SDK_LAYOUT` and the npm command; bun can run what npm installed.
 
 ## Entry points
 
@@ -24,19 +24,17 @@ This package owns no codes of its own. The SDK's errors are read once, here, and
 
 ## Loading it
 
-A host loads an engine the first time a call needs one, by the SDK set of the call's network: `rc` for preprod, preview and a local network, `beta` for stagenet. A process runs one set; a call on a network of the other set fails with `OTHER_SDK_SET`, so a program that needs both runs two processes.
+A host loads the engine the first time a call needs one, for every network: its loader is given the SDK set (`rc`) and the host.
 
 ```js
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createHost } from '@kuiralabs/midnight-cli-core';
 
-// One process runs one SDK set: the loader imports only the engine of the set asked for.
+// The loader imports the engine only when a call first needs it.
 const host = createHost({
   paths: { stateRoot: join(homedir(), '.my-app'), home: homedir() },
-  engineLoader: async (set, host) => set === 'rc'
-    ? (await import('@kuiralabs/midnight-engine-rc')).createRcEngine(host)
-    : (await import('@kuiralabs/midnight-engine-beta')).createBetaEngine(host),
+  engineLoader: async (_set, host) => (await import('@kuiralabs/midnight-engine-rc')).createRcEngine(host),
 });
 
 const engine = await host.engines.for('undeployed');

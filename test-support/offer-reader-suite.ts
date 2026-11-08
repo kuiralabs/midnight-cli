@@ -1,7 +1,7 @@
-// The offer reader's tests, over either SDK engine: a real offer (made on a
+// The offer reader's tests, over the SDK engine: a real offer (made on a
 // local ledger-9 chain, never submitted) is read from its bytes alone, and
-// what is not an offer is refused. Each engine reads with its own ledger.
-// This file loads no engine: each test file that runs it passes one.
+// what is not an offer is refused. The engine reads with its own ledger.
+// This file loads no engine: the test file that runs it passes one.
 
 import { createHash } from 'node:crypto';
 import { describe, it, expect, beforeAll } from 'vitest';

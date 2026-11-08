@@ -169,7 +169,7 @@ describe('a dApp laid out unlike ours', () => {
     fs.mkdirSync(hoisted, { recursive: true });
     const dapp = path.join(dir, 'dapp', 'node_modules');
     fs.mkdirSync(path.dirname(dapp), { recursive: true });
-    const packages = { set: 'beta', packages: ['@x/a', 'ws'], packageFolder: (name: string) => (name === 'ws' ? hoisted : path.join(nested, '@x', 'a')) };
+    const packages = { set: 'rc', packages: ['@x/a', 'ws'], packageFolder: (name: string) => (name === 'ws' ? hoisted : path.join(nested, '@x', 'a')) };
     const made = overlayScriptPackagesFor(dapp, packages);
     expect(made.map((m) => [path.relative(dir, m.path), m.kind])).toEqual([
       [path.join('dapp', 'node_modules'), 'folder'],
@@ -182,16 +182,16 @@ describe('a dApp laid out unlike ours', () => {
     expect(fs.readdirSync(path.dirname(dapp))).toEqual([]);
   });
 
-  it('refuses another SDK set\'s packages while a run uses its overlay, and replaces it once none does', () => {
-    acquireOverlay(dir);
-    const beta = { ...RC_PACKAGES, set: 'beta' };
-    expect(() => acquireOverlayFor(dir, beta)).toThrow('uses the rc SDK set\'s packages, and this one needs the beta set\'s');
-    // The rc run dies: its share is stale, so the beta run undoes the rc overlay and makes its own.
+  it('refuses while a run uses an overlay of another SDK set\'s packages (an earlier mn\'s beta set), and replaces it once none does', () => {
+    // An earlier mn ran this dApp on its beta engine, which recorded its overlay as the beta set's.
+    acquireOverlayFor(dir, { ...RC_PACKAGES, set: 'beta' });
+    expect(() => acquireOverlay(dir)).toThrow('uses the beta SDK set\'s packages, and this one needs the rc set\'s');
+    // That run is gone: its share is stale, so the rc run undoes the beta overlay and makes its own.
     const record = path.join(dir, '.mn-overlay.json');
     const held = JSON.parse(fs.readFileSync(record, 'utf8')) as { pids: number[]; made: unknown[]; set: string };
     fs.writeFileSync(record, JSON.stringify({ ...held, pids: [2 ** 22 + 12345] }));
-    acquireOverlayFor(dir, beta);
-    expect(JSON.parse(fs.readFileSync(record, 'utf8'))).toMatchObject({ set: 'beta', pids: [process.pid] });
+    acquireOverlay(dir);
+    expect(JSON.parse(fs.readFileSync(record, 'utf8'))).toMatchObject({ set: 'rc', pids: [process.pid] });
     releaseOverlay(dir);
     expect(fs.readdirSync(dir)).toEqual([]);
   });

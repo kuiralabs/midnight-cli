@@ -11,7 +11,7 @@ import { type ApprovalOptions, type CoinPicking, createCoinPicking } from '@kuir
 /** A connector test's host: nobody at a terminal to ask, and the connector's lines dropped. */
 export const NO_TERMINAL = { prompter: null, notice: (_line: string): void => {} } as const;
 
-/** A DApp connector, as both engines make one. */
+/** A DApp connector, as the engine makes one. */
 export interface StubConnector {
   handlers: Record<string, (params: any, ctx: RpcHandlerContext) => Promise<unknown>>;
   dispose(): void;
@@ -29,10 +29,8 @@ export interface StubEngine {
   deriveShieldedAddress(seed: Buffer): any;
   DustAddress: new (data: bigint) => any;
   UnshieldedAddress: new (data: Buffer) => any;
-  /** The wallet's secret keys, on an engine whose facade takes them on every call that spends. */
-  secretKeys?: unknown;
-  /** The protocol version each wallet reports once on ledger 9, on an engine whose state reports one. */
-  ledger9ProtocolVersion?: bigint;
+  /** The protocol version each wallet reports once on ledger 9. */
+  ledger9ProtocolVersion: bigint;
   /** What finalizeRecipe gives back unless a test says otherwise. */
   finalized?: () => unknown;
 }
@@ -94,7 +92,7 @@ export function connectorStub(engine: StubEngine) {
     return {
       isSynced: overrides?.isSynced ?? true,
       // Each wallet's protocol version, as the rc SDK's FacadeState reports it: on ledger 9 unless a test says otherwise.
-      ...(v9 !== undefined ? { protocolVersion: overrides?.protocolVersion ?? { shielded: v9, unshielded: v9, dust: v9 } } : {}),
+      protocolVersion: overrides?.protocolVersion ?? { shielded: v9, unshielded: v9, dust: v9 },
       unshielded: {
         balances: overrides?.unshieldedBalances ?? { '0000000000000000000000000000000000000000000000000000000000000000': 5000000n },
         address: WALLET_UNSHIELDED,
@@ -132,7 +130,7 @@ export function connectorStub(engine: StubEngine) {
         balanceFinalizedTransaction: overrides?.balanceFinalizedTransaction ?? vi.fn().mockResolvedValue({ type: 'FINALIZED' }),
         initSwap: overrides?.initSwap ?? vi.fn().mockResolvedValue({ type: 'SWAP' }),
         registerNightUtxosForDustGeneration: vi.fn(),
-        // The rc SDK's reader; the beta engine reads with its ledger and never calls it.
+        // The rc SDK's reader.
         adoptTransaction: vi.fn((bytes: Uint8Array, stage: string) => ({ stage, hex: Buffer.from(bytes).toString('hex') })),
         estimateTransactionFee: overrides?.estimateTransactionFee ?? vi.fn().mockResolvedValue(1_000n),
         getAllFromTxHistory: overrides?.getAllFromTxHistory ?? vi.fn().mockResolvedValue(HISTORY),
@@ -142,7 +140,6 @@ export function connectorStub(engine: StubEngine) {
         signDataAsync: vi.fn().mockResolvedValue({ tag: 'schnorr', value: 'abcd1234signature' }),
         getPublicKey: vi.fn().mockReturnValue({ tag: 'schnorr', value: '5678efghpubkey' }),
       },
-      ...(engine.secretKeys !== undefined ? { secretKeys: engine.secretKeys } : {}),
       // mn's own coin picking, over no open offers; a coin's nullifier here is its nonce.
       coinPicking: overrides?.coinPicking ?? createCoinPicking<{ type: string; value: bigint; nonce: string }>(() => [], (coin) => coin.nonce),
     };

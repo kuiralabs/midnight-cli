@@ -37,13 +37,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Once per SDK engine: each test file loads one engine at most, and the
-      # beta engine's are named for it (src/__tests__/test-engines.test.ts).
-      - name: Tests — rc engine (and the SDK-free rest)
-        run: npm run test:rc
-
-      - name: Tests — beta engine
-        run: npm run test:beta
+      - name: Tests
+        run: npm test
 
       # ── Connector package ──
 
@@ -87,8 +82,8 @@ jobs:
       # The tests above run on the lockfile's dependency tree. This packs mn
       # with the shrinkwrap the release ships, installs it from a local
       # registry as a user's npm would, and checks the tree it gets: one copy
-      # of each WASM package per SDK engine, both engines loading, a shielded
-      # address still parsing, the MCP server's files present.
+      # of each WASM package, the engine loading, a shielded address still
+      # parsing, the MCP server's files present.
       - name: Check a fresh install
         run: node scripts/fresh-install-check.mjs
 

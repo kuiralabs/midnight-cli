@@ -1,6 +1,5 @@
-// The indexer-direct shielded reader's tests, which both engines run, each
-// with its own ledger: shielded-direct.test.ts (rc) and
-// engine-beta-shielded-direct.test.ts (beta).
+// The indexer-direct shielded reader's tests, over the engine's own ledger:
+// packages/engine-rc/src/__tests__/shielded-direct.test.ts runs them.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startFakeEventIndexer, type FakeEventIndexer } from './fake-event-indexer.ts';
@@ -8,7 +7,7 @@ import zswapEvents from './fixtures/zswap-events-localnet.json';
 
 /** An engine's reader, and a wallet's secret keys made with the engine's own ledger. */
 export interface ShieldedDirectEngine<Keys, State> {
-  set: 'rc' | 'beta';
+  set: 'rc';
   secretKeysFor(seedHex: string): Keys;
   readShieldedBalanceDirect(secretKeys: Keys, indexerWS: string, options?: { idleMs?: number; initialState?: State; startFromId?: number }): Promise<{
     balance: bigint;

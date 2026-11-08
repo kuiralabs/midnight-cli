@@ -1,18 +1,14 @@
-// The DApp connector's tests, over either SDK engine: each engine has its own
-// copy of the connector, and both must behave the same way to a dApp. The
-// facade is stubbed at the SDK boundary (per CLAUDE.md: no mocks of our own
+// The DApp connector's tests, over the SDK engine. The facade is stubbed at the SDK boundary (per CLAUDE.md: no mocks of our own
 // code); the dApp's transactions are real ledger-9 transactions built with the
 // engine's own copy of the ledger, and so are the finalized transactions the
-// stub facade gives back. Where the engines differ (the rc SDK reads a dApp's
-// transaction through its facade and waits for the ledger-9 fork; the beta
-// engine reads it with its ledger and passes the wallet's secret keys), the
-// tests say which.
+// stub facade gives back. The rc SDK reads a dApp's transaction through its
+// facade and waits for the ledger-9 fork.
 //
-// This file loads no engine: each test file that runs it passes one.
+// This file loads no engine: the test file that runs it passes one.
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import * as rx from 'rxjs';
-// The wallet SDK's copy of Effect (both engines' SDKs share it): its submit runs on it.
+// The wallet SDK's copy of Effect: its submit runs on it.
 import { Effect } from 'effect';
 import { HISTORY, NO_TERMINAL, TEST_NETWORK_CONFIG, connectorStub, type BundleOverrides, type StubConnector, type StubEngine } from './connector-stub.ts';
 import { startLocalIndexer, type LocalIndexer } from './local-indexer.ts';
@@ -37,8 +33,6 @@ export interface ConnectorEngine extends StubEngine {
   ledger: Ledger;
   createKeystore(secret: { kind: 'schnorr'; secret: Uint8Array }, network: string): { getPublicKey(): SignatureVerifyingKey; signDataAsync(data: Uint8Array): Promise<unknown> };
   SubmissionError: new (args: { message: string; cause?: unknown }) => Error;
-  /** Whether the engine reads a dApp's transaction through the facade's adoptTransaction (the rc SDK's reader) rather than with its ledger. */
-  readsThroughFacade: boolean;
   /** The hex of a transaction handle the engine passed to the facade. */
   handleHex(handle: any): string;
 }
@@ -370,57 +364,32 @@ export function connectorSuite(engine: ConnectorEngine): void {
       };
 
       const v9 = engine.ledger9ProtocolVersion;
-      if (v9 !== undefined) {
-        // The rc SDK's facade reads a dApp's transaction at the lowest of the
-        // three wallets' versions, so one wallet behind the fork would make it
-        // read ledger-9 bytes as ledger 8.
-        const DUST_BEHIND = { shielded: v9, unshielded: v9, dust: 1000300n };
+      // The rc SDK's facade reads a dApp's transaction at the lowest of the
+      // three wallets' versions, so one wallet behind the fork would make it
+      // read ledger-9 bytes as ledger 8.
+      const DUST_BEHIND = { shielded: v9, unshielded: v9, dust: 1000300n };
 
-        it.each(calls(() => AGENT_TX))('%s refuses as Disconnected, naming the wallet behind the ledger-9 fork, before touching the facade', async (method, params) => {
-          const bundle = createBundleStub({ stateFn: () => rx.of(mockState({ protocolVersion: DUST_BEHIND })) });
-          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+      it.each(calls(() => AGENT_TX))('%s refuses as Disconnected, naming the wallet behind the ledger-9 fork, before touching the facade', async (method, params) => {
+        const bundle = createBundleStub({ stateFn: () => rx.of(mockState({ protocolVersion: DUST_BEHIND })) });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
-          const err: any = await (connector.handlers as any)[method](params(), ctx()).catch((e: any) => e);
+        const err: any = await (connector.handlers as any)[method](params(), ctx()).catch((e: any) => e);
 
-          expect(err.code).toBe('Disconnected');
-          expect(err.message).toContain('still behind: dust at 1000300');
-          expectFacadeUntouched(bundle);
-        });
+        expect(err.code).toBe('Disconnected');
+        expect(err.message).toContain('still behind: dust at 1000300');
+        expectFacadeUntouched(bundle);
+      });
 
-        it('accepts transactions once the lagging wallet crosses the fork', async () => {
-          const states = new rx.BehaviorSubject(mockState({ protocolVersion: DUST_BEHIND }));
-          const bundle = createBundleStub({ stateFn: () => states });
-          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
-          await expect(connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx())).rejects.toMatchObject({ code: 'Disconnected' });
+      it('accepts transactions once the lagging wallet crosses the fork', async () => {
+        const states = new rx.BehaviorSubject(mockState({ protocolVersion: DUST_BEHIND }));
+        const bundle = createBundleStub({ stateFn: () => states });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+        await expect(connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx())).rejects.toMatchObject({ code: 'Disconnected' });
 
-          states.next(mockState());
+        states.next(mockState());
 
-          await expect(connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx())).resolves.toHaveProperty('tx');
-        });
-      } else {
-        // The beta SDK has one ledger: there is no fork to wait for, only the wallet's first state.
-        it.each(calls(() => AGENT_TX))('%s refuses as Disconnected before the wallet\'s first state, before touching the facade', async (method, params) => {
-          const bundle = createBundleStub({ stateFn: () => rx.NEVER });
-          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
-
-          const err: any = await (connector.handlers as any)[method](params(), ctx()).catch((e: any) => e);
-
-          expect(err.code).toBe('Disconnected');
-          expect(err.message).toBe('Wallet not synced yet');
-          expectFacadeUntouched(bundle);
-        });
-
-        it('accepts transactions once the first state comes', async () => {
-          const states = new rx.Subject<any>();
-          const bundle = createBundleStub({ stateFn: () => states.asObservable() });
-          connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
-          await expect(connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx())).rejects.toMatchObject({ code: 'Disconnected' });
-
-          states.next(mockState());
-
-          await expect(connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx())).resolves.toHaveProperty('tx');
-        });
-      }
+        await expect(connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx())).resolves.toHaveProperty('tx');
+      });
 
       it('does not require a strictly synced state, which an idle chain\'s dust wallet never reports', async () => {
         const bundle = createBundleStub({ stateFn: () => rx.of(mockState({ isSynced: false })) });
@@ -821,11 +790,9 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
         await connector.handlers[method]({ tx }, ctx());
 
-        if (engine.readsThroughFacade) expect(bundle.facade.adoptTransaction).toHaveBeenCalledWith(Uint8Array.from(Buffer.from(tx, 'hex')), stage);
+        expect(bundle.facade.adoptTransaction).toHaveBeenCalledWith(Uint8Array.from(Buffer.from(tx, 'hex')), stage);
         const [call] = balance.mock.calls;
         expect(engine.handleHex(call![0])).toBe(tx);
-        // The beta facade takes the wallet's secret keys before the options.
-        if (engine.secretKeys !== undefined) expect(call![1]).toBe(engine.secretKeys);
         expect(call!.at(-1)).toMatchObject({ ttl: expect.any(Date) });
       });
 
@@ -836,7 +803,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
         const result = await connector.handlers.submitTransaction({ tx: SEALED_AGENT_TX }, ctx());
 
-        if (engine.readsThroughFacade) expect(bundle.facade.adoptTransaction).toHaveBeenCalledWith(Uint8Array.from(Buffer.from(SEALED_AGENT_TX, 'hex')), 'Finalized');
+        expect(bundle.facade.adoptTransaction).toHaveBeenCalledWith(Uint8Array.from(Buffer.from(SEALED_AGENT_TX, 'hex')), 'Finalized');
         expect(submit).toHaveBeenCalledTimes(1);
         expect(engine.handleHex(submit.mock.calls[0]![0])).toBe(SEALED_AGENT_TX);
         expect(result).toEqual({ txHash: 'tx-id' });
@@ -879,15 +846,15 @@ export function connectorSuite(engine: ConnectorEngine): void {
       it('reports bytes the wallet cannot read as InvalidRequest, naming the stage, without balancing', async () => {
         const balance = vi.fn();
         const bundle = createBundleStub({ balanceUnboundTransaction: balance });
-        // The rc SDK's reader, as it refuses another ledger version's bytes; the beta engine's ledger refuses these on its own.
-        if (engine.readsThroughFacade) (bundle.facade as any).adoptTransaction = () => { throw new Error('unknown tag midnight:transaction[v99]'); };
+        // The rc SDK's reader, as it refuses another ledger version's bytes.
+        (bundle.facade as any).adoptTransaction = () => { throw new Error('unknown tag midnight:transaction[v99]'); };
         connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         const err: any = await connector.handlers.balanceUnsealedTransaction({ tx: 'aabb' }, ctx()).catch((e: any) => e);
 
         expect(err.code).toBe('InvalidRequest');
         expect(err.message).toContain('stage Unbound');
-        if (engine.readsThroughFacade) expect(err.message).toContain('unknown tag midnight:transaction[v99]');
+        expect(err.message).toContain('unknown tag midnight:transaction[v99]');
         expect(balance).not.toHaveBeenCalled();
       });
 
@@ -1647,7 +1614,6 @@ export function connectorSuite(engine: ConnectorEngine): void {
         expect(engine.handleHex(validate.mock.calls[0]![0])).toBe(SWAP_OFFER_HEX);
         const [call] = balance.mock.calls;
         expect(engine.handleHex(call![0])).toBe(SWAP_OFFER_HEX);
-        if (engine.secretKeys !== undefined) expect(call![1]).toBe(engine.secretKeys);
         expect(call!.at(-1)).toMatchObject({ tokenKindsToBalance: 'all' });
         expect(validate.mock.calls[1]![1]).toEqual({ flags: { enforceBalancing: true, verifySignatures: true, enforceLimits: true }, blockData: 'block' });
         expect(connector.hasPendingTxs()).toBe(true);

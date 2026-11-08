@@ -1,10 +1,9 @@
 // The npm-shrinkwrap.json mn ships: the tree package-lock.json resolves for
 // mn's own dependencies, the one the tests ran on, as an install of the
-// published package lays it out. Each SDK engine there resolves its own SDK
-// set once (the rc set at the top, the beta set nested under its engine).
-// Left to resolve on its own, an install mixes the sets: the beta set's loose
-// ranges reach newer betas built on the rc ledger, and an engine's ledger then
-// refuses the objects another copy made.
+// published package lays it out: the SDK engine there resolves its SDK set
+// once, as the tests ran on it. Left to resolve on its own, an install can
+// reach a second copy of a WASM package, and the engine's ledger then refuses
+// the objects another copy made.
 //
 // From the lockfile: every entry mn's production dependencies reach, by
 // Node's resolution over the lockfile's paths. The workspace packages mn
@@ -12,11 +11,11 @@
 // shrinkwrap each is the published package, with its own nested entries moved
 // under it, and its tarball and integrity from `dist`.
 //
-// Each SDK engine ships one too (`--package packages/engine-*`), so a program
-// that installs an engine without mn gets the set the tests ran on, with the
+// The SDK engine ships one too (`--package packages/engine-rc`), so a program
+// that installs the engine without mn gets the set the tests ran on, with the
 // account package beside it (its Midnight libraries are peer dependencies, so
 // they resolve to that set); and so does grant (`--package packages/grant`),
-// which reaches the account package through an engine and pins only the
+// which reaches the account package through the engine and pins only the
 // account library's own tree. It leaves out the workspace packages the package depends on (core
 // and chain; for grant also wallet and contract): those are shared with the
 // program that loads it, which installs them itself, so the process holds one

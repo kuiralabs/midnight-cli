@@ -1,7 +1,7 @@
 // Whether an engine's install holds its SDK set once. An engine's ledger is
 // WASM: an object one copy made is refused by another ("expected instance of
-// LedgerParameters"). npm installs mn with the shrinkwrap it ships, which keeps
-// each engine's set apart; an installer that ignores it (bun's) can leave an
+// LedgerParameters"). npm installs mn with the shrinkwrap it ships, which holds
+// the engine's set once; an installer that ignores it (bun's) can leave an
 // engine's SDK packages reaching different copies of its ledger, and every
 // call would then fail obscurely. An engine checks at load and refuses,
 // saying how to install mn instead.
