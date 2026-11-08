@@ -274,7 +274,8 @@ export async function ensureDust(
 // ── Transfer build/submit ────────────────────────────────────────────
 
 /**
- * Build, sign, prove, and submit a transfer transaction.
+ * Build, sign, prove, and submit a transfer transaction: one transaction, an
+ * output for each payment.
  *
  * Retries on:
  * - Stale UTXO (error 115): quick-sync and retry immediately (up to 3 attempts)
@@ -282,8 +283,8 @@ export async function ensureDust(
  */
 async function buildAndSubmitTransfer(
   bundle: FacadeBundle,
-  recipientAddress: UnshieldedAddress,
-  amount: bigint,
+  /** One output each, in this order. */
+  payments: readonly { receiverAddress: UnshieldedAddress; amount: bigint }[],
   onProving?: () => void,
   onSubmitting?: () => void,
   onDust?: (status: string) => void,
@@ -316,13 +317,11 @@ async function buildAndSubmitTransfer(
         [
           {
             type: 'unshielded',
-            outputs: [
-              {
-                amount,
-                receiverAddress: recipientAddress,
-                type: ledger.unshieldedToken().raw,
-              },
-            ],
+            outputs: payments.map(({ receiverAddress, amount }) => ({
+              amount,
+              receiverAddress,
+              type: ledger.unshieldedToken().raw,
+            })),
           },
         ],
         { ttl, payFees: true },
@@ -426,6 +425,7 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
     networkConfig,
     recipientAddress,
     amount,
+    extraRecipients = [],
     signal,
     onSync,
     onSyncDetail,
@@ -440,10 +440,12 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
     notice,
   } = params;
 
-  if (amount <= 0n) {
+  const recipients = [{ address: recipientAddress, amount }, ...extraRecipients];
+  if (recipients.some((recipient) => recipient.amount <= 0n)) {
     throw new Error('Amount must be greater than 0');
   }
-  const decodedAddress = validateRecipientAddress(recipientAddress, networkConfig);
+  const payments = recipients.map((recipient) => ({ receiverAddress: validateRecipientAddress(recipient.address, networkConfig), amount: recipient.amount }));
+  const total = recipients.reduce((sum, recipient) => sum + recipient.amount, 0n);
 
   // Suppress SDK transient errors + polkadot-js RPC noise for the duration
   // of the transfer (covers dust registration AND tx submission).
@@ -460,11 +462,12 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
         const unshieldedBalance = state.unshielded.balances[ledger.unshieldedToken().raw] ?? 0n;
         const availableCoinCount = state.unshielded.availableCoins?.length ?? 0;
         log?.('transfer', `Balance: ${Number(unshieldedBalance) / TOKEN_MULTIPLIER} NIGHT, coins: ${availableCoinCount}`);
-        if (unshieldedBalance < amount) {
+        if (unshieldedBalance < total) {
           const haveNight = Number(unshieldedBalance) / TOKEN_MULTIPLIER;
           throw new InsufficientBalanceError(
             `Insufficient balance: ${haveNight.toFixed(6)} NIGHT available, ` +
-            `${nightAmountText(amount)} NIGHT requested`
+            `${nightAmountText(total)} NIGHT requested` +
+            (recipients.length > 1 ? ` in all, for ${recipients.length} recipients` : '')
           );
         }
 
@@ -495,8 +498,7 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
         log?.('transfer', 'Building and submitting transaction...');
         const txHash = await buildAndSubmitTransfer(
           bundle,
-          decodedAddress,
-          amount,
+          payments,
           onProving,
           onSubmitting,
           onDust,
@@ -505,7 +507,7 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
           log,
           registration,
         );
-        return { txHash, amountMicroNight: amount };
+        return { txHash, amountMicroNight: total };
       },
       {
         root,

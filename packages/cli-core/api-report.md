@@ -1228,7 +1228,7 @@ export declare function payWhenDustCovers<T>(pay: () => Promise<T>, dust: DustBa
 export declare function planDustWait(err: unknown, dust: DustBalanceSource, now: Date): DustWaitPlan | undefined;
 export declare function sleep(ms: number, signal?: AbortSignal): Promise<void>;
 export type AccountEntryPoint = 'artefacts' | 'connector' | 'context' | 'contract' | 'deposit' | 'errors' | 'owner';
-export type AirdropParams = Omit<TransferParams, 'seedBuffer'>;
+export type AirdropParams = Omit<TransferParams, 'seedBuffer' | 'extraRecipients'>;
 export interface BlockLimits {
     readTime: number;
     computeTime: number;
@@ -1445,6 +1445,7 @@ export interface ShieldedTransferParams extends WalletSyncHooks {
     networkConfig: NetworkConfig;
     recipient: string;
     amount: bigint;
+    extraRecipients?: readonly TransferRecipient[];
     progress: Spinner;
     insufficient: (availableNight: string) => string;
     waitForDustToCover: boolean;
@@ -1462,6 +1463,7 @@ export interface TransferParams {
     networkConfig: NetworkConfig;
     recipientAddress: string;
     amount: bigint;
+    extraRecipients?: readonly TransferRecipient[];
     signal?: AbortSignal;
     onSync?: (applied: number, highest: number) => void;
     onSyncDetail?: (walletsStillSyncing: string) => void;
@@ -1474,6 +1476,10 @@ export interface TransferParams {
     log?: VerboseLog;
     root: string;
     notice: NoticeSink;
+}
+export interface TransferRecipient {
+    address: string;
+    amount: bigint;
 }
 export interface TransferResult {
     txHash: string;

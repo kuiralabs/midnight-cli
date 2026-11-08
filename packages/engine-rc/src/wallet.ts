@@ -23,10 +23,13 @@ import { createDAppConnector } from './dapp-connector.ts';
 const HOUR_MS = 60 * 60 * 1000;
 
 async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTransferParams): Promise<string> {
-  const { seed, root, notice, network, networkConfig, amount, progress, signal } = params;
+  const { seed, root, notice, network, networkConfig, progress, signal } = params;
   const networkId = getNetworkId(networkConfig.networkId);
   const nightToken = ledger.unshieldedToken().raw;
-  const receiverAddress = decodeShieldedAddress(params.recipient, network);
+  // One output each, in this order: the recipient, then the extra ones.
+  const payments = [{ address: params.recipient, amount: params.amount }, ...(params.extraRecipients ?? [])]
+    .map(({ address, amount }) => ({ type: nightToken, amount, receiverAddress: decodeShieldedAddress(address, network) }));
+  const total = payments.reduce((sum, payment) => sum + payment.amount, 0n);
 
   return repo.withFacade(
     seed,
@@ -35,7 +38,7 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
       params.onSenderShieldedAddress?.(MidnightBech32m.encode(networkId, state.shielded.address).asString());
 
       const shieldedBalance = state.shielded.balances[nightToken] ?? 0n;
-      if (shieldedBalance < amount) {
+      if (shieldedBalance < total) {
         throw new InsufficientBalanceError(params.insufficient((Number(shieldedBalance) / 1_000_000).toFixed(6)));
       }
 
@@ -48,7 +51,7 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
       const build = () => bundle.facade.transferTransaction(
         [{
           type: 'shielded' as const,
-          outputs: [{ type: nightToken, amount, receiverAddress }],
+          outputs: payments,
         }],
         { ttl: new Date(Date.now() + HOUR_MS) },
       );

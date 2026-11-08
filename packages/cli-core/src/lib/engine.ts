@@ -211,12 +211,22 @@ export interface BalanceSummary {
   unregisteredUtxos: number;
 }
 
+/** One more payment in the same transaction: an output of `amount` to `address`. */
+export interface TransferRecipient {
+  /** The recipient's address on the network, of the kind the transfer sends (unshielded or shielded). */
+  address: string;
+  /** In NIGHT's smallest unit; more than 0. */
+  amount: bigint;
+}
+
 export interface TransferParams {
   seedBuffer: Buffer;
   networkConfig: NetworkConfig;
   recipientAddress: string;
   /** In NIGHT's smallest unit; more than 0. */
   amount: bigint;
+  /** Further recipients paid in the same transaction after `recipientAddress`, one output each; none: only `recipientAddress` is paid. */
+  extraRecipients?: readonly TransferRecipient[];
   signal?: AbortSignal;
   onSync?: (applied: number, highest: number) => void;
   onSyncDetail?: (walletsStillSyncing: string) => void;
@@ -241,6 +251,7 @@ export interface TransferParams {
 
 export interface TransferResult {
   txHash: string;
+  /** What the transaction pays, all its recipients together. */
   amountMicroNight: bigint;
 }
 
@@ -249,7 +260,7 @@ export interface EnsureDustResult {
   txHash?: string;
 }
 
-export type AirdropParams = Omit<TransferParams, 'seedBuffer'>;
+export type AirdropParams = Omit<TransferParams, 'seedBuffer' | 'extraRecipients'>;
 
 export interface DustRegisterOptions {
   signal?: AbortSignal;
@@ -386,9 +397,11 @@ export interface ShieldedTransferParams extends WalletSyncHooks {
   recipient: string;
   /** In NIGHT's smallest unit. */
   amount: bigint;
+  /** Further recipients paid in the same transaction after `recipient`, each at a shielded address on `network`, one output each. */
+  extraRecipients?: readonly TransferRecipient[];
   /** Says each step, and the time the submit has taken. */
   progress: Spinner;
-  /** The message of the InsufficientBalanceError thrown when the wallet holds less shielded NIGHT than `amount`, given what it holds, in NIGHT. */
+  /** The message of the InsufficientBalanceError thrown when the wallet holds less shielded NIGHT than it pays (`amount` and every extra recipient's), given what it holds, in NIGHT. */
   insufficient: (availableNight: string) => string;
   /** Right after another payment the wallet's Dust can be short of this fee: wait when the rest is moments away. */
   waitForDustToCover: boolean;

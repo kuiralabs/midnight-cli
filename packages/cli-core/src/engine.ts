@@ -26,7 +26,7 @@ export {
   type EnsureDustResult, type OpenedConnector, type PrepWallet, type RawStateValue, type ReadOptions,
   type ScriptParts, type ServedWalletSession, type ShieldedBalanceResult, type ShieldedCachedOptions,
   type ShieldedTransferParams, type StateScript, type TransactionDetail, type TransferParams,
-  type TransferResult, type UnshieldedView
+  type TransferRecipient, type TransferResult, type UnshieldedView
 } from './lib/engine.ts';
 export { EngineError, ProofTimeoutError } from './lib/errors.ts';
 export { proveWithin, SUBMIT_WAIT_MS, submitWithin, type SubmitWaitOptions } from './lib/submit-wait.ts';

@@ -2,7 +2,8 @@
 // unit, refused when not above 0 before anything reaches the chain, and
 // carried whole past what a JS number holds (2^53 micro-NIGHT) to where the
 // wallet first asks the chain, the repository's protocol-version read, which a
-// test stands in for with a ledger-8 chain so the call stops there. A
+// test stands in for with a ledger-8 chain so the call stops there; and each
+// extra recipient paid in the same transaction is read the same way. A
 // submitted transfer needs a chain: the scratch chain's live runs cover it.
 //
 // This file loads no engine: each test file that runs it passes one.
@@ -72,6 +73,26 @@ export function engineTransferSuite(engine: TransferEngine): void {
         waitForDustToCover: false,
       })).rejects.toMatchObject({ code: 'UNSUPPORTED_LEDGER' });
       expect(asked).toEqual([NETWORK.indexer, NETWORK.indexer, NETWORK.indexer]);
+    });
+
+    it('reads every extra recipient: refuses one of 0 NIGHT or of another network before it asks the chain, and carries the rest to it', async () => {
+      const { host, wallet, recipient, shieldedRecipient, asked } = onLedger8();
+      const preprod = engine.createEngine(host, { repository: { fetchProtocolVersion: async () => LEDGER_8 } }).keys.unshieldedAddress(Buffer.alloc(32, 3), 'preprod');
+      const withExtra = (extraRecipients: TransferParams['extraRecipients']) => paramsOf(host, recipient)(1_000_000n, (params) => wallet.transfer({ ...params, extraRecipients }));
+      await expect(withExtra([{ address: recipient, amount: 1n }, { address: recipient, amount: 0n }])).rejects.toThrow('Amount must be greater than 0');
+      await expect(withExtra([{ address: preprod, amount: 1n }])).rejects.toThrow('Expected a bech32m address for network "Undeployed"');
+      expect(asked).toEqual([]);
+      await expect(withExtra([{ address: recipient, amount: LARGE }, { address: recipient, amount: 1n }])).rejects.toMatchObject({ code: 'UNSUPPORTED_LEDGER' });
+      expect(asked).toEqual([NETWORK.indexer]);
+
+      const shielded = (extraRecipients: TransferParams['extraRecipients']) => wallet.shieldedTransfer({
+        seed: SEED, root, notice: host.notice, network: 'undeployed', networkConfig: NETWORK, recipient: shieldedRecipient, amount: 1n,
+        extraRecipients, progress: silentSpinner(), insufficient: (available) => `${available} NIGHT available`, waitForDustToCover: false,
+      });
+      await expect(shielded([{ address: recipient, amount: 1n }])).rejects.toThrow('Expected type shield-addr, got addr');
+      expect(asked).toEqual([NETWORK.indexer]);
+      await expect(shielded([{ address: shieldedRecipient, amount: LARGE }])).rejects.toMatchObject({ code: 'UNSUPPORTED_LEDGER' });
+      expect(asked).toEqual([NETWORK.indexer, NETWORK.indexer]);
     });
 
     it('refuses a recipient of another network before it asks the chain', async () => {
