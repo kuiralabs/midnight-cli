@@ -14,6 +14,7 @@ import { CustomForkingDustWallet, DustWallet as SdkDustWallet, dustVariantConfig
 import { V1Builder } from '@midnightntwrk/wallet-sdk/dust/v1';
 import { Transacting, V2Builder, WalletError } from '@midnightntwrk/wallet-sdk/dust/v2';
 import { LedgerOps } from '@midnightntwrk/wallet-sdk/utilities';
+import { feeWithBlockUsage, isProofErased, proofBytesUnpriced } from './proof-pricing.ts';
 import { type DustInput, chooseDustCoins, planDustInputs, spreadFeeAcrossInputs, type DustShortfall, withDustShortfall } from '@kuiralabs/midnight-cli-core/engine';
 
 type SdkTransacting = Transacting.TransactingCapabilityImplementation<ledger.FinalizedTransaction>;
@@ -21,9 +22,53 @@ type RecipeArguments = Parameters<SdkTransacting['computeBalancingRecipe']>;
 type Recipe = ReturnType<SdkTransacting['computeBalancingRecipe']>;
 type DustCoin = ReturnType<ReturnType<SdkTransacting['getCoins']>['getAvailableCoinsWithGeneratedDust']>[number];
 
-/** The SDK's transacting, with its fee-coin choice replaced by one that ends. */
+/**
+ * The SDK's transacting, with its fee-coin choice replaced by one that ends,
+ * and the proofs of the transactions it balances priced as they are
+ * (proof-pricing.ts): the SDK prices them proof-erased, each contract proof as
+ * 4832 bytes.
+ */
 export class ConvergingDustTransacting extends Transacting.TransactingCapabilityImplementation<ledger.FinalizedTransaction> {
+  /** While a balancing or a dry run prices: the bytes the proof-erased pricing of its transactions leaves out. */
+  #proofBytesUnpriced = 0n;
+  #balancing = false;
+
   override computeBalancingRecipe(...args: RecipeArguments): Recipe {
+    const [, , transactions, , , ledgerParams] = args;
+    return this.#pricingProofs(transactions, ledgerParams, () => this.#recipe(...args));
+  }
+
+  override dryRunFee(...args: Parameters<SdkTransacting['dryRunFee']>): bigint {
+    const [, transactions, , , , , ledgerParams] = args;
+    return this.#pricingProofs(transactions, ledgerParams, () => super.dryRunFee(...args));
+  }
+
+  /** Runs `run` with the proofs of `transactions` priced as they are: the bytes their erased pricing leaves out, for calculateFee. */
+  #pricingProofs<T>(transactions: Parameters<typeof proofBytesUnpriced>[0], ledgerParams: ledger.LedgerParameters, run: () => T): T {
+    // Within a balancing already (its dry runs): its count stands.
+    if (this.#balancing) return run();
+    this.#balancing = true;
+    try {
+      this.#proofBytesUnpriced = proofBytesUnpriced(transactions, ledgerParams);
+    } catch {
+      this.#proofBytesUnpriced = 0n;
+    }
+    try {
+      return run();
+    } finally {
+      this.#proofBytesUnpriced = 0n;
+      this.#balancing = false;
+    }
+  }
+
+  /** The SDK's fee for `transaction`; for the proof-erased merge of what is being balanced, with its proofs' real bytes. */
+  override calculateFee(transaction: Parameters<SdkTransacting['calculateFee']>[0], ledgerParams: ledger.LedgerParameters): bigint {
+    const fee = super.calculateFee(transaction, ledgerParams);
+    if (this.#proofBytesUnpriced === 0n || !isProofErased(transaction, ledgerParams)) return fee;
+    return feeWithBlockUsage(fee, transaction, ledgerParams, this.#proofBytesUnpriced);
+  }
+
+  #recipe(...args: RecipeArguments): Recipe {
     const [secretKey, state, transactions, ttl, currentTime, ledgerParams] = args;
     let plan;
     try {
