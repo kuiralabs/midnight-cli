@@ -58,7 +58,18 @@ export interface ReachabilityOptions {
   readonly signal?: AbortSignal;
   /** How long each endpoint has to answer; REACHABILITY_TIMEOUT_MS when not given. */
   readonly timeoutMs?: number;
+  /** The HTTP client for the indexer and proof server; the runtime's fetch when not given. */
+  readonly request?: typeof fetch;
 }
+
+/**
+ * What a probe found: nothing wrong, the endpoint's own error (it can't be
+ * used as configured, refused the upgrade, or the check was cancelled), or
+ * why it couldn't be reached. Kept apart by the probe, because the runtimes
+ * shape a transport failure differently (Node's fetch throws a TypeError with
+ * the reason as its cause, Bun's an Error with code "ConnectionRefused").
+ */
+type ProbeOutcome = undefined | { readonly refused: Error } | { readonly unreachable: unknown };
 
 /**
  * The endpoints `network` has that `needs` names (by default the indexer and
@@ -83,29 +94,32 @@ export function endpointsOf(network: Pick<NetworkConfig, 'indexer' | 'node' | 'p
  */
 export async function assertEndpointsReachable(needed: NeededEndpoints, options: ReachabilityOptions = {}): Promise<void> {
   const timeoutMs = options.timeoutMs ?? REACHABILITY_TIMEOUT_MS;
-  const probes: Array<[EndpointRole, string, Promise<unknown>]> = [];
-  if (needed.indexer !== undefined) probes.push(['indexer', needed.indexer, probeHttp(needed.indexer, 'POST', timeoutMs, options.signal)]);
+  const request = options.request ?? fetch;
+  const probes: Array<[EndpointRole, string, Promise<ProbeOutcome>]> = [];
+  if (needed.indexer !== undefined) probes.push(['indexer', needed.indexer, probeHttp(request, needed.indexer, 'POST', timeoutMs, options.signal)]);
   if (needed.node !== undefined) probes.push(['node', needed.node, probeWebSocket(needed.node, timeoutMs, options.signal)]);
-  if (needed.proofServer !== undefined) probes.push(['proof server', needed.proofServer, probeHttp(needed.proofServer, 'GET', timeoutMs, options.signal)]);
-  const failures = await Promise.all(probes.map(([, , probe]) => probe));
+  if (needed.proofServer !== undefined) probes.push(['proof server', needed.proofServer, probeHttp(request, needed.proofServer, 'GET', timeoutMs, options.signal)]);
+  const outcomes = await Promise.all(probes.map(([, , probe]) => probe));
   throwIfCancelled(options.signal);
   for (let i = 0; i < probes.length; i++) {
-    const failure = failures[i];
-    if (failure === undefined) continue;
-    if (failure instanceof Error && 'code' in failure && typeof (failure as { code?: unknown }).code === 'string' && !isTransportCode((failure as { code: string }).code)) throw failure;
+    const outcome = outcomes[i];
+    if (outcome === undefined) continue;
+    if ('refused' in outcome) throw outcome.refused;
     const [role, url] = probes[i]!;
-    throw endpointUnreachable(role, url, failure);
+    throw endpointUnreachable(role, url, outcome.unreachable);
   }
 }
 
-const isTransportCode = (code: string): boolean => /^(E[A-Z]+|UND_ERR_[A-Z_]+)$/.test(code);
-
 /** Undefined when the URL answers an HTTP request with any status; else why it didn't. */
-async function probeHttp(url: string, method: 'GET' | 'POST', timeoutMs: number, signal: AbortSignal | undefined): Promise<unknown> {
+async function probeHttp(request: typeof fetch, url: string, method: 'GET' | 'POST', timeoutMs: number, signal: AbortSignal | undefined): Promise<ProbeOutcome> {
   try {
     assertEndpointUsable(url);
+  } catch (err) {
+    return { refused: err as Error };
+  }
+  try {
     const timeout = AbortSignal.timeout(timeoutMs);
-    const response = await fetch(url, {
+    const response = await request(url, {
       method,
       ...(method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: '{ __typename }' }) } : {}),
       signal: signal === undefined ? timeout : AbortSignal.any([timeout, signal]),
@@ -114,23 +128,23 @@ async function probeHttp(url: string, method: 'GET' | 'POST', timeoutMs: number,
     await response.body?.cancel().catch(() => {});
     return undefined;
   } catch (err) {
-    return err;
+    return signal?.aborted === true ? { refused: new CancelledError() } : { unreachable: err };
   }
 }
 
 /** Undefined when the URL accepts a WebSocket connection; else why it didn't. */
-function probeWebSocket(url: string, timeoutMs: number, signal: AbortSignal | undefined): Promise<unknown> {
+function probeWebSocket(url: string, timeoutMs: number, signal: AbortSignal | undefined): Promise<ProbeOutcome> {
   return new Promise((resolve) => {
     try {
       assertEndpointUsable(url);
     } catch (err) {
-      resolve(err);
+      resolve({ refused: err as Error });
       return;
     }
-    if (signal?.aborted === true) { resolve(new CancelledError()); return; }
+    if (signal?.aborted === true) { resolve({ refused: new CancelledError() }); return; }
     const ws = new WebSocket(url);
     let settled = false;
-    const finish = (outcome: unknown): void => {
+    const finish = (outcome: ProbeOutcome): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -141,11 +155,11 @@ function probeWebSocket(url: string, timeoutMs: number, signal: AbortSignal | un
       try { if (ws.readyState === WebSocket.CONNECTING) ws.terminate(); else ws.close(); } catch { /* already gone */ }
       resolve(outcome);
     };
-    const onAbort = (): void => finish(new CancelledError());
-    const timer = setTimeout(() => finish(Object.assign(new Error(`no answer within ${timeoutMs / 1000} s`), { name: 'TimeoutError' })), timeoutMs);
+    const onAbort = (): void => finish({ refused: new CancelledError() });
+    const timer = setTimeout(() => finish({ unreachable: Object.assign(new Error(`no answer within ${timeoutMs / 1000} s`), { name: 'TimeoutError' }) }), timeoutMs);
     signal?.addEventListener('abort', onAbort, { once: true });
     ws.on('open', () => finish(undefined));
-    ws.on('error', (err) => finish(endpointRefusalFromWsError(url, err) ?? err));
+    ws.on('error', (err) => { const refusal = endpointRefusalFromWsError(url, err); finish(refusal === undefined ? { unreachable: err } : { refused: refusal }); });
   });
 }
 

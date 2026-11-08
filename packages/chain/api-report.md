@@ -34,6 +34,7 @@ export declare const REACHABILITY_TIMEOUT_MS = 5000;
 export interface ReachabilityOptions {
     readonly signal?: AbortSignal;
     readonly timeoutMs?: number;
+    readonly request?: typeof fetch;
 }
 export declare function fetchEventTip(indexerWS: string, stream: LedgerEventStream): Promise<number | null>;
 export declare function isCursorBeyondTip(lastAppliedEventId: number, tip: number | null): boolean;

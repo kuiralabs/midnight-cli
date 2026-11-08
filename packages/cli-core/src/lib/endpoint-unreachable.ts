@@ -21,6 +21,8 @@ const REASON_OF_CODE: Readonly<Record<string, string>> = {
   EHOSTUNREACH: 'host unreachable',
   ENETUNREACH: 'network unreachable',
   UND_ERR_CONNECT_TIMEOUT: 'connection timed out',
+  // Bun's fetch: its one code for a refused connection and a host that doesn't resolve.
+  ConnectionRefused: 'cannot connect (connection refused, or no such host)',
 };
 
 /** Messages that say nothing about the failure: fetch's own, and an event turned into a string. */

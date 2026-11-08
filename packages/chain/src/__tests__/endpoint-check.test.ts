@@ -111,6 +111,14 @@ describe('assertEndpointsReachable', () => {
     await expect(assertEndpointsReachable({ node: `ws://127.0.0.1:${port}` })).rejects.toMatchObject({ code: 'NETWORK_ERROR', endpoint: 'node', message: expect.stringContaining(`Cannot reach the node at ws://127.0.0.1:${port}: connection refused.`) });
   });
 
+  it('names an endpoint Bun\'s fetch can\'t connect to as NETWORK_ERROR, not as an error of its own', async () => {
+    // Bun's fetch rejects with an Error whose code is "ConnectionRefused" (measured with Bun 1.3.14), where Node's throws a TypeError.
+    const bunRefused = (async () => { throw Object.assign(new Error('Unable to connect. Is the computer able to access the url?'), { code: 'ConnectionRefused' }); }) as typeof fetch;
+    const failure = assertEndpointsReachable({ indexer: 'http://127.0.0.1:1/api/v4/graphql' }, { request: bunRefused });
+    await expect(failure).rejects.toBeInstanceOf(EndpointUnreachableError);
+    await expect(failure).rejects.toMatchObject({ code: 'NETWORK_ERROR', endpoint: 'indexer', message: expect.stringContaining('Cannot reach the indexer at http://127.0.0.1:1/api/v4/graphql: cannot connect (connection refused, or no such host).') });
+  });
+
   it('gives up on a silent endpoint within its timeout', async () => {
     const silent = await silentServer();
     try {
