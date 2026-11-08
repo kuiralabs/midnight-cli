@@ -56,15 +56,30 @@ describe('repricingPayments', () => {
   });
 
   it('carries a deploy on from the refused step: the steps that landed are not submitted again', async () => {
-    // The wallet's margin goes back to the first after each transaction lands, so each step can be repriced in turn.
-    const { submitted, submit } = wallet(['h1', new FeeRepricedError(3, 5), 'h2', new FeeRepricedError(3, 5), new FeeRepricedError(5, 8), 'h3']);
+    // The wallet holds the margin it raised, so the steps after the refused one go through.
+    const { submitted, submit } = wallet(['h1', new FeeRepricedError(3, 5), 'h2', 'h3']);
     const payments = repricingPayments(submit);
     const deploy = recordedDeploy(3, payments.submit);
 
     expect(await payments.repricing(deploy.run, () => {}, undefined)).toBe('account-address');
 
-    expect(submitted).toEqual(['step-1', 'step-2', 'step-2', 'step-3', 'step-3', 'step-3']);
+    expect(submitted).toEqual(['step-1', 'step-2', 'step-2', 'step-3']);
     expect(deploy.landed()).toBe(3);
+  });
+
+  it('stops after two re-runs, however many steps land between them: a re-run that makes a step again never loops', async () => {
+    // As a grant issue under a wallet that went back to its first margin after each landing: each re-run makes its first step
+    // again (it lands), and the next is refused.
+    const answers: Array<Error | string> = [];
+    for (let i = 0; i < 6; i++) answers.push(`landed-${i}`, new FeeRepricedError(3, 5));
+    const { submitted, submit } = wallet(answers);
+    const payments = repricingPayments(submit);
+    const issue = async () => { await payments.submit('prepare'); await payments.submit('issue'); return 'issued'; };
+
+    const err = await payments.repricing(issue, () => {}, undefined).catch((e: unknown) => e);
+
+    expect(err).toMatchObject({ code: 'FEE_REPRICED' });
+    expect(submitted).toEqual(['prepare', 'issue', 'prepare', 'issue', 'prepare', 'issue']);
   });
 
   it("fails with the wallet's FEE_TOO_LOW past the largest margin, its code kept", async () => {

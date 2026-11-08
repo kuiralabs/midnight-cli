@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { Effect } from 'effect';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import { DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN } from '../lib/constants.ts';
-import { DUST_FEE_MARGIN_STEPS, isFeeShortRefusal, newFeePricing, nextFeeMargin, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin } from '../lib/fee-margin.ts';
+import { DUST_FEE_MARGIN_STEPS, RAISED_MARGIN_HOLD_MS, isFeeShortRefusal, newFeePricing, nextFeeMargin, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin } from '../lib/fee-margin.ts';
 import { FeeTooLowError, TransactionRefusedError } from '../lib/errors.ts';
 import { classifyError, EXIT_TX_REJECTED } from '../lib/exit-codes.ts';
 import { CORE_CODES } from '../../../../test-support/core-codes.ts';
@@ -40,6 +40,29 @@ describe('the fee settings', () => {
     expect(nextFeeMargin(5)).toBe(8);
     expect(nextFeeMargin(8)).toBeUndefined();
     expect(nextFeeMargin(0)).toBe(3);
+  });
+});
+
+describe('a raised margin', () => {
+  it('holds for RAISED_MARGIN_HOLD_MS from when it was raised, then the first margin is read again', () => {
+    let clock = 1_000_000;
+    const pricing = newFeePricing(() => clock);
+    pricing.feeBlocksMargin = 5;
+    clock += RAISED_MARGIN_HOLD_MS - 1;
+    expect(pricing.feeBlocksMargin).toBe(5);
+    clock += 1;
+    expect(pricing.feeBlocksMargin).toBe(3);
+  });
+
+  it('goes back to the first margin when the command that raised it resets it', () => {
+    let clock = 0;
+    const pricing = newFeePricing(() => clock);
+    pricing.feeBlocksMargin = 8;
+    expect(pricing.feeBlocksMargin).toBe(8);
+    resetFeeMargin(pricing);
+    expect(pricing.feeBlocksMargin).toBe(3);
+    clock += 1;
+    expect(pricing.feeBlocksMargin).toBe(3);
   });
 });
 

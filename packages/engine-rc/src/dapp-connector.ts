@@ -2,7 +2,7 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isFeeShortRefusal, repriceAfterFeeRefusal, resetFeeMargin } from '@kuiralabs/midnight-cli-core/engine';
+import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isFeeShortRefusal, repriceAfterFeeRefusal } from '@kuiralabs/midnight-cli-core/engine';
 import { type NoticeSink, FeeRepricedError, LEDGER_9_FORK_VERSION, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE } from '@kuiralabs/midnight-cli-core';
 import { dim, roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
@@ -1060,8 +1060,6 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
         tracker.complete();
         // Submitted: its coins are spent, not pending.
         submittingTxs.delete(txHex);
-        // A fee priced with a larger margin went through: the next is priced with the first again.
-        resetFeeMargin(bundle.feePricing);
         context.metadata.phases = tracker.getTimings();
         // Return txHash for server logging (onResponse can read it from result)
         return { txHash };

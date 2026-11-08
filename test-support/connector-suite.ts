@@ -926,14 +926,14 @@ export function connectorSuite(engine: ConnectorEngine): void {
         expect(err.message).toContain('(0.738727721894531 DUST, priced with 8 blocks of margin, the most mn tries)');
       });
 
-      it('goes back to the first margin once a transaction goes through', async () => {
+      it('keeps the raised margin for the payments after one that goes through', async () => {
         const bundle = createBundleStub({ submitTransaction: vi.fn().mockResolvedValue('tx-id') });
         bundle.feePricing.feeBlocksMargin = 5;
         connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
         await connector.handlers.submitTransaction({ tx: SEALED_AGENT_TX }, ctx());
 
-        expect(bundle.feePricing.feeBlocksMargin).toBe(3);
+        expect(bundle.feePricing.feeBlocksMargin).toBe(5);
       });
     });
 

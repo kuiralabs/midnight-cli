@@ -10,6 +10,8 @@
 import {
   DustRequiredError,
   EngineError,
+  FeeRepricedError,
+  FeeTooLowError,
   InsufficientBalanceError,
   InvalidDustProofError,
   NetworkError,
@@ -294,10 +296,12 @@ const carriesCode = (err: unknown): boolean => !isConnectorApiError(err) && carr
  * failure mn names as the typed error for its code, with the SDK's message and
  * the SDK's error as its cause; a connector error marked with mn's code as the
  * typed error for that code. Anything else (an error that carries its own
- * code, a failure mn doesn't name) as it is.
+ * code, a failure mn doesn't name) as it is. A fee the wallet re-priced, or
+ * refused past its largest margin, stays that, though the node's refusal is
+ * among its causes: what it says to do differs from a refusal's.
  */
 export function toEngineError(err: unknown): unknown {
-  if (err instanceof TransactionRefusedError) return err;
+  if (err instanceof TransactionRefusedError || err instanceof FeeRepricedError || err instanceof FeeTooLowError) return err;
   const held = heldCoinRefusalOf(err);
   if (held !== undefined) return held;
   const reason = nodeRefusalOf(err);

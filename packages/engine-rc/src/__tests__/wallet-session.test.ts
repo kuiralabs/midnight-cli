@@ -263,6 +263,29 @@ describe('wallet session', () => {
       await session.close();
     });
 
+    it('reports a fee the node refused as too low, which the wallet now prices higher, as FEE_REPRICED, not as a refusal', async () => {
+      const refused = () => {
+        const failure = Effect.runPromise(Effect.fail(new SubmissionError({ message: 'Transaction submission error', cause: new Error('1010: Invalid Transaction: Custom error: 138') })));
+        failure.catch(() => {});
+        return failure;
+      };
+      // The refused fee, priced again, is well within the wallet's Dust (42).
+      const { session, bundle } = openSession({ bundleOverrides: { submitTransaction: refused, calculateTransactionFee: async () => 10n } });
+      const balanced = await session.balanceTransaction(AGENT_TX);
+
+      const err = await session.submit(balanced).catch((e: Error) => e);
+
+      expect(err).toMatchObject({ code: 'FEE_REPRICED', fromBlocks: 3, toBlocks: 5 });
+      expect(classifyError(err as Error, CORE_CODES)).toStrictEqual({ errorCode: 'FEE_REPRICED', exitCode: 6 });
+      expect(bundle.feePricing.feeBlocksMargin).toBe(5);
+
+      // Past the largest margin: FEE_TOO_LOW.
+      bundle.feePricing.feeBlocksMargin = 8;
+      const again = await session.submit(await session.balanceTransaction(AGENT_TX)).catch((e: Error) => e);
+      expect(again).toMatchObject({ code: 'FEE_TOO_LOW', marginBlocks: 8 });
+      await session.close();
+    });
+
     it("reports the connector's Dust refusal as DUST_REQUIRED, in the connector's words", async () => {
       vi.useFakeTimers();
       try {

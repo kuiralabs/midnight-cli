@@ -30,9 +30,34 @@ export interface FeePricing {
   feeBlocksMargin: number;
 }
 
-/** Fee settings at mn's first margin, for one wallet. */
-export function newFeePricing(): FeePricing {
-  return { additionalFeeOverhead: DUST_COST_OVERHEAD, feeBlocksMargin: DUST_FEE_MARGIN_STEPS[0]! };
+/**
+ * How long a margin raised after a refused fee holds: 10 minutes. Every payment
+ * of the command that met the refusal goes at it (a grant deploy's five
+ * transactions take about two minutes): going back to the first margin after
+ * each one that lands made the next refuse again, and a grant step that a
+ * re-run makes again was then made over and over (measured: twelve times).
+ */
+export const RAISED_MARGIN_HOLD_MS = 10 * 60_000;
+
+/**
+ * Fee settings at mn's first margin, for one wallet. A margin set larger
+ * holds for RAISED_MARGIN_HOLD_MS from when it was set, then the settings
+ * read the first margin again; `now` is the clock that is measured by.
+ */
+export function newFeePricing(now: () => number = Date.now): FeePricing {
+  const first = DUST_FEE_MARGIN_STEPS[0]!;
+  let raised: { blocks: number; at: number } | undefined;
+  return {
+    additionalFeeOverhead: DUST_COST_OVERHEAD,
+    get feeBlocksMargin(): number {
+      if (raised !== undefined && now() - raised.at < RAISED_MARGIN_HOLD_MS) return raised.blocks;
+      raised = undefined;
+      return first;
+    },
+    set feeBlocksMargin(blocks: number) {
+      raised = blocks === first ? undefined : { blocks, at: now() };
+    },
+  };
 }
 
 /** The margin after `blocks` in DUST_FEE_MARGIN_STEPS; undefined when `blocks` is the last one or past it. */
@@ -40,7 +65,7 @@ export function nextFeeMargin(blocks: number): number | undefined {
   return DUST_FEE_MARGIN_STEPS.find((step) => step > blocks);
 }
 
-/** Back to the first margin, once a transaction priced with a larger one has gone through. */
+/** Back to the first margin: a command that raised it is done. */
 export function resetFeeMargin(pricing: FeePricing): void {
   pricing.feeBlocksMargin = DUST_FEE_MARGIN_STEPS[0]!;
 }

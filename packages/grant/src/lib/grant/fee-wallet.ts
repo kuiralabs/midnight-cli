@@ -14,8 +14,8 @@ export interface PayingWallet {
   /**
    * Runs a payment, and again when its submit was refused because the node
    * took its fee as too low and the wallet now prices with a larger margin
-   * (FEE_REPRICED), saying so through `onStatus`. The account package carries
-   * on from the step it recorded, so steps that landed are not made again.
+   * (FEE_REPRICED), saying so through `onStatus`, at most once per larger
+   * margin. The account package carries on from the step it recorded.
    * Past the largest margin the payment fails with the wallet's FEE_TOO_LOW.
    */
   repricing: <T>(pay: () => Promise<T>, onStatus: (message: string) => void, signal: AbortSignal | undefined) => Promise<T>;
@@ -34,33 +34,33 @@ export interface RepricingPayments {
  * Payments over `walletSubmit` that run again after a fee refused as too low.
  * A refusal is kept as the wallet's own error (its code kept): the account
  * package reports a refused submit through midnight-js, which keeps only its
- * message. A payment that failed after a FEE_REPRICED refusal runs again,
- * while the wallet has larger margins left since a transaction last went
- * through (each step of a deploy can be repriced in turn); one that failed
- * after a FEE_TOO_LOW, or a FEE_REPRICED past them, reports that refusal.
+ * message. A payment that failed after a FEE_REPRICED refusal runs again, at
+ * most once per larger margin the wallet can move to: the wallet holds the
+ * raised margin for the rest of the command (RAISED_MARGIN_HOLD_MS), so the
+ * later steps of a payment are priced with it too, and a re-run that makes a
+ * step again can't go on making it. One that failed after a FEE_TOO_LOW, or a
+ * FEE_REPRICED past those, reports that refusal.
  */
 export function repricingPayments(walletSubmit: (tx: string) => Promise<string>): RepricingPayments {
   let lastRefusal: unknown;
-  let repricedSinceLanded = 0;
   const submit = async (tx: string): Promise<string> => {
     try {
       const txHash = await walletSubmit(tx);
       lastRefusal = undefined;
-      repricedSinceLanded = 0;
       return txHash;
     } catch (err) {
       lastRefusal = err;
-      if (isFeeRepriced(err)) repricedSinceLanded++;
       throw err;
     }
   };
   const refusedFee = (err: unknown): boolean => isFeeRepriced(err) || (err as { code?: unknown } | null | undefined)?.code === FEE_TOO_LOW_CODE;
   const repricing = async <T>(pay: () => Promise<T>, onStatus: (message: string) => void, signal: AbortSignal | undefined): Promise<T> => {
+    let reruns = 0;
     try {
       return await rerunWhenRepriced(async () => {
         lastRefusal = undefined;
         return pay();
-      }, () => isFeeRepriced(lastRefusal) && repricedSinceLanded < DUST_FEE_MARGIN_STEPS.length, onStatus, signal);
+      }, () => isFeeRepriced(lastRefusal) && reruns++ < DUST_FEE_MARGIN_STEPS.length - 1, onStatus, signal);
     } catch (err) {
       throw refusedFee(lastRefusal) ? lastRefusal : err;
     }
