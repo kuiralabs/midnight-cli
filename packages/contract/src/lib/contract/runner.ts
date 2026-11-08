@@ -7,7 +7,7 @@
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdirSync, rmdirSync } from 'node:fs';
+import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdirSync, rmdirSync, rmSync } from 'node:fs';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -18,6 +18,7 @@ import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
 import { coerceArg } from './arg-coerce.ts';
 import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
 import { openPrivateStateStore } from './private-state-store.ts';
+import { CONTRACT_STATE_BUSY, PRIVATE_STATE_BUSY_WAIT_MS, SCRIPT_NOTICE_MARKER, claimPrivateStateStore, holderCommandOf, waitForPrivateState } from './private-state-lock.ts';
 import { callStateDir, deployStateDir, dropEmptyDeployState, keepDeployState, moveDappStore } from './private-state.ts';
 
 // The generated deploy/call script imports SDK packages by bare specifier
@@ -174,7 +175,7 @@ export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
   const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options), [PRIVATE_STATE_DIR_ENV]: staging };
   let deployed: DeployResult;
   try {
-    const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env, signal: options.signal });
+    const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, env, signal: options.signal });
     try {
       deployed = JSON.parse(result) as DeployResult;
     } catch {
@@ -206,7 +207,14 @@ export async function runCall(options: CallOptions): Promise<CallResult> {
   const store = callStateDir(options.root, options.network, options.contractAddress, options.dappDir);
   if (store.copiedFrom !== undefined) notice(`Contract ${options.contractAddress} had no private-state store of its own yet: it starts from a copy of the one moved out of the dApp (${store.copiedFrom}), now at ${store.dir}.`);
   const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options), [PRIVATE_STATE_DIR_ENV]: store.dir };
-  const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env, signal: options.signal });
+  // Says, while the script runs, which mn runs it on the store: another that waits for the store names it.
+  const release = claimPrivateStateStore({ fs: { existsSync, mkdirSync, writeFileSync, rmSync }, join }, store.dir, { pid: process.pid, command: holderCommandOf(process.argv) });
+  let result: string;
+  try {
+    result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, env, signal: options.signal });
+  } finally {
+    release();
+  }
   try {
     return JSON.parse(result) as CallResult;
   } catch {
@@ -307,6 +315,9 @@ const PRIVATE_STATE_SECRET_FN = `\nconst resolvePrivateStateSecretKey = (${resol
 // openPrivateStateStore serialized for the generated script, the same way.
 const PRIVATE_STATE_STORE_FN = `\nconst openPrivateStateStore = (${openPrivateStateStore.toString()});\n`;
 
+// waitForPrivateState serialized for the generated script, the same way.
+const PRIVATE_STATE_WAIT_FN = `\nconst waitForPrivateState = (${waitForPrivateState.toString()});\n`;
+
 /** Marks the line a generated script reports its failure on, so mn can tell it from progress and warnings. */
 export const SCRIPT_ERROR_MARKER = '__MN_ERROR__';
 
@@ -380,6 +391,22 @@ export class ContractScriptError extends Error {
   }
 }
 
+/** A contract's private-state store stayed in use by another process for as long as a script waits for it (PRIVATE_STATE_BUSY_WAIT_MS). */
+export class ContractStateBusyError extends Error {
+  readonly code = 'CONTRACT_STATE_BUSY';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'ContractStateBusyError';
+    Object.setPrototypeOf(this, ContractStateBusyError.prototype);
+  }
+}
+
+/** The error a script's reported failure is: ContractStateBusyError for a store that stayed busy, else a ContractScriptError. */
+export function scriptErrorOf(failure: ScriptFailure): ContractScriptError | ContractStateBusyError {
+  return failure.code === CONTRACT_STATE_BUSY ? new ContractStateBusyError(failure.message) : new ContractScriptError(failure);
+}
+
 /** What every SDK set's script shares, for the engine to write it with. */
 export const SCRIPT_PARTS: ScriptParts = {
   prelude: SCRIPT_PRELUDE,
@@ -387,6 +414,9 @@ export const SCRIPT_PARTS: ScriptParts = {
   coerceArgFn: ARG_COERCE_FN,
   privateStateSecretFn: PRIVATE_STATE_SECRET_FN,
   privateStateStoreFn: PRIVATE_STATE_STORE_FN,
+  privateStateWaitFn: PRIVATE_STATE_WAIT_FN,
+  privateStateBusyWaitMs: PRIVATE_STATE_BUSY_WAIT_MS,
+  noticeMarker: SCRIPT_NOTICE_MARKER,
   privateStateSecretEnv: PRIVATE_STATE_SECRET_ENV,
   privateStatePasswordEnv: PRIVATE_STATE_PASSWORD_ENV,
   privateStateAccountEnv: PRIVATE_STATE_ACCOUNT_ENV,
@@ -562,8 +592,10 @@ export interface ScriptRun {
   /** Where the script file is written: its bare imports resolve from here. */
   dir: string;
   script: string;
-  /** Each line the script writes to stderr, other than its marked error. */
+  /** Each line the script writes to stderr, other than its marked error and notices. */
   onMessage?: (msg: string) => void;
+  /** Each notice the script writes (a line marked SCRIPT_NOTICE_MARKER): the private-state store is in use and the script waits for it. */
+  onNotice?: (line: string) => void;
   /** Set over mn's own environment; a variable given as undefined is cleared. */
   env?: Record<string, string | undefined>;
   /** The script's working directory; `dir` when not given. */
@@ -613,7 +645,7 @@ export function scriptRuntime(
 }
 
 /** Runs a generated script and returns what it wrote to stdout. Throws its marked error when it fails. */
-export async function executeScript({ dir: dappDir, script, packages, onMessage, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal, findRuntime = scriptRuntime }: ScriptRun): Promise<string> {
+export async function executeScript({ dir: dappDir, script, packages, onMessage, onNotice, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal, findRuntime = scriptRuntime }: ScriptRun): Promise<string> {
   throwIfCancelled(signal);
   // ESM resolution walks up from the importing file's location to find
   // node_modules; NODE_PATH does NOT work for ESM. Three different files
@@ -675,7 +707,11 @@ export async function executeScript({ dir: dappDir, script, packages, onMessage,
 
     child.stderr?.on('data', (chunk: Buffer) => {
       stderrRaw += chunk.toString();
-      const line = chunk.toString().trim();
+      const notices = chunk.toString().split('\n').filter((line) => line.startsWith(SCRIPT_NOTICE_MARKER + ' '));
+      for (const marked of notices) {
+        try { onNotice?.(String(JSON.parse(marked.slice(SCRIPT_NOTICE_MARKER.length + 1)))); } catch { /* a line cut across two reads: its progress lines still say it */ }
+      }
+      const line = chunk.toString().split('\n').filter((part) => !part.startsWith(SCRIPT_NOTICE_MARKER + ' ')).join('\n').trim();
       if (line && !line.includes(SCRIPT_ERROR_MARKER)) onMessage?.(line);
     });
 
@@ -686,7 +722,7 @@ export async function executeScript({ dir: dappDir, script, packages, onMessage,
         return;
       }
       if (code !== 0) {
-        reject(new ContractScriptError(scriptFailureOf(stderrRaw, code)));
+        reject(scriptErrorOf(scriptFailureOf(stderrRaw, code)));
         return;
       }
       resolve(stdout.trim());

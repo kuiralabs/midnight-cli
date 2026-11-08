@@ -241,6 +241,13 @@ export declare const contractCodes: readonly [
         readonly order: 206;
         readonly summary: "A compiled contract's contract-info.json is not what the Compact compiler writes (not JSON, or its circuits or witnesses missing or malformed).";
         readonly recovery: "The message names what is wrong: ask the user to compile the contract again (compact compile).";
+    },
+    {
+        readonly code: "CONTRACT_STATE_BUSY";
+        readonly exitCode: 1;
+        readonly order: 207;
+        readonly summary: "A contract's private-state store stayed in use by another process (another mn running a call of the same contract) for the 3 minutes a call waits for it. The message names the contract and, when it is an mn, its pid and command.";
+        readonly recovery: "Let the other mn finish, or stop it if it is stuck. A call reads the store before it submits and writes it after, so read the contract state (`midnight_contract_state`) to see whether the call landed before retrying it.";
     }
 ];
 export declare const RUNS_CONTRACTS: import("@kuiralabs/midnight-cli-core").CodeSet;

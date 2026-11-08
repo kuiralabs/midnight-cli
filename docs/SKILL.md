@@ -166,6 +166,7 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 | `NO_NODE_RUNTIME` | Contract scripts run under Node.js, and none was found on PATH. | Ask the user to install Node.js 22 or later, or to run mn under Node. |
 | `CONTRACT_NOT_COMPILED` | No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json). | Ask the user to compile the contract (compact compile), or pass the dApp folder (path) or the managed folder (managed). |
 | `CONTRACT_INFO_INVALID` | A compiled contract's contract-info.json is not what the Compact compiler writes (not JSON, or its circuits or witnesses missing or malformed). | The message names what is wrong: ask the user to compile the contract again (compact compile). |
+| `CONTRACT_STATE_BUSY` | A contract's private-state store stayed in use by another process (another mn running a call of the same contract) for the 3 minutes a call waits for it. The message names the contract and, when it is an mn, its pid and command. | Let the other mn finish, or stop it if it is stuck. A call reads the store before it submits and writes it after, so read the contract state (`midnight_contract_state`) to see whether the call landed before retrying it. |
 | `NO_ACCOUNT` | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. | Offer `midnight_grant_deploy()`, after telling the user how its owner key is kept (see the allowance flow). |
 | `ACCOUNT_KEYS_UNAVAILABLE` | A proving key of the account contract couldn't be had: the installed account build's keys are not published (HTTP 404), or fetching them failed. Nothing was submitted. | Show the message: it names the key and the build. Not published: tell the user mn grant needs an mn release whose account keys are published; don't retry. A failed fetch: retry once. |
 | `WRONG_PASSPHRASE` | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. | Ask the user to correct `MN_PASSPHRASE` in the MCP server's environment. Nothing was changed. |
@@ -201,7 +202,7 @@ A tool's description ends with the codes it can fail with: its own, and sets of 
 | paying | `TX_REJECTED`, `STALE_UTXO`, `INVALID_DUST_PROOF`, `FEE_TOO_LOW`, `FEE_REPRICED`, `PROOF_TIMEOUT`, `PROOF_FAILURE`, `DUST_REQUIRED`, `DUST_GENERATING`, `INSUFFICIENT_BALANCE`, `OFFER_COINS_IN_USE`, `OFFER_RECORD_UNREADABLE` |
 | offers | `NOT_AN_OFFER`, `TERMS_MISMATCH` |
 | chain | `UNSUPPORTED_LEDGER`, `LOCAL_STACK_UNREACHABLE` |
-| contract | `CONTRACT_NOT_COMPILED`, `CONTRACT_INFO_INVALID`, `NO_NODE_RUNTIME` |
+| contract | `CONTRACT_NOT_COMPILED`, `CONTRACT_INFO_INVALID`, `NO_NODE_RUNTIME`, `CONTRACT_STATE_BUSY` |
 | account | `NO_ACCOUNT`, `ACCOUNT_KEYS_UNAVAILABLE` |
 
 ## When to use which network

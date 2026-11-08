@@ -190,8 +190,12 @@ const compiled = witnesses
 /** How long a transaction a script builds stays valid: midnight-js's own default, one hour. */
 const TX_TTL_SECONDS = 3600;
 
-/** The `providers` object deploy/call pass to midnight-js-contracts. */
-export function providerSetupCode(networkConfig: NetworkConfig, privateStateKey: string, parts: ScriptParts): string {
+/**
+ * The `providers` object deploy/call pass to midnight-js-contracts. Its level
+ * providers wait while another process holds the store (waitForPrivateState),
+ * for the contract at `contractAddress` (undefined for a deploy).
+ */
+export function providerSetupCode(networkConfig: NetworkConfig, privateStateKey: string, parts: ScriptParts, contractAddress?: string): string {
   return `
 const zkConfigProvider = new NodeZkConfigProvider(MANAGED_DIR);
 
@@ -203,8 +207,22 @@ if (typeof PRIVATE_STATE_DIR !== 'string' || PRIVATE_STATE_DIR === '') {
   throw new Error('The contract script was given no private-state folder (${parts.privateStateDirEnv}): it is started by mn contract deploy or call, which name it.');
 }
 ${parts.privateStateStoreFn}
+${parts.privateStateWaitFn}
+// Each private-state operation waits while another process holds the store,
+// saying so as mn's notice (marked) and its progress, with the time waited.
+const privateStateWait = {
+  fs: mnFs,
+  join: mnPath.join,
+  isAlive: (pid) => { try { process.kill(pid, 0); return true; } catch (err) { return err?.code === 'EPERM'; } },
+  now: () => Date.now(),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  notice: (line) => process.stderr.write('\\n${parts.noticeMarker} ' + JSON.stringify(line) + '\\n'),
+  progress: (line) => process.stderr.write(line + '\\n'),
+};
+const privateStateWaitOptions = { dir: PRIVATE_STATE_DIR, address: ${JSON.stringify(contractAddress)}, ownPid: process.ppid, timeoutMs: ${parts.privateStateBusyWaitMs} };
+const waitingLevelPrivateStateProvider = (config) => waitForPrivateState(levelPrivateStateProvider(config), privateStateWait, privateStateWaitOptions);
 const { accountId: privateStateAccount } = await openPrivateStateStore(
-  { fs: mnFs, join: mnPath.join, provide: (value) => () => value, umask: (mask) => process.umask(mask), levelPrivateStateProvider },
+  { fs: mnFs, join: mnPath.join, provide: (value) => () => value, umask: (mask) => process.umask(mask), levelPrivateStateProvider: waitingLevelPrivateStateProvider },
   {
     dir: PRIVATE_STATE_DIR,
     storeName: ${JSON.stringify(privateStateKey)},
@@ -217,7 +235,7 @@ const providers = {
   // The network the transactions are built for, and how long one stays valid
   // (mn serve applies its own TTL when it balances).
   config: { networkId: ${JSON.stringify(networkConfig.networkId.toLowerCase())}, ttlSeconds: ${TX_TTL_SECONDS} },
-  privateStateProvider: levelPrivateStateProvider({
+  privateStateProvider: waitingLevelPrivateStateProvider({
     midnightDbName: PRIVATE_STATE_DIR,
     privateStateStoreName: ${JSON.stringify(privateStateKey)},
     privateStoragePasswordProvider: () => process.env.${parts.privateStatePasswordEnv},
@@ -293,7 +311,7 @@ process.stderr.write('Connected\\n');
 
 ${PROVIDER_IMPORTS}
 ${walletProviderCode()}
-${providerSetupCode(opts.networkConfig, privateStateKey, parts)}
+${providerSetupCode(opts.networkConfig, privateStateKey, parts, opts.contractAddress)}
 
 import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 

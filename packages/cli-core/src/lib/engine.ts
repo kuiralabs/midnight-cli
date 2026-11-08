@@ -93,6 +93,12 @@ export interface ScriptParts {
   readonly privateStateAccountEnv: string;
   /** The environment variable naming the private-state store's folder (absolute), under mn's state root. */
   readonly privateStateDirEnv: string;
+  /** Defines waitForPrivateState, which a script wraps its level providers in so that an operation waits while another process holds the store. */
+  readonly privateStateWaitFn: string;
+  /** How long one private-state operation waits for the store before failing with CONTRACT_STATE_BUSY. */
+  readonly privateStateBusyWaitMs: number;
+  /** Marks a line a script writes for mn's notices (JSON text after it), apart from its progress lines. */
+  readonly noticeMarker: string;
   /** Where the dApp's witnesses may be, relative to its folder. */
   readonly witnessCandidates: readonly string[];
   /** The environment variables carrying the indexer's URLs, which never go into a script's text. */
