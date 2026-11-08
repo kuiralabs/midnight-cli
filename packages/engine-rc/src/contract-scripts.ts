@@ -208,18 +208,20 @@ if (typeof PRIVATE_STATE_DIR !== 'string' || PRIVATE_STATE_DIR === '') {
 }
 ${parts.privateStateStoreFn}
 ${parts.privateStateWaitFn}
-// Each private-state operation waits while another process holds the store,
-// saying so as mn's notice (marked) and its progress, with the time waited.
+// mn holds the store's call lock for this script's run; an operation still
+// refused the folder (an mn that takes no call lock holds it) waits, saying so
+// as mn's notice (marked) and its progress, with the time waited.
 const privateStateWait = {
   fs: mnFs,
   join: mnPath.join,
   isAlive: (pid) => { try { process.kill(pid, 0); return true; } catch (err) { return err?.code === 'EPERM'; } },
   now: () => Date.now(),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  text: privateStateBusyText,
   notice: (line) => process.stderr.write('\\n${parts.noticeMarker} ' + JSON.stringify(line) + '\\n'),
   progress: (line) => process.stderr.write(line + '\\n'),
 };
-const privateStateWaitOptions = { dir: PRIVATE_STATE_DIR, address: ${JSON.stringify(contractAddress)}, ownPid: process.ppid, timeoutMs: ${parts.privateStateBusyWaitMs} };
+const privateStateWaitOptions = { dir: PRIVATE_STATE_DIR, what: ${JSON.stringify(parts.privateStateName(contractAddress))}, ownPid: process.ppid, timeoutMs: ${parts.privateStateBusyWaitMs} };
 const waitingLevelPrivateStateProvider = (config) => waitForPrivateState(levelPrivateStateProvider(config), privateStateWait, privateStateWaitOptions);
 const { accountId: privateStateAccount } = await openPrivateStateStore(
   { fs: mnFs, join: mnPath.join, provide: (value) => () => value, umask: (mask) => process.umask(mask), levelPrivateStateProvider: waitingLevelPrivateStateProvider },

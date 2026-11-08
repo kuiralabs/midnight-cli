@@ -7,18 +7,18 @@
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdirSync, rmdirSync, rmSync } from 'node:fs';
+import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdirSync, rmdirSync, rmSync, openSync, writeSync, closeSync, renameSync, linkSync } from 'node:fs';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { assertEndpointUsable, type ContractKeys, type NetworkConfig, type NetworkName, sdkSetOf, type EngineContractScripts, type HostEngines, type ScriptParts, CancelledError, throwIfCancelled, isTransportFailure } from '@kuiralabs/midnight-cli-core';
+import { assertEndpointUsable, type ContractKeys, type NetworkConfig, type NetworkName, sdkSetOf, type EngineContractScripts, type HostEngines, type ScriptParts, CancelledError, throwIfCancelled, isTransportFailure, sleep } from '@kuiralabs/midnight-cli-core';
 import { findContractInfo } from './inspect.ts';
 import { assertContractRunsOn } from './runtime-check.ts';
 import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
 import { coerceArg } from './arg-coerce.ts';
 import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
 import { openPrivateStateStore } from './private-state-store.ts';
-import { CONTRACT_STATE_BUSY, PRIVATE_STATE_BUSY_WAIT_MS, SCRIPT_NOTICE_MARKER, claimPrivateStateStore, holderCommandOf, waitForPrivateState } from './private-state-lock.ts';
+import { CONTRACT_STATE_BUSY, ContractStateBusyError, PRIVATE_STATE_BUSY_WAIT_MS, SCRIPT_NOTICE_MARKER, acquireContractCallLock, holderCommandOf, privateStateBusyText, privateStateNameOf, processIsAlive, waitForPrivateState } from './private-state-lock.ts';
 import { callStateDir, deployStateDir, dropEmptyDeployState, keepDeployState, moveDappStore } from './private-state.ts';
 
 // The generated deploy/call script imports SDK packages by bare specifier
@@ -207,8 +207,13 @@ export async function runCall(options: CallOptions): Promise<CallResult> {
   const store = callStateDir(options.root, options.network, options.contractAddress, options.dappDir);
   if (store.copiedFrom !== undefined) notice(`Contract ${options.contractAddress} had no private-state store of its own yet: it starts from a copy of the one moved out of the dApp (${store.copiedFrom}), now at ${store.dir}.`);
   const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options), [PRIVATE_STATE_DIR_ENV]: store.dir };
-  // Says, while the script runs, which mn runs it on the store: another that waits for the store names it.
-  const release = claimPrivateStateStore({ fs: { existsSync, mkdirSync, writeFileSync, rmSync }, join }, store.dir, { pid: process.pid, command: holderCommandOf(process.argv) });
+  // One call at a time on the contract's private state, for the script's whole run: it reads the state before it submits and writes it after the transaction lands.
+  const release = await acquireContractCallLock(
+    { fs: { existsSync, mkdirSync, openSync, writeSync, closeSync, readFileSync, renameSync, linkSync, rmSync }, join, isAlive: processIsAlive, now: () => Date.now(), sleep },
+    store.dir,
+    { pid: process.pid, command: holderCommandOf(process.argv) },
+    { address: options.contractAddress, timeoutMs: PRIVATE_STATE_BUSY_WAIT_MS, notice, progress: (line) => options.onMessage?.(line), signal: options.signal },
+  );
   let result: string;
   try {
     result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, env, signal: options.signal });
@@ -316,7 +321,7 @@ const PRIVATE_STATE_SECRET_FN = `\nconst resolvePrivateStateSecretKey = (${resol
 const PRIVATE_STATE_STORE_FN = `\nconst openPrivateStateStore = (${openPrivateStateStore.toString()});\n`;
 
 // waitForPrivateState serialized for the generated script, the same way.
-const PRIVATE_STATE_WAIT_FN = `\nconst waitForPrivateState = (${waitForPrivateState.toString()});\n`;
+const PRIVATE_STATE_WAIT_FN = `\nconst waitForPrivateState = (${waitForPrivateState.toString()});\nconst privateStateBusyText = (${privateStateBusyText.toString()});\n`;
 
 /** Marks the line a generated script reports its failure on, so mn can tell it from progress and warnings. */
 export const SCRIPT_ERROR_MARKER = '__MN_ERROR__';
@@ -391,16 +396,7 @@ export class ContractScriptError extends Error {
   }
 }
 
-/** A contract's private-state store stayed in use by another process for as long as a script waits for it (PRIVATE_STATE_BUSY_WAIT_MS). */
-export class ContractStateBusyError extends Error {
-  readonly code = 'CONTRACT_STATE_BUSY';
-
-  constructor(message: string) {
-    super(message);
-    this.name = 'ContractStateBusyError';
-    Object.setPrototypeOf(this, ContractStateBusyError.prototype);
-  }
-}
+export { ContractStateBusyError };
 
 /** The error a script's reported failure is: ContractStateBusyError for a store that stayed busy, else a ContractScriptError. */
 export function scriptErrorOf(failure: ScriptFailure): ContractScriptError | ContractStateBusyError {
@@ -415,6 +411,7 @@ export const SCRIPT_PARTS: ScriptParts = {
   privateStateSecretFn: PRIVATE_STATE_SECRET_FN,
   privateStateStoreFn: PRIVATE_STATE_STORE_FN,
   privateStateWaitFn: PRIVATE_STATE_WAIT_FN,
+  privateStateName: privateStateNameOf,
   privateStateBusyWaitMs: PRIVATE_STATE_BUSY_WAIT_MS,
   noticeMarker: SCRIPT_NOTICE_MARKER,
   privateStateSecretEnv: PRIVATE_STATE_SECRET_ENV,

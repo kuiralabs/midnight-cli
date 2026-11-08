@@ -44,7 +44,8 @@ const TEST_PARTS: ScriptParts = {
   privateStateAccountEnv: 'MN_TEST_PRIVATE_STATE_ACCOUNT',
   privateStateDirEnv: 'MN_TEST_PRIVATE_STATE_DIR',
   // The wait for a busy store is the contract runner's (tested there): here the provider as it is.
-  privateStateWaitFn: 'const waitForPrivateState = (provider) => provider;',
+  privateStateWaitFn: 'const waitForPrivateState = (provider) => provider; const privateStateBusyText = () => "";',
+  privateStateName: (address) => `contract ${address}`,
   privateStateBusyWaitMs: 1_000,
   noticeMarker: '__MN_TEST_NOTICE__',
   witnessCandidates: [],

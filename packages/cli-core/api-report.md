@@ -415,6 +415,7 @@ export interface ScriptParts {
     readonly privateStateAccountEnv: string;
     readonly privateStateDirEnv: string;
     readonly privateStateWaitFn: string;
+    privateStateName(address: string | undefined): string;
     readonly privateStateBusyWaitMs: number;
     readonly noticeMarker: string;
     readonly witnessCandidates: readonly string[];
@@ -1448,6 +1449,7 @@ export interface ScriptParts {
     readonly privateStateAccountEnv: string;
     readonly privateStateDirEnv: string;
     readonly privateStateWaitFn: string;
+    privateStateName(address: string | undefined): string;
     readonly privateStateBusyWaitMs: number;
     readonly noticeMarker: string;
     readonly witnessCandidates: readonly string[];
