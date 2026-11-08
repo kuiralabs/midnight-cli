@@ -47,24 +47,27 @@ describe('accountKeysFailureOf', () => {
   // Regression: grant deploy on a build whose keys are not published failed as UNKNOWN "Failed to read verifier key …".
   it('says a key the build\'s release does not have is not published, naming the key, the build and its compiler', async () => {
     const chain = await accountChainFor(host.engines, 'undeployed');
-    const failure = await readFailure(await release(404));
+    const source = await release(404);
+    const failure = await readFailure(source);
     // As midnight-js reports it when it proves: its own error, the account package's as its cause.
     const wrapped = new Error(`Failed to read verifier key for Account#${CIRCUIT}`, { cause: failure });
-    const keys = accountKeysFailureOf(wrapped, chain);
+    const keys = accountKeysFailureOf(wrapped, chain, { source, origin: 'MN_ACCOUNT_ARTIFACTS' });
     expect(keys).toBeInstanceOf(AccountKeysUnavailableError);
     expect(keys!.file).toBe(`keys/${CIRCUIT}.verifier`);
     const compiler = JSON.parse(fs.readFileSync(path.join(chain.contract.ACCOUNT_BUILD, 'compiler', 'contract-info.json'), 'utf8'))['compiler-version'];
     expect(keys!.message).toBe(
-      `The account contract's keys/${CIRCUIT}.verifier isn't available: the keys of this account build ${chain.artefacts.ACCOUNT_BUILD_ID} (compiled with compactc ${compiler}) are not published (${chain.artefacts.BUILD_RELEASE} answered HTTP 404). `
-      + "mn grant needs them to deploy and to act on an account, and retrying won't help: use an mn release whose account build has its keys published.",
+      `The account contract's keys/${CIRCUIT}.verifier isn't available: the keys of this account build ${chain.artefacts.ACCOUNT_BUILD_ID} (compiled with compactc ${compiler}) are not published (${source} answered HTTP 404). `
+      + "mn grant needs them to deploy and to act on an account, and retrying won't help: use an mn release whose account build has its keys published. "
+      + 'To use a local build of the account contract (the folder holding its keys/ and zkir/), run: midnight config set account-artifacts <that folder>, or set MN_ACCOUNT_ARTIFACTS.',
     );
     expect(classifyError(keys!, { code: (code) => grantCodes.find((d) => d.code === code) })).toEqual({ exitCode: EXIT_GENERAL_ERROR, errorCode: 'ACCOUNT_KEYS_UNAVAILABLE' });
   });
 
   it('says a fetch that failed otherwise could not be had, in the account package\'s words', async () => {
     const chain = await accountChainFor(host.engines, 'undeployed');
-    const keys = accountKeysFailureOf(await readFailure(await release(500)), chain);
-    expect(keys?.message).toMatch(new RegExp(`^The account contract's keys/${CIRCUIT}\\.verifier for this account build ${chain.artefacts.ACCOUNT_BUILD_ID} .* could not be had: could not fetch the proving artefact .*HTTP 500`));
+    const source = await release(500);
+    const keys = accountKeysFailureOf(await readFailure(source), chain, { source, origin: 'MN_ACCOUNT_ARTIFACTS' });
+    expect(keys?.message).toMatch(new RegExp(`^The account contract's keys/${CIRCUIT}\\.verifier for this account build ${chain.artefacts.ACCOUNT_BUILD_ID} .* could not be had from ${source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(MN_ACCOUNT_ARTIFACTS\\): could not fetch the proving artefact .*HTTP 500`));
   });
 
   it('leaves any other failure alone', async () => {

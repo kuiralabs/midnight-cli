@@ -6,6 +6,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AccountChain } from './account-chain.ts';
 import { AccountKeysUnavailableError } from './account-errors.ts';
+import { ACCOUNT_ARTIFACTS_KEY, type AccountArtifactsSource } from '@kuiralabs/midnight-cli-core';
+
+/** How a user points mn at a local build of the account contract. */
+const USE_A_LOCAL_BUILD = `To use a local build of the account contract (the folder holding its keys/ and zkir/), run: midnight config set ${ACCOUNT_ARTIFACTS_KEY} <that folder>, or set MN_ACCOUNT_ARTIFACTS.`;
 
 /** The compiler version of the account build `chain` runs, from its contract-info.json; undefined when it can't be read. */
 function accountCompilerVersion(chain: AccountChain): string | undefined {
@@ -25,7 +29,7 @@ function accountCompilerVersion(chain: AccountChain): string | undefined {
  * other failure. Keys the build's release doesn't have (HTTP 404) are said to
  * be unpublished, which retrying can't change.
  */
-export function accountKeysFailureOf(err: unknown, chain: AccountChain): AccountKeysUnavailableError | undefined {
+export function accountKeysFailureOf(err: unknown, chain: AccountChain, from: AccountArtifactsSource = { source: undefined, origin: "the account build's release" }): AccountKeysUnavailableError | undefined {
   const seen = new Set<unknown>();
   let fetch: Error | undefined;
   for (let current: unknown = err; current instanceof Error && !seen.has(current); current = current.cause) {
@@ -38,7 +42,7 @@ export function accountKeysFailureOf(err: unknown, chain: AccountChain): Account
   const build = `account build ${chain.artefacts.ACCOUNT_BUILD_ID}${compiler === undefined ? '' : ` (compiled with compactc ${compiler})`}`;
   const unpublished = fetch.cause instanceof Error && /\bHTTP 404\b/.test(fetch.cause.message);
   return new AccountKeysUnavailableError(file, unpublished
-    ? `The account contract's ${file} isn't available: the keys of this ${build} are not published (${chain.artefacts.BUILD_RELEASE} answered HTTP 404). `
-      + 'mn grant needs them to deploy and to act on an account, and retrying won\'t help: use an mn release whose account build has its keys published.'
-    : `The account contract's ${file} for this ${build} could not be had: ${fetch.message}`);
+    ? `The account contract's ${file} isn't available: the keys of this ${build} are not published (${from.source ?? chain.artefacts.BUILD_RELEASE} answered HTTP 404). `
+      + `mn grant needs them to deploy and to act on an account, and retrying won't help: use an mn release whose account build has its keys published. ${USE_A_LOCAL_BUILD}`
+    : `The account contract's ${file} for this ${build} could not be had from ${from.source ?? chain.artefacts.BUILD_RELEASE} (${from.origin}): ${fetch.message}${from.source === undefined ? ` ${USE_A_LOCAL_BUILD}` : ''}`);
 }

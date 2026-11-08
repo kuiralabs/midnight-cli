@@ -68,6 +68,7 @@ describe('config command — error handling', () => {
       ['indexer-ws', '(not set)'],
       ['wallet', '(not set)'],
       ['blockfrost-project-id', expect.stringMatching(/^nightpreprod.*\(preprod\)$/)],
+      ['account-artifacts', '(not set)'],
     ]);
     // Each as `config get <key>` shows it.
     io.clearStdout();

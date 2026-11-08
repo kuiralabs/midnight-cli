@@ -27,7 +27,7 @@ import {
   sealedOwnerStore,
   sealedPrivateStatePassword,
 } from './sealed-account.ts';
-import type { NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core';
+import type { AccountArtifactsSource, NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core';
 import { type AccountChain, accountChainOf } from './account-chain.ts';
 import { MIN_NODE_FOR_ACCOUNT, NodeTooOldForAccountError, UnreachableByAccountError } from './account-errors.ts';
 import { accountArtifactsDir } from './account-records.ts';
@@ -97,6 +97,8 @@ export interface OpenAccountOptions {
   host: UnlockHost;
   source?: PassphraseSource;
   warn?: (line: string) => void;
+  /** Where the account contract's proving artefacts come from (resolveAccountArtifactsSource); the build's release when not given. */
+  artefacts?: AccountArtifactsSource;
 }
 
 /**
@@ -113,7 +115,8 @@ export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir:
   const { artefacts, context: contexts, owner } = chain;
   const progress = (event: ProgressEvent): void => say(contexts.describeProgress(event).trim());
   const network = contexts.networkOf({ networkId, node: httpOf(networkConfig.node), indexer: networkConfig.indexer, proofServer: networkConfig.proofServer });
-  const context = contexts.accountContext({ network, artefacts: artefacts.artefactCache(accountArtifactsDir(root), { progress }), progress });
+  const source = options.artefacts?.source;
+  const context = contexts.accountContext({ network, artefacts: artefacts.artefactCache(accountArtifactsDir(root), { progress, ...(source === undefined ? {} : { source }) }), progress });
   const database = join(recordsDir, PRIVATE_STATE_DATABASE);
   // The account's private state is midnight-js's, which the engine's policy checks a new password against.
   const { contracts } = engine;

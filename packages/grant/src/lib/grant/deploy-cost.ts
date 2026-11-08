@@ -12,15 +12,18 @@
 // updates, the activation); what leaves the wallet is those fees times 1.1443:
 //   12.23, 9.87, 10.00, 1.37, 0.26: 33.73 in fees, 38.60 from the wallet, 13.99 for the largest
 //   13.40, 10.74, 10.82, 1.53, 0.27: 36.76 in fees, 42.06 from the wallet, 15.33 for the largest
+// and 2026-11-08, account build 88907db6aa44b081, with the Dust each paid read
+// from its transaction:
+//   14.02, 11.06, 10.77, 4.05, 0.28: 40.18 in fees, 46.02 from the wallet, 16.04 for the largest
 
 import { formatDust } from '@kuiralabs/midnight-cli-core/ui';
 
 export const MEASURED_ACCOUNT_DEPLOY = {
   transactions: 5,
   /** DUST that leaves the wallet for all of them, rounded up. */
-  totalDust: 43,
+  totalDust: 47,
   /** DUST the largest one (the deploy itself) needs at once, rounded up. */
-  largestDust: 15.4,
+  largestDust: 16.1,
 } as const;
 
 /**

@@ -6,6 +6,7 @@ import { assertValidWalletName } from './wallet-name.ts';
 import { blockfrostNetworks, checkProjectId, maskProjectId, networkOfProjectId } from './blockfrost.ts';
 import { InvalidNetworkError, type NetworkName, NetworkNotNamedError, RetiredNetworkError, getValidNetworkNames, isNamedOnlyNetwork, isRetiredNetworkName, isValidNetworkName } from './network.ts';
 import { UsageError } from './errors.ts';
+import { ACCOUNT_ARTIFACTS_KEY, checkAccountArtifactsSource } from './account-artifacts.ts';
 
 /** mn's config file can't be read as one: mn neither guesses its settings nor writes over it. */
 export class CorruptConfigError extends UsageError {
@@ -57,13 +58,15 @@ export interface CliConfig {
   node?: string;
   'indexer-ws'?: string;
   wallet?: string;
+  /** Where mn grant gets the account contract's proving artefacts: an absolute folder or an http(s) URL (account-artifacts.ts). For every network: it is the account build's. */
+  'account-artifacts'?: string;
 }
 
 const DEFAULT_CLI_CONFIG: CliConfig = {
   network: 'undeployed',
 };
 
-const VALID_CONFIG_KEYS: readonly string[] = ['network', 'proof-server', 'node', 'indexer-ws', 'wallet', PROJECT_ID_KEY] as const;
+const VALID_CONFIG_KEYS: readonly string[] = ['network', 'proof-server', 'node', 'indexer-ws', 'wallet', PROJECT_ID_KEY, ACCOUNT_ARTIFACTS_KEY] as const;
 
 /**
  * Aliases mapped to canonical config keys. Keeps integrations that learned
@@ -161,6 +164,9 @@ export function loadCliConfig(configDir: string): CliConfig {
   if (parsed.wallet && typeof parsed.wallet === 'string') {
     config.wallet = parsed.wallet;
   }
+  if (parsed[ACCOUNT_ARTIFACTS_KEY] && typeof parsed[ACCOUNT_ARTIFACTS_KEY] === 'string') {
+    config[ACCOUNT_ARTIFACTS_KEY] = parsed[ACCOUNT_ARTIFACTS_KEY];
+  }
 
   // Per-network endpoint overrides: keep only valid network names and
   // string-valued endpoint keys; drop anything else silently (config files
@@ -238,6 +244,7 @@ export function getConfigValue(key: string, configDir: string, scope?: NetworkNa
 
   if (canonical === 'network') return config.retiredNetwork ?? config.network;
   if (canonical === 'wallet') return config.wallet ?? '(not set)';
+  if (canonical === ACCOUNT_ARTIFACTS_KEY) return config[ACCOUNT_ARTIFACTS_KEY] ?? '(not set)';
   if (canonical === PROJECT_ID_KEY) {
     // A secret: shown masked, and by network, since each network has its own.
     const set = blockfrostNetworks().filter((network) => scope === undefined || scope === network).flatMap((network) => {
@@ -307,6 +314,8 @@ export function setConfigValue(key: string, value: string, configDir: string, sc
       throw new UsageError(`Wallet "${value}" not found.\nRun "midnight wallet list" to see available wallets.`);
     }
     config.wallet = value;
+  } else if (canonical === ACCOUNT_ARTIFACTS_KEY) {
+    config[ACCOUNT_ARTIFACTS_KEY] = checkAccountArtifactsSource(value, `config key ${ACCOUNT_ARTIFACTS_KEY}`);
   } else if (canonical === PROJECT_ID_KEY) {
     // Filed under the network its prefix names, whichever network is selected.
     const { projectId, network } = checkProjectId(value);
@@ -347,6 +356,8 @@ export function unsetConfigValue(key: string, configDir: string, scope?: Network
     delete config.retiredNetwork;
   } else if (canonical === 'wallet') {
     delete config.wallet;
+  } else if (canonical === ACCOUNT_ARTIFACTS_KEY) {
+    delete config[ACCOUNT_ARTIFACTS_KEY];
   } else if (canonical === PROJECT_ID_KEY) {
     for (const network of blockfrostNetworks()) {
       if (scope !== undefined && scope !== network) continue;

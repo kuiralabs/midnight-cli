@@ -181,6 +181,12 @@ export function buildManual(): string {
   out.push(`                   indexer and node Blockfrost serves (nightpreprod... or`);
   out.push(`                   nightmainnet...). Kept per network, shown masked,`);
   out.push(`                   never printed. Or: MN_BLOCKFROST_PROJECT_ID / BLOCKFROST_PROJECT_ID.`);
+  out.push(`    ${yellow('account-artifacts')}`);
+  out.push(`                   Where mn grant gets the account contract's proving artefacts:`);
+  out.push(`                   the build's release by default, or a local build's folder`);
+  out.push(`                   (holding keys/ and zkir/), or an http(s) URL. For every`);
+  out.push(`                   network; each file checked against the build's manifest.`);
+  out.push(`                   Or: MN_ACCOUNT_ARTIFACTS, which wins.`);
   out.push('');
   out.push(`    ${bold('Compatibility alias')}`);
   out.push(`    ${yellow('network-id')}     Resolves transparently to ${yellow('network')}.`);

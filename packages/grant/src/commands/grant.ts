@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs';
 // confirmed. The others are paid by this wallet, through its DApp connector in
 // this process: no server, no port.
 
-import { type ParsedArgs, hasFlag, getFlag, DustRequiredError, UsageError, type CallContext, payerFor, throwIfCancelled, withTransportCode, NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, hasFlag, getFlag, DustRequiredError, UsageError, type CallContext, payerFor, throwIfCancelled, withTransportCode, NATIVE_TOKEN_TYPE, loadCliConfig, resolveAccountArtifactsSource } from '@kuiralabs/midnight-cli-core';
 import { dim, header, keyValue, formatNight, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { accountChainFor } from '../lib/grant/account-chain.ts';
 import { type GrantAccount, openGrantAccount, ownerDeviceOf } from '../lib/grant/account.ts';
@@ -134,10 +134,12 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
   // A cancel takes effect at the next step the account package reports: each
   // step it records before submitting, so stopping there is as safe as an
   // interruption, and the next run finishes what this one left.
+  // Where the account contract's proving artefacts come from: MN_ACCOUNT_ARTIFACTS, the config key, or the build's release.
+  const artefacts = resolveAccountArtifactsSource(ctx.config.settings, loadCliConfig(target.root));
   const owned: GrantAccount = await openGrantAccount(target.networkConfig, recordsDir, (line) => {
     spinner.update(line);
     throwIfCancelled(ctx.signal);
-  }, { root: target.root, host: ctx.host });
+  }, { root: target.root, host: ctx.host, artefacts });
   // How the account's owner key and records are kept: sealed, or in plain text until `wallet protect`.
   const common = { subcommand: request.subcommand, network: target.network, wallet: walletName, ownerKey: owned.protection };
 
@@ -317,7 +319,7 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
       throw new DustRequiredError(`${err.message}\n\n${deployShortOfDustNote(funds.dustBalance)}`, { cause: err });
     }
     // A proving key of the account contract it couldn't fetch: named, with the build's.
-    const keys = accountKeysFailureOf(err, owned.chain);
+    const keys = accountKeysFailureOf(err, owned.chain, artefacts);
     if (keys !== undefined) throw keys;
     // The account package reaches the indexer and the proof server itself, past the engine: a connection it couldn't make is a network error.
     throw withTransportCode(err);

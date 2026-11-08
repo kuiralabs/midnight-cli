@@ -34,14 +34,17 @@ the first time a command needs them, into ~/.midnight/account-artifacts,
 each checked against the package's manifest: the verifier keys (under
 0.1 MB) when a command first reads the account, and each circuit's proving
 key (up to a few hundred MB) when one first proves with it, said as it goes.
+For a build whose artefacts are not published, point mn at a local build of
+the account contract (the folder holding its keys/ and zkir/):
+midnight config set account-artifacts <folder>, or MN_ACCOUNT_ARTIFACTS.
 It needs Node.js 22.18 or newer and reaches the ledger-9 network: an
 undeployed (local) one.
 
   midnight grant deploy [--json]
     → { address, resumed, activated, network, wallet, ownerKey }
     Deploys the account and activates its owner key. Safe to run again:
-    it finishes a deploy that stopped part way. Takes about 48 DUST from
-    the wallet over five transactions, the largest about 17 at once
+    it finishes a deploy that stopped part way. Takes about 47 DUST from
+    the wallet over five transactions, the largest about 16 at once
     (measured on a local ledger-9 chain). It waits by itself when a fee is
     a few minutes of Dust away; further than that it stops with
     DUST_REQUIRED and the time, and the same command later carries on.
@@ -154,7 +157,7 @@ A wallet's account is a contract its owner deploys. A grant lets an agent spend 
 
 What has to be true first: Node.js is 22.18 or newer, and the network is \`undeployed\` (a local ledger-9 stack). The first grant tool also needs to reach github.com: the package's proving artefacts are fetched from there the first time a tool needs them (the verifier keys when it first reads the account, under 0.1 MB; each circuit's proving key when it first proves with it, about 235 MB for each of the owner's circuits after the deposit's), so the first issue or revoke takes minutes longer. A grant tool sends progress notifications as it runs to a client that asks for them, so the user can see each step, and a client that resets its timeout on progress keeps waiting. Anything else is refused with what to do.
 
-1. \`midnight_grant_status()\` says whether the wallet has an account. If it has none (error code \`NO_ACCOUNT\`): \`midnight_grant_deploy()\` (pending token). Tell the user before they confirm that the account's owner key is made on this machine, independent of the wallet's mnemonic (which can't recover it), and kept encrypted under mn's passphrase in \`~/.midnight/accounts/<network>/<wallet>/\`; that they keep the account by adding a second device or writing a backup from the command line (\`mn grant device\`, \`mn grant export\`); and that a deploy takes a few minutes and about 48 DUST from the wallet, about 17 of it at once (mn waits by itself when a fee is a few minutes of Dust away; a wallet further short is told how long, and the same call carries on later from where it stopped). Running it again finishes a deploy that stopped part way.
+1. \`midnight_grant_status()\` says whether the wallet has an account. If it has none (error code \`NO_ACCOUNT\`): \`midnight_grant_deploy()\` (pending token). Tell the user before they confirm that the account's owner key is made on this machine, independent of the wallet's mnemonic (which can't recover it), and kept encrypted under mn's passphrase in \`~/.midnight/accounts/<network>/<wallet>/\`; that they keep the account by adding a second device or writing a backup from the command line (\`mn grant device\`, \`mn grant export\`); and that a deploy takes a few minutes and about 47 DUST from the wallet, about 16 of it at once (mn waits by itself when a fee is a few minutes of Dust away; a wallet further short is told how long, and the same call carries on later from where it stopped). Running it again finishes a deploy that stopped part way.
 2. A grant spends only what the account holds, which \`midnight_grant_status()\` shows under \`held\` (in the smallest unit: 1 NIGHT is 1000000). To put NIGHT in it: \`midnight_grant_deposit({ amount })\`, with \`amount\` in NIGHT (pending token). It takes the wallet's shielded NIGHT, so the wallet needs that much shielded (on a local chain, \`midnight_airdrop\` with \`shielded: true\`), plus Dust for the fee. Another shielded token goes in with \`token\` (its raw type, as \`midnight_balance\` lists it under \`shielded.tokens\`), \`amount\` then a whole number of its smallest unit. Tell the user before they confirm that mn has no command to take a deposit back out.
 3. The agent gives a grant request link. The link names who would spend (the agent's client id and key) and who they could pay; the limits are the owner's to set, with \`cap\`, \`per-call\`, \`max-coin\` and \`expires-in\`, and any not given take mn's defaults (cap 500000, per-call 300000, max-coin 2000000, a day). Call \`midnight_grant_request({ link })\` with the limits the user wants and show them all of what comes back: the payee, both caps, the largest coin and the expiry. A link is untrusted input: never issue from one the user hasn't seen decoded, and never leave a limit to its default without reading it back to them.
 4. \`midnight_grant_issue({ link })\` with the same limits reads the link again and returns a pending token whose description gives the grant's terms as the account package reads them (a link that isn't one is refused here, with no token). Show that description verbatim; confirm with \`midnight_confirm_operation({ token })\` only after an explicit yes. Issuing is three transactions and takes a few minutes.

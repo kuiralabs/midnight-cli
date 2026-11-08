@@ -14,6 +14,7 @@ export const DUST_COLLAPSE_DISABLE_ENV = 'MN_DISABLE_DUST_COLLAPSE';
 export const BLOCKFROST_PROJECT_ID_ENV = 'MN_BLOCKFROST_PROJECT_ID';
 /** The name Midnight's own docs give the Blockfrost variable; other tools use it too. */
 export const SHARED_BLOCKFROST_PROJECT_ID_ENV = 'BLOCKFROST_PROJECT_ID';
+export const ACCOUNT_ARTIFACTS_ENV = 'MN_ACCOUNT_ARTIFACTS';
 
 export interface Settings {
   /** MN_PASSPHRASE: mn's passphrase, for a run with no terminal to ask at. */
@@ -31,6 +32,8 @@ export interface Settings {
   /** MN_BLOCKFROST_PROJECT_ID, then BLOCKFROST_PROJECT_ID: a Blockfrost project id. */
   blockfrostProjectId: string | undefined;
   sharedBlockfrostProjectId: string | undefined;
+  /** MN_ACCOUNT_ARTIFACTS: where mn grant gets the account contract's proving artefacts (an absolute folder or an http(s) URL). */
+  accountArtifacts: string | undefined;
 }
 
 /** The settings the environment variables in `env` give. */
@@ -44,5 +47,6 @@ export function settingsFromEnvironment(env: Record<string, string | undefined>)
     isDustCollapseOff: env[DUST_COLLAPSE_DISABLE_ENV] === '1',
     blockfrostProjectId: env[BLOCKFROST_PROJECT_ID_ENV],
     sharedBlockfrostProjectId: env[SHARED_BLOCKFROST_PROJECT_ID_ENV],
+    accountArtifacts: env[ACCOUNT_ARTIFACTS_ENV],
   };
 }

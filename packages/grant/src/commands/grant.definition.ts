@@ -226,7 +226,7 @@ export const grantDefinition: CommandDefinition = {
       },
       {
         name: 'midnight_grant_deploy',
-        description: 'Deploy the wallet\'s account and activate its owner key (returns pending token). Takes about 48 DUST from the wallet (17 at once for the largest of five transactions) and a few minutes. Its owner key is made on this machine and kept encrypted under mn\'s passphrase (MN_PASSPHRASE).',
+        description: 'Deploy the wallet\'s account and activate its owner key (returns pending token). Takes about 47 DUST from the wallet (16 at once for the largest of five transactions) and a few minutes. Its owner key is made on this machine and kept encrypted under mn\'s passphrase (MN_PASSPHRASE).',
         annotations: { destructiveHint: true, openWorldHint: true },
         params: [{ flag: 'wallet' }, { flag: 'network' }],
         argv: { subcommand: 'deploy', flags: 'rest' },

@@ -128,6 +128,7 @@ export interface CliConfig {
     node?: string;
     'indexer-ws'?: string;
     wallet?: string;
+    'account-artifacts'?: string;
 }
 export declare class CorruptConfigError extends UsageError {
     constructor(configPath: string, reason: string);
@@ -444,6 +445,18 @@ export interface CodeSet {
 export declare function defineCodes<const T extends readonly CodeDefinition[]>(codes: T): T;
 export declare function defineCodeSet(name: string, codes: readonly string[]): CodeSet;
 export declare function trimAgentMessage(raw: string): string;
+export declare const ACCOUNT_ARTIFACTS_KEY = "account-artifacts";
+export interface AccountArtifactsSource {
+    source: string | undefined;
+    origin: string;
+}
+export declare function checkAccountArtifactsSource(value: string, origin: string): string;
+export declare class InvalidAccountArtifactsSourceError extends UsageError {
+    readonly source: string;
+    readonly origin: string;
+    constructor(source: string, origin: string, reason: string);
+}
+export declare function resolveAccountArtifactsSource(settings: Pick<Settings, 'accountArtifacts'>, config: Pick<CliConfig, 'account-artifacts'>): AccountArtifactsSource;
 export declare function asReported(err: Error): Error;
 export declare const CANCELLED_MESSAGE = "Operation cancelled";
 export declare class CancelledError extends Error {
@@ -836,6 +849,7 @@ export interface Settings {
     isDustCollapseOff: boolean;
     blockfrostProjectId: string | undefined;
     sharedBlockfrostProjectId: string | undefined;
+    accountArtifacts: string | undefined;
 }
 export declare function settingsFromEnvironment(env: Record<string, string | undefined>): Settings;
 export declare function shieldedDisabledReason(network: NetworkName): string;
@@ -1582,7 +1596,7 @@ export type FeeRefusalStep = {
     dust: bigint;
 };
 export declare function isFeeShortRefusal(err: unknown): boolean;
-export declare function newFeePricing(): FeePricing;
+export declare function newFeePricing(now?: () => number): FeePricing;
 export declare function nextFeeMargin(blocks: number): number | undefined;
 export declare function repriceAfterFeeRefusal(pricing: FeePricing, check: () => Promise<FeeRefusalCheck>, refusal: unknown): Promise<FeeRefusalStep>;
 export declare function repricingStatus(step: {

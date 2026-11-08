@@ -65,6 +65,9 @@ export {
 } from './lib/error-codes.ts';
 export { trimAgentMessage } from './lib/error-trim.ts';
 export {
+  ACCOUNT_ARTIFACTS_KEY, type AccountArtifactsSource, checkAccountArtifactsSource, InvalidAccountArtifactsSourceError, resolveAccountArtifactsSource
+} from './lib/account-artifacts.ts';
+export {
   asReported, CANCELLED_MESSAGE, CancelledError, CommandFailedError, DustRequiredError,
   FeeRepricedError, FeeTooLowError, InsufficientBalanceError, isUsageError, NetworkError, ProofFailureError, SyncTimeoutError,
   throwIfCancelled, TransactionRefusedError, UsageError
