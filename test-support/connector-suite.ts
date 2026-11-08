@@ -869,6 +869,74 @@ export function connectorSuite(engine: ConnectorEngine): void {
       });
     });
 
+    describe('a fee the node refuses as too low (error 138)', () => {
+      /** The SDK's submit failing as it does when the node refuses the Dust payment as short of the fee. */
+      const feeRefused = () => {
+        const failure = Effect.runPromise(Effect.fail(new engine.SubmissionError({ message: 'Transaction submission error', cause: new Error('1010: Invalid Transaction: Custom error: 138') })));
+        failure.catch(() => {});
+        return failure;
+      };
+      const DUST = 10n ** 15n;
+      /** A wallet holding `dust` and a refused transaction whose fee, priced with the wallet's margin as it is when asked, is 0.5 DUST times 1.05 per block. */
+      const refusingWallet = (dust: bigint) => {
+        const priced: number[] = [];
+        const bundle = createBundleStub({
+          submitTransaction: () => feeRefused(),
+          stateFn: () => rx.of(mockState({ dustBalance: dust })),
+          calculateTransactionFee: async () => {
+            priced.push(bundle.feePricing.feeBlocksMargin);
+            return (DUST / 2n) * 105n ** BigInt(bundle.feePricing.feeBlocksMargin) / 100n ** BigInt(bundle.feePricing.feeBlocksMargin);
+          },
+        });
+        return { bundle, priced };
+      };
+
+      it('with Dust that covers the fee, raises the margin and asks the dApp to balance again (FEE_REPRICED)', async () => {
+        const { bundle, priced } = refusingWallet(10n * DUST);
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        const err: any = await connector.handlers.submitTransaction({ tx: SEALED_AGENT_TX }, ctx()).catch((e: any) => e);
+
+        expect(err.code).toBe('FEE_REPRICED');
+        expect(err.message).toBe('The node refused the fee as too low (priced with 3 blocks of margin). The wallet now prices fees with 5 blocks: balance the transaction again and submit it.');
+        // The refused fee was priced with the next margin, and the wallet keeps it for the next balance.
+        expect(priced).toEqual([5]);
+        expect(bundle.feePricing.feeBlocksMargin).toBe(5);
+      });
+
+      it('with Dust that does not cover it, leaves the margin and reports the refusal as before', async () => {
+        const { bundle } = refusingWallet(DUST / 10n);
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        const err: any = await connector.handlers.submitTransaction({ tx: SEALED_AGENT_TX }, ctx()).catch((e: any) => e);
+
+        expect(err.mnCode).toBe('TX_REJECTED');
+        expect(err.message).toContain('Custom error: 138');
+        expect(bundle.feePricing.feeBlocksMargin).toBe(3);
+      });
+
+      it('past the largest margin, fails with FEE_TOO_LOW naming the fee and the margin', async () => {
+        const { bundle } = refusingWallet(10n * DUST);
+        bundle.feePricing.feeBlocksMargin = 8;
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        const err: any = await connector.handlers.submitTransaction({ tx: SEALED_AGENT_TX }, ctx()).catch((e: any) => e);
+
+        expect(err.code).toBe('FEE_TOO_LOW');
+        expect(err.message).toContain('(0.738727721894531 DUST, priced with 8 blocks of margin, the most mn tries)');
+      });
+
+      it('goes back to the first margin once a transaction goes through', async () => {
+        const bundle = createBundleStub({ submitTransaction: vi.fn().mockResolvedValue('tx-id') });
+        bundle.feePricing.feeBlocksMargin = 5;
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        await connector.handlers.submitTransaction({ tx: SEALED_AGENT_TX }, ctx());
+
+        expect(bundle.feePricing.feeBlocksMargin).toBe(3);
+      });
+    });
+
     describe('signatureScheme', () => {
       it('names BIP-340 Schnorr, and refuses any other tag rather than mislabel it', () => {
         expect(engine.signatureScheme('schnorr')).toBe('schnorr_bip340');

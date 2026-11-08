@@ -4,7 +4,7 @@
 // themselves before the SDK moved behind the engine.
 
 import { deriveUnshieldedAddress } from './derive-address.ts';
-import { assertSpendsNoOfferCoin, type DAppConnector, type EngineWallet, type OpenedConnector, type PrepWallet, type ServedWalletSession, type ShieldedTransferParams, reportingEngineErrors, getNetworkId, bindCachesToIndexer, describeIndexerChange, loadWalletCache, saveWalletCache, DUST_SHORT_WAIT_MS, payWhenDustCovers, proveWithin, submitWithin, PROOF_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/engine';
+import { assertSpendsNoOfferCoin, type DAppConnector, type EngineWallet, type OpenedConnector, type PrepWallet, type ServedWalletSession, type ShieldedTransferParams, reportingEngineErrors, getNetworkId, bindCachesToIndexer, describeIndexerChange, loadWalletCache, saveWalletCache, DUST_SHORT_WAIT_MS, payWhenDustCovers, proveWithin, submitWithin, PROOF_TIMEOUT_MS, isFeeShortRefusal, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin } from '@kuiralabs/midnight-cli-core/engine';
 import { readOpenOffers, InsufficientBalanceError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import { trackElapsed } from '@kuiralabs/midnight-cli-core/ui';
 import { spentNullifiers } from './offer-reader.ts';
@@ -12,7 +12,8 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { MidnightBech32m } from '@midnightntwrk/wallet-sdk/address-format';
 import { assertLedgerSupported } from '@kuiralabs/midnight-chain';
 import { decodeShieldedAddress } from './addresses.ts';
-import { buildFacade, hasDustAvailable, isFacadeSynced, startAndSyncFacade, stopFacade, waitForDustAvailable } from './facade.ts';
+import { buildFacade, hasDustAvailable, isFacadeSynced, quickSync, startAndSyncFacade, stopFacade, waitForDustAvailable } from './facade.ts';
+import { refusedFeeCheck } from './fee-refusal.ts';
 import { ensureDust, executeTransfer, transactionIdOf } from './transfer.ts';
 import { airdropNight } from './airdrop.ts';
 import { registerDust } from './dust-register.ts';
@@ -47,48 +48,71 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
 
       throwIfCancelled(signal);
 
-      progress.update('Building shielded transaction...');
-      const build = () => bundle.facade.transferTransaction(
-        [{
-          type: 'shielded' as const,
-          outputs: payments,
-        }],
-        { ttl: new Date(Date.now() + HOUR_MS) },
-      );
-      const recipe = params.waitForDustToCover
-        ? await payWhenDustCovers(build, state.dust, { maxWaitMs: DUST_SHORT_WAIT_MS, onStatus: (status) => progress.update(status), signal })
-        : await build();
+      const buildAndProveShielded = async () => {
+        progress.update('Building shielded transaction...');
+        const build = () => bundle.facade.transferTransaction(
+          [{
+            type: 'shielded' as const,
+            outputs: payments,
+          }],
+          { ttl: new Date(Date.now() + HOUR_MS) },
+        );
+        const recipe = params.waitForDustToCover
+          ? await payWhenDustCovers(build, state.dust, { maxWaitMs: DUST_SHORT_WAIT_MS, onStatus: (status) => progress.update(status), signal })
+          : await build();
 
-      progress.update('Signing...');
-      const signed = await bundle.facade.signRecipe(recipe, bundle.keystore.signDataAsync);
+        progress.update('Signing...');
+        const signed = await bundle.facade.signRecipe(recipe, bundle.keystore.signDataAsync);
 
-      progress.update('Generating ZK proof (this may take a few minutes)...');
-      // Cancelled while proving, the call stops at once: nothing was sent.
-      const finalized = await proveWithin(bundle.facade.finalizeRecipe(signed), PROOF_TIMEOUT_MS, signal);
-      throwIfCancelled(signal);
+        progress.update('Generating ZK proof (this may take a few minutes)...');
+        // Cancelled while proving, the call stops at once: nothing was sent.
+        const finalized = await proveWithin(bundle.facade.finalizeRecipe(signed), PROOF_TIMEOUT_MS, signal);
+        throwIfCancelled(signal);
 
-      // Spending an open swap offer's coins would cancel it: refused.
-      const open = readOpenOffers(root, network, deriveUnshieldedAddress(seed, network));
-      if (open.length > 0) {
-        try {
-          assertSpendsNoOfferCoin(open, spentNullifiers(Buffer.from(finalized.serialize()).toString('hex')));
-        } catch (err) {
-          try { await bundle.facade.revert(finalized); } catch { /* best-effort */ }
-          throw err;
+        // Spending an open swap offer's coins would cancel it: refused.
+        const open = readOpenOffers(root, network, deriveUnshieldedAddress(seed, network));
+        if (open.length > 0) {
+          try {
+            assertSpendsNoOfferCoin(open, spentNullifiers(Buffer.from(finalized.serialize()).toString('hex')));
+          } catch (err) {
+            try { await bundle.facade.revert(finalized); } catch { /* best-effort */ }
+            throw err;
+          }
         }
-      }
 
-      // facade.submitTransaction blocks until the chain finalizes the block
-      // (typically 12 to 30s on hosted networks, ~6 to 12s on localnet).
-      // trackElapsed updates the spinner once a second so users see the wait
-      // is alive, not stuck.
-      const txId = await trackElapsed(
-        progress,
-        'Submitting and waiting for finalization (typically 12 to 30s)...',
-        // Bounded: against a node that went away the SDK's submit never returns.
-        submitWithin(bundle.facade.submitTransaction(finalized), { txId: transactionIdOf(finalized), node: bundle.nodeUrl, signal }),
-      );
-      return String(txId);
+        return finalized;
+      };
+
+      const submitShielded = async (finalized: Awaited<ReturnType<typeof bundle.facade.finalizeRecipe>>) => {
+        // facade.submitTransaction blocks until the chain finalizes the block
+        // (typically 12 to 30s on hosted networks, ~6 to 12s on localnet).
+        // trackElapsed updates the spinner once a second so users see the wait
+        // is alive, not stuck.
+        const txId = await trackElapsed(
+          progress,
+          'Submitting and waiting for finalization (typically 12 to 30s)...',
+          // Bounded: against a node that went away the SDK's submit never returns.
+          submitWithin(bundle.facade.submitTransaction(finalized), { txId: transactionIdOf(finalized), node: bundle.nodeUrl, signal }),
+        );
+        return String(txId);
+      };
+
+      // A fee the node refuses as too low is priced again with a larger margin while the Dust covers it.
+      try {
+        for (;;) {
+          const finalized = await buildAndProveShielded();
+          try {
+            return await submitShielded(finalized);
+          } catch (err) {
+            if (!isFeeShortRefusal(err)) throw err;
+            const step = await repriceAfterFeeRefusal(bundle.feePricing, async () => refusedFeeCheck(bundle.facade, finalized, await quickSync(bundle, 'lite')), err);
+            if (step.kind === 'dust-short') throw err;
+            progress.update(repricingStatus(step));
+          }
+        }
+      } finally {
+        resetFeeMargin(bundle.feePricing);
+      }
     },
     {
       root,

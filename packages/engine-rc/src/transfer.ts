@@ -2,7 +2,7 @@
 // Handles: facade lifecycle, sync, balance check, dust, tx build/sign/prove/submit, retries
 
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { getNetworkId, proveWithin, submitWithin, TOKEN_MULTIPLIER, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, STALE_UTXO_ERROR_CODE, DUST_REGISTRATION_TIMEOUT_MS, DUST_REGISTRATION_RETRY_DELAY_MS, SYNC_ATTEMPT_TIMEOUT_MS, DUST_COST_OVERHEAD, MIN_DUST_FOR_TRANSFER, isColdStartRace, isDustRelatedError, DustFeeNotGeneratedError, planRegistration, type RegistrationContext, awaitDustForFee, sleep, type EnsureDustResult, type TransferParams, type TransferResult } from '@kuiralabs/midnight-cli-core/engine';
+import { getNetworkId, proveWithin, submitWithin, TOKEN_MULTIPLIER, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, STALE_UTXO_ERROR_CODE, DUST_REGISTRATION_TIMEOUT_MS, DUST_REGISTRATION_RETRY_DELAY_MS, SYNC_ATTEMPT_TIMEOUT_MS, MIN_DUST_FOR_TRANSFER, isFeeShortRefusal, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin, isColdStartRace, isDustRelatedError, DustFeeNotGeneratedError, planRegistration, type RegistrationContext, awaitDustForFee, sleep, type EnsureDustResult, type TransferParams, type TransferResult } from '@kuiralabs/midnight-cli-core/engine';
 import { CancelledError, DustRequiredError, InsufficientBalanceError, SyncTimeoutError, throwIfCancelled, type NetworkConfig, type VerboseLog, nightAmountText, NATIVE_TOKEN_TYPE, formatWait, type CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
 import { toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, type DustAddress } from '@midnightntwrk/wallet-sdk/address-format';
@@ -10,6 +10,7 @@ import { type FacadeState, type UtxoWithMeta } from '@midnightntwrk/wallet-sdk/f
 import * as rx from 'rxjs';
 
 import { type FacadeBundle, hasDustAvailable, quickSync } from './facade.ts';
+import { refusedFeeCheck } from './fee-refusal.ts';
 import type { WalletDataRepository } from './wallet-data-repository.ts';
 
 
@@ -278,10 +279,14 @@ export async function ensureDust(
  * output for each payment.
  *
  * Retries on:
+ * - A fee refused as too low (error 138) while the Dust covers it: priced again
+ *   with the next margin of DUST_FEE_MARGIN_STEPS, FeeTooLowError past the last
  * - Stale UTXO (error 115): quick-sync and retry immediately (up to 3 attempts)
- * - Dust-related errors: re-ensure dust is available, then retry (up to 10 min)
+ * - Dust-related errors: re-ensure dust is available, then retry (up to 2 min)
+ *
+ * Exported for tests.
  */
-async function buildAndSubmitTransfer(
+export async function buildAndSubmitTransfer(
   bundle: FacadeBundle,
   /** One output each, in this order. */
   payments: readonly { receiverAddress: UnshieldedAddress; amount: bigint }[],
@@ -303,6 +308,8 @@ async function buildAndSubmitTransfer(
   let staleAttempts = 0;
 
   while (true) {
+    // The attempt's proven transaction, once there is one: a fee the node refuses is priced again from it.
+    let finalizedTx: Awaited<ReturnType<typeof bundle.facade.finalizeRecipe>> | undefined;
     try {
       // A call cancelled between attempts stops before building another.
       throwIfCancelled(signal);
@@ -334,7 +341,7 @@ async function buildAndSubmitTransfer(
       log?.('transfer', 'Generating ZK proof...');
       onProving?.();
       // Cancelled while proving, the call stops at once: nothing was sent.
-      const finalizedTx = await proveWithin(bundle.facade.finalizeRecipe(signedRecipe), PROOF_TIMEOUT_MS, signal);
+      finalizedTx = await proveWithin(bundle.facade.finalizeRecipe(signedRecipe), PROOF_TIMEOUT_MS, signal);
       throwIfCancelled(signal);
 
       log?.('transfer', 'Submitting transaction to node...');
@@ -359,6 +366,19 @@ async function buildAndSubmitTransfer(
       // Cancelled: no retry.
       if (err instanceof CancelledError) throw err;
       lastError = err;
+
+      // The fee refused as too low: priced again with a larger margin when the
+      // Dust covers it (FeeTooLowError past the largest), else the Dust wait below.
+      if (finalizedTx !== undefined && isFeeShortRefusal(err)) {
+        const refused = finalizedTx;
+        const step = await repriceAfterFeeRefusal(bundle.feePricing, async () => refusedFeeCheck(bundle.facade, refused, await quickSync(bundle, 'lite')), err);
+        if (step.kind === 'repriced') {
+          const status = repricingStatus(step);
+          log?.('transfer', status);
+          onDust?.(status);
+          continue;
+        }
+      }
 
       // Stale UTXO: quick-sync and retry immediately (limited attempts)
       const isStaleUtxo = err?.code === STALE_UTXO_ERROR_CODE ||
@@ -496,18 +516,22 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
         throwIfCancelled(signal);
 
         log?.('transfer', 'Building and submitting transaction...');
-        const txHash = await buildAndSubmitTransfer(
-          bundle,
-          payments,
-          onProving,
-          onSubmitting,
-          onDust,
-          onSubmittingTick,
-          signal,
-          log,
-          registration,
-        );
-        return { txHash, amountMicroNight: total };
+        try {
+          const txHash = await buildAndSubmitTransfer(
+            bundle,
+            payments,
+            onProving,
+            onSubmitting,
+            onDust,
+            onSubmittingTick,
+            signal,
+            log,
+            registration,
+          );
+          return { txHash, amountMicroNight: total };
+        } finally {
+          resetFeeMargin(bundle.feePricing);
+        }
       },
       {
         root,

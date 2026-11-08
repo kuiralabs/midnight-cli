@@ -1,4 +1,4 @@
-import { getNetworkId, type WalletCacheData, DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN, SYNC_TIMEOUT_MS, PRE_SEND_SYNC_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/engine';
+import { getNetworkId, type WalletCacheData, type FeePricing, newFeePricing, SYNC_TIMEOUT_MS, PRE_SEND_SYNC_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/engine';
 import { type NoticeSink, type NetworkConfig, type VerboseLog, CancelledError, SyncTimeoutError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import {
   UnshieldedWallet,
@@ -55,6 +55,28 @@ export interface FacadeBundle {
   indexerWsUrl?: string;
   /** The streams the chain has no events in, as read when the sync started. */
   emptyStreams?: EmptyStreams;
+  /** The fee settings this wallet's Dust wallet prices with: the SDK reads the margin from it at every price, so a refused fee is priced again by raising it. */
+  feePricing: FeePricing;
+}
+
+/**
+ * The configuration WalletFacade.init() takes, which all wallet types and
+ * services draw from. `feePricing` goes in by reference: the Dust wallet's
+ * transacting keeps the object and reads it at every price.
+ */
+export function facadeConfiguration(networkId: NetworkName, networkConfig: Pick<NetworkConfig, 'indexer' | 'indexerWS' | 'proofServer' | 'node'>, feePricing: FeePricing) {
+  return {
+    networkId,
+    forks: FORK_SCHEDULE,
+    indexerClientConnection: {
+      indexerHttpUrl: networkConfig.indexer,
+      indexerWsUrl: networkConfig.indexerWS,
+    },
+    costParameters: feePricing,
+    txHistoryStorage: new InMemoryTransactionHistoryStorage(WalletEntrySchema, mergeWalletEntries),
+    provingServerUrl: new URL(networkConfig.proofServer),
+    relayURL: new URL(networkConfig.node),
+  };
 }
 
 /**
@@ -104,23 +126,8 @@ export async function buildFacade(
   const walletAddress = deriveUnshieldedAddress(seedBuffer, network);
   const coinPicking = shieldedCoinPicking(seeds.shielded, () => readOpenOffers(root, network, walletAddress));
 
-  // Merged configuration for WalletFacade.init() — all wallet types
-  // and services draw from this single config object.
-  const configuration = {
-    networkId,
-    forks: FORK_SCHEDULE,
-    indexerClientConnection: {
-      indexerHttpUrl: networkConfig.indexer,
-      indexerWsUrl: networkConfig.indexerWS,
-    },
-    costParameters: {
-      additionalFeeOverhead: DUST_COST_OVERHEAD,
-      feeBlocksMargin: DUST_FEE_BLOCKS_MARGIN,
-    },
-    txHistoryStorage: new InMemoryTransactionHistoryStorage(WalletEntrySchema, mergeWalletEntries),
-    provingServerUrl: new URL(networkConfig.proofServer),
-    relayURL: new URL(networkConfig.node),
-  };
+  const feePricing = newFeePricing();
+  const configuration = facadeConfiguration(networkId, networkConfig, feePricing);
 
   // Fresh build. The class-level startWithSeed probes which side of the fork
   // the chain is on and builds the wallet there. It doesn't start syncing;
@@ -170,7 +177,7 @@ export async function buildFacade(
     facade = await initFresh();
   }
 
-  return { facade, keystore, seeds, coinPicking, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS, nodeUrl: networkConfig.node };
+  return { facade, keystore, seeds, coinPicking, feePricing, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS, nodeUrl: networkConfig.node };
 }
 
 /**

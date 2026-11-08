@@ -2,8 +2,8 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap } from '@kuiralabs/midnight-cli-core/engine';
-import { type NoticeSink, LEDGER_9_FORK_VERSION, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE } from '@kuiralabs/midnight-cli-core';
+import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isFeeShortRefusal, repriceAfterFeeRefusal, resetFeeMargin } from '@kuiralabs/midnight-cli-core/engine';
+import { type NoticeSink, FeeRepricedError, LEDGER_9_FORK_VERSION, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE } from '@kuiralabs/midnight-cli-core';
 import { dim, roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
@@ -11,6 +11,7 @@ import type { FacadeState, WalletEntry } from '@midnightntwrk/wallet-sdk/facade'
 import type { FinalizedTx } from '@midnightntwrk/wallet-sdk';
 
 import { type FacadeBundle, hasDustAvailable } from './facade.ts';
+import { refusedFeeCheck } from './fee-refusal.ts';
 import { inspectTxHex } from './tx-inspect.ts';
 import { readOffer, spentNullifiers } from './offer-reader.ts';
 import { expiredIntents, feeOnlyRefusals, readDAppTransaction, type DAppTxStage, type FeeCheckTransaction } from './fee-only-check.ts';
@@ -1059,6 +1060,8 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
         tracker.complete();
         // Submitted: its coins are spent, not pending.
         submittingTxs.delete(txHex);
+        // A fee priced with a larger margin went through: the next is priced with the first again.
+        resetFeeMargin(bundle.feePricing);
         context.metadata.phases = tracker.getTimings();
         // Return txHash for server logging (onResponse can read it from result)
         return { txHash };
@@ -1066,6 +1069,18 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
         tracker.complete();
         // Revert pending tx to release locked dust coins
         await release();
+        // The fee refused as too low while the Dust covers it: the next balance
+        // is priced with a larger margin, and the dApp balances this one again.
+        // Not rebuilt here: the dApp holds this transaction and follows it by
+        // its identifiers (the connector's submit returns nothing), and its fee
+        // is the one that was approved. Past the largest margin, FeeTooLowError.
+        if (isFeeShortRefusal(submitErr)) {
+          const step = await repriceAfterFeeRefusal(bundle.feePricing, () => refusedFeeCheck(facade, sealedTx, getState()), submitErr);
+          if (step.kind === 'repriced') {
+            notice(dim(`  fee refused as too low with ${step.fromBlocks} blocks of margin; fees are now priced with ${step.toBlocks}`));
+            throw new FeeRepricedError(step.fromBlocks, step.toBlocks, { cause: submitErr });
+          }
+        }
         // Re-throw with full detail so the RPC layer can forward it
         const detail = extractErrorDetail(submitErr);
         const enriched = new Error(`Transaction submission failed: ${detail}`);

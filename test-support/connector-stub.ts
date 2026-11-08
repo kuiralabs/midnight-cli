@@ -6,7 +6,7 @@
 import { vi } from 'vitest';
 import * as rx from 'rxjs';
 import type { NetworkConfig, RpcHandlerContext } from '@kuiralabs/midnight-cli-core';
-import { type ApprovalOptions, type CoinPicking, createCoinPicking } from '@kuiralabs/midnight-cli-core/engine';
+import { type ApprovalOptions, type CoinPicking, createCoinPicking, newFeePricing } from '@kuiralabs/midnight-cli-core/engine';
 
 /** A connector test's host: nobody at a terminal to ask, and the connector's lines dropped. */
 export const NO_TERMINAL = { prompter: null, notice: (_line: string): void => {} } as const;
@@ -66,6 +66,7 @@ export interface BundleOverrides {
   initSwap?: (...args: any[]) => Promise<any>;
   getAllFromTxHistory?: () => Promise<any[]>;
   estimateTransactionFee?: (...args: any[]) => Promise<bigint>;
+  calculateTransactionFee?: (...args: any[]) => Promise<bigint>;
   validateTransaction?: (...args: any[]) => Promise<void>;
 }
 
@@ -133,6 +134,7 @@ export function connectorStub(engine: StubEngine) {
         // The rc SDK's reader.
         adoptTransaction: vi.fn((bytes: Uint8Array, stage: string) => ({ stage, hex: Buffer.from(bytes).toString('hex') })),
         estimateTransactionFee: overrides?.estimateTransactionFee ?? vi.fn().mockResolvedValue(1_000n),
+        calculateTransactionFee: overrides?.calculateTransactionFee ?? vi.fn().mockResolvedValue(1_000n),
         getAllFromTxHistory: overrides?.getAllFromTxHistory ?? vi.fn().mockResolvedValue(HISTORY),
         validateTransaction: overrides?.validateTransaction ?? vi.fn().mockResolvedValue(undefined),
       },
@@ -142,6 +144,8 @@ export function connectorStub(engine: StubEngine) {
       },
       // mn's own coin picking, over no open offers; a coin's nullifier here is its nonce.
       coinPicking: overrides?.coinPicking ?? createCoinPicking<{ type: string; value: bigint; nonce: string }>(() => [], (coin) => coin.nonce),
+      // mn's own fee settings, as buildFacade gives each wallet.
+      feePricing: newFeePricing(),
     };
   }
 

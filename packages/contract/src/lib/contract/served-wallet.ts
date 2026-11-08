@@ -1,8 +1,10 @@
 // The one sequence a contract deploy and call share: check the payer's wallet
 // can pay, serve it through the payer, run the script against it with a
-// progress line, and stop serving whatever happens.
+// progress line, and stop serving whatever happens. A run whose fee the node
+// refused as too low runs again: mn serve then prices with a larger margin
+// (FEE_REPRICED), until it has none larger left (FEE_TOO_LOW).
 
-import { type Payer, type PayingTarget, type CallSdkWarnings, type ServedWallet, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { type Payer, type PayingTarget, type CallSdkWarnings, type ServedWallet, DUST_FEE_MARGIN_STEPS, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 
 export interface ServedWalletParams {
@@ -36,8 +38,7 @@ export async function withServedWallet<T>(
   const serve = await payer.serve(target, wallet, progress('Starting mn serve...'), sdkWarnings, signal);
   const spinner = progress(labels.running);
   try {
-    throwIfCancelled(signal);
-    const result = await run(serve, spinner);
+    const result = await runRepricing(() => run(serve, spinner), (message) => spinner.update(message), signal);
     spinner.stop(labels.done);
     return result;
   } catch (err) {
@@ -45,5 +46,27 @@ export async function withServedWallet<T>(
     throw err;
   } finally {
     await serve.stop();
+  }
+}
+
+/** The code mn serve refuses a submit with when the node refused its fee as too low and it now prices with a larger margin. */
+const FEE_REPRICED = 'FEE_REPRICED';
+
+/**
+ * Runs `run`, and again each time it fails with FEE_REPRICED, at most once per
+ * margin mn serve can move to: nothing was spent, and the next balance is
+ * priced with the larger margin. Any other failure, or one past the last, is
+ * the run's.
+ */
+export async function runRepricing<T>(run: () => Promise<T>, onStatus: (message: string) => void, signal: AbortSignal | undefined): Promise<T> {
+  for (let repriced = 0; ; repriced++) {
+    throwIfCancelled(signal);
+    try {
+      return await run();
+    } catch (err) {
+      const code = (err as { code?: unknown } | null)?.code;
+      if (code !== FEE_REPRICED || repriced >= DUST_FEE_MARGIN_STEPS.length - 1) throw err;
+      onStatus('The node refused the fee as too low: running it again with the larger margin mn serve now prices with...');
+    }
   }
 }
