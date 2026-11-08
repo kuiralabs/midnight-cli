@@ -23,9 +23,18 @@ import type { Host } from './host.ts';
 
 /** A parameter as an MCP tool's schema shows it to an agent. */
 export interface ParamSchema {
-  readonly type: 'string' | 'boolean';
+  readonly type: 'string' | 'boolean' | 'array';
   readonly enum?: readonly string[];
   readonly description?: string;
+  /** With type 'array': what each item is. */
+  readonly items?: ItemSchema;
+}
+
+/** An item of an array parameter: an object whose fields are strings. */
+export interface ItemSchema {
+  readonly type: 'object';
+  readonly properties: Readonly<Record<string, ParamSchema>>;
+  readonly required?: readonly string[];
 }
 
 /** A network as tools show it: one of the networks mn knows (a test keeps it equal to network.ts's). */
@@ -131,6 +140,13 @@ export interface ToolArgv {
   readonly subcommand?: string | { readonly param: string };
   /** Parameters that become positionals, in order, up to the first not given (or empty); each as its string. */
   readonly positionals?: readonly string[];
+  /**
+   * An array parameter whose items each become two words after the
+   * positionals: the values of its two fields, in this order, each as its
+   * string. When the subcommand slot's parameter is not given, the first word
+   * fills the slot.
+   */
+  readonly pairs?: { readonly param: string; readonly fields: readonly [string, string] };
   /**
    * The parameters that become flags: 'rest' is every other one (one not
    * given is left out, `true` is a bare flag and `false` none, anything else
@@ -334,7 +350,7 @@ function checkTool(command: CommandDefinition, tool: ToolDefinition, globalFlags
     }
   }
   const sub = tool.argv.subcommand;
-  for (const name of [...(typeof sub === 'object' ? [sub.param] : []), ...(tool.argv.positionals ?? [])]) {
+  for (const name of [...(typeof sub === 'object' ? [sub.param] : []), ...(tool.argv.positionals ?? []), ...(tool.argv.pairs === undefined ? [] : [tool.argv.pairs.param])]) {
     if (!own.has(name)) throw new CommandDefinitionError(`${where}: "${name}" fills the subcommand or a positional but is not one of its own parameters`);
   }
   if (tool.argv.flags === 'rest') {
@@ -360,6 +376,16 @@ function shownSchema(schema: ParamSchema): ParamSchema {
     type: schema.type,
     ...(schema.enum === undefined ? {} : { enum: [...schema.enum] }),
     ...(schema.description === undefined ? {} : { description: schema.description }),
+    ...(schema.items === undefined ? {} : { items: shownItems(schema.items) }),
+  };
+}
+
+/** An array parameter's item schema as tools/list sends it: type, its fields, then the ones required. */
+function shownItems(items: ItemSchema): ItemSchema {
+  return {
+    type: items.type,
+    properties: Object.fromEntries(Object.entries(items.properties).map(([name, field]) => [name, shownSchema(field)])),
+    ...(items.required === undefined ? {} : { required: [...items.required] }),
   };
 }
 
@@ -407,7 +433,15 @@ export function toolArgv(tool: RegisteredTool, params: Readonly<Record<string, u
     if (!given(params[name])) break;
     positionals.push(String(params[name]));
   }
-  const consumed = new Set([...(slotParam === undefined ? [] : [slotParam]), ...(argv.positionals ?? [])]);
+  let slotFilled = subcommand;
+  if (argv.pairs !== undefined) {
+    const [first, second] = argv.pairs.fields;
+    const items = params[argv.pairs.param];
+    const words = (Array.isArray(items) ? items : []).flatMap((item: Record<string, unknown>) => [String(item[first] ?? ''), String(item[second] ?? '')]);
+    if (slotFilled === undefined && slotParam !== undefined && words.length > 0) slotFilled = words.shift();
+    positionals.push(...words);
+  }
+  const consumed = new Set([...(slotParam === undefined ? [] : [slotParam]), ...(argv.positionals ?? []), ...(argv.pairs === undefined ? [] : [argv.pairs.param])]);
   const flags: Record<string, string | true> = { json: true };
   const passed = argv.flags === 'rest' ? Object.keys(params).filter((key) => !consumed.has(key)) : argv.flags;
   for (const key of passed) {
@@ -426,7 +460,7 @@ export function toolArgv(tool: RegisteredTool, params: Readonly<Record<string, u
   for (const [name, value] of Object.entries(argv.defaultFlags ?? {})) {
     if (!flags[name]) flags[name] = value;
   }
-  return { command: tool.command.name, subcommand, positionals, flags };
+  return { command: tool.command.name, subcommand: slotFilled, positionals, flags };
 }
 
 /** The error codes a definition declares, its sets spread, in the order declared. */
