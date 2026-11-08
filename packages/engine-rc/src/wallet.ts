@@ -4,8 +4,8 @@
 // themselves before the SDK moved behind the engine.
 
 import { deriveUnshieldedAddress } from './derive-address.ts';
-import { assertSpendsNoOfferCoin, type DAppConnector, type EngineWallet, type OpenedConnector, type PrepWallet, type ServedWalletSession, type ShieldedTransferParams, reportingEngineErrors, getNetworkId, bindCachesToIndexer, describeIndexerChange, loadWalletCache, saveWalletCache, DUST_SHORT_WAIT_MS, payWhenDustCovers, proveWithin, submitWithin, PROOF_TIMEOUT_MS, isFeeShortRefusal, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin } from '@kuiralabs/midnight-cli-core/engine';
-import { readOpenOffers, InsufficientBalanceError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { assertSpendsNoOfferCoin, type DAppConnector, type EngineWallet, type OpenedConnector, type PrepWallet, type ServedWalletSession, type ShieldedTransferParams, reportingEngineErrors, getNetworkId, bindCachesToIndexer, describeIndexerChange, loadWalletCache, saveWalletCache, DUST_SHORT_WAIT_MS, payWhenDustCovers, proveWithin, submitWithin, PROOF_TIMEOUT_MS, DUST_DOUBLE_SPEND_RETRIES, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin } from '@kuiralabs/midnight-cli-core/engine';
+import { readOpenOffers, InsufficientBalanceError, throwIfCancelled, walletDustLock, walletDustLockFile, DustDoubleSpentError, RERUN_DOUBLE_SPENT_STATUS } from '@kuiralabs/midnight-cli-core';
 import { trackElapsed } from '@kuiralabs/midnight-cli-core/ui';
 import { spentNullifiers } from './offer-reader.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
@@ -97,17 +97,32 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
         return String(txId);
       };
 
-      // A fee the node refuses as too low is priced again with a larger margin while the Dust covers it.
+      // From balancing to submit this wallet's Dust is held from another mn's payments. A fee the node refuses as
+      // too low is priced again with a larger margin while the Dust covers it; Dust another transaction of the
+      // wallet's spent first is paid with again from free Dust, at most DUST_DOUBLE_SPEND_RETRIES times.
+      const dustLock = walletDustLock(walletDustLockFile(root, network, deriveUnshieldedAddress(seed, network)));
+      let doubleSpends = 0;
       try {
         for (;;) {
-          const finalized = await buildAndProveShielded();
+          await dustLock.hold({ notice, progress: (line) => progress.update(line) }, signal);
           try {
-            return await submitShielded(finalized);
-          } catch (err) {
-            if (!isFeeShortRefusal(err)) throw err;
-            const step = await repriceAfterFeeRefusal(bundle.feePricing, async () => refusedFeeCheck(bundle.facade, finalized, await quickSync(bundle, 'lite')), err);
-            if (step.kind === 'dust-short') throw err;
-            progress.update(repricingStatus(step));
+            const finalized = await buildAndProveShielded();
+            try {
+              return await submitShielded(finalized);
+            } catch (err) {
+              if (isDustDoubleSpendRefusal(err)) {
+                if (doubleSpends++ >= DUST_DOUBLE_SPEND_RETRIES) throw new DustDoubleSpentError(DUST_DOUBLE_SPEND_RETRIES, { cause: err });
+                await quickSync(bundle, 'lite');
+                progress.update(RERUN_DOUBLE_SPENT_STATUS);
+                continue;
+              }
+              if (!isFeeShortRefusal(err)) throw err;
+              const step = await repriceAfterFeeRefusal(bundle.feePricing, async () => refusedFeeCheck(bundle.facade, finalized, await quickSync(bundle, 'lite')), err);
+              if (step.kind === 'dust-short') throw err;
+              progress.update(repricingStatus(step));
+            }
+          } finally {
+            dustLock.release();
           }
         }
       } finally {
@@ -255,6 +270,7 @@ async function openConnector(repo: WalletDataRepository, options: Parameters<Eng
       isCurrent: (state) => isFacadeSynced(state, syncMode, built.emptyStreams),
       dustWaitMs: options.dustWaitMs,
       openOffers: () => readOpenOffers(root, network, address),
+      dustLock: walletDustLock(walletDustLockFile(root, network, address)),
       callbacks: {
         onPhaseStart: (_connId, _method, phase) => {
           onMessage(`${phase}...`);
@@ -306,6 +322,7 @@ function serveWallet<T>(repo: WalletDataRepository, options: Parameters<EngineWa
         initialState: lastState,
         isCurrent: (state) => isFacadeSynced(state, syncMode, bundle.emptyStreams),
         openOffers: () => readOpenOffers(root, network, address),
+        dustLock: walletDustLock(walletDustLockFile(root, network, address)),
       }),
     };
     return serve(session);

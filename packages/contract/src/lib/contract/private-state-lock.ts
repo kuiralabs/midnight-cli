@@ -22,7 +22,9 @@
 // with `.toString()`, so they import nothing and refer to nothing outside
 // themselves: what they use comes in `deps`.
 
-import { CancelledError } from '@kuiralabs/midnight-cli-core';
+import { acquireProcessLock, type LockHolder, type ProcessLockDeps } from '@kuiralabs/midnight-cli-core';
+
+export { holderCommandOf, processIsAlive } from '@kuiralabs/midnight-cli-core';
 
 /** How long a call waits for the store: 3 minutes. A call holds it for its own run (its proof, its submit, the block it lands in: under a minute on a local chain), so 3 minutes is several calls' turns ahead of this one, past which the holder is stuck, not busy. */
 export const PRIVATE_STATE_BUSY_WAIT_MS = 180_000;
@@ -37,22 +39,7 @@ export const SCRIPT_NOTICE_MARKER = '__MN_NOTICE__';
 export const CALL_LOCK_FILE = 'mn-call.lock';
 
 /** An mn process that holds the store's call lock. */
-export interface PrivateStateHolder {
-  pid: number;
-  /** Its command, without its flags' values: `mn contract call`. */
-  command: string;
-}
-
-/** A command as the lock names it: the program's name and the words before the first flag, so no flag's value (a secret key) is written. */
-export function holderCommandOf(argv: readonly string[]): string {
-  const program = (argv[1] ?? 'mn').split(/[\\/]/).pop()!.replace(/\.(m?js|ts)$/, '');
-  const words: string[] = [];
-  for (const word of argv.slice(2)) {
-    if (word.startsWith('-')) break;
-    words.push(word);
-  }
-  return [program === 'wallet' || program === 'midnight' ? 'mn' : program, ...words].join(' ');
-}
+export type PrivateStateHolder = LockHolder;
 
 /** What a wait for the store says: the notice as it starts, the progress line, and the failure past the wait. `what` names the private state, `by` its holder. */
 export function privateStateBusyText(kind: 'notice' | 'progress' | 'busy', what: string, by: string, waitedMs: number): string {
@@ -80,25 +67,7 @@ export class ContractStateBusyError extends Error {
 }
 
 /** What the call lock is taken with. */
-export interface CallLockDeps {
-  fs: {
-    existsSync(path: string): boolean;
-    mkdirSync(path: string, options: { recursive: boolean; mode: number }): unknown;
-    openSync(path: string, flags: string, mode: number): number;
-    writeSync(fd: number, data: string): number;
-    closeSync(fd: number): void;
-    readFileSync(path: string, encoding: 'utf8'): string;
-    renameSync(from: string, to: string): void;
-    linkSync(existing: string, link: string): void;
-    rmSync(path: string, options: { force: boolean }): void;
-  };
-  join(...parts: string[]): string;
-  /** Whether the process `pid` runs. */
-  isAlive(pid: number): boolean;
-  now(): number;
-  /** Waits `ms`, or throws CancelledError when `signal` aborts. */
-  sleep(ms: number, signal?: AbortSignal): Promise<void>;
-}
+export type CallLockDeps = Omit<ProcessLockDeps, 'dirname'>;
 
 export interface CallLockOptions {
   /** The contract, for what the wait says. */
@@ -111,100 +80,23 @@ export interface CallLockOptions {
   signal?: AbortSignal;
 }
 
-/** Whether the process `pid` runs: signal 0 reaches it, or it is someone else's (EPERM). */
-export function processIsAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return (err as { code?: unknown }).code === 'EPERM';
-  }
-}
-
 /**
  * Takes the call lock of the store in `dir` for `holder`, waiting while
- * another live process holds it; the function returned lets it go (only the
- * lock this call took: its token). A lock whose process ended is taken over at
- * once. Fails with ContractStateBusyError past `timeoutMs`, and with
- * CancelledError at once when `signal` aborts.
+ * another live process holds it; the function returned lets it go. A lock
+ * whose process ended is taken over at once. Fails with
+ * ContractStateBusyError past `timeoutMs`, and with CancelledError at once
+ * when `signal` aborts.
  */
 export async function acquireContractCallLock(deps: CallLockDeps, dir: string, holder: PrivateStateHolder, options: CallLockOptions): Promise<() => void> {
-  const { fs, join } = deps;
-  const file = join(dir, CALL_LOCK_FILE);
   const what = privateStateNameOf(options.address);
-  const token = `${holder.pid}-${deps.now()}-${Math.random().toString(16).slice(2)}`;
-  const started = deps.now();
-  let delay = 500;
-  let said: string | undefined;
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  for (;;) {
-    if (options.signal?.aborted === true) throw new CancelledError();
-    try {
-      const fd = fs.openSync(file, 'wx', 0o600);
-      try {
-        fs.writeSync(fd, JSON.stringify({ ...holder, token }) + '\n');
-      } finally {
-        fs.closeSync(fd);
-      }
-      return () => {
-        // Only the lock this call took: one taken over after it was judged stale stays its new holder's.
-        try {
-          if ((JSON.parse(fs.readFileSync(file, 'utf8')) as { token?: unknown }).token === token) fs.rmSync(file, { force: true });
-        } catch { /* gone already */ }
-      };
-    } catch (err) {
-      if ((err as { code?: unknown }).code !== 'EEXIST') throw err;
-    }
-    const current = readLock(fs, file);
-    if (current !== undefined && !deps.isAlive(current.pid)) {
-      takeOverStale(deps, file, current.raw);
-      continue;
-    }
-    // A lock being written (no content yet), or a live holder.
-    const by = current === undefined ? 'another mn' : `another mn (pid ${current.pid}${current.command === undefined ? '' : `, ${current.command}`})`;
-    const waited = deps.now() - started;
-    if (waited >= options.timeoutMs) throw new ContractStateBusyError(privateStateBusyText('busy', what, by, waited));
-    if (said !== by) {
-      said = by;
-      options.notice(privateStateBusyText('notice', what, by, waited));
-    }
-    options.progress(privateStateBusyText('progress', what, by, waited));
-    await deps.sleep(Math.min(delay, options.timeoutMs - waited), options.signal);
-    delay = Math.min(delay * 2, 2000);
-  }
-}
-
-/** The lock file's holder, and its text; undefined while it has none readable (being written, or just removed). */
-function readLock(fs: CallLockDeps['fs'], file: string): { pid: number; command?: string; raw: string } | undefined {
-  try {
-    const raw = fs.readFileSync(file, 'utf8');
-    const lock = JSON.parse(raw) as { pid?: unknown; command?: unknown };
-    if (typeof lock.pid !== 'number') return undefined;
-    return { pid: lock.pid, ...(typeof lock.command === 'string' ? { command: lock.command } : {}), raw };
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Removes a lock whose holder ended, by moving it aside first, which only one
- * of several takers manages. One that moved a lock taken meanwhile (not the
- * stale one it read) puts it back, unless the place was taken again.
- */
-function takeOverStale(deps: CallLockDeps, file: string, stale: string): void {
-  const { fs } = deps;
-  const aside = `${file}.stale-${process.pid}-${deps.now()}`;
-  try {
-    fs.renameSync(file, aside);
-  } catch {
-    return; // another taker moved it first
-  }
-  let moved = '';
-  try { moved = fs.readFileSync(aside, 'utf8'); } catch { /* read below as not the stale one */ }
-  if (moved !== stale) {
-    try { fs.linkSync(aside, file); } catch { /* taken again meanwhile */ }
-  }
-  fs.rmSync(aside, { force: true });
+  const lock = await acquireProcessLock({ ...deps, dirname: () => dir }, deps.join(dir, CALL_LOCK_FILE), holder, {
+    timeoutMs: options.timeoutMs,
+    notice: (by) => options.notice(privateStateBusyText('notice', what, by, 0)),
+    progress: (by, waited) => options.progress(privateStateBusyText('progress', what, by, waited)),
+    timedOut: (by, waited) => new ContractStateBusyError(privateStateBusyText('busy', what, by, waited)),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  });
+  return lock.release;
 }
 
 /** What waitForPrivateState uses. */

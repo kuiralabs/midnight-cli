@@ -10,6 +10,7 @@
 import {
   DustRequiredError,
   EngineError,
+  DustDoubleSpentError,
   FeeRepricedError,
   FeeTooLowError,
   InsufficientBalanceError,
@@ -301,7 +302,7 @@ const carriesCode = (err: unknown): boolean => !isConnectorApiError(err) && carr
  * among its causes: what it says to do differs from a refusal's.
  */
 export function toEngineError(err: unknown): unknown {
-  if (err instanceof TransactionRefusedError || err instanceof FeeRepricedError || err instanceof FeeTooLowError) return err;
+  if (err instanceof TransactionRefusedError || err instanceof FeeRepricedError || err instanceof FeeTooLowError || err instanceof DustDoubleSpentError) return err;
   const held = heldCoinRefusalOf(err);
   if (held !== undefined) return held;
   const reason = nodeRefusalOf(err);

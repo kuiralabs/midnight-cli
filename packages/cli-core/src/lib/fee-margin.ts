@@ -71,6 +71,9 @@ export function resetFeeMargin(pricing: FeePricing): void {
 }
 
 const OVERSPEND = new RegExp(`custom error:?\\s*${BALANCE_OVERSPEND_ERROR_CODE}\\b`, 'i');
+/** The ledger's DustDoubleSpend: the Dust coin a transaction spends was spent by another first. */
+export const DUST_DOUBLE_SPEND_ERROR_CODE = 196;
+const DOUBLE_SPEND = new RegExp(`custom error:?\\s*${DUST_DOUBLE_SPEND_ERROR_CODE}\\b`, 'i');
 
 /**
  * Whether the node refused the transaction because the Dust it pays falls
@@ -79,13 +82,23 @@ const OVERSPEND = new RegExp(`custom error:?\\s*${BALANCE_OVERSPEND_ERROR_CODE}\
  * TransactionRefusedError, or in any message among the error's causes.
  */
 export function isFeeShortRefusal(err: unknown): boolean {
+  return refusalSays(err, OVERSPEND);
+}
+
+/** Whether the node refused the transaction because another spent its Dust coin first (error 196), anywhere in the error's causes. */
+export function isDustDoubleSpendRefusal(err: unknown): boolean {
+  return refusalSays(err, DOUBLE_SPEND);
+}
+
+/** Whether the node's words, or a message or reason among the error's causes, match `pattern`. */
+function refusalSays(err: unknown, pattern: RegExp): boolean {
   const said = nodeRefusalOf(err);
-  if (said !== undefined && OVERSPEND.test(said)) return true;
+  if (said !== undefined && pattern.test(said)) return true;
   const seen = new Set<unknown>();
   for (let current: unknown = err; current !== null && typeof current === 'object' && !seen.has(current); current = (current as { cause?: unknown }).cause) {
     seen.add(current);
     const { message, reason } = current as { message?: unknown; reason?: unknown };
-    if ((typeof message === 'string' && OVERSPEND.test(message)) || (typeof reason === 'string' && OVERSPEND.test(reason))) return true;
+    if ((typeof message === 'string' && pattern.test(message)) || (typeof reason === 'string' && pattern.test(reason))) return true;
   }
   return false;
 }
@@ -146,8 +159,22 @@ export function isFeeRepriced(err: unknown): boolean {
   return (err as { code?: unknown } | null)?.code === FEE_REPRICED_CODE;
 }
 
+/** The code of a payment refused because another transaction from the wallet spent its Dust first (DustDoubleSpentError). */
+export const DUST_DOUBLE_SPENT_CODE = 'DUST_DOUBLE_SPENT';
+
+/** Whether `err` is a DUST_DOUBLE_SPENT refusal, by the code it carries. */
+export function isDustDoubleSpent(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === DUST_DOUBLE_SPENT_CODE;
+}
+
 /** What a paying command says while it runs a payment again after FEE_REPRICED. */
 export const RERUN_REPRICED_STATUS = 'The node refused the fee as too low: running it again with the larger margin the wallet now prices with...';
+
+/** What a paying command says while it runs a payment again after DUST_DOUBLE_SPENT. */
+export const RERUN_DOUBLE_SPENT_STATUS = 'Another transaction from this wallet spent the same Dust first: running it again, paying with Dust that is still free...';
+
+/** How many times a payment is built again after its Dust was spent by another transaction of the wallet's. */
+export const DUST_DOUBLE_SPEND_RETRIES = 2;
 
 /**
  * Runs `pay`, and again after each failure `rerunAfter` accepts (a payment mn
@@ -155,14 +182,14 @@ export const RERUN_REPRICED_STATUS = 'The node refused the fee as too low: runni
  * priced with the larger margin), saying so through `onStatus`. Any other
  * failure is the payment's. `rerunAfter` holds the bound on how many times.
  */
-export async function rerunWhenRepriced<T>(pay: () => Promise<T>, rerunAfter: (err: unknown) => boolean, onStatus: (message: string) => void, signal: AbortSignal | undefined): Promise<T> {
+export async function rerunWhenRepriced<T>(pay: () => Promise<T>, rerunAfter: (err: unknown) => boolean, onStatus: (message: string) => void, signal: AbortSignal | undefined, statusOf: (err: unknown) => string = () => RERUN_REPRICED_STATUS): Promise<T> {
   for (;;) {
     throwIfCancelled(signal);
     try {
       return await pay();
     } catch (err) {
       if (!rerunAfter(err)) throw err;
-      onStatus(RERUN_REPRICED_STATUS);
+      onStatus(statusOf(err));
     }
   }
 }

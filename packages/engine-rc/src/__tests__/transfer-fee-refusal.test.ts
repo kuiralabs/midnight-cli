@@ -10,7 +10,7 @@ import { Effect } from 'effect';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import { MidnightBech32m, UnshieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { newFeePricing } from '@kuiralabs/midnight-cli-core/engine';
-import { FeeTooLowError } from '@kuiralabs/midnight-cli-core';
+import { DustDoubleSpentError, FeeTooLowError, RERUN_DOUBLE_SPENT_STATUS } from '@kuiralabs/midnight-cli-core';
 import { buildAndSubmitTransfer } from '../transfer.ts';
 import { deriveUnshieldedAddress } from '../derive-address.ts';
 import type { FacadeBundle } from '../facade.ts';
@@ -21,8 +21,10 @@ const addressOf = (seedByte: number) => MidnightBech32m.parse(deriveUnshieldedAd
 const ONE_PAYMENT = [{ receiverAddress: addressOf(9), amount: 1_000_000n }];
 
 /** The SDK's submit failing as it does when the node refuses the Dust payment as short of the fee. */
-const nodeRefusesFee = (): Promise<never> =>
-  Effect.runPromise(Effect.fail(new SubmissionError({ message: 'Transaction submission error', cause: new Error('1010: Invalid Transaction: Custom error: 138') })));
+const nodeRefusesFee = (): Promise<never> => nodeRefuses(138);
+/** The SDK's submit failing as it does when the node refuses with `code`: 138 a fee short, 196 Dust another transaction spent first. */
+const nodeRefuses = (code: number): Promise<never> =>
+  Effect.runPromise(Effect.fail(new SubmissionError({ message: 'Transaction submission error', cause: new Error(`1010: Invalid Transaction: Custom error: ${code}`) })));
 
 /** A synced wallet state whose Dust balance at a time is `dust(at)`. */
 const syncedState = (dust: (at: Date) => bigint) => {
@@ -39,7 +41,7 @@ const syncedState = (dust: (at: Date) => bigint) => {
  * 0.5 DUST times 1.05 a block of the margin mn's settings hold when it is
  * priced; the first `refusals` submits are refused as too low.
  */
-function wallet(dust: (at: Date) => bigint, refusals: number) {
+function wallet(dust: (at: Date) => bigint, refusals: number, refusalCode = 138) {
   const feePricing = newFeePricing();
   const builtWith: number[] = [];
   /** The outputs each build was asked for. */
@@ -54,7 +56,7 @@ function wallet(dust: (at: Date) => bigint, refusals: number) {
     }),
     signRecipe: vi.fn(async (recipe: unknown) => recipe),
     finalizeRecipe: vi.fn(async () => ({ serialize: () => new Uint8Array() })),
-    submitTransaction: vi.fn(async () => (refused++ < refusals ? nodeRefusesFee() : 'tx-hash')),
+    submitTransaction: vi.fn(async () => (refused++ < refusals ? nodeRefuses(refusalCode) : 'tx-hash')),
     calculateTransactionFee: vi.fn(async () => (DUST / 2n) * 105n ** BigInt(feePricing.feeBlocksMargin) / 100n ** BigInt(feePricing.feeBlocksMargin)),
   };
   const bundle = { facade, keystore: { signDataAsync: vi.fn() }, feePricing } as unknown as FacadeBundle;
@@ -124,5 +126,28 @@ describe('buildAndSubmitTransfer, when the node refuses the fee as too low', () 
     expect(bundle.feePricing.feeBlocksMargin).toBe(3);
     expect(statuses.some((status) => status === 'Waiting about 15 seconds for Dust to cover the fee (0.500000 of 0.650000 DUST)...')).toBe(true);
     expect(statuses.some((status) => status.startsWith('The node refused the fee as too low'))).toBe(false);
+  });
+
+  it('with Dust another transaction of the wallet spent first (error 196), builds it again with the same margin', async () => {
+    vi.useFakeTimers({ now: T0 });
+    const { bundle, builtWith } = wallet(() => 10n * DUST, 1, 196);
+    const statuses: string[] = [];
+
+    expect(await transfer(bundle, statuses)).toBe('tx-hash');
+
+    expect(builtWith).toEqual([3, 3]);
+    expect(statuses).toContain(RERUN_DOUBLE_SPENT_STATUS);
+  });
+
+  it('with its Dust spent by others three times, fails as DUST_DOUBLE_SPENT after building it again twice', async () => {
+    vi.useFakeTimers({ now: T0 });
+    const { bundle, builtWith } = wallet(() => 10n * DUST, 3, 196);
+
+    const err = await transfer(bundle, []).catch((e: unknown) => e);
+
+    expect(builtWith).toEqual([3, 3, 3]);
+    expect(err).toBeInstanceOf(DustDoubleSpentError);
+    expect(err).toMatchObject({ code: 'DUST_DOUBLE_SPENT', rebuilt: 2 });
+    expect((err as Error).message).toContain('Another transaction from this wallet spent the same Dust first');
   });
 });

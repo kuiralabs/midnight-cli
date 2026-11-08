@@ -229,6 +229,31 @@ export class ContractStateUnreadableError extends Error {
   }
 }
 
+/**
+ * The node refused a transaction because another transaction from the same
+ * wallet spent the Dust coin it pays with first ("Custom error: 196",
+ * DustDoubleSpend): two mn processes paying from one wallet at once picked the
+ * same coin. Nothing of the refused one was spent; balanced again, it picks
+ * another coin. `rebuilt` is how many times mn built it again already.
+ */
+export class DustDoubleSpentError extends Error {
+  readonly code = 'DUST_DOUBLE_SPENT';
+  readonly rebuilt: number;
+
+  constructor(rebuilt: number, options?: { cause?: unknown }) {
+    super(
+      'Another transaction from this wallet spent the same Dust first, so the node refused this one (error 196, DustDoubleSpend); nothing of it was spent. '
+      + (rebuilt === 0
+        ? 'Balance it again and submit it: the wallet then pays with Dust that is still free.'
+        : `mn built it again ${rebuilt === 1 ? 'once' : `${rebuilt} times`} and another transaction of this wallet's took its Dust each time: run it again once the wallet's other transactions have landed.`),
+      options,
+    );
+    this.name = 'DustDoubleSpentError';
+    this.rebuilt = rebuilt;
+    Object.setPrototypeOf(this, DustDoubleSpentError.prototype);
+  }
+}
+
 /** Not enough NIGHT for the amount asked for: raised by the engines with the message the command gives them. */
 export class InsufficientBalanceError extends Error {
   readonly code = 'INSUFFICIENT_BALANCE';

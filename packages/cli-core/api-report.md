@@ -446,6 +446,62 @@ export declare function defineCodes<const T extends readonly CodeDefinition[]>(c
 export declare function defineCodeSet(name: string, codes: readonly string[]): CodeSet;
 export declare function trimAgentMessage(raw: string): string;
 export declare function stateDecodeFailureOf(err: unknown): string | undefined;
+export declare const DUST_LOCK_WAIT_MS = 120000;
+export interface DustLockSay {
+    notice(line: string): void;
+    progress(line: string): void;
+}
+export declare function walletDustLock(file: string, { timeoutMs, now }?: {
+    timeoutMs?: number;
+    now?: () => number;
+}): WalletDustLock;
+export declare function walletDustLockFile(root: string, network: string, address: string): string;
+export interface WalletDustLock {
+    hold(say: DustLockSay, signal?: AbortSignal): Promise<void>;
+    release(): void;
+    readonly held: boolean;
+}
+export declare function acquireProcessLock(deps: ProcessLockDeps, file: string, holder: LockHolder, options: ProcessLockOptions): Promise<TakenLock>;
+export declare function holderCommandOf(argv: readonly string[]): string;
+export interface LockHolder {
+    pid: number;
+    command: string;
+}
+export declare function processIsAlive(pid: number): boolean;
+export interface ProcessLockDeps {
+    fs: {
+        existsSync(path: string): boolean;
+        mkdirSync(path: string, options: {
+            recursive: boolean;
+            mode: number;
+        }): unknown;
+        openSync(path: string, flags: string, mode: number): number;
+        writeSync(fd: number, data: string): number;
+        closeSync(fd: number): void;
+        readFileSync(path: string, encoding: 'utf8'): string;
+        renameSync(from: string, to: string): void;
+        linkSync(existing: string, link: string): void;
+        rmSync(path: string, options: {
+            force: boolean;
+        }): void;
+    };
+    join(...parts: string[]): string;
+    dirname(path: string): string;
+    isAlive(pid: number): boolean;
+    now(): number;
+    sleep(ms: number, signal?: AbortSignal): Promise<void>;
+}
+export interface ProcessLockOptions {
+    timeoutMs: number;
+    notice(by: string): void;
+    progress(by: string, waitedMs: number): void;
+    timedOut(by: string, waitedMs: number): Error | undefined;
+    signal?: AbortSignal;
+}
+export interface TakenLock {
+    held: boolean;
+    release(): void;
+}
 export declare const ACCOUNT_ARTIFACTS_KEY = "account-artifacts";
 export interface AccountArtifactsSource {
     source: string | undefined;
@@ -475,6 +531,13 @@ export declare class ContractStateUnreadableError extends Error {
     readonly address: string;
     readonly reason: string;
     constructor(address: string, reason: string, options?: {
+        cause?: unknown;
+    });
+}
+export declare class DustDoubleSpentError extends Error {
+    readonly code = "DUST_DOUBLE_SPENT";
+    readonly rebuilt: number;
+    constructor(rebuilt: number, options?: {
         cause?: unknown;
     });
 }
@@ -570,6 +633,7 @@ export declare const ERROR_CODES: {
     readonly INVALID_DUST_PROOF: "INVALID_DUST_PROOF";
     readonly FEE_TOO_LOW: "FEE_TOO_LOW";
     readonly FEE_REPRICED: "FEE_REPRICED";
+    readonly DUST_DOUBLE_SPENT: "DUST_DOUBLE_SPENT";
     readonly DUST_REQUIRED: "DUST_REQUIRED";
     readonly DUST_GENERATING: "DUST_GENERATING";
     readonly CHAIN_CLOCK_BEHIND: "CHAIN_CLOCK_BEHIND";
@@ -614,12 +678,16 @@ export interface FeeLimits {
     maxPending: number;
 }
 export declare function parseFeeLimits(maxFee: string | undefined, maxPending: string | undefined): FeeLimits;
+export declare const DUST_DOUBLE_SPEND_RETRIES = 2;
+export declare const DUST_DOUBLE_SPENT_CODE = "DUST_DOUBLE_SPENT";
 export declare const DUST_FEE_MARGIN_STEPS: readonly number[];
 export declare const FEE_REPRICED_CODE = "FEE_REPRICED";
 export declare const FEE_TOO_LOW_CODE = "FEE_TOO_LOW";
+export declare function isDustDoubleSpent(err: unknown): boolean;
+export declare const RERUN_DOUBLE_SPENT_STATUS = "Another transaction from this wallet spent the same Dust first: running it again, paying with Dust that is still free...";
 export declare function isFeeRepriced(err: unknown): boolean;
 export declare const RERUN_REPRICED_STATUS = "The node refused the fee as too low: running it again with the larger margin the wallet now prices with...";
-export declare function rerunWhenRepriced<T>(pay: () => Promise<T>, rerunAfter: (err: unknown) => boolean, onStatus: (message: string) => void, signal: AbortSignal | undefined): Promise<T>;
+export declare function rerunWhenRepriced<T>(pay: () => Promise<T>, rerunAfter: (err: unknown) => boolean, onStatus: (message: string) => void, signal: AbortSignal | undefined, statusOf?: (err: unknown) => string): Promise<T>;
 export declare function createHost(options?: HostOptions): Host;
 export declare function defineHostSlot<T>(name: string, init: () => T): HostSlot<T>;
 export interface Host {
@@ -1128,6 +1196,13 @@ export declare const coreCodes: readonly [
         readonly recovery: "Tell the user the contract's on-chain state is unreadable (show the message); don't retry, and don't suggest clearing caches or changing endpoints. Reading or calling that contract can't work until its state is fixed on chain.";
     },
     {
+        readonly code: "DUST_DOUBLE_SPENT";
+        readonly exitCode: 6;
+        readonly order: 117;
+        readonly summary: "Another transaction from the same wallet spent the Dust coin this one pays with first (node error 196, DustDoubleSpend): two payments from one wallet at once. mn builds a transfer or a contract call again by itself, at most twice; mn serve answers it to the dApp to balance again.";
+        readonly recovery: "Nothing of the refused transaction was spent. Run it again once the wallet's other transactions have landed; to avoid it, don't pay from one wallet in parallel.";
+    },
+    {
         readonly code: "FEE_TOO_LOW";
         readonly exitCode: 6;
         readonly order: 115;
@@ -1593,6 +1668,7 @@ export interface FeeLimits {
     maxPending: number;
 }
 export declare function pendingLimitRefusal(pendingCount: number, limits: FeeLimits): string | undefined;
+export declare const DUST_DOUBLE_SPEND_RETRIES = 2;
 export declare const DUST_FEE_MARGIN_STEPS: readonly number[];
 export interface FeePricing {
     readonly additionalFeeOverhead: bigint;
@@ -1611,6 +1687,7 @@ export type FeeRefusalStep = {
     fee: bigint;
     dust: bigint;
 };
+export declare function isDustDoubleSpendRefusal(err: unknown): boolean;
 export declare function isFeeShortRefusal(err: unknown): boolean;
 export declare function newFeePricing(now?: () => number): FeePricing;
 export declare function nextFeeMargin(blocks: number): number | undefined;

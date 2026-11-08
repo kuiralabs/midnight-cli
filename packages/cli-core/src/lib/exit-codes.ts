@@ -36,6 +36,8 @@ export const ERROR_CODES = {
   FEE_TOO_LOW: 'FEE_TOO_LOW',
   /** mn serve's node refused a fee as too low and mn serve now prices with more margin. Recovery: balance the transaction again and submit it. */
   FEE_REPRICED: 'FEE_REPRICED',
+  /** Another transaction from the wallet spent the same Dust first. Recovery: run it again once the wallet's other transactions have landed. */
+  DUST_DOUBLE_SPENT: 'DUST_DOUBLE_SPENT',
   DUST_REQUIRED: 'DUST_REQUIRED',
   /** A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust. Recovery: run `mn dust register` again at the time the message gives, or add NIGHT. */
   DUST_GENERATING: 'DUST_GENERATING',

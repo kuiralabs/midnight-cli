@@ -3,7 +3,7 @@
 
 import type { FeeWallet } from '@kuiralabs/midnight-account-chain/owner';
 import type { AccountChain } from './account-chain.ts';
-import { type ConnectOptions, type Payer, type PayingTarget, type CallSdkWarnings, DUST_FEE_MARGIN_STEPS, FEE_TOO_LOW_CODE, isFeeRepriced, rerunWhenRepriced } from '@kuiralabs/midnight-cli-core';
+import { type ConnectOptions, type Payer, type PayingTarget, type CallSdkWarnings, DUST_DOUBLE_SPEND_RETRIES, DUST_FEE_MARGIN_STEPS, FEE_TOO_LOW_CODE, isDustDoubleSpent, isFeeRepriced, RERUN_DOUBLE_SPENT_STATUS, RERUN_REPRICED_STATUS, rerunWhenRepriced } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 
 /** A fee wallet in this process, and how to stop it. */
@@ -53,14 +53,16 @@ export function repricingPayments(walletSubmit: (tx: string) => Promise<string>)
       throw err;
     }
   };
-  const refusedFee = (err: unknown): boolean => isFeeRepriced(err) || (err as { code?: unknown } | null | undefined)?.code === FEE_TOO_LOW_CODE;
+  const refusedFee = (err: unknown): boolean => isFeeRepriced(err) || isDustDoubleSpent(err) || (err as { code?: unknown } | null | undefined)?.code === FEE_TOO_LOW_CODE;
   const repricing = async <T>(pay: () => Promise<T>, onStatus: (message: string) => void, signal: AbortSignal | undefined): Promise<T> => {
-    let reruns = 0;
+    let repriced = 0;
+    let doubleSpent = 0;
     try {
       return await rerunWhenRepriced(async () => {
         lastRefusal = undefined;
         return pay();
-      }, () => isFeeRepriced(lastRefusal) && reruns++ < DUST_FEE_MARGIN_STEPS.length - 1, onStatus, signal);
+      }, () => (isFeeRepriced(lastRefusal) && repriced++ < DUST_FEE_MARGIN_STEPS.length - 1) || (isDustDoubleSpent(lastRefusal) && doubleSpent++ < DUST_DOUBLE_SPEND_RETRIES), onStatus, signal,
+      () => (isDustDoubleSpent(lastRefusal) ? RERUN_DOUBLE_SPENT_STATUS : RERUN_REPRICED_STATUS));
     } catch (err) {
       throw refusedFee(lastRefusal) ? lastRefusal : err;
     }

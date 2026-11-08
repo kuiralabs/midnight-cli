@@ -111,6 +111,7 @@ Stable identifiers used in error messages and structured error objects, with the
 | `CONTRACT_STATE_UNREADABLE` | 1 | A contract's state on chain can't be decoded by this mn's ledger: the state the chain holds is at fault, not the user's setup. The message names the contract and includes what the ledger said. |
 | `FEE_TOO_LOW` | 6 | The node refused the fee as too low even after mn priced it again with its largest margin (8 blocks of rising prices): prices are climbing faster than that, as when blocks are full one after another. |
 | `FEE_REPRICED` | 6 | mn serve's node refused a transaction's fee as too low; mn serve now prices fees with more margin. The transaction keeps its old fee. |
+| `DUST_DOUBLE_SPENT` | 6 | Another transaction from the same wallet spent the Dust coin this one pays with first (node error 196, DustDoubleSpend): two payments from one wallet at once. mn builds a transfer or a contract call again by itself, at most twice; mn serve answers it to the dApp to balance again. |
 | `DUST_REQUIRED` | 5 | Wallet has NIGHT but not enough DUST for the fee. |
 | `DUST_GENERATING` | 5 | A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust. |
 | `CHAIN_CLOCK_BEHIND` | 4 | The chain's clock lags this computer's (a local chain after sleep), so Dust estimates don't hold. |

@@ -2,8 +2,8 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isFeeShortRefusal, repriceAfterFeeRefusal } from '@kuiralabs/midnight-cli-core/engine';
-import { type NoticeSink, FeeRepricedError, LEDGER_9_FORK_VERSION, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE } from '@kuiralabs/midnight-cli-core';
+import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal } from '@kuiralabs/midnight-cli-core/engine';
+import { type NoticeSink, DustDoubleSpentError, FeeRepricedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE } from '@kuiralabs/midnight-cli-core';
 import { dim, roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
@@ -36,6 +36,8 @@ export interface DAppConnectorOptions {
    * cancel itself. None when absent.
    */
   openOffers?: () => readonly OpenOffer[];
+  /** The wallet's Dust lock across mn processes: held from a balancing until no transaction of this connector holds coins, so another mn paying from the wallet doesn't pick the same Dust. */
+  dustLock?: WalletDustLock;
   callbacks?: DAppConnectorCallbacks;
   /**
    * The state the caller's own sync ended on. Reads answer from it at once;
@@ -258,6 +260,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       if (txMap!.size === 0) pendingTxsByConnection.delete(connectionId);
       try { await facade.revert(finalized); } catch { /* best-effort */ }
       notice(dim(`  abandoned tx reverted (${connectionId})`));
+      releaseDustIfIdle();
     }, ABANDONED_TX_TIMEOUT_MS);
     txMap.set(txHex, { finalized, timer, feeOnly });
   }
@@ -281,6 +284,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
   function handOffPendingTx(connectionId: string, txHex: string): boolean {
     const held = pendingTxsByConnection.get(connectionId)?.has(txHex) ?? false;
     untrackPendingTx(connectionId, txHex);
+    releaseDustIfIdle();
     return held;
   }
 
@@ -316,6 +320,12 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       try { await facade.revert(entry.finalized); } catch { /* best-effort */ }
     }
     notice(dim(`  reverted ${txMap.size} pending tx(s) on disconnect`));
+    releaseDustIfIdle();
+  }
+
+  /** Lets the wallet's Dust lock go once no transaction of this connector is being built, waits to be submitted, or is being submitted. */
+  function releaseDustIfIdle(): void {
+    if (pendingCount() + submittingTxs.size + buildsInFlight === 0) options.dustLock?.release();
   }
 
   function createTtl(): Date {
@@ -831,11 +841,14 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
   async function building<T>(build: () => Promise<T>): Promise<T> {
     buildsInFlight++;
     try {
+      // Another mn paying from this wallet balances once its spend is on chain, not at the same time.
+      await options.dustLock?.hold({ notice: (line) => notice(dim(`  ${line}`)), progress: () => {} });
       return await build();
     } catch (err) {
       throw heldByOthersOr(err);
     } finally {
       buildsInFlight--;
+      releaseDustIfIdle();
     }
   }
 
@@ -1060,6 +1073,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
         tracker.complete();
         // Submitted: its coins are spent, not pending.
         submittingTxs.delete(txHex);
+        releaseDustIfIdle();
         context.metadata.phases = tracker.getTimings();
         // Return txHash for server logging (onResponse can read it from result)
         return { txHash };
@@ -1067,6 +1081,9 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
         tracker.complete();
         // Revert pending tx to release locked dust coins
         await release();
+        releaseDustIfIdle();
+        // Another transaction from this wallet spent the same Dust first: nothing of this one was spent, and balanced again it pays with free Dust.
+        if (isDustDoubleSpendRefusal(submitErr)) throw new DustDoubleSpentError(0, { cause: submitErr });
         // The fee refused as too low while the Dust covers it: the next balance
         // is priced with a larger margin, and the dApp balances this one again.
         // Not rebuilt here: the dApp holds this transaction and follows it by
@@ -1193,6 +1210,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       }
     }
     pendingTxsByConnection.clear();
+    options.dustLock?.release();
   }
 
   function hasPendingTxs(): boolean {

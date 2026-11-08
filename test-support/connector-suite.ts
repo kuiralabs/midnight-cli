@@ -926,6 +926,21 @@ export function connectorSuite(engine: ConnectorEngine): void {
         expect(err.message).toContain('(0.738727721894531 DUST, priced with 8 blocks of margin, the most mn tries)');
       });
 
+      it('answers Dust another transaction of the wallet spent first (error 196) as DUST_DOUBLE_SPENT, to balance again', async () => {
+        const spentFirst = () => {
+          const failure = Effect.runPromise(Effect.fail(new engine.SubmissionError({ message: 'Transaction submission error', cause: new Error('1010: Invalid Transaction: Custom error: 196') })));
+          failure.catch(() => {});
+          return failure;
+        };
+        const bundle = createBundleStub({ submitTransaction: spentFirst });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        const err: any = await connector.handlers.submitTransaction({ tx: SEALED_AGENT_TX }, ctx()).catch((e: any) => e);
+
+        expect(err.code).toBe('DUST_DOUBLE_SPENT');
+        expect(err.message).toContain('Balance it again and submit it');
+      });
+
       it('keeps the raised margin for the payments after one that goes through', async () => {
         const bundle = createBundleStub({ submitTransaction: vi.fn().mockResolvedValue('tx-id') });
         bundle.feePricing.feeBlocksMargin = 5;

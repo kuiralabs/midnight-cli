@@ -65,11 +65,13 @@ export {
 } from './lib/error-codes.ts';
 export { trimAgentMessage } from './lib/error-trim.ts';
 export { stateDecodeFailureOf } from './lib/contract-state-errors.ts';
+export { DUST_LOCK_WAIT_MS, type DustLockSay, walletDustLock, walletDustLockFile, type WalletDustLock } from './lib/wallet-dust-lock.ts';
+export { acquireProcessLock, holderCommandOf, type LockHolder, processIsAlive, type ProcessLockDeps, type ProcessLockOptions, type TakenLock } from './lib/process-lock.ts';
 export {
   ACCOUNT_ARTIFACTS_KEY, type AccountArtifactsSource, checkAccountArtifactsSource, InvalidAccountArtifactsSourceError, resolveAccountArtifactsSource
 } from './lib/account-artifacts.ts';
 export {
-  asReported, CANCELLED_MESSAGE, CancelledError, CommandFailedError, ContractStateUnreadableError, DustRequiredError,
+  asReported, CANCELLED_MESSAGE, CancelledError, CommandFailedError, ContractStateUnreadableError, DustDoubleSpentError, DustRequiredError,
   FeeRepricedError, FeeTooLowError, InsufficientBalanceError, isUsageError, NetworkError, ProofFailureError, SyncTimeoutError,
   throwIfCancelled, TransactionRefusedError, UsageError
 } from './lib/errors.ts';
@@ -79,7 +81,7 @@ export {
   EXIT_INVALID_ARGS, EXIT_NETWORK_ERROR, EXIT_TX_REJECTED, EXIT_WALLET_NOT_FOUND, humanizeNetworkError
 } from './lib/exit-codes.ts';
 export { type FeeLimits, parseFeeLimits } from './lib/fee-limits.ts';
-export { DUST_FEE_MARGIN_STEPS, FEE_REPRICED_CODE, FEE_TOO_LOW_CODE, isFeeRepriced, RERUN_REPRICED_STATUS, rerunWhenRepriced } from './lib/fee-margin.ts';
+export { DUST_DOUBLE_SPEND_RETRIES, DUST_DOUBLE_SPENT_CODE, DUST_FEE_MARGIN_STEPS, FEE_REPRICED_CODE, FEE_TOO_LOW_CODE, isDustDoubleSpent, RERUN_DOUBLE_SPENT_STATUS, isFeeRepriced, RERUN_REPRICED_STATUS, rerunWhenRepriced } from './lib/fee-margin.ts';
 export { createHost, defineHostSlot, type Host, type HostOptions } from './lib/host.ts';
 export { writeJsonError, writeJsonResult } from './lib/json-output.ts';
 export {
