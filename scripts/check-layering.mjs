@@ -77,7 +77,7 @@ const HOMES = [
   // The SDK engines: each is the only code that imports its SDK set.
   ['engine', /^engine\//],
 
-  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|verbose|error-trim|command-flags|run-command|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|error-codes|wallet-cache|cache-indexer|reader-cache-files|connector-api|dust-wait|fee-limits|tx-serde|sign-data|approval|dust-balancing-plan|dust-registration-plan|shielded-policy|mainnet-refusal|wallet-session|sdk-layout|swap-offer|offer-envelope|open-offers|coin-picker|host|transport-failure|progress|network-target|wallet-name|owner-only|contract-keys|dust-cap|endpoint-unreachable|submit-wait)\.ts$/],
+  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|verbose|error-trim|command-flags|run-command|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|error-codes|wallet-cache|cache-indexer|reader-cache-files|connector-api|dust-wait|fee-limits|fee-margin|tx-serde|sign-data|approval|dust-balancing-plan|dust-registration-plan|shielded-policy|mainnet-refusal|wallet-session|sdk-layout|swap-offer|offer-envelope|open-offers|coin-picker|host|transport-failure|progress|network-target|wallet-name|owner-only|contract-keys|dust-cap|endpoint-unreachable|submit-wait)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
   // What a host calls on its own process: the SDK rejection guard, the sync heap advice.
   ['core', /^process\//],
@@ -162,10 +162,11 @@ export function accountImportRule(home, specifier, typeOnly) {
 
 // The engine contract's reading of the SDK's and the node's errors: an engine
 // turns them into typed errors, so only the engines read them, and in core
-// only the wallet session (the DApp connector in a program's process) and the
-// Dust wait (what a shortage says the wallet is short by).
+// only the wallet session (the DApp connector in a program's process), the
+// Dust wait (what a shortage says the wallet is short by) and the fee margin
+// (a fee the node refused as too low).
 const SDK_ERRORS = 'lib/sdk-errors.ts';
-const SDK_ERROR_READERS = /^lib\/(sdk-errors|wallet-session|dust-wait)\.ts$/;
+const SDK_ERROR_READERS = /^lib\/(sdk-errors|wallet-session|dust-wait|fee-margin)\.ts$/;
 
 // import ... from 'x', export ... from 'x', import 'x', import('x').
 const IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+)(['"])([^'"]+)\1/gm;

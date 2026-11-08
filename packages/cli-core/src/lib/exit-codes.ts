@@ -32,6 +32,10 @@ export const ERROR_CODES = {
   PROOF_FAILURE: 'PROOF_FAILURE',
   /** Chain rejected the dust spend proof as malformed (substrate "Custom error 170" / `InvalidDustSpendProof`). Almost always a stale commitment tree. Recovery: `mn cache clear --wallet <name>` then retry. */
   INVALID_DUST_PROOF: 'INVALID_DUST_PROOF',
+  /** The node refused the fee as too low even with mn's largest margin. Recovery: wait a minute and retry. */
+  FEE_TOO_LOW: 'FEE_TOO_LOW',
+  /** mn serve's node refused a fee as too low and mn serve now prices with more margin. Recovery: balance the transaction again and submit it. */
+  FEE_REPRICED: 'FEE_REPRICED',
   DUST_REQUIRED: 'DUST_REQUIRED',
   /** A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust. Recovery: run `mn dust register` again at the time the message gives, or add NIGHT. */
   DUST_GENERATING: 'DUST_GENERATING',

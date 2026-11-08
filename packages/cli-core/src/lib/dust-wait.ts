@@ -1,7 +1,7 @@
 // Waiting for Dust to cover a fee. The Dust wallet's balance is a function of
 // time (registered NIGHT keeps generating), so the wait can be found by
-// looking ahead: right after registering 1000 NIGHT a wallet holds ~0.66 DUST
-// and a ledger-9 transfer costs ~0.85, a gap 1000 NIGHT closes in ~20 seconds.
+// looking ahead: 1000 NIGHT generates about 0.0083 DUST a second on a ledger-9
+// local chain, so a wallet 0.2 DUST short of a fee waits about 24 seconds.
 
 import { formatWait } from './duration.ts';
 import { sleep } from './sleep.ts';
@@ -21,8 +21,9 @@ export const DUST_SHORT_WAIT_MS = 2 * 60_000;
  * How long a serve that mn starts for one of its own commands waits (contract
  * deploy and call, a test suite, grant): the person who ran the command sees
  * the wait and can stop it, and five minutes covers a 1000 NIGHT wallet's
- * next fee after it paid one (a deploy takes about 1.13 DUST on a local
- * chain on the final ledger-9 release, generated in about two minutes).
+ * next fee after it paid one (a counter deploy's fee was 1.08 DUST on a
+ * ledger-9 local chain, 1.23 with the wallet's 3 blocks of margin, generated
+ * in about two minutes).
  */
 export const OWN_COMMAND_DUST_WAIT_MS = 5 * 60_000;
 /** How far ahead a wait is looked for: past it, the wallet's NIGHT won't generate the Dust in useful time. */

@@ -16,21 +16,33 @@ export const INDEXER_GRAPHQL_WS_PATH = `/api/${INDEXER_API_VERSION}/graphql/ws`;
 export const TOKEN_DECIMALS = 6;
 export const TOKEN_MULTIPLIER = 1_000_000;
 
-// Dust wallet cost parameters — matches the reference implementation.
-// The SDK uses: feesWithMargin(ledgerParams, feeBlocksMargin) + additionalFeeOverhead
-// Reference (kuira-verification-test): 300T overhead, 5 blocks margin.
-export const DUST_COST_OVERHEAD = 300_000_000_000_000n;
-export const DUST_FEE_BLOCKS_MARGIN = 5;
+// What the wallet SDK pays a fee with: feesWithMargin(params, DUST_FEE_BLOCKS_MARGIN)
+// + DUST_COST_OVERHEAD, priced before proving. The whole amount is burned, not
+// only the fee the chain charges, so every margin block is Dust spent.
+//
+// No overhead: the price before proving is within 0.072% of the proven
+// transaction's fee (a deploy, the worst measured; a transfer 0.013%; a call's
+// is 2.5% above, as its proof is estimated at 4832 bytes). The 0.3 DUST mn
+// added before covered that gap 400 times over, and cost 55% of a transfer's fee.
+//
+// Three blocks of margin: each block of margin prices at the highest price the
+// chain can reach one block later (prices rise at most 4.6% a block, when
+// blocks are full), and a transaction lands 3 to 4 blocks after the block it
+// was priced at. Measured on a ledger-9 local chain, 2026-11-08. When the node
+// still refuses the fee as too low, the paying paths price again with more
+// margin (DUST_FEE_MARGIN_STEPS).
+export const DUST_COST_OVERHEAD = 0n;
+export const DUST_FEE_BLOCKS_MARGIN = 3;
 
 // Minimum dust balance for a transfer transaction.
-// The actual fee = feesWithMargin(tx, ledgerParams, feeBlocksMargin) + DUST_COST_OVERHEAD.
-// We can't compute the exact feesWithMargin without building the transaction;
-// a 1 NIGHT unshielded transfer cost ~0.85 DUST on a ledger-9 localnet
-// (2026-10-05), so 0.9 DUST. Used as a pre-flight check: below it the transfer
-// waits for Dust that is moments away, or fails fast with how long it takes.
-// Measured on a localnet only; a transaction whose fee is higher (more inputs,
-// other fee prices) is caught by the transfer retry, which waits for Dust to grow.
-export const MIN_DUST_FOR_TRANSFER = 900_000_000_000_000n;
+// We can't compute the exact fee without building the transaction; a 1 NIGHT
+// unshielded transfer's fee was 0.548 DUST on a ledger-9 local chain
+// (2026-11-08), and with 3 blocks of margin the wallet spends 0.627, so 0.65 DUST.
+// Used as a pre-flight check: below it the transfer waits for Dust that is
+// moments away, or fails fast with how long it takes. Measured on a local chain
+// only; a transaction whose fee is higher (more inputs, other fee prices) is
+// caught by the transfer retry, which waits for Dust to grow.
+export const MIN_DUST_FOR_TRANSFER = 650_000_000_000_000n;
 
 // Initial dust-accrual parameters (protocol constants, matching the ledger's
 // INITIAL_PARAMETERS). Single source of truth: the direct dust readers build a

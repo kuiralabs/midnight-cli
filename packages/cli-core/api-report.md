@@ -458,6 +458,22 @@ export declare class DustRequiredError extends Error {
         cause?: unknown;
     });
 }
+export declare class FeeRepricedError extends Error {
+    readonly code = "FEE_REPRICED";
+    readonly fromBlocks: number;
+    readonly toBlocks: number;
+    constructor(fromBlocks: number, toBlocks: number, options?: {
+        cause?: unknown;
+    });
+}
+export declare class FeeTooLowError extends Error {
+    readonly code = "FEE_TOO_LOW";
+    readonly fee: bigint;
+    readonly marginBlocks: number;
+    constructor(fee: bigint, marginBlocks: number, options?: {
+        cause?: unknown;
+    });
+}
 export declare class InsufficientBalanceError extends Error {
     readonly code = "INSUFFICIENT_BALANCE";
     constructor(message: string, options?: {
@@ -526,6 +542,8 @@ export declare const ERROR_CODES: {
     readonly PROOF_TIMEOUT: "PROOF_TIMEOUT";
     readonly PROOF_FAILURE: "PROOF_FAILURE";
     readonly INVALID_DUST_PROOF: "INVALID_DUST_PROOF";
+    readonly FEE_TOO_LOW: "FEE_TOO_LOW";
+    readonly FEE_REPRICED: "FEE_REPRICED";
     readonly DUST_REQUIRED: "DUST_REQUIRED";
     readonly DUST_GENERATING: "DUST_GENERATING";
     readonly CHAIN_CLOCK_BEHIND: "CHAIN_CLOCK_BEHIND";
@@ -570,6 +588,7 @@ export interface FeeLimits {
     maxPending: number;
 }
 export declare function parseFeeLimits(maxFee: string | undefined, maxPending: string | undefined): FeeLimits;
+export declare const DUST_FEE_MARGIN_STEPS: readonly number[];
 export declare function createHost(options?: HostOptions): Host;
 export declare function defineHostSlot<T>(name: string, init: () => T): HostSlot<T>;
 export interface Host {
@@ -1070,6 +1089,20 @@ export declare const coreCodes: readonly [
         readonly recovery: "Retry; the cache resumes from the last applied event so progress is preserved.";
     },
     {
+        readonly code: "FEE_TOO_LOW";
+        readonly exitCode: 6;
+        readonly order: 115;
+        readonly summary: "The node refused the fee as too low even after mn priced it again with its largest margin (8 blocks of rising prices): prices are climbing faster than that, as when blocks are full one after another.";
+        readonly recovery: "Nothing was spent. Wait a minute and retry; don't retry in a loop.";
+    },
+    {
+        readonly code: "FEE_REPRICED";
+        readonly exitCode: 6;
+        readonly order: 116;
+        readonly summary: "mn serve's node refused a transaction's fee as too low; mn serve now prices fees with more margin. The transaction keeps its old fee.";
+        readonly recovery: "Balance the transaction again and submit it (`mn contract deploy` and `call` do this themselves). Nothing was spent.";
+    },
+    {
         readonly code: "DUST_REQUIRED";
         readonly exitCode: 5;
         readonly order: 120;
@@ -1156,8 +1189,8 @@ export declare function promptApproval(request: ApprovalRequest, options: Approv
 export declare function bindCachesToIndexer(network: string, indexerUrl: string, root: string): IndexerChange | undefined;
 export declare function describeIndexerChange(network: string, change: IndexerChange): string;
 export declare const ABANDONED_TX_TIMEOUT_MS = 120000;
-export declare const DUST_COST_OVERHEAD = 300000000000000n;
-export declare const DUST_FEE_BLOCKS_MARGIN = 5;
+export declare const DUST_COST_OVERHEAD = 0n;
+export declare const DUST_FEE_BLOCKS_MARGIN = 3;
 export declare const DUST_REGISTRATION_RETRY_DELAY_MS = 15000;
 export declare const DUST_REGISTRATION_TIMEOUT_MS = 600000;
 export declare const DUST_RETRY_ATTEMPTS = 10;
@@ -1167,7 +1200,7 @@ export declare const INITIAL_DUST_GRACE_PERIOD_SECONDS = 10800n;
 export declare const INITIAL_GENERATION_DECAY_RATE = 8267n;
 export declare const INITIAL_NIGHT_DUST_RATIO = 5000000000n;
 export declare const MAX_RETRY_ATTEMPTS = 3;
-export declare const MIN_DUST_FOR_TRANSFER = 900000000000000n;
+export declare const MIN_DUST_FOR_TRANSFER = 650000000000000n;
 export declare const PRE_SEND_SYNC_TIMEOUT_MS = 10000;
 export declare const PROOF_TIMEOUT_MS = 300000;
 export declare const STALE_UTXO_ERROR_CODE = 115;
@@ -1517,6 +1550,33 @@ export interface FeeLimits {
     maxPending: number;
 }
 export declare function pendingLimitRefusal(pendingCount: number, limits: FeeLimits): string | undefined;
+export declare const DUST_FEE_MARGIN_STEPS: readonly number[];
+export interface FeePricing {
+    readonly additionalFeeOverhead: bigint;
+    feeBlocksMargin: number;
+}
+export interface FeeRefusalCheck {
+    fee: bigint;
+    dust: bigint;
+}
+export type FeeRefusalStep = {
+    kind: 'repriced';
+    fromBlocks: number;
+    toBlocks: number;
+} | {
+    kind: 'dust-short';
+    fee: bigint;
+    dust: bigint;
+};
+export declare function isFeeShortRefusal(err: unknown): boolean;
+export declare function newFeePricing(): FeePricing;
+export declare function nextFeeMargin(blocks: number): number | undefined;
+export declare function repriceAfterFeeRefusal(pricing: FeePricing, check: () => Promise<FeeRefusalCheck>, refusal: unknown): Promise<FeeRefusalStep>;
+export declare function repricingStatus(step: {
+    fromBlocks: number;
+    toBlocks: number;
+}): string;
+export declare function resetFeeMargin(pricing: FeePricing): void;
 export declare function getNetworkId(networkIdStr: string): MidnightNetworkId;
 export declare function networkIdForName(name: NetworkName): MidnightNetworkId;
 export declare function assertSpendsNoOfferCoin(open: readonly OpenOffer[], spent: readonly string[], cancelling?: readonly string[]): void;

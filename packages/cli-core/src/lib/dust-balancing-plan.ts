@@ -12,7 +12,8 @@
 // memory until it traps ("unreachable"). The loop is synchronous, so the
 // process answers nothing meanwhile. A Dust coin regrowing after a payment
 // passes through that range (0.71 to 0.82 DUST for a simple payment on a
-// ledger-9 localnet: 13 seconds for a 1000 NIGHT coin, 11 minutes for 20).
+// ledger-9 localnet, priced with the 5 blocks of margin and 0.3 DUST mn used
+// then: 13 seconds for a 1000 NIGHT coin, 11 minutes for 20).
 //
 // planDustInputs is that loop with the amount owed kept as an amount owed, and
 // an end: each choice that falls short is followed by one for strictly more,

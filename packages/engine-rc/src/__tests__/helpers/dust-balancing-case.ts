@@ -5,7 +5,6 @@
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { CoinsAndBalances, CoreWallet, Keys, Transacting } from '@midnightntwrk/wallet-sdk/dust/v2';
-import { DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN } from '@kuiralabs/midnight-cli-core/engine';
 import { TWO_COIN_DUST_CAPTURED_AT, TWO_COIN_DUST_SEED_HEX, TWO_COIN_DUST_STATE_HEX } from '../fixtures/dust-state-two-coins.ts';
 import { LEDGER9_PARAMETERS_HEX } from '../../../../../test-support/fixtures/ledger9-parameters.ts';
 import { NETWORK, TTL, agentPaysMerchant, unsealedBytes } from '../../../../../test-support/ledger-tx.ts';
@@ -26,12 +25,22 @@ const allCoins = CoinsAndBalances.makeDefaultCoinsAndBalancesCapability({}, () =
 export const coinsAt = (time: Date): DustCoin[] =>
   [...allCoins.getAvailableCoinsWithGeneratedDust(state, time)].sort((a, b) => Number(a.value - b.value));
 
-/** A transacting capability over the fixture wallet; `onlySmallest` offers it the smaller coin alone. */
-export function transacting(Class: TransactingClass, { onlySmallest = false } = {}): SdkTransacting {
+/**
+ * The fee settings the fixture's cases are priced with: those mn priced with
+ * when the state was captured (0.3 DUST and 5 blocks of margin). The cases need
+ * the smallest coin to grow through the range where it covers the payment's own
+ * fee and not the fee with its spend added; with mn's lower fees since, the coin
+ * is already past that range at the capture. The coin choice doesn't depend on
+ * the settings, only where the range falls does.
+ */
+export const FIXTURE_COST_PARAMETERS = { additionalFeeOverhead: 300_000_000_000_000n, feeBlocksMargin: 5 };
+
+/** A transacting capability over the fixture wallet; `onlySmallest` offers it the smaller coin alone; it prices with `costParameters` (the fixture's unless given). */
+export function transacting(Class: TransactingClass, { onlySmallest = false, costParameters = FIXTURE_COST_PARAMETERS } = {}): SdkTransacting {
   const coins = onlySmallest
     ? { ...allCoins, getAvailableCoinsWithGeneratedDust: (s: typeof state, time: Date) => allCoins.getAvailableCoinsWithGeneratedDust(s, time).filter((c) => c.token.nonce === coinsAt(time)[0]!.token.nonce) }
     : allCoins;
-  return new Class(NETWORK, { additionalFeeOverhead: DUST_COST_OVERHEAD, feeBlocksMargin: DUST_FEE_BLOCKS_MARGIN }, () => CoinsAndBalances.chooseCoin, () => coins, () => keys);
+  return new Class(NETWORK, costParameters, () => CoinsAndBalances.chooseCoin, () => coins, () => keys);
 }
 
 /** The agent's payment as the wallet receives it to balance: proven, unsealed, owing only its fee. */

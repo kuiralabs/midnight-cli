@@ -66,7 +66,7 @@ export {
 export { trimAgentMessage } from './lib/error-trim.ts';
 export {
   asReported, CANCELLED_MESSAGE, CancelledError, CommandFailedError, DustRequiredError,
-  InsufficientBalanceError, isUsageError, NetworkError, ProofFailureError, SyncTimeoutError,
+  FeeRepricedError, FeeTooLowError, InsufficientBalanceError, isUsageError, NetworkError, ProofFailureError, SyncTimeoutError,
   throwIfCancelled, TransactionRefusedError, UsageError
 } from './lib/errors.ts';
 export { execProgram, type ExecRun, type ExecRunner, ProgramFailedError, ProgramTimedOutError } from './lib/exec-program.ts';
@@ -75,6 +75,7 @@ export {
   EXIT_INVALID_ARGS, EXIT_NETWORK_ERROR, EXIT_TX_REJECTED, EXIT_WALLET_NOT_FOUND, humanizeNetworkError
 } from './lib/exit-codes.ts';
 export { type FeeLimits, parseFeeLimits } from './lib/fee-limits.ts';
+export { DUST_FEE_MARGIN_STEPS } from './lib/fee-margin.ts';
 export { createHost, defineHostSlot, type Host, type HostOptions } from './lib/host.ts';
 export { writeJsonError, writeJsonResult } from './lib/json-output.ts';
 export {

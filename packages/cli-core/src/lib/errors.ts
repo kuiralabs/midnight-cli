@@ -9,6 +9,8 @@
 // Throw plain `Error` (or any subclass) for: real failures (network,
 // insufficient balance, file not found, SDK errors, etc.).
 
+import { toDust } from '../ui/format.ts';
+
 /**
  * Thrown when the user invoked the CLI with missing or invalid arguments
  * that they should fix and retry. Renders in yellow with a "Usage" header
@@ -150,6 +152,56 @@ export class DustRequiredError extends Error {
     super(message, options);
     this.name = 'DustRequiredError';
     Object.setPrototypeOf(this, DustRequiredError.prototype);
+  }
+}
+
+/**
+ * The node refused a fee as too low even after the wallet priced it again with
+ * its largest margin. Fee prices climbed faster than the margin covers (blocks
+ * full one after another), so a retry a little later is priced at the new prices.
+ */
+export class FeeTooLowError extends Error {
+  readonly code = 'FEE_TOO_LOW';
+  /** The fee in Specks, as the wallet priced it with the last margin tried. */
+  readonly fee: bigint;
+  /** The last margin tried, in blocks. */
+  readonly marginBlocks: number;
+
+  constructor(fee: bigint, marginBlocks: number, options?: { cause?: unknown }) {
+    super(
+      `The node refused the fee as too low (${toDust(fee)} DUST, priced with ${marginBlocks} blocks of margin, the most mn tries). `
+      + 'Fee prices are rising faster than that margin covers, which happens when blocks are full one after another: wait a minute and run it again.',
+      options,
+    );
+    this.name = 'FeeTooLowError';
+    this.fee = fee;
+    this.marginBlocks = marginBlocks;
+    Object.setPrototypeOf(this, FeeTooLowError.prototype);
+  }
+}
+
+/**
+ * mn serve submitted a transaction whose fee the node refused as too low, and
+ * now prices fees with more margin. The transaction the dApp holds keeps its
+ * fee, so it is balanced again and submitted again; mn's contract commands do
+ * that themselves.
+ */
+export class FeeRepricedError extends Error {
+  readonly code = 'FEE_REPRICED';
+  /** The margin the refused fee was priced with, and the one the wallet prices with now, in blocks. */
+  readonly fromBlocks: number;
+  readonly toBlocks: number;
+
+  constructor(fromBlocks: number, toBlocks: number, options?: { cause?: unknown }) {
+    super(
+      `The node refused the fee as too low (priced with ${fromBlocks} blocks of margin). `
+      + `The wallet now prices fees with ${toBlocks} blocks: balance the transaction again and submit it.`,
+      options,
+    );
+    this.name = 'FeeRepricedError';
+    this.fromBlocks = fromBlocks;
+    this.toBlocks = toBlocks;
+    Object.setPrototypeOf(this, FeeRepricedError.prototype);
   }
 }
 

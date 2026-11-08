@@ -108,6 +108,8 @@ Stable identifiers used in error messages and structured error objects, with the
 | `PROOF_TIMEOUT` | 6 | ZK proof generation didn't finish within the deadline. |
 | `PROOF_FAILURE` | 6 | Proof server rejected or failed to generate the ZK proof. Often a stale commitment tree or unreachable proof server. |
 | `INVALID_DUST_PROOF` | 6 | Chain rejected the dust spend proof as malformed (substrate "Custom error 170"). Stale commitment tree. |
+| `FEE_TOO_LOW` | 6 | The node refused the fee as too low even after mn priced it again with its largest margin (8 blocks of rising prices): prices are climbing faster than that, as when blocks are full one after another. |
+| `FEE_REPRICED` | 6 | mn serve's node refused a transaction's fee as too low; mn serve now prices fees with more margin. The transaction keeps its old fee. |
 | `DUST_REQUIRED` | 5 | Wallet has NIGHT but not enough DUST for the fee. |
 | `DUST_GENERATING` | 5 | A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust. |
 | `CHAIN_CLOCK_BEHIND` | 4 | The chain's clock lags this computer's (a local chain after sleep), so Dust estimates don't hold. |

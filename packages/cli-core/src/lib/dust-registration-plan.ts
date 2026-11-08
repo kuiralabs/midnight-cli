@@ -3,7 +3,8 @@
 // On ledger 9 a registration pays its fee from the Dust its NIGHT UTXOs have
 // generated since they were created, and generation scales with the amount of
 // NIGHT: on a ledger-9 localnet 20 NIGHT took about 53 minutes to generate a
-// 0.53 DUST fee, 1000 NIGHT about a minute. The SDK's estimateRegistration
+// 0.53 DUST fee (as mn priced it then, with 5 blocks of margin and 0.3 DUST;
+// the registration's fee was 0.29 on 2026-11-08), 1000 NIGHT about a minute. The SDK's estimateRegistration
 // reports the fee and, per UTXO, what it has generated so far, its rate and
 // its cap; that is enough to say up front how long the wait is.
 

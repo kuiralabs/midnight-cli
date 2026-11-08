@@ -16,9 +16,9 @@ export interface FeeLimits {
   maxPending: number;
 }
 
-// A simple contract call cost ~0.49 DUST in total on a ledger-9 localnet;
-// 10 DUST leaves room for larger transactions (more circuits, more calls)
-// while still stopping a runaway one.
+// A counter's increment call's fee was 0.197 DUST on a ledger-9 local chain
+// (0.23 with the wallet's 3 blocks of margin); 10 DUST leaves room for larger
+// transactions (more circuits, more calls) while still stopping a runaway one.
 export const DEFAULT_FEE_LIMITS: FeeLimits = {
   maxFeeSpecks: 10n * SPECKS_PER_DUST,
   maxPending: 2,

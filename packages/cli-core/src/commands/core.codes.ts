@@ -44,6 +44,8 @@ export const coreCodes = defineCodes([
   { code: 'STALE_UTXO', exitCode: EXIT_TX_REJECTED, order: 70, summary: 'UTXO was already spent on-chain (substrate "error code 115").', recovery: 'Re-sync (the next call will refresh state) and retry.' },
   { code: 'STALE_CACHE', exitCode: EXIT_TX_REJECTED, order: 80, summary: 'Local wallet cache disagrees with chain (e.g. localnet reset, remote testnet re-indexed).', recovery: '`midnight_cache_clear({ wallet: "<name>" })` then retry.' },
   { code: 'SYNC_TIMEOUT', exitCode: EXIT_NETWORK_ERROR, order: 40, summary: 'Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync.', recovery: 'Retry; the cache resumes from the last applied event so progress is preserved.' },
+  { code: 'FEE_TOO_LOW', exitCode: EXIT_TX_REJECTED, order: 115, summary: 'The node refused the fee as too low even after mn priced it again with its largest margin (8 blocks of rising prices): prices are climbing faster than that, as when blocks are full one after another.', recovery: "Nothing was spent. Wait a minute and retry; don't retry in a loop." },
+  { code: 'FEE_REPRICED', exitCode: EXIT_TX_REJECTED, order: 116, summary: "mn serve's node refused a transaction's fee as too low; mn serve now prices fees with more margin. The transaction keeps its old fee.", recovery: 'Balance the transaction again and submit it (`mn contract deploy` and `call` do this themselves). Nothing was spent.' },
   { code: 'DUST_REQUIRED', exitCode: EXIT_INSUFFICIENT_BALANCE, order: 120, summary: 'Wallet has NIGHT but not enough DUST for the fee.', recovery: 'Not registered (`midnight_dust_status()` shows `registered: false`): run `midnight_dust_register()`. Registered: its NIGHT is still generating the fee, which happens with time. mn has already waited when the fee was a few minutes away; the message says how long the rest takes ("generates the rest in about 4 minutes"). Wait that long and retry, don\'t retry at once.' },
   { code: 'DUST_GENERATING', exitCode: EXIT_INSUFFICIENT_BALANCE, order: 130, summary: "A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust.", recovery: 'The message says when: run `midnight_dust_register()` again then, or add NIGHT.' },
   { code: 'INSUFFICIENT_BALANCE', exitCode: EXIT_INSUFFICIENT_BALANCE, order: 50, summary: "Wallet doesn't have enough NIGHT to cover the requested amount.", recovery: 'Show the user. On localnet: `midnight_airdrop({ amount: "..." })`. On hosted networks: tell user to fund the address.' },
@@ -67,7 +69,7 @@ export const LOADS_ENGINE = defineCodeSet('engine', ['MIXED_SDK_LAYOUT']);
 export const ENGINE_SYNC = defineCodeSet('sync', ['NETWORK_ERROR', 'SYNC_TIMEOUT', 'STALE_CACHE']);
 
 /** Paying for a transaction: the node's refusals, the proof, the Dust for the fee, the NIGHT, coins an open swap offer holds. */
-export const PAYS = defineCodeSet('paying', ['TX_REJECTED', 'STALE_UTXO', 'INVALID_DUST_PROOF', 'PROOF_TIMEOUT', 'PROOF_FAILURE', 'DUST_REQUIRED', 'DUST_GENERATING', 'INSUFFICIENT_BALANCE', 'OFFER_COINS_IN_USE', 'OFFER_RECORD_UNREADABLE']);
+export const PAYS = defineCodeSet('paying', ['TX_REJECTED', 'STALE_UTXO', 'INVALID_DUST_PROOF', 'FEE_TOO_LOW', 'FEE_REPRICED', 'PROOF_TIMEOUT', 'PROOF_FAILURE', 'DUST_REQUIRED', 'DUST_GENERATING', 'INSUFFICIENT_BALANCE', 'OFFER_COINS_IN_USE', 'OFFER_RECORD_UNREADABLE']);
 
 /** Reading a swap offer's bytes and terms. */
 export const READS_OFFERS = defineCodeSet('offers', ['NOT_AN_OFFER', 'TERMS_MISMATCH']);
