@@ -191,10 +191,13 @@ export function providerSetupCode(networkConfig: NetworkConfig, privateStateKey:
   return `
 const zkConfigProvider = new NodeZkConfigProvider(MANAGED_DIR);
 
-// The private-state store, in the folder the script runs in (midnight-js's
-// default place), opened for the paying wallet first: kept to its owner, its
+// The private-state store, in the folder mn names under its state root (one
+// per contract), opened for the paying wallet first: kept to its owner, its
 // entries under the wallet's own password and account (openPrivateStateStore).
-const PRIVATE_STATE_DIR = mnPath.resolve('midnight-level-db');
+const PRIVATE_STATE_DIR = process.env.${parts.privateStateDirEnv};
+if (typeof PRIVATE_STATE_DIR !== 'string' || PRIVATE_STATE_DIR === '') {
+  throw new Error('The contract script was given no private-state folder (${parts.privateStateDirEnv}): it is started by mn contract deploy or call, which name it.');
+}
 ${parts.privateStateStoreFn}
 const { accountId: privateStateAccount } = await openPrivateStateStore(
   { fs: mnFs, join: mnPath.join, provide: (value) => () => value, umask: (mask) => process.umask(mask), levelPrivateStateProvider },

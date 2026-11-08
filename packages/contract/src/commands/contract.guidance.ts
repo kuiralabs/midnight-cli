@@ -40,6 +40,12 @@ Compile with Compact 0.36 (language 0.28): mn bundles compact-runtime
     → { contractName, circuit, address, network, status }
     Example: midnight contract call --address abc123... --circuit post --args '["Hello!"]'
 
+  Private state (deploy, call): kept under mn's state root, one store per
+  contract, ~/.midnight/contract-state/<network>/<address>/ (owner-only),
+  so a call from any folder finds what its deploy left. A
+  midnight-level-db folder an earlier mn left in the dApp is moved out once
+  (said on stderr; with --json, in "warnings").
+
   State — read ledger state of a deployed contract:
     midnight contract state --address <addr> [--network <name>] [--json]
     → { address, network, fields: { key: value }, maps: { key: { size } } }

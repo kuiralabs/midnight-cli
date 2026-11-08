@@ -213,6 +213,8 @@ async function executeDeploy(action: TestAction, ctx: ExecutionContext): Promise
     managedDir: ctx.managedDir,
     contractName: ctx.contractName,
     servePort: ctx.servePort,
+    // A note such as the private-state store moved out of the dApp, with the run's messages.
+    notice: ctx.onMessage,
     contractKeys: await ctx.contractKeys(),
     onMessage: ctx.onMessage,
   });
@@ -286,6 +288,8 @@ async function executeCall(action: TestAction, ctx: ExecutionContext): Promise<A
     circuit: action.circuit,
     args,
     servePort: ctx.servePort,
+    // A note such as the private-state store moved out of the dApp, with the run's messages.
+    notice: ctx.onMessage,
     contractKeys: await ctx.contractKeys(),
     onMessage: ctx.onMessage,
   });

@@ -80,6 +80,8 @@ export interface WitnessInfo {
     'result type': CompactType;
 }
 export declare function clearDappPrivateState(dappDir: string): boolean;
+export declare function clearNetworkContractState(root: string, network: NetworkName): boolean;
+export declare function contractStateDir(root: string, network: NetworkName, address: string): string;
 export declare const PRIVATE_STATE_DATABASE = "midnight-level-db";
 export interface ContractCallRequest {
     dappDir: string;
@@ -149,6 +151,7 @@ export interface RunnerOptions {
     contractKeys: ContractKeys;
     privateStateSecretKey?: string;
     onMessage?: (msg: string) => void;
+    notice?: (line: string) => void;
     signal?: AbortSignal;
 }
 export declare function runState(options: StateOptions): Promise<StateResult>;

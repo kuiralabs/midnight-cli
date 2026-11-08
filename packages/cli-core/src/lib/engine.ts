@@ -91,6 +91,8 @@ export interface ScriptParts {
   readonly privateStateSecretEnv: string;
   readonly privateStatePasswordEnv: string;
   readonly privateStateAccountEnv: string;
+  /** The environment variable naming the private-state store's folder (absolute), under mn's state root. */
+  readonly privateStateDirEnv: string;
   /** Where the dApp's witnesses may be, relative to its folder. */
   readonly witnessCandidates: readonly string[];
   /** The environment variables carrying the indexer's URLs, which never go into a script's text. */

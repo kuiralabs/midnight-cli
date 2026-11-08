@@ -42,6 +42,7 @@ const TEST_PARTS: ScriptParts = {
   privateStateSecretEnv: 'MN_TEST_PRIVATE_STATE_SECRET',
   privateStatePasswordEnv: 'MN_TEST_PRIVATE_STATE_PASSWORD',
   privateStateAccountEnv: 'MN_TEST_PRIVATE_STATE_ACCOUNT',
+  privateStateDirEnv: 'MN_TEST_PRIVATE_STATE_DIR',
   witnessCandidates: [],
   indexerUrlEnv: 'MN_TEST_INDEXER_URL',
   indexerWsUrlEnv: 'MN_TEST_INDEXER_WS_URL',
@@ -202,6 +203,7 @@ describe('generated providers object', () => {
       ...indexerEnvironment(NETWORK),
       [TEST_PARTS.privateStatePasswordEnv]: 'Mn-abc-def-123-456',
       [TEST_PARTS.privateStateAccountEnv]: 'mn-test-account',
+      [TEST_PARTS.privateStateDirEnv]: join(dir, 'private-state'),
     };
     Object.assign(process.env, environment);
     try {

@@ -77,12 +77,12 @@ export const contractDefinition: CommandDefinition = {
       takesValue: true,
       subcommands: ['deploy', 'call'],
       help: [
-        '--secret-key <64-hex>         The private-state secret (deploy, call), for a contract whose owner is public_key(secret_key()). Default: one derived from the wallet\'s seed, the same on every run. It reaches the contract script through its environment, never argv; the private state it seeds is kept in the dApp\'s midnight-level-db folder, encrypted with a key derived from the wallet\'s seed',
+        '--secret-key <64-hex>         The private-state secret (deploy, call), for a contract whose owner is public_key(secret_key()). Default: one derived from the wallet\'s seed, the same on every run. It reaches the contract script through its environment, never argv; the private state it seeds is kept under mn\'s state root (~/.midnight/contract-state/<network>/<address>/, one store per contract, owner-only), encrypted with a key derived from the wallet\'s seed',
         '--secret-key legacy           (call) The secret an mn before 0.6.0 used by default: the wallet\'s public coin key. Only for calling a contract deployed with that default',
       ],
       agent: {
         type: 'string',
-        description: 'The private-state secret, 64 hex chars, for a contract whose owner is public_key(secret_key()); by default one derived from the wallet\'s seed. On call, "legacy" uses the default of an mn before 0.6.0 (the wallet\'s public coin key) for a contract deployed with it. The private state it seeds is kept in the dApp\'s midnight-level-db folder, encrypted with a key from the wallet\'s seed',
+        description: 'The private-state secret, 64 hex chars, for a contract whose owner is public_key(secret_key()); by default one derived from the wallet\'s seed. On call, "legacy" uses the default of an mn before 0.6.0 (the wallet\'s public coin key) for a contract deployed with it. The private state it seeds is kept under mn\'s state root, one store per contract (~/.midnight/contract-state/<network>/<address>/), encrypted with a key from the wallet\'s seed',
       },
     },
     {

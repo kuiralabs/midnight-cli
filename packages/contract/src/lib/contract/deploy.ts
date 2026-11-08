@@ -57,6 +57,7 @@ export async function deployContract(host: Host, options: DeployContractOptions)
         args: constructorArgs,
         privateStateSecretKey,
         onMessage: (msg) => spinner.update(msg),
+        notice: host.notice,
         signal,
       });
       const receipt = result.txHash === undefined ? undefined : await receiptOf(target.networkConfig.indexer, result.txHash, signal);

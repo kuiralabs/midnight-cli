@@ -418,6 +418,7 @@ export interface ScriptParts {
     readonly privateStateSecretEnv: string;
     readonly privateStatePasswordEnv: string;
     readonly privateStateAccountEnv: string;
+    readonly privateStateDirEnv: string;
     readonly witnessCandidates: readonly string[];
     readonly indexerUrlEnv: string;
     readonly indexerWsUrlEnv: string;
@@ -1417,6 +1418,7 @@ export interface ScriptParts {
     readonly privateStateSecretEnv: string;
     readonly privateStatePasswordEnv: string;
     readonly privateStateAccountEnv: string;
+    readonly privateStateDirEnv: string;
     readonly witnessCandidates: readonly string[];
     readonly indexerUrlEnv: string;
     readonly indexerWsUrlEnv: string;

@@ -12,7 +12,7 @@ export { type CallContractOptions, type CalledCircuit, callContract } from './li
 export { type DeployContractOptions, type DeployedContract, deployContract } from './lib/contract/deploy.ts';
 export { contractExists } from './lib/contract/exists.ts';
 export { type CircuitInfo, type CompactType, type ContractInfo, ContractInfoInvalidError, ContractNotCompiledError, findContractInfo, type WitnessInfo } from './lib/contract/inspect.ts';
-export { clearDappPrivateState, PRIVATE_STATE_DATABASE } from './lib/contract/private-state.ts';
+export { clearDappPrivateState, clearNetworkContractState, contractStateDir, PRIVATE_STATE_DATABASE } from './lib/contract/private-state.ts';
 export {
   type ContractCallRequest, contractCallRequest, type ContractDeployRequest, contractDeployRequest, type ContractLocation
 } from './lib/contract/request.ts';

@@ -18,6 +18,7 @@ import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
 import { coerceArg } from './arg-coerce.ts';
 import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
 import { openPrivateStateStore } from './private-state-store.ts';
+import { callStateDir, deployStateDir, dropEmptyDeployState, keepDeployState, moveDappStore } from './private-state.ts';
 
 // The generated deploy/call script imports SDK packages by bare specifier
 // (`@midnight-ntwrk/midnight-js-contracts`, `ws`, etc.); without help, Node
@@ -50,6 +51,8 @@ export interface RunnerOptions {
    */
   privateStateSecretKey?: string;
   onMessage?: (msg: string) => void;
+  /** Where a note for the person goes (the private-state store moved out of the dApp): the host's notices. */
+  notice?: (line: string) => void;
   /** Cancels the run: the script's process is stopped. */
   signal?: AbortSignal;
 }
@@ -122,6 +125,8 @@ const INDEXER_WS_URL_ENV = 'MN_INDEXER_WS_URL';
 const PRIVATE_STATE_SECRET_ENV = 'MN_PRIVATE_STATE_SECRET';
 const PRIVATE_STATE_PASSWORD_ENV = 'MN_PRIVATE_STATE_PASSWORD';
 const PRIVATE_STATE_ACCOUNT_ENV = 'MN_PRIVATE_STATE_ACCOUNT';
+// The store's folder, under mn's state root (private-state.ts).
+const PRIVATE_STATE_DIR_ENV = 'MN_PRIVATE_STATE_DIR';
 
 /** What a deploy or call script keeps the wallet's private state with: the secret it seeds, and the store's password and account. */
 export function privateStateEnvironment({ contractKeys, privateStateSecretKey }: Pick<RunnerOptions, 'contractKeys' | 'privateStateSecretKey'>): Record<string, string> {
@@ -162,13 +167,31 @@ export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
   const engine = await options.engines.load(sdkSetOf(options.network, options.root));
   const scripts = { ...engine.contracts.scripts, set: engine.set };
   const script = scripts.deploy(options, SCRIPT_PARTS);
-  const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options) };
-  const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env, signal: options.signal });
+  const notice = options.notice ?? (() => {});
+  noteMovedStore(moveDappStore(options.root, options.dappDir), notice);
+  // The deploy's own store until its address is known.
+  const staging = deployStateDir(options.root, options.network);
+  const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options), [PRIVATE_STATE_DIR_ENV]: staging };
+  let deployed: DeployResult;
   try {
-    return JSON.parse(result) as DeployResult;
-  } catch {
-    throw new Error(`Deploy script returned unexpected output:\n${result}`);
+    const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env, signal: options.signal });
+    try {
+      deployed = JSON.parse(result) as DeployResult;
+    } catch {
+      throw new Error(`Deploy script returned unexpected output:\n${result}`);
+    }
+  } catch (err) {
+    if (!dropEmptyDeployState(staging)) notice(`The private state of the deploy that failed is kept at ${staging}.`);
+    throw err;
   }
+  const kept = keepDeployState(staging, options.root, options.network, deployed.contractAddress);
+  if (kept === staging) notice(`A private-state store for contract ${deployed.contractAddress} was there already; the deploy's is kept at ${staging}.`);
+  return deployed;
+}
+
+/** Says where the store an earlier mn kept in the dApp went. */
+function noteMovedStore(moved: { from: string; to: string } | undefined, notice: (line: string) => void): void {
+  if (moved !== undefined) notice(`Moved the contract private-state store out of the dApp: ${moved.from} is now ${moved.to} (mn keeps private state under its state root, one store per contract).`);
 }
 
 export async function runCall(options: CallOptions): Promise<CallResult> {
@@ -178,7 +201,11 @@ export async function runCall(options: CallOptions): Promise<CallResult> {
   const engine = await options.engines.load(sdkSetOf(options.network, options.root));
   const scripts = { ...engine.contracts.scripts, set: engine.set };
   const script = scripts.call(options, SCRIPT_PARTS);
-  const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options) };
+  const notice = options.notice ?? (() => {});
+  noteMovedStore(moveDappStore(options.root, options.dappDir), notice);
+  const store = callStateDir(options.root, options.network, options.contractAddress, options.dappDir);
+  if (store.copiedFrom !== undefined) notice(`Contract ${options.contractAddress} had no private-state store of its own yet: it starts from a copy of the one moved out of the dApp (${store.copiedFrom}), now at ${store.dir}.`);
+  const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options), [PRIVATE_STATE_DIR_ENV]: store.dir };
   const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, env, signal: options.signal });
   try {
     return JSON.parse(result) as CallResult;
@@ -363,6 +390,7 @@ export const SCRIPT_PARTS: ScriptParts = {
   privateStateSecretEnv: PRIVATE_STATE_SECRET_ENV,
   privateStatePasswordEnv: PRIVATE_STATE_PASSWORD_ENV,
   privateStateAccountEnv: PRIVATE_STATE_ACCOUNT_ENV,
+  privateStateDirEnv: PRIVATE_STATE_DIR_ENV,
   witnessCandidates: WITNESS_FILE_CANDIDATES,
   indexerUrlEnv: INDEXER_URL_ENV,
   indexerWsUrlEnv: INDEXER_WS_URL_ENV,

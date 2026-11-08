@@ -162,19 +162,23 @@ async function handleDown(jsonMode: boolean, ctx: CallContext, docker: DockerCal
     const { clearChainCaches } = await import('@kuiralabs/midnight-wallet');
     clearChainCaches('undeployed', docker.root);
 
-    // Also wipe the dapp-local LevelDB private-state store if the user is
-    // running this from a dapp directory. The store survives `docker compose
-    // down --volumes` and refers to contract addresses that no longer exist
-    // after the chain reset, causing "NotOpenError: Database failed to open"
-    // (corruption) on the next `mn contract deploy/call`. Best-effort: only
-    // touches the store in the cwd, never scans the filesystem.
-    const { PRIVATE_STATE_DATABASE, clearDappPrivateState } = await import('@kuiralabs/midnight-contract');
+    // The contracts' private state on the local chain refers to contracts
+    // that no longer exist after the reset: every store under the state root
+    // for undeployed goes. So does a store an earlier mn kept in the folder
+    // this runs in (only there: the filesystem is never scanned), which
+    // otherwise fails the next deploy or call ("NotOpenError: Database failed
+    // to open").
+    const { PRIVATE_STATE_DATABASE, clearDappPrivateState, clearNetworkContractState } = await import('@kuiralabs/midnight-contract');
+    const contractStateCleared = clearNetworkContractState(ctx.config.paths.stateRoot, 'undeployed');
     const leveldbWiped = clearDappPrivateState(process.cwd());
 
     spinner.stop('Local network removed (containers, networks, volumes, caches)');
     if (jsonMode) {
-      ctx.output.result({ subcommand: 'down', status: 'removed', cachesCleared: true, dappLevelDbWiped: leveldbWiped });
+      ctx.output.result({ subcommand: 'down', status: 'removed', cachesCleared: true, contractStateCleared, dappLevelDbWiped: leveldbWiped });
       return;
+    }
+    if (contractStateCleared) {
+      ctx.output.stderr(dim("  Also cleared the local chain's contract private state (it referred to the old chain)") + '\n');
     }
     if (leveldbWiped) {
       ctx.output.stderr(dim(`  Also cleared dapp leveldb at ./${PRIVATE_STATE_DATABASE} (private state from old chain)`) + '\n');
