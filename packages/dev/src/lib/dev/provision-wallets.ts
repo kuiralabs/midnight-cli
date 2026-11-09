@@ -6,7 +6,7 @@
 
 import { existsSync } from 'node:fs';
 import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet, type UnlockHost, createWallet, walletFilePath, walletSecretFrom, passphraseForNewSecret } from '@kuiralabs/midnight-wallet';
-import { sdkSetOf, resolveNetwork, type NetworkSettings, type NetworkConfig, type CallSdkWarnings, throwIfCancelled, nightToMicro, LOCAL_WALLET_FUNDING_NIGHT, NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core';
+import { sdkSetOf, resolveNetwork, type NetworkSettings, type NetworkConfig, type CallSdkWarnings, throwIfCancelled, nightAmountText, nightToMicro, LOCAL_WALLET_FUNDING_NIGHT, NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core';
 import { checkBalance } from '@kuiralabs/midnight-chain';
 import { topUpShortfall } from './top-up.ts';
 
@@ -23,6 +23,18 @@ export interface ProvisionedWallet {
   state: WalletProvisionState;
   /** Micro-NIGHT airdropped to an existing wallet to bring it up to the run's amount; absent when none was. */
   toppedUp?: bigint;
+  /** An existing wallet registered for Dust by this run (its setup had stopped after funding). */
+  registered?: true;
+}
+
+/** One wallet's line in mn dev's summary: `dev-bob: reused, topped up 49000 NIGHT, registered`. */
+export function provisionedWalletText({ name, state, toppedUp, registered }: ProvisionedWallet): string {
+  const done = [
+    state,
+    ...(toppedUp !== undefined ? [`topped up ${nightAmountText(toppedUp)} NIGHT`] : []),
+    ...(registered === true ? ['registered'] : []),
+  ];
+  return `${name}: ${done.join(', ')}`;
 }
 
 /** What provisioning reads of an existing wallet on the local chain. */
@@ -81,7 +93,9 @@ export async function provisionDevWallets(opts: ProvisionOptions): Promise<Provi
   const { root } = opts;
   const steps = 'steps' in opts ? opts.steps : walletSteps(root, opts.host, undeployedNetwork(root, opts.host.settings()), opts.sdkWarnings);
   const results: ProvisionedWallet[] = [];
-  const created: string[] = [];
+  /** The wallets to register, in order: the new ones and existing ones never registered. */
+  const toRegister: string[] = [];
+  const existing = new Set<string>();
   const toppedUp = new Map<string, bigint>();
   const withTopUp = (wallet: ProvisionedWallet): ProvisionedWallet => {
     const amount = toppedUp.get(wallet.name);
@@ -97,8 +111,9 @@ export async function provisionDevWallets(opts: ProvisionOptions): Promise<Provi
       throwIfCancelled(opts.signal);
 
       if (walletExists(root, name)) {
-        const existing = await steps.inspect(name, opts.signal);
-        const shortfall = topUpShortfall(existing.night, opts.amountNight);
+        existing.add(name);
+        const wallet = await steps.inspect(name, opts.signal);
+        const shortfall = topUpShortfall(wallet.night, opts.amountNight);
         if (shortfall > 0n) {
           opts.onProgress?.(name, 'topping-up', 'reused');
           await steps.airdrop(name, shortfall, opts.signal);
@@ -106,8 +121,8 @@ export async function provisionDevWallets(opts: ProvisionOptions): Promise<Provi
         }
         // Funded but never registered (setup stopped between funding and
         // registering): finish it below rather than reuse it as is.
-        if (existing.needsDust) {
-          created.push(name);
+        if (wallet.needsDust) {
+          toRegister.push(name);
           continue;
         }
         opts.onProgress?.(name, 'done', 'reused');
@@ -120,16 +135,17 @@ export async function provisionDevWallets(opts: ProvisionOptions): Promise<Provi
 
       opts.onProgress?.(name, 'funding', 'created');
       await steps.airdrop(name, nightToMicro(opts.amountNight), opts.signal);
-      created.push(name);
+      toRegister.push(name);
     }
 
-    for (const name of created) {
+    for (const name of toRegister) {
       throwIfCancelled(opts.signal);
-      opts.onProgress?.(name, 'dust', 'created');
+      const state: WalletProvisionState = existing.has(name) ? 'reused' : 'created';
+      opts.onProgress?.(name, 'dust', state);
       await steps.registerDust(name, opts.signal);
 
-      opts.onProgress?.(name, 'done', 'created');
-      results.push(withTopUp({ name, state: 'created' }));
+      opts.onProgress?.(name, 'done', state);
+      results.push(withTopUp(state === 'reused' ? { name, state, registered: true } : { name, state }));
     }
   } finally {
     restoreActiveWallet(root, previousActive);

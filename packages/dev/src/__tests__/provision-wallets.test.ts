@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { nightAmountText, nightToMicro } from '@kuiralabs/midnight-cli-core';
-import { DEFAULT_DEV_AIRDROP_AMOUNT, provisionDevWallets, type ProvisionSteps } from '../lib/dev/provision-wallets.ts';
+import { DEFAULT_DEV_AIRDROP_AMOUNT, provisionDevWallets, provisionedWalletText, type ProvisionSteps } from '../lib/dev/provision-wallets.ts';
 import { stateRootIn } from '../../../../test-support/state-root-in.ts';
 
 let home: string;
@@ -85,7 +85,7 @@ describe('provisionDevWallets', () => {
     const result = await provisionDevWallets({ root: stateRootIn(home), names: ['dev-alice'], amountNight: 1000, steps: recordingSteps(calls, ['dev-alice']) });
 
     expect(calls).toEqual(['check dev-alice', 'register dev-alice']);
-    expect(result).toEqual([{ name: 'dev-alice', state: 'created' }]);
+    expect(result).toEqual([{ name: 'dev-alice', state: 'reused', registered: true }]);
   });
 
   it('tops up an existing wallet holding less than the amount to it, from genesis, and says by how much', async () => {
@@ -118,7 +118,23 @@ describe('provisionDevWallets', () => {
     const result = await provisionDevWallets({ root: stateRootIn(home), names: ['dev-alice'], amountNight: 50_000, steps: recordingSteps(calls, ['dev-alice'], { 'dev-alice': 1000 }) });
 
     expect(calls).toEqual(['check dev-alice', 'airdrop dev-alice 49000', 'register dev-alice']);
-    expect(result).toEqual([{ name: 'dev-alice', state: 'created', toppedUp: nightToMicro(49_000) }]);
+    // Regression: it was counted as created, though mn dev made it on an earlier run.
+    expect(result).toEqual([{ name: 'dev-alice', state: 'reused', toppedUp: nightToMicro(49_000), registered: true }]);
+    expect(result.map(provisionedWalletText)).toEqual(['dev-alice: reused, topped up 49000 NIGHT, registered']);
+  });
+
+  it('says what happened to each wallet: new ones are created, existing ones reused with what was done to them', () => {
+    expect([
+      { name: 'dev-alice', state: 'created' as const },
+      { name: 'dev-bob', state: 'reused' as const },
+      { name: 'dev-carol', state: 'reused' as const, toppedUp: nightToMicro(49_000) },
+      { name: 'dev-dave', state: 'reused' as const, registered: true as const },
+    ].map(provisionedWalletText)).toEqual([
+      'dev-alice: created',
+      'dev-bob: reused',
+      'dev-carol: reused, topped up 49000 NIGHT',
+      'dev-dave: reused, registered',
+    ]);
   });
 
   it('stops before registering when cancelled after funding, as CANCELLED', async () => {
