@@ -1,12 +1,14 @@
 // Dev wallet provisioning for `mn dev`.
 // Creates a fixed set of named wallets on localnet, funds them from genesis,
-// and registers them for dust. Idempotent — wallets that already exist are
-// left untouched (the user can `mn wallet remove <name>` to force re-setup).
+// and registers them for dust. Idempotent — a wallet that already exists is
+// reused, topped up from genesis when it holds less than the amount new ones
+// get (the user can `mn wallet remove <name>` to force re-setup).
 
 import { existsSync } from 'node:fs';
 import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet, type UnlockHost, createWallet, walletFilePath, walletSecretFrom, passphraseForNewSecret } from '@kuiralabs/midnight-wallet';
-import { sdkSetOf, resolveNetwork, type NetworkSettings, type NetworkConfig, type CallSdkWarnings, throwIfCancelled, nightToMicro, LOCAL_WALLET_FUNDING_NIGHT } from '@kuiralabs/midnight-cli-core';
+import { sdkSetOf, resolveNetwork, type NetworkSettings, type NetworkConfig, type CallSdkWarnings, throwIfCancelled, nightToMicro, LOCAL_WALLET_FUNDING_NIGHT, NATIVE_TOKEN_TYPE } from '@kuiralabs/midnight-cli-core';
 import { checkBalance } from '@kuiralabs/midnight-chain';
+import { topUpShortfall } from './top-up.ts';
 
 /** Default dev wallet names — one per common test persona. */
 export const DEFAULT_DEV_WALLET_NAMES = ['dev-alice', 'dev-bob', 'dev-carol'] as const;
@@ -19,15 +21,25 @@ export type WalletProvisionState = 'reused' | 'created';
 export interface ProvisionedWallet {
   name: string;
   state: WalletProvisionState;
+  /** Micro-NIGHT airdropped to an existing wallet to bring it up to the run's amount; absent when none was. */
+  toppedUp?: bigint;
+}
+
+/** What provisioning reads of an existing wallet on the local chain. */
+export interface ExistingWallet {
+  /** It still has no NIGHT registered for Dust (a setup interrupted after funding). */
+  needsDust: boolean;
+  /** Its unshielded NIGHT, in micro-NIGHT. */
+  night: bigint;
 }
 
 /** The steps of setting up a wallet; the defaults are the wallet functions mn's own commands use. */
 export interface ProvisionSteps {
   generate: (name: string, signal?: AbortSignal) => Promise<void>;
-  airdrop: (name: string, amountNight: number, signal?: AbortSignal) => Promise<void>;
+  /** Airdrops `amount` micro-NIGHT from genesis. */
+  airdrop: (name: string, amount: bigint, signal?: AbortSignal) => Promise<void>;
   registerDust: (name: string, signal?: AbortSignal) => Promise<void>;
-  /** Whether an existing wallet still has no NIGHT registered for Dust (a setup interrupted after funding). */
-  needsDust: (name: string, signal?: AbortSignal) => Promise<boolean>;
+  inspect: (name: string, signal?: AbortSignal) => Promise<ExistingWallet>;
 }
 
 interface ProvisionRun {
@@ -35,7 +47,7 @@ interface ProvisionRun {
   root: string;
   names: readonly string[];
   amountNight: number;
-  onProgress?: (wallet: string, phase: 'creating' | 'funding' | 'dust' | 'done', state: WalletProvisionState) => void;
+  onProgress?: (wallet: string, phase: 'creating' | 'funding' | 'topping-up' | 'dust' | 'done', state: WalletProvisionState) => void;
   signal?: AbortSignal;
 }
 
@@ -46,15 +58,18 @@ export type ProvisionOptions = ProvisionRun & ({ steps: ProvisionSteps } | { sdk
 function walletSteps(root: string, host: UnlockHost, network: NetworkConfig, sdkWarnings: CallSdkWarnings): ProvisionSteps {
   return {
     generate: (name, signal) => generateWallet(root, host, name, signal),
-    airdrop: (name, amountNight, signal) => airdropToWallet(root, host, network, name, amountNight, signal, sdkWarnings),
+    airdrop: (name, amount, signal) => airdropToWallet(root, host, network, name, amount, signal, sdkWarnings),
     registerDust: (name, signal) => registerWalletDust(root, host, network, name, signal, sdkWarnings),
-    needsDust: (name, signal) => walletNeedsDust(root, host, network, name, signal),
+    inspect: (name, signal) => inspectWallet(root, host, network, name, signal),
   };
 }
 
 /**
  * Ensure each wallet exists, is funded from genesis, and is dust-registered.
- * Only runs create → airdrop → dust for brand-new wallets; reuses existing ones as-is.
+ * Runs create → airdrop → dust for brand-new wallets. An existing one is
+ * reused; one holding less than `amountNight` is first topped up to it from
+ * genesis (it was funded when the amount was smaller, and generates its Dust
+ * that much slower), and one never registered is registered.
  * Always targets the `undeployed` network — airdrop is localnet-only.
  *
  * Every new wallet is funded before any registers: a ledger-9 registration
@@ -67,6 +82,11 @@ export async function provisionDevWallets(opts: ProvisionOptions): Promise<Provi
   const steps = 'steps' in opts ? opts.steps : walletSteps(root, opts.host, undeployedNetwork(root, opts.host.settings()), opts.sdkWarnings);
   const results: ProvisionedWallet[] = [];
   const created: string[] = [];
+  const toppedUp = new Map<string, bigint>();
+  const withTopUp = (wallet: ProvisionedWallet): ProvisionedWallet => {
+    const amount = toppedUp.get(wallet.name);
+    return amount === undefined ? wallet : { ...wallet, toppedUp: amount };
+  };
 
   // `wallet generate` sets the new wallet as active — remember the user's
   // current active wallet so we can restore it after provisioning.
@@ -77,14 +97,21 @@ export async function provisionDevWallets(opts: ProvisionOptions): Promise<Provi
       throwIfCancelled(opts.signal);
 
       if (walletExists(root, name)) {
+        const existing = await steps.inspect(name, opts.signal);
+        const shortfall = topUpShortfall(existing.night, opts.amountNight);
+        if (shortfall > 0n) {
+          opts.onProgress?.(name, 'topping-up', 'reused');
+          await steps.airdrop(name, shortfall, opts.signal);
+          toppedUp.set(name, shortfall);
+        }
         // Funded but never registered (setup stopped between funding and
         // registering): finish it below rather than reuse it as is.
-        if (await steps.needsDust(name, opts.signal)) {
+        if (existing.needsDust) {
           created.push(name);
           continue;
         }
         opts.onProgress?.(name, 'done', 'reused');
-        results.push({ name, state: 'reused' });
+        results.push(withTopUp({ name, state: 'reused' }));
         continue;
       }
 
@@ -92,7 +119,7 @@ export async function provisionDevWallets(opts: ProvisionOptions): Promise<Provi
       await steps.generate(name, opts.signal);
 
       opts.onProgress?.(name, 'funding', 'created');
-      await steps.airdrop(name, opts.amountNight, opts.signal);
+      await steps.airdrop(name, nightToMicro(opts.amountNight), opts.signal);
       created.push(name);
     }
 
@@ -102,7 +129,7 @@ export async function provisionDevWallets(opts: ProvisionOptions): Promise<Provi
       await steps.registerDust(name, opts.signal);
 
       opts.onProgress?.(name, 'done', 'created');
-      results.push({ name, state: 'created' });
+      results.push(withTopUp({ name, state: 'created' }));
     }
   } finally {
     restoreActiveWallet(root, previousActive);
@@ -148,16 +175,16 @@ async function generateWallet(root: string, host: UnlockHost, name: string, sign
   await createWallet(root, name, walletSecretFrom(), passphrase, await host.engines.any());
 }
 
-async function airdropToWallet(root: string, host: UnlockHost, network: NetworkConfig, name: string, amountNight: number, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
+async function airdropToWallet(root: string, host: UnlockHost, network: NetworkConfig, name: string, amount: bigint, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {
   const recipientAddress = (await loadWalletConfig(resolveWalletPath(root, name), host.engines)).addresses.undeployed;
   // dev's wallets live on the local chain.
-  await (await host.engines.load(sdkSetOf('undeployed', root))).wallet.airdrop({ networkConfig: network, recipientAddress, amount: nightToMicro(amountNight), signal, sdkWarnings, root, notice: host.notice });
+  await (await host.engines.load(sdkSetOf('undeployed', root))).wallet.airdrop({ networkConfig: network, recipientAddress, amount, signal, sdkWarnings, root, notice: host.notice });
 }
 
-async function walletNeedsDust(root: string, host: UnlockHost, network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<boolean> {
+async function inspectWallet(root: string, host: UnlockHost, network: NetworkConfig, name: string, signal: AbortSignal | undefined): Promise<ExistingWallet> {
   const address = (await loadWalletConfig(resolveWalletPath(root, name), host.engines)).addresses.undeployed;
-  const { registeredUtxos, unregisteredUtxos } = await checkBalance(address, network.indexerWS, undefined, signal);
-  return registeredUtxos === 0 && unregisteredUtxos > 0;
+  const { registeredUtxos, unregisteredUtxos, balances } = await checkBalance(address, network.indexerWS, undefined, signal);
+  return { needsDust: registeredUtxos === 0 && unregisteredUtxos > 0, night: balances.get(NATIVE_TOKEN_TYPE) ?? 0n };
 }
 
 async function registerWalletDust(root: string, host: UnlockHost, network: NetworkConfig, name: string, signal: AbortSignal | undefined, sdkWarnings: CallSdkWarnings): Promise<void> {

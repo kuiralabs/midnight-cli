@@ -480,6 +480,9 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
       onMessage(msg) {
         spinner?.update(msg);
       },
+      onNote(_step, note) {
+        if (!jsonMode) ctx.output.stderr(`    ${note}\n`);
+      },
     });
 
     prepResults.push(...results);

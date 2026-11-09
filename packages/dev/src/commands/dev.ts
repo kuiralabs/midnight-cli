@@ -3,7 +3,7 @@
 // M2: `d` keypress deploys the current compiled artifact, `q` quits cleanly.
 
 import { resolve, relative } from 'node:path';
-import { type ParsedArgs, payerFor, type CallContext, type CallOutput } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, nightAmountText, payerFor, type CallContext, type CallOutput } from '@kuiralabs/midnight-cli-core';
 import { header, divider, keyValue, bold, dim, red, teal, yellow } from '@kuiralabs/midnight-cli-core/ui';
 import { isPassphraseSet, unlockPassphrase } from '@kuiralabs/midnight-wallet';
 import { detectProject, type ProjectInfo } from '../lib/dev/detect-project.ts';
@@ -75,6 +75,7 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
         const label = {
           creating: 'generating',
           funding: 'airdropping',
+          'topping-up': `topping up to ${DEFAULT_DEV_AIRDROP_AMOUNT} NIGHT`,
           dust: 'registering dust',
           done: 'ready',
         }[phase];
@@ -88,6 +89,9 @@ export default async function devCommand(args: ParsedArgs, ctx: CallContext): Pr
       reused ? `${reused} reused` : '',
     ].filter(Boolean).join(', ');
     walletSpinner.stop(`Dev wallets: ${provisioned.map((w) => w.name).join(', ')} (${summary})`);
+    for (const { name, toppedUp } of provisioned) {
+      if (toppedUp !== undefined) ctx.output.stderr(`  ${name}: topped up ${nightAmountText(toppedUp)} NIGHT from genesis, to ${DEFAULT_DEV_AIRDROP_AMOUNT} NIGHT\n`);
+    }
   } catch (err) {
     walletSpinner.fail('Wallet provisioning failed');
     throw err;

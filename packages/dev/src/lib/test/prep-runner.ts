@@ -2,13 +2,14 @@
 
 import { join } from 'node:path';
 
-import { clearWalletCache, GENESIS_SEED, resolveNetwork, type NetworkConfig, type NetworkName, OWN_COMMAND_DUST_WAIT_MS, DustRequiredError, InsufficientBalanceError, throwIfCancelled, sdkSetOf, nightToMicro } from '@kuiralabs/midnight-cli-core';
+import { clearWalletCache, GENESIS_SEED, resolveNetwork, type NetworkConfig, type NetworkName, OWN_COMMAND_DUST_WAIT_MS, DustRequiredError, InsufficientBalanceError, throwIfCancelled, sdkSetOf, nightAmountText } from '@kuiralabs/midnight-cli-core';
 import { resolveWalletPath, unlockWallet, walletAddress } from '@kuiralabs/midnight-wallet';
 import { assertLedger9StackReachable, assertLedgerSupported } from '@kuiralabs/midnight-chain';
 
 import type { DappTestConfig, PrepStepId, PrepStepResult, PrepContext, PrepCallbacks } from './types.ts';
 import { originOfPage, startServeOrReuse } from '@kuiralabs/midnight-connect';
 import { startBuild } from './build-manager.ts';
+import { planBalanceStep } from '../dev/top-up.ts';
 
 /** A prep step failed: the step's own error is its cause, and its code (DUST_REQUIRED, …) is this one's. */
 export class PrepStepFailedError extends Error {
@@ -41,10 +42,11 @@ export async function runPrepSteps(
     callbacks.onStepStart(step);
 
     try {
-      await runStep(step, config, dappDir, ctx, callbacks);
+      const note = await runStep(step, config, dappDir, ctx, callbacks);
       const duration = Date.now() - start;
-      results.push({ step, status: 'pass', duration });
+      results.push({ step, status: 'pass', duration, ...(note !== undefined ? { note } : {}) });
       callbacks.onStepComplete(step, 'pass', duration);
+      if (note !== undefined) callbacks.onNote?.(step, note);
     } catch (err) {
       const duration = Date.now() - start;
       const error = (err as Error).message;
@@ -65,25 +67,30 @@ async function runStep(
   dappDir: string,
   ctx: PrepContext,
   callbacks: PrepCallbacks,
-): Promise<void> {
+): Promise<string | undefined> {
   if (step === 'cache-clear') {
-    return stepCacheClear(config, ctx);
+    await stepCacheClear(config, ctx);
+    return undefined;
   }
   if (step === 'localnet-up') {
-    return stepLocalnetUp(config, ctx, callbacks);
+    await stepLocalnetUp(config, ctx, callbacks);
+    return undefined;
   }
   if (step.startsWith('balance:')) {
     const amount = parseInt(step.split(':')[1], 10);
     return stepBalance(amount, config, ctx, callbacks);
   }
   if (step === 'dust' || step === 'dust-register' || step === 'dust-wait') {
-    return stepDust(config, ctx, callbacks);
+    await stepDust(config, ctx, callbacks);
+    return undefined;
   }
   if (step === 'mn-serve') {
-    return stepMnServe(config, ctx, callbacks);
+    await stepMnServe(config, ctx, callbacks);
+    return undefined;
   }
   if (step === 'build-and-serve') {
-    return stepBuildAndServe(config, dappDir, ctx, callbacks);
+    await stepBuildAndServe(config, dappDir, ctx, callbacks);
+    return undefined;
   }
 
   throw new Error(`Unknown prep step: ${step}`);
@@ -119,7 +126,8 @@ async function stepLocalnetUp(config: DappTestConfig, ctx: PrepContext, callback
   callbacks.onMessage(`Using the ledger-9 stack at ${networkConfig.node} (indexer ${networkConfig.indexer})`);
 }
 
-async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepContext, callbacks: PrepCallbacks): Promise<void> {
+/** Returns a note when it topped up a wallet that had NIGHT. */
+async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepContext, callbacks: PrepCallbacks): Promise<string | undefined> {
   const network = config.network ?? 'undeployed';
   const { config: networkConfig } = resolveNetwork({
     args: { command: 'test', subcommand: undefined, positionals: [], flags: { network } },
@@ -138,18 +146,19 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
   const stopListening = ctx.sdkWarnings.listen((_tag, msg) => {
     callbacks.onMessage(`SDK: ${msg}`);
   });
+  let balance: bigint;
   try {
-    const balance = await engine.wallet.prepNightBalance({ seed: seedBuffer, root: ctx.root, notice: ctx.host.notice, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage });
-    if (balance > 0n) {
-      callbacks.onMessage(`Balance OK: ${balance}`);
-      return;
-    }
+    balance = await engine.wallet.prepNightBalance({ seed: seedBuffer, root: ctx.root, notice: ctx.host.notice, network, networkConfig, address, signal: ctx.signal, onMessage: callbacks.onMessage });
   } finally {
     stopListening();
   }
 
-  // Balance is zero
-  if (network !== 'undeployed') {
+  const plan = planBalanceStep(network as NetworkName, balance, amount);
+  if (plan.kind === 'enough') {
+    callbacks.onMessage(`Balance OK: ${nightAmountText(balance)} NIGHT`);
+    return undefined;
+  }
+  if (plan.kind === 'unfunded') {
     throw new InsufficientBalanceError(
       `Wallet has 0 NIGHT on ${network}. Fund your wallet before running tests:\n` +
       `  mn airdrop ${amount}   (if faucet available)\n` +
@@ -157,13 +166,15 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
     );
   }
 
-  // Undeployed (localnet) — auto-airdrop from genesis
-  callbacks.onMessage(`Balance is 0. Airdropping ${amount} NIGHT from genesis...`);
+  // Local network: bring the wallet up to the step's amount from genesis.
+  callbacks.onMessage(balance === 0n
+    ? `Balance is 0. Airdropping ${amount} NIGHT from genesis...`
+    : `Balance ${nightAmountText(balance)} NIGHT is below the ${amount} this test names. Topping up ${nightAmountText(plan.amount)} NIGHT from genesis...`);
   // The same genesis airdrop `mn airdrop` and `mn dev` fund through.
   await engine.wallet.airdrop({
     networkConfig,
     recipientAddress: address,
-    amount: nightToMicro(amount),
+    amount: plan.amount,
     onSync(_applied, _highest) {},
     onDust(status) { callbacks.onMessage(`Dust: ${status}`); },
     onProving() { callbacks.onMessage('Generating ZK proof...'); },
@@ -174,7 +185,11 @@ async function stepBalance(amount: number, config: DappTestConfig, ctx: PrepCont
     notice: ctx.host.notice,
   });
 
-  callbacks.onMessage(`Airdropped ${amount} NIGHT`);
+  if (balance === 0n) {
+    callbacks.onMessage(`Airdropped ${amount} NIGHT`);
+    return undefined;
+  }
+  return `Topped up the wallet from ${nightAmountText(balance)} to ${amount} NIGHT: added ${nightAmountText(plan.amount)} NIGHT from genesis`;
 }
 
 /** The port a dApp's page is served on when dapp.test.json names none (Vite's preview). */

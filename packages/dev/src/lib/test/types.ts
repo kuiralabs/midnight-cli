@@ -123,6 +123,8 @@ export interface PrepStepResult {
   status: 'pass' | 'fail' | 'skip';
   duration: number;
   error?: string;
+  /** What the step did that the person should know (a wallet topped up, by how much). */
+  note?: string;
 }
 
 export interface AssertionResult {
@@ -178,4 +180,6 @@ export interface PrepCallbacks {
   onStepStart(step: string): void;
   onStepComplete(step: string, status: 'pass' | 'fail', duration: number, error?: string): void;
   onMessage(message: string): void;
+  /** A passed step's note, after its onStepComplete. */
+  onNote?(step: string, note: string): void;
 }
