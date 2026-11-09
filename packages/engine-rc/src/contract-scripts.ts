@@ -9,7 +9,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import type { CallScript, DeployScript, ScriptParts, StateScript } from '@kuiralabs/midnight-cli-core/engine';
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core';
+import { type NetworkConfig, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
 
 /**
  * Every package a generated script imports, and the compact runtime the
@@ -187,6 +187,41 @@ const compiled = witnesses
 `;
 }
 
+/**
+ * The proof provider deploy/call pass to midnight-js: `proving`, with the
+ * transaction midnight-js hands it priced by mn serve first (what the wallet
+ * commits to its fee, against its Dust), written as one marked line for mn to
+ * show before anything is proven. With the dry-run variable set to 1 the
+ * script stops there: nothing is proven or sent, and a price that can't be
+ * had is the script's failure. Otherwise a price that can't be had (an mn
+ * serve that doesn't offer it) is said, and the transaction is proven as
+ * before.
+ */
+export function pricingProofProviderCode(parts: ScriptParts): string {
+  return `
+const pricingProofProvider = (proving) => ({
+  supportedEras: proving.supportedEras,
+  async proveTx(tx, proveTxConfig) {
+    const dryRun = process.env.${parts.dryRunEnv} === '1';
+    try {
+      const price = await rpcCall(${JSON.stringify(PRICE_TRANSACTION_METHOD)}, { tx: toHex(tx.serialize()) });
+      process.stderr.write('\\n${parts.pricedMarker} ' + JSON.stringify(price) + '\\n');
+    } catch (err) {
+      if (dryRun) fail(err);
+      // Not a refusal of the transaction: the prelude must not report it for a later failure.
+      globalThis.mnServeRefusal = undefined;
+      process.stderr.write('Could not price the transaction before proving it: ' + String(err?.message ?? err) + '\\n');
+    }
+    if (dryRun) {
+      rpcClose();
+      process.exit(0);
+    }
+    return proving.proveTx(tx, proveTxConfig);
+  },
+});
+`;
+}
+
 /** How long a transaction a script builds stays valid: midnight-js's own default, one hour. */
 const TX_TTL_SECONDS = 3600;
 
@@ -233,6 +268,7 @@ const { accountId: privateStateAccount } = await openPrivateStateStore(
   },
 );
 
+${pricingProofProviderCode(parts)}
 const providers = {
   // The network the transactions are built for, and how long one stays valid
   // (mn serve applies its own TTL when it balances).
@@ -248,7 +284,7 @@ const providers = {
     subscriptionURL: process.env.${parts.indexerWsUrlEnv},
   }),
   zkConfigProvider,
-  proofProvider: httpClientProofProvider({ url: ${JSON.stringify(networkConfig.proofServer)}, zkConfigProvider }),
+  proofProvider: pricingProofProvider(httpClientProofProvider({ url: ${JSON.stringify(networkConfig.proofServer)}, zkConfigProvider })),
   walletProvider,
   midnightProvider,
 };

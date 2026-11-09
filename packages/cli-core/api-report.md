@@ -299,7 +299,9 @@ export declare const LOCAL_WALLET_FUNDING_NIGHT = 50000;
 export declare const LOCALNET_DIR_NAME = "localnet";
 export declare const MAX_WALLET_NAME_LENGTH = 64;
 export declare const MIDNIGHT_DIR = ".midnight";
+export declare const MN_RPC_METHOD_PREFIX = "mn_";
 export declare const NATIVE_TOKEN_TYPE = "0000000000000000000000000000000000000000000000000000000000000000";
+export declare const PRICE_TRANSACTION_METHOD = "mn_priceTransaction";
 export declare const SYNC_HEAP_MIN_GAIN_MB = 512;
 export declare const SYNC_HEAP_RAM_FRACTION = 0.7;
 export declare const SYNC_HEAP_TARGET_MB = 16384;
@@ -320,6 +322,21 @@ export declare function narrowToOwnerOnly(file: string): void;
 export declare function formatWait(ms: number): string;
 export declare function dustShortError(have: bigint, needed: bigint, waitMs: number | null): DustRequiredError;
 export declare const OWN_COMMAND_DUST_WAIT_MS: number;
+export interface TransactionPrice {
+    committed: bigint;
+    have: bigint;
+    covers: boolean;
+    waitMs: number | null;
+    marginBlocks: number;
+}
+export interface TransactionPriceWire {
+    committed: string;
+    have: string;
+    covers: boolean;
+    waitMs: number | null;
+    marginBlocks: number;
+}
+export declare function transactionPriceFromWire(value: unknown): TransactionPrice;
 export interface BalanceSummary {
     balances: Map<string, bigint>;
     utxoCount: number;
@@ -420,6 +437,8 @@ export interface ScriptParts {
     privateStateName(address: string | undefined): string;
     readonly privateStateBusyWaitMs: number;
     readonly noticeMarker: string;
+    readonly pricedMarker: string;
+    readonly dryRunEnv: string;
     readonly witnessCandidates: readonly string[];
     readonly indexerUrlEnv: string;
     readonly indexerWsUrlEnv: string;
@@ -1558,6 +1577,8 @@ export interface ScriptParts {
     privateStateName(address: string | undefined): string;
     readonly privateStateBusyWaitMs: number;
     readonly noticeMarker: string;
+    readonly pricedMarker: string;
+    readonly dryRunEnv: string;
     readonly witnessCandidates: readonly string[];
     readonly indexerUrlEnv: string;
     readonly indexerWsUrlEnv: string;
@@ -1755,6 +1776,8 @@ export declare class NotAnOfferError extends Error {
         cause?: unknown;
     });
 }
+export declare function priceTransaction(estimate: () => Promise<bigint>, dust: DustBalanceSource, marginBlocks: number, now?: Date): Promise<TransactionPrice>;
+export declare function transactionPriceToWire(price: TransactionPrice): TransactionPriceWire;
 export declare function fromHex(hex: string): Uint8Array;
 export declare function toHex(bytes: Uint8Array): string;
 export declare function cacheRootDir(root: string): string;

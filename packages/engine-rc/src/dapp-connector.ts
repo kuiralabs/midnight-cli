@@ -1,9 +1,10 @@
-// DApp Connector — implements all 18 ConnectedAPI methods as RPC handlers
+// DApp Connector — implements all 18 ConnectedAPI methods as RPC handlers,
+// and mn's own pricing of a transaction before it is proven
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal } from '@kuiralabs/midnight-cli-core/engine';
-import { type NoticeSink, DustDoubleSpentError, FeeRepricedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE } from '@kuiralabs/midnight-cli-core';
+import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, priceTransaction, transactionPriceToWire } from '@kuiralabs/midnight-cli-core/engine';
+import { type NoticeSink, DustDoubleSpentError, FeeRepricedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
 import { dim, roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
@@ -1198,6 +1199,30 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
         throw createApiError('InvalidRequest', 'methodNames must be an array of connector method names');
       }
       notice(dim(`  DApp hints usage: ${methods.join(', ')}`));
+    },
+
+    // ── mn's own (1): not in the DApp connector API ──
+
+    /**
+     * The price of a transaction a dApp is about to prove (unproven, hex): the
+     * fee this wallet would commit to it when it balances it, with its own
+     * Dust spend and the margin it prices with now, against the Dust it has.
+     * Nothing is booked, signed or sent, so the operator isn't asked.
+     */
+    [PRICE_TRANSACTION_METHOD]: async (params) => {
+      const txHex = String(params.tx ?? '');
+      if (!txHex) {
+        throw createApiError('InvalidRequest', 'tx is required');
+      }
+      assertWalletsOnLedger9();
+      const unproven = adopt(txHex, 'Unproven');
+      const state = getState();
+      const price = await priceTransaction(
+        () => facade.estimateTransactionFee(unproven, { ttl: createTtl() }),
+        state.dust,
+        bundle.feePricing.feeBlocksMargin,
+      );
+      return transactionPriceToWire(price);
     },
   };
 

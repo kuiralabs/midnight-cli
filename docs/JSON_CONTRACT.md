@@ -233,7 +233,30 @@ rule once formally documented here.)
   "subcommand": "deploy",
   "contractName": "counter",
   "address": "9b3e083bf850ca17983d34110337d384d2dc626da8223c3fb2dbd3f8a2df35a3",
-  "network": "preprod"
+  "network": "preprod",
+  // The deploy's price, worked out after the wallet synced and before anything was proven; absent when the mn serve that paid gave none.
+  "cost": {
+    "fee": "1.075820342856952",        // expected fee at the chain's fee prices then, DUST
+    "committed": "1.2310452531272",    // Dust the wallet commits to it: the fee with marginBlocks of rising prices, all of it burned
+    "have": "5.000000",                // Dust the wallet held
+    "covers": true,                    // whether have covers committed
+    "waitSeconds": 0,                  // how long its registered NIGHT takes to generate the rest; null when not within a day
+    "marginBlocks": 3
+  }
+}
+```
+
+### `mn contract deploy --dry-run --json`
+
+Prices the deploy and stops: nothing is proven or sent, and there is no address, txHash or receipt. `mn contract call --dry-run --json` is the same for a call, with `circuit` and `address`.
+
+```jsonc
+{
+  "subcommand": "deploy",
+  "contractName": "counter",
+  "network": "undeployed",
+  "dryRun": true,
+  "cost": { "fee": "1.075820342856952", "committed": "1.2310452531272", "have": "0.388954231668571", "covers": false, "waitSeconds": 102, "marginBlocks": 3 }
 }
 ```
 
@@ -246,7 +269,9 @@ rule once formally documented here.)
   "circuit": "increment",
   "address": "9b3e083bf850ca17983d34110337d384d2dc626da8223c3fb2dbd3f8a2df35a3",
   "network": "preprod",
-  "status": "success"
+  "status": "success",
+  // As deploy's; a call's proofs are priced at the ledger's estimate, so a few percent off (a counter's increment: about 3% over).
+  "cost": { "fee": "0.201842057142821", "committed": "0.230964870646751", "have": "0.827836439768184", "covers": true, "waitSeconds": 0, "marginBlocks": 3 }
 }
 ```
 

@@ -46,7 +46,7 @@ export {
 export {
   BALANCE_CHECK_TIMEOUT_MS, DASHBOARD_BASE_URL, DEFAULT_CONFIG_FILENAME, DEFAULT_SERVE_PORT, DEFAULT_WALLET_FILENAME,
   DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE, GENESIS_SEED, isValidWalletName, LOCAL_WALLET_FUNDING_NIGHT, LOCALNET_DIR_NAME,
-  MAX_WALLET_NAME_LENGTH, MIDNIGHT_DIR, NATIVE_TOKEN_TYPE, SYNC_HEAP_MIN_GAIN_MB, SYNC_HEAP_RAM_FRACTION, SYNC_HEAP_TARGET_MB,
+  MAX_WALLET_NAME_LENGTH, MIDNIGHT_DIR, MN_RPC_METHOD_PREFIX, NATIVE_TOKEN_TYPE, PRICE_TRANSACTION_METHOD, SYNC_HEAP_MIN_GAIN_MB, SYNC_HEAP_RAM_FRACTION, SYNC_HEAP_TARGET_MB,
   WALLETS_DIR_NAME
 } from './lib/constants.ts';
 export { FileExistsError, readJsonIfPresent, writeJsonDurably } from './lib/durable-file.ts';
@@ -54,6 +54,7 @@ export { assertValidWalletName, InvalidWalletNameError } from './lib/wallet-name
 export { ensureOwnerOnlyDir, narrowToOwnerOnly } from './lib/owner-only.ts';
 export { formatWait } from './lib/duration.ts';
 export { dustShortError, OWN_COMMAND_DUST_WAIT_MS } from './lib/dust-wait.ts';
+export { type TransactionPrice, type TransactionPriceWire, transactionPriceFromWire } from './lib/transaction-price.ts';
 export {
   type BalanceSummary, type DAppConnector, type DAppConnectorCallbacks, type DustExportResult,
   type Engine, type EngineContractScripts, type EngineKeys, type HostEngines, type OpenedConnector,

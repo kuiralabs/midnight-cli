@@ -1,6 +1,7 @@
-// A chain's block limits, from its ledger parameters' bytes. The ledger
-// doesn't expose the limits themselves, so each is probed through
-// normalizeFullness: normalized = value / limit, so limit = value / normalized.
+// A chain's block limits and its fee prices' largest rise in a block, from its
+// ledger parameters' bytes. The ledger doesn't expose the limits themselves,
+// so each is probed through normalizeFullness: normalized = value / limit, so
+// limit = value / normalized.
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 import type { BlockLimits } from '@kuiralabs/midnight-cli-core/engine';
@@ -26,4 +27,13 @@ export function blockLimitsOf(parametersHex: string): BlockLimits {
     bytesWritten: probeDimension(params, 'bytesWritten', 10_000n),
     bytesChurned: probeDimension(params, 'bytesChurned', 1_000_000n),
   };
+}
+
+/**
+ * The most fee prices can rise in one block, as a factor, in serialized ledger
+ * parameters (hex): a fee priced with n blocks of margin is the fee at the
+ * prices now times this to the nth (the ledger's fees_with_margin).
+ */
+export function maxPriceAdjustmentOf(parametersHex: string): number {
+  return ledger.LedgerParameters.deserialize(Buffer.from(parametersHex, 'hex')).maxPriceAdjustment();
 }

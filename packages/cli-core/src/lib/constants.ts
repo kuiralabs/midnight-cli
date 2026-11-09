@@ -170,5 +170,10 @@ export const ABANDONED_TX_TIMEOUT_MS = 120_000; // 2 minutes
 // DApp Connector server port (99=midnight, 32=ws)
 export const DEFAULT_SERVE_PORT = 9932;
 
+// What every method mn serve answers beyond the DApp connector API's starts with.
+export const MN_RPC_METHOD_PREFIX = 'mn_';
+// mn serve's method that prices an unproven transaction (hex, `tx`) before it is proven (transaction-price.ts).
+export const PRICE_TRANSACTION_METHOD = `${MN_RPC_METHOD_PREFIX}priceTransaction`;
+
 // Dashboard URL — serves canary-verified status.json, compatibility.json, issues.json
 export const DASHBOARD_BASE_URL = 'https://midnight-comp-tracker.vercel.app';

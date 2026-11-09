@@ -5,6 +5,7 @@ import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from 
 import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
 import { OPENS_WALLET } from '@kuiralabs/midnight-wallet/commands';
 import { RUNS_CONTRACTS } from './contract.codes.ts';
+import type { ContractCostJson } from '../lib/contract/cost.ts';
 
 /** The subcommands that reach a chain: inspect reads only the compiled contract (--path, --managed, --name). */
 const ON_CHAIN: readonly string[] = ['deploy', 'call', 'state'];
@@ -13,6 +14,13 @@ const ON_CHAIN: readonly string[] = ['deploy', 'call', 'state'];
 async function checkSendingWallet(params: Readonly<Record<string, unknown>>, root: string, engines: HostEngines): Promise<void> {
   const { loadWalletConfig, resolveWalletPath } = await import('@kuiralabs/midnight-wallet');
   await loadWalletConfig(resolveWalletPath(root, params.wallet as string | undefined), engines);
+}
+
+/** What a deploy confirmation names: the dApp, the wallet, the network, the constructor's arguments. */
+function describeDeploy(params: Readonly<Record<string, unknown>>): string {
+  const { network, wallet } = confirmationTarget(params);
+  const argsHint = params.args ? ` with args ${params.args}` : '';
+  return `Deploy contract from ${params.path ?? 'current directory'} as ${wallet} on ${network}${argsHint}`;
 }
 
 export const contractDefinition: CommandDefinition = {
@@ -42,6 +50,15 @@ export const contractDefinition: CommandDefinition = {
       subcommands: ['call'],
       help: ['--circuit <name>              Circuit to call (call)'],
       agent: { type: 'string', description: 'Circuit name to invoke' },
+    },
+    {
+      name: 'dry-run',
+      takesValue: false,
+      subcommands: ['deploy', 'call'],
+      help: [
+        '--dry-run                     Price the deploy or call and stop (deploy, call): the wallet syncs and the contract script builds the transaction, and nothing is proven or sent',
+      ],
+      agent: { notForAgents: 'the deploy tool\'s confirmation prices the deploy itself and shows the cost; confirming then deploys' },
     },
     {
       name: 'managed',
@@ -136,7 +153,9 @@ export const contractDefinition: CommandDefinition = {
       { flag: 'indexer-ws' },
       { flag: 'proof-server' },
       { flag: 'secret-key' },
+      { flag: 'dry-run' },
       '--json                        Output structured JSON',
+      'A deploy or call says its cost after the wallet syncs and before anything is proven: the expected fee at the chain\'s fee prices now, the Dust the wallet commits to it (the fee with its margin of rising prices, all of it burned), and whether the wallet\'s Dust covers that or how long its registered NIGHT takes to',
     ],
     examples: [
       'midnight contract inspect',
@@ -145,6 +164,8 @@ export const contractDefinition: CommandDefinition = {
       'midnight contract call --address 0x123 --circuit submit_score --args \'{"score": 100, "alias": "TEST"}\'',
       'midnight contract state --address 0x123',
       'midnight contract deploy --json',
+      'midnight contract deploy --dry-run',
+      'midnight contract call --address 0x123 --circuit increment --dry-run --json',
     ],
     jsonFields: {
       subcommand: 'deploy, call or state (not inspect)',
@@ -156,6 +177,8 @@ export const contractDefinition: CommandDefinition = {
       receipt: 'The transaction once the indexer lists it: block, time, fee, result; null with receiptMissing saying why (deploy, call)',
       circuit: 'Circuit called (call)',
       status: 'What the call reported (call)',
+      cost: 'The deploy\'s or call\'s price before it was proven (deploy, call; absent when the mn serve that paid gave none): fee (expected fee at the chain\'s fee prices now, DUST as a decimal string), committed (Dust the wallet commits to it: the fee with its margin, all of it burned), have (Dust the wallet holds), covers (whether have covers committed), waitSeconds (how long its registered NIGHT takes to generate the rest; 0 when it covers, null when not within a day), marginBlocks',
+      dryRun: 'true when --dry-run priced the deploy or call and stopped: nothing was proven or sent, and there is no address, txHash or receipt (deploy, call)',
       fields: 'Ledger fields, each a string (state)',
       maps: 'Ledger maps, each with its size (state)',
       raw: 'The ledger state undecoded, when the compiled contract is not at hand (state)',
@@ -209,7 +232,7 @@ export const contractDefinition: CommandDefinition = {
       },
       {
         name: 'midnight_contract_deploy',
-        description: 'Deploy a compiled Compact contract (returns pending token; agent must show the description and redeem via midnight_confirm_operation).',
+        description: 'Deploy a compiled Compact contract (returns pending token, whose description gives the deploy\'s expected fee, the Dust the wallet commits and whether its Dust covers it, priced after the wallet syncs; agent must show the description and redeem via midnight_confirm_operation).',
         annotations: { destructiveHint: true, openWorldHint: true },
         params: [
           { flag: 'wallet' },
@@ -222,11 +245,12 @@ export const contractDefinition: CommandDefinition = {
         ],
         argv: { subcommand: 'deploy', flags: 'rest' },
         confirmation: {
-          describe: (params) => {
-            const { network, wallet } = confirmationTarget(params);
-            const argsHint = params.args ? ` with args ${params.args}` : '';
-            return `Deploy contract from ${params.path ?? 'current directory'} as ${wallet} on ${network}${argsHint}`;
-          },
+          describe: describeDeploy,
+          // The deploy is priced before a token is issued (a dry run: the wallet
+          // syncs and the transaction is built, nothing proven or sent), so the
+          // user confirms what it costs and whether the wallet's Dust covers it.
+          // A price that can't be had (the chain out of reach, a wallet with no
+          // NIGHT) is said in its place: the deploy itself says why it fails.
           async check(params, call) {
             const { resolveContractDeployRequest } = await import('../lib/contract/request.ts');
             const args = call.argv();
@@ -236,6 +260,18 @@ export const contractDefinition: CommandDefinition = {
             const root = call.host.paths().stateRoot;
             await assertContractRunsOn(info, resolvePayingTarget(args, 'contract', 'deploy', root, call.host).network, root, call.host.engines);
             await checkSendingWallet(params, root, call.host.engines);
+            const dryRun = call.argv();
+            dryRun.flags['dry-run'] = true;
+            const { costSentence, unpricedSentence } = await import('../lib/contract/cost.ts');
+            const { CancelledError } = await import('@kuiralabs/midnight-cli-core');
+            let cost: string;
+            try {
+              cost = costSentence((await call.run(dryRun)).cost as ContractCostJson);
+            } catch (err) {
+              if (err instanceof CancelledError) throw err;
+              cost = unpricedSentence(err);
+            }
+            return `${describeDeploy(params)}. ${cost}`;
           },
         },
         order: 26,
