@@ -7,7 +7,7 @@
 // record each step so that a run after an interruption carries on from it.
 
 import { describe, expect, it } from 'vitest';
-import { DustDoubleSpentError, FeeRepricedError, FeeTooLowError, RERUN_DOUBLE_SPENT_STATUS, RERUN_REPRICED_STATUS, dustShortError } from '@kuiralabs/midnight-cli-core';
+import { DustDoubleSpentError, FeeRepricedError, FeeTooLowError, RERUN_DOUBLE_SPENT_STATUS, RERUN_INVALIDATED_STATUS, RERUN_REPRICED_STATUS, TransactionInvalidatedError, dustShortError } from '@kuiralabs/midnight-cli-core';
 import { repricingPayments } from '../lib/grant/fee-wallet.ts';
 
 /** A wallet whose submit answers each transaction in turn with the next of `answers` (an error, or its hash); every later one goes through. */
@@ -115,6 +115,20 @@ describe('repricingPayments', () => {
 
     const third = new DustDoubleSpentError(0);
     const again = wallet([new DustDoubleSpentError(0), new DustDoubleSpentError(0), third]);
+    const more = repricingPayments(again.submit);
+    await expect(more.repricing(recordedDeploy(1, more.submit).run, () => {}, undefined)).rejects.toBe(third);
+  });
+
+  it('runs a payment again after TX_INVALIDATED (dropped from the node\'s pool), sharing the two reruns with DUST_DOUBLE_SPENT, then reports it', async () => {
+    const { submitted, submit } = wallet([new TransactionInvalidatedError(0), new DustDoubleSpentError(0)]);
+    const payments = repricingPayments(submit);
+    const statuses: string[] = [];
+    expect(await payments.repricing(recordedDeploy(1, payments.submit).run, (status) => statuses.push(status), undefined)).toBe('account-address');
+    expect(submitted).toHaveLength(3);
+    expect(statuses).toEqual([RERUN_INVALIDATED_STATUS, RERUN_DOUBLE_SPENT_STATUS]);
+
+    const third = new TransactionInvalidatedError(0);
+    const again = wallet([new TransactionInvalidatedError(0), new TransactionInvalidatedError(0), third]);
     const more = repricingPayments(again.submit);
     await expect(more.repricing(recordedDeploy(1, more.submit).run, () => {}, undefined)).rejects.toBe(third);
   });

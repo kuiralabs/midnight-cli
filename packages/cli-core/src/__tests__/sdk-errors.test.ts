@@ -6,7 +6,8 @@ import { describe, it, expect } from 'vitest';
 import { Brand, Effect } from 'effect';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import { NodeClientError } from '@midnightntwrk/wallet-sdk/node-client/effect';
-import { DustRequiredError, InsufficientBalanceError, NetworkError, ProofFailureError, StaleWalletStateError, SyncTimeoutError, TransactionRefusedError } from '../lib/errors.ts';
+import { DustRequiredError, InsufficientBalanceError, NetworkError, ProofFailureError, StaleWalletStateError, SyncTimeoutError, TransactionInvalidatedError, TransactionRefusedError } from '../lib/errors.ts';
+import { isDroppedFromPool } from '../lib/fee-margin.ts';
 import { classifyError } from '../lib/exit-codes.ts';
 import { createApiError } from '../lib/connector-api.ts';
 import { isTransportFailure } from '../lib/transport-failure.ts';
@@ -179,6 +180,22 @@ describe("the node's reason for refusing a transaction", () => {
     const thrown = await caught(refusal(new NodeClientError.TransactionInvalidError({ message: 'Transaction is invalid and was rejected by the node', txData: TX_DATA })));
     expect(nodeRefusalOf(thrown)).toBe('Transaction is invalid and was rejected by the node');
     expect(classifyError(withNodeReason(thrown), CORE_CODES)).toEqual({ exitCode: 6, errorCode: 'TX_REJECTED' });
+  });
+
+  it('reports a transaction the node took into its pool and then dropped as TX_INVALIDATED, saying another payment from the wallet spent its Dust or coin first', async () => {
+    const thrown = await caught(refusal(new NodeClientError.TransactionInvalidError({ message: 'Transaction is invalid and was rejected by the node', txData: TX_DATA })));
+    expect(isDroppedFromPool(thrown)).toBe(true);
+    const reported = toEngineError(thrown) as Error;
+    expect(reported).toBeInstanceOf(TransactionInvalidatedError);
+    expect(reported.cause).toBe(thrown);
+    expect(reported.message).toContain('another transaction from this wallet');
+    expect(reported.message).toContain('Nothing of this one was spent');
+    expect(classifyError(reported, CORE_CODES)).toEqual({ exitCode: 6, errorCode: 'TX_INVALIDATED' });
+    // A DApp connector's answer carries the code beside its own.
+    expect(mnCodeOf(withEngineCode(thrown))).toBe('TX_INVALIDATED');
+    // A refusal with the node's own reason is not one, nor any other failure.
+    expect(isDroppedFromPool(await caught(refusal(new NodeClientError.SubmissionError({ message: 'Transaction submission failed', txData: TX_DATA, cause: new Error('1010: Invalid Transaction: Custom error: 196') }))))).toBe(false);
+    expect(isDroppedFromPool(new Error('ECONNREFUSED'))).toBe(false);
   });
 
   it('classifies a reason no rule knows as TX_REJECTED, with the reason in the message', async () => {

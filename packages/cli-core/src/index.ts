@@ -73,7 +73,7 @@ export {
 export {
   asReported, CANCELLED_MESSAGE, CancelledError, CommandFailedError, ContractStateUnreadableError, DustDoubleSpentError, DustRequiredError,
   FeeRepricedError, FeeTooLowError, InsufficientBalanceError, isUsageError, NetworkError, ProofFailureError, SyncTimeoutError,
-  throwIfCancelled, TransactionRefusedError, UsageError
+  throwIfCancelled, TransactionInvalidatedError, TransactionRefusedError, UsageError
 } from './lib/errors.ts';
 export { execProgram, type ExecRun, type ExecRunner, ProgramFailedError, ProgramTimedOutError } from './lib/exec-program.ts';
 export {
@@ -81,7 +81,7 @@ export {
   EXIT_INVALID_ARGS, EXIT_NETWORK_ERROR, EXIT_TX_REJECTED, EXIT_WALLET_NOT_FOUND, humanizeNetworkError
 } from './lib/exit-codes.ts';
 export { type FeeLimits, parseFeeLimits } from './lib/fee-limits.ts';
-export { DUST_DOUBLE_SPEND_RETRIES, DUST_DOUBLE_SPENT_CODE, DUST_FEE_MARGIN_STEPS, FEE_REPRICED_CODE, FEE_TOO_LOW_CODE, isDustDoubleSpent, RERUN_DOUBLE_SPENT_STATUS, isFeeRepriced, RERUN_REPRICED_STATUS, rerunWhenRepriced } from './lib/fee-margin.ts';
+export { DUST_DOUBLE_SPEND_RETRIES, DUST_DOUBLE_SPENT_CODE, DUST_FEE_MARGIN_STEPS, FEE_REPRICED_CODE, FEE_TOO_LOW_CODE, isDustDoubleSpent, isSpentFirst, isTxInvalidated, RERUN_DOUBLE_SPENT_STATUS, RERUN_INVALIDATED_STATUS, isFeeRepriced, RERUN_REPRICED_STATUS, rerunSpentFirstStatus, rerunWhenRepriced, TX_INVALIDATED_CODE } from './lib/fee-margin.ts';
 export { createHost, defineHostSlot, type Host, type HostOptions } from './lib/host.ts';
 export { writeJsonError, writeJsonResult } from './lib/json-output.ts';
 export {

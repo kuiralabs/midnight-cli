@@ -21,6 +21,7 @@ import {
   StaleUtxoError,
   StaleWalletStateError,
   SyncTimeoutError,
+  TransactionInvalidatedError,
   TransactionRefusedError,
   type RefusalCode,
 } from './errors.ts';
@@ -223,6 +224,9 @@ const INVALID_DUST_PROOF_WORDS: readonly string[] = ['error 170', 'error: 170', 
 const STALE_STATE_WORDS: readonly string[] = ['stale cache', 'chain reset', 'chainid mismatch', 'applied > highest', 'inserted non-linearly'];
 const SYNC_TIMEOUT_WORDS: readonly string[] = ['sync timed out', 'timed out waiting for dust'];
 
+// The SDK's words for a transaction the node took into its pool and then dropped as invalid (its TransactionInvalidError).
+export const DROPPED_FROM_POOL_WORDS = /transaction is invalid and was rejected by the node/i;
+
 const saysAny = (text: string, words: readonly string[]): boolean => words.some((word) => text.includes(word));
 
 /** The code a node's refusal is reported with, from its reason. */
@@ -241,7 +245,7 @@ export function refusalCodeOf(reason: string): RefusalCode {
  */
 function engineCodeOf(err: unknown): string | undefined {
   const reason = nodeRefusalOf(err);
-  if (reason !== undefined) return refusalCodeOf(reason);
+  if (reason !== undefined) return DROPPED_FROM_POOL_WORDS.test(reason) ? 'TX_INVALIDATED' : refusalCodeOf(reason);
   if (!(err instanceof Error)) return undefined;
   const said = err.message.toLowerCase();
   if (said.includes('proof') && said.includes('timeout')) return 'PROOF_TIMEOUT';
@@ -272,6 +276,7 @@ function typedEngineError(code: string, message: string, cause: unknown): Error 
     case 'DUST_REQUIRED': return new DustRequiredError(message, options);
     case 'INSUFFICIENT_BALANCE': return new InsufficientBalanceError(message, options);
     case 'NETWORK_ERROR': return new NetworkError(message, options);
+    case 'TX_INVALIDATED': return new TransactionInvalidatedError(0, options);
     default: return new EngineError(code, message, options);
   }
 }
@@ -302,10 +307,12 @@ const carriesCode = (err: unknown): boolean => !isConnectorApiError(err) && carr
  * among its causes: what it says to do differs from a refusal's.
  */
 export function toEngineError(err: unknown): unknown {
-  if (err instanceof TransactionRefusedError || err instanceof FeeRepricedError || err instanceof FeeTooLowError || err instanceof DustDoubleSpentError) return err;
+  if (err instanceof TransactionRefusedError || err instanceof FeeRepricedError || err instanceof FeeTooLowError || err instanceof DustDoubleSpentError || err instanceof TransactionInvalidatedError) return err;
   const held = heldCoinRefusalOf(err);
   if (held !== undefined) return held;
   const reason = nodeRefusalOf(err);
+  // Taken into the node's pool and dropped from it: the words alone say nothing of why, the error says what it most likely was.
+  if (reason !== undefined && DROPPED_FROM_POOL_WORDS.test(reason)) return new TransactionInvalidatedError(0, { cause: err });
   if (reason !== undefined) return new TransactionRefusedError(reason, { cause: err, code: refusalCodeOf(reason) });
   const marked = mnCodeOf(err);
   if (marked !== undefined && err instanceof Error) return typedEngineError(marked, err.message, err);

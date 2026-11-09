@@ -588,6 +588,13 @@ export declare class SyncTimeoutError extends Error {
     });
 }
 export declare function throwIfCancelled(signal: AbortSignal | undefined): void;
+export declare class TransactionInvalidatedError extends Error {
+    readonly code = "TX_INVALIDATED";
+    readonly rebuilt: number;
+    constructor(rebuilt: number, options?: {
+        cause?: unknown;
+    });
+}
 export declare class TransactionRefusedError extends Error {
     readonly reason: string;
     readonly code: RefusalCode;
@@ -634,6 +641,7 @@ export declare const ERROR_CODES: {
     readonly FEE_TOO_LOW: "FEE_TOO_LOW";
     readonly FEE_REPRICED: "FEE_REPRICED";
     readonly DUST_DOUBLE_SPENT: "DUST_DOUBLE_SPENT";
+    readonly TX_INVALIDATED: "TX_INVALIDATED";
     readonly DUST_REQUIRED: "DUST_REQUIRED";
     readonly DUST_GENERATING: "DUST_GENERATING";
     readonly CHAIN_CLOCK_BEHIND: "CHAIN_CLOCK_BEHIND";
@@ -684,10 +692,15 @@ export declare const DUST_FEE_MARGIN_STEPS: readonly number[];
 export declare const FEE_REPRICED_CODE = "FEE_REPRICED";
 export declare const FEE_TOO_LOW_CODE = "FEE_TOO_LOW";
 export declare function isDustDoubleSpent(err: unknown): boolean;
+export declare function isSpentFirst(err: unknown): boolean;
+export declare function isTxInvalidated(err: unknown): boolean;
 export declare const RERUN_DOUBLE_SPENT_STATUS = "Another transaction from this wallet spent the same Dust first: running it again, paying with Dust that is still free...";
+export declare const RERUN_INVALIDATED_STATUS = "The node dropped it: another transaction from this wallet spent the same Dust or coin first. Running it again with what is still free...";
 export declare function isFeeRepriced(err: unknown): boolean;
 export declare const RERUN_REPRICED_STATUS = "The node refused the fee as too low: running it again with the larger margin the wallet now prices with...";
+export declare function rerunSpentFirstStatus(err: unknown): string;
 export declare function rerunWhenRepriced<T>(pay: () => Promise<T>, rerunAfter: (err: unknown) => boolean, onStatus: (message: string) => void, signal: AbortSignal | undefined, statusOf?: (err: unknown) => string): Promise<T>;
+export declare const TX_INVALIDATED_CODE = "TX_INVALIDATED";
 export declare function createHost(options?: HostOptions): Host;
 export declare function defineHostSlot<T>(name: string, init: () => T): HostSlot<T>;
 export interface Host {
@@ -1203,6 +1216,13 @@ export declare const coreCodes: readonly [
         readonly recovery: "Nothing of the refused transaction was spent. Run it again once the wallet's other transactions have landed; to avoid it, don't pay from one wallet in parallel.";
     },
     {
+        readonly code: "TX_INVALIDATED";
+        readonly exitCode: 6;
+        readonly order: 118;
+        readonly summary: "The node accepted the transaction into its pool, then dropped it as invalid while building a block (\"Transaction is invalid and was rejected by the node\", no error code): another transaction from the same wallet, sent at the same time (another mn, script or machine with the same seed), spent the same Dust or coin and went in first. mn builds a transfer or a contract call again by itself, at most twice; mn serve answers it to the dApp to balance again.";
+        readonly recovery: "Nothing of the dropped transaction was spent. Run it again once the wallet's other transactions have landed; to avoid it, don't pay from one wallet in parallel.";
+    },
+    {
         readonly code: "FEE_TOO_LOW";
         readonly exitCode: 6;
         readonly order: 115;
@@ -1687,6 +1707,7 @@ export type FeeRefusalStep = {
     fee: bigint;
     dust: bigint;
 };
+export declare function isDroppedFromPool(err: unknown): boolean;
 export declare function isDustDoubleSpendRefusal(err: unknown): boolean;
 export declare function isFeeShortRefusal(err: unknown): boolean;
 export declare function newFeePricing(now?: () => number): FeePricing;

@@ -3,7 +3,7 @@
 
 import type { FeeWallet } from '@kuiralabs/midnight-account-chain/owner';
 import type { AccountChain } from './account-chain.ts';
-import { type ConnectOptions, type Payer, type PayingTarget, type CallSdkWarnings, DUST_DOUBLE_SPEND_RETRIES, DUST_FEE_MARGIN_STEPS, isDustDoubleSpent, isFeeRepriced, RERUN_DOUBLE_SPENT_STATUS, RERUN_REPRICED_STATUS, rerunWhenRepriced } from '@kuiralabs/midnight-cli-core';
+import { type ConnectOptions, type Payer, type PayingTarget, type CallSdkWarnings, DUST_DOUBLE_SPEND_RETRIES, DUST_FEE_MARGIN_STEPS, isSpentFirst, isFeeRepriced, RERUN_REPRICED_STATUS, rerunSpentFirstStatus, rerunWhenRepriced } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 
 /** A fee wallet in this process, and how to stop it. */
@@ -67,8 +67,8 @@ export function repricingPayments(walletSubmit: (tx: string) => Promise<string>,
       return await rerunWhenRepriced(async () => {
         lastFailure = undefined;
         return pay();
-      }, () => (isFeeRepriced(lastFailure) && repriced++ < DUST_FEE_MARGIN_STEPS.length - 1) || (isDustDoubleSpent(lastFailure) && doubleSpent++ < DUST_DOUBLE_SPEND_RETRIES), onStatus, signal,
-      () => (isDustDoubleSpent(lastFailure) ? RERUN_DOUBLE_SPENT_STATUS : RERUN_REPRICED_STATUS));
+      }, () => (isFeeRepriced(lastFailure) && repriced++ < DUST_FEE_MARGIN_STEPS.length - 1) || (isSpentFirst(lastFailure) && doubleSpent++ < DUST_DOUBLE_SPEND_RETRIES), onStatus, signal,
+      () => (isSpentFirst(lastFailure) ? rerunSpentFirstStatus(lastFailure) : RERUN_REPRICED_STATUS));
     } catch (err) {
       // The account package reports the wallet's failure through midnight-js, which keeps only a redacted message:
       // the wallet's own error stands in for it (a Dust shortage as DUST_REQUIRED, a refused fee, ...).

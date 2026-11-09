@@ -86,6 +86,8 @@ export function connectorStub(engine: StubEngine) {
     dustBalance?: bigint;
     /** The wallet's Dust coins, as the SDK's state lists them: each one's cap, and when its NIGHT was spent. */
     dustCoins?: { maxCap: bigint; dtime: Date | undefined }[];
+    /** The Dust coins a transaction not yet on chain pays with, by nonce, as the SDK's state lists them. */
+    pendingDustNonces?: bigint[];
     protocolVersion?: { shielded: bigint; unshielded: bigint; dust: bigint };
     isSynced?: boolean;
   }) {
@@ -107,6 +109,7 @@ export function connectorStub(engine: StubEngine) {
       dust: {
         balance: (_time: Date) => overrides?.dustBalance ?? 1000n,
         availableCoins: [],
+        pendingCoins: (overrides?.pendingDustNonces ?? []).map((nonce) => ({ token: { nonce } })),
         totalCoins: overrides?.dustCoins ?? [],
         address: WALLET_DUST,
       },

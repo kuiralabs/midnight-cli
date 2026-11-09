@@ -2,8 +2,8 @@
 // Handles: facade lifecycle, sync, balance check, dust, tx build/sign/prove/submit, retries
 
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { getNetworkId, proveWithin, submitWithin, TOKEN_MULTIPLIER, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, STALE_UTXO_ERROR_CODE, DUST_REGISTRATION_TIMEOUT_MS, DUST_REGISTRATION_RETRY_DELAY_MS, SYNC_ATTEMPT_TIMEOUT_MS, MIN_DUST_FOR_TRANSFER, isFeeShortRefusal, isDustDoubleSpendRefusal, DUST_DOUBLE_SPEND_RETRIES, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin, isColdStartRace, isDustRelatedError, DustFeeNotGeneratedError, planRegistration, type RegistrationContext, awaitDustForFee, sleep, type EnsureDustResult, type TransferParams, type TransferResult } from '@kuiralabs/midnight-cli-core/engine';
-import { CancelledError, DustDoubleSpentError, DustRequiredError, InsufficientBalanceError, RERUN_DOUBLE_SPENT_STATUS, walletDustLock, walletDustLockFile, type WalletDustLock, type NetworkName, SyncTimeoutError, throwIfCancelled, type NetworkConfig, type VerboseLog, nightAmountText, NATIVE_TOKEN_TYPE, formatWait, type CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
+import { getNetworkId, proveWithin, submitWithin, TOKEN_MULTIPLIER, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, STALE_UTXO_ERROR_CODE, DUST_REGISTRATION_TIMEOUT_MS, DUST_REGISTRATION_RETRY_DELAY_MS, SYNC_ATTEMPT_TIMEOUT_MS, MIN_DUST_FOR_TRANSFER, isFeeShortRefusal, isDroppedFromPool, isDustDoubleSpendRefusal, DUST_DOUBLE_SPEND_RETRIES, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin, isColdStartRace, isDustRelatedError, DustFeeNotGeneratedError, planRegistration, type RegistrationContext, awaitDustForFee, sleep, type EnsureDustResult, type TransferParams, type TransferResult } from '@kuiralabs/midnight-cli-core/engine';
+import { CancelledError, DustDoubleSpentError, DustRequiredError, InsufficientBalanceError, RERUN_DOUBLE_SPENT_STATUS, RERUN_INVALIDATED_STATUS, TransactionInvalidatedError, walletDustLock, walletDustLockFile, type WalletDustLock, type NetworkName, SyncTimeoutError, throwIfCancelled, type NetworkConfig, type VerboseLog, nightAmountText, NATIVE_TOKEN_TYPE, formatWait, type CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
 import { toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, type DustAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { type FacadeState, type UtxoWithMeta } from '@midnightntwrk/wallet-sdk/facade';
@@ -11,6 +11,7 @@ import * as rx from 'rxjs';
 
 import { type FacadeBundle, hasDustAvailable, quickSync } from './facade.ts';
 import { refusedFeeCheck } from './fee-refusal.ts';
+import { awaitDustSpendSeen, pendingDustNonces } from './dust-spend-seen.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
 import type { WalletDataRepository } from './wallet-data-repository.ts';
 
@@ -280,8 +281,9 @@ export async function ensureDust(
  * output for each payment.
  *
  * Retries on:
- * - Dust another transaction of the wallet's spent first (error 196): built
- *   again from free Dust, at most DUST_DOUBLE_SPEND_RETRIES times
+ * - Dust another transaction of the wallet's spent first (error 196, or the
+ *   transaction dropped from the node's pool as invalid): built again from
+ *   free Dust, at most DUST_DOUBLE_SPEND_RETRIES times
  * - A fee refused as too low (error 138) while the Dust covers it: priced again
  *   with the next margin of DUST_FEE_MARGIN_STEPS, FeeTooLowError past the last
  * - Stale UTXO (error 115): quick-sync and retry immediately (up to 3 attempts)
@@ -317,6 +319,8 @@ export async function buildAndSubmitTransfer(
   while (true) {
     // The attempt's proven transaction, once there is one: a fee the node refuses is priced again from it.
     let finalizedTx: Awaited<ReturnType<typeof bundle.facade.finalizeRecipe>> | undefined;
+    // The Dust coins the attempt pays with, by nonce, once it is built: a rebuild waits until the wallet saw them spent.
+    let paidWith: bigint[] = [];
     try {
       // A call cancelled between attempts stops before building another.
       throwIfCancelled(signal);
@@ -353,6 +357,7 @@ export async function buildAndSubmitTransfer(
       finalizedTx = await proveWithin(bundle.facade.finalizeRecipe(signedRecipe), PROOF_TIMEOUT_MS, signal);
       throwIfCancelled(signal);
 
+      paidWith = pendingDustNonces(await rx.firstValueFrom(bundle.facade.state()));
       log?.('transfer', 'Submitting transaction to node...');
       onSubmitting?.();
       // SDK v4's facade.submitTransaction blocks until block finalization
@@ -379,11 +384,18 @@ export async function buildAndSubmitTransfer(
       if (err instanceof CancelledError) throw err;
       lastError = err;
 
-      // Another transaction from this wallet spent the same Dust first: built again (re-synced) from free Dust.
-      if (isDustDoubleSpendRefusal(err)) {
-        if (doubleSpends++ >= DUST_DOUBLE_SPEND_RETRIES) throw new DustDoubleSpentError(DUST_DOUBLE_SPEND_RETRIES, { cause: err });
-        log?.('transfer', RERUN_DOUBLE_SPENT_STATUS);
-        onDust?.(RERUN_DOUBLE_SPENT_STATUS);
+      // Another transaction from this wallet spent the same Dust first, refused as it arrived (196) or dropped from the
+      // node's pool when the other went into a block first: built again (re-synced) from free Dust.
+      const dropped = isDroppedFromPool(err);
+      if (dropped || isDustDoubleSpendRefusal(err)) {
+        if (doubleSpends++ >= DUST_DOUBLE_SPEND_RETRIES) {
+          throw dropped ? new TransactionInvalidatedError(DUST_DOUBLE_SPEND_RETRIES, { cause: err }) : new DustDoubleSpentError(DUST_DOUBLE_SPEND_RETRIES, { cause: err });
+        }
+        const status = dropped ? RERUN_INVALIDATED_STATUS : RERUN_DOUBLE_SPENT_STATUS;
+        log?.('transfer', status);
+        onDust?.(status);
+        // Built again before the wallet has seen the other's spend, it would pay with the same Dust.
+        await awaitDustSpendSeen(bundle.facade.state(), paidWith, { signal });
         continue;
       }
 

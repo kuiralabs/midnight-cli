@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { ContractScriptError } from '../lib/contract/runner.ts';
 import { runRepricing } from '../lib/contract/served-wallet.ts';
-import { RERUN_DOUBLE_SPENT_STATUS, RERUN_REPRICED_STATUS } from '@kuiralabs/midnight-cli-core';
+import { RERUN_DOUBLE_SPENT_STATUS, RERUN_INVALIDATED_STATUS, RERUN_REPRICED_STATUS } from '@kuiralabs/midnight-cli-core';
 
 const repriced = () => new ContractScriptError({ message: 'The node refused the fee as too low (priced with 3 blocks of margin). The wallet now prices fees with 5 blocks: balance the transaction again and submit it.', code: 'FEE_REPRICED' });
 
@@ -60,6 +60,19 @@ describe('runRepricing', () => {
 
     const third = spent();
     const script = scriptRun([spent(), spent(), third]);
+    await expect(runRepricing(script.run, () => {}, undefined)).rejects.toBe(third);
+    expect(script.runs()).toBe(3);
+  });
+
+  it('runs the script again after TX_INVALIDATED, sharing the two reruns with DUST_DOUBLE_SPENT', async () => {
+    const dropped = () => new ContractScriptError({ message: 'The node accepted this transaction, then dropped it as invalid', code: 'TX_INVALIDATED' });
+    const spent = () => new ContractScriptError({ message: 'Another transaction from this wallet spent the same Dust first', code: 'DUST_DOUBLE_SPENT' });
+    const statuses: string[] = [];
+    expect(await runRepricing(scriptRun([dropped(), spent()]).run, (status) => statuses.push(status), undefined)).toBe('deployed');
+    expect(statuses).toEqual([RERUN_INVALIDATED_STATUS, RERUN_DOUBLE_SPENT_STATUS]);
+
+    const third = dropped();
+    const script = scriptRun([dropped(), spent(), third]);
     await expect(runRepricing(script.run, () => {}, undefined)).rejects.toBe(third);
     expect(script.runs()).toBe(3);
   });
