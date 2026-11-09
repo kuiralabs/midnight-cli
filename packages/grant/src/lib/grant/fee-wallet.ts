@@ -3,7 +3,7 @@
 
 import type { FeeWallet } from '@kuiralabs/midnight-account-chain/owner';
 import type { AccountChain } from './account-chain.ts';
-import { type ConnectOptions, type Payer, type PayingTarget, type CallSdkWarnings, DUST_DOUBLE_SPEND_RETRIES, DUST_FEE_MARGIN_STEPS, FEE_TOO_LOW_CODE, isDustDoubleSpent, isFeeRepriced, RERUN_DOUBLE_SPENT_STATUS, RERUN_REPRICED_STATUS, rerunWhenRepriced } from '@kuiralabs/midnight-cli-core';
+import { type ConnectOptions, type Payer, type PayingTarget, type CallSdkWarnings, DUST_DOUBLE_SPEND_RETRIES, DUST_FEE_MARGIN_STEPS, isDustDoubleSpent, isFeeRepriced, RERUN_DOUBLE_SPENT_STATUS, RERUN_REPRICED_STATUS, rerunWhenRepriced } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 
 /** A fee wallet in this process, and how to stop it. */
@@ -22,10 +22,12 @@ export interface PayingWallet {
   stop: () => Promise<void>;
 }
 
-/** A wallet's submit (the DApp connector API's), with the refusals it met kept for `repricing`. */
+/** A wallet's balance and submit (the DApp connector API's), with the failures they met kept for `repricing`. */
 export interface RepricingPayments {
   /** Submits as the wallet does, keeping what a refusal was. */
   submit: (tx: string) => Promise<string>;
+  /** Balances as the wallet does, keeping what a failure was (a Dust shortage). */
+  balance: (tx: string) => Promise<string>;
   /** PayingWallet's repricing, over this submit's refusals. */
   repricing: PayingWallet['repricing'];
 }
@@ -34,40 +36,46 @@ export interface RepricingPayments {
  * Payments over `walletSubmit` that run again after a fee refused as too low.
  * A refusal is kept as the wallet's own error (its code kept): the account
  * package reports a refused submit through midnight-js, which keeps only its
- * message. A payment that failed after a FEE_REPRICED refusal runs again, at
+ * message; so does a failure to balance (a Dust shortage). A payment that failed after a FEE_REPRICED refusal runs again, at
  * most once per larger margin the wallet can move to: the wallet holds the
  * raised margin for the rest of the command (RAISED_MARGIN_HOLD_MS), so the
  * later steps of a payment are priced with it too, and a re-run that makes a
  * step again can't go on making it. One that failed after a FEE_TOO_LOW, or a
- * FEE_REPRICED past those, reports that refusal.
+ * FEE_REPRICED past those, reports that refusal; one that failed after any other
+ * failure of the wallet's carrying mn's code reports that failure.
  */
-export function repricingPayments(walletSubmit: (tx: string) => Promise<string>): RepricingPayments {
-  let lastRefusal: unknown;
-  const submit = async (tx: string): Promise<string> => {
+export function repricingPayments(walletSubmit: (tx: string) => Promise<string>, walletBalance: (tx: string) => Promise<string> = async (tx) => tx): RepricingPayments {
+  // The wallet's last failure, to balance or to submit (mn's own error, its code kept); undefined after a call that succeeded.
+  let lastFailure: unknown;
+  const recording = <A extends unknown[], R>(call: (...args: A) => Promise<R>) => async (...args: A): Promise<R> => {
     try {
-      const txHash = await walletSubmit(tx);
-      lastRefusal = undefined;
-      return txHash;
+      const result = await call(...args);
+      lastFailure = undefined;
+      return result;
     } catch (err) {
-      lastRefusal = err;
+      lastFailure = err;
       throw err;
     }
   };
-  const refusedFee = (err: unknown): boolean => isFeeRepriced(err) || isDustDoubleSpent(err) || (err as { code?: unknown } | null | undefined)?.code === FEE_TOO_LOW_CODE;
+  const submit = recording(walletSubmit);
+  const balance = recording(walletBalance);
+  const carriesMnCode = (err: unknown): boolean => typeof (err as { code?: unknown } | null | undefined)?.code === 'string';
   const repricing = async <T>(pay: () => Promise<T>, onStatus: (message: string) => void, signal: AbortSignal | undefined): Promise<T> => {
     let repriced = 0;
     let doubleSpent = 0;
     try {
       return await rerunWhenRepriced(async () => {
-        lastRefusal = undefined;
+        lastFailure = undefined;
         return pay();
-      }, () => (isFeeRepriced(lastRefusal) && repriced++ < DUST_FEE_MARGIN_STEPS.length - 1) || (isDustDoubleSpent(lastRefusal) && doubleSpent++ < DUST_DOUBLE_SPEND_RETRIES), onStatus, signal,
-      () => (isDustDoubleSpent(lastRefusal) ? RERUN_DOUBLE_SPENT_STATUS : RERUN_REPRICED_STATUS));
+      }, () => (isFeeRepriced(lastFailure) && repriced++ < DUST_FEE_MARGIN_STEPS.length - 1) || (isDustDoubleSpent(lastFailure) && doubleSpent++ < DUST_DOUBLE_SPEND_RETRIES), onStatus, signal,
+      () => (isDustDoubleSpent(lastFailure) ? RERUN_DOUBLE_SPENT_STATUS : RERUN_REPRICED_STATUS));
     } catch (err) {
-      throw refusedFee(lastRefusal) ? lastRefusal : err;
+      // The account package reports the wallet's failure through midnight-js, which keeps only a redacted message:
+      // the wallet's own error stands in for it (a Dust shortage as DUST_REQUIRED, a refused fee, ...).
+      throw carriesMnCode(lastFailure) ? lastFailure : err;
     }
   };
-  return { submit, repricing };
+  return { submit, balance, repricing };
 }
 
 /**
@@ -77,11 +85,11 @@ export function repricingPayments(walletSubmit: (tx: string) => Promise<string>)
 export async function openPayingWallet(payer: Payer, target: PayingTarget, connector: AccountChain['connector'], wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined, options?: ConnectOptions): Promise<PayingWallet> {
   const { feeWalletOver } = connector;
   const session = await payer.connect(target, wallet, progress, sdkWarnings, signal, options);
-  const payments = repricingPayments((tx) => session.submit(tx));
+  const payments = repricingPayments((tx) => session.submit(tx), (tx) => session.balanceTransaction(tx));
   try {
     const feeWallet = await feeWalletOver({
       getShieldedAddresses: () => session.addresses(),
-      balanceUnsealedTransaction: async (tx) => ({ tx: await session.balanceTransaction(tx) }),
+      balanceUnsealedTransaction: async (tx) => ({ tx: await payments.balance(tx) }),
       submitTransaction: payments.submit,
     });
     const shieldedBalance = async (tokenType: string): Promise<bigint> => (await session.balances()).shielded[tokenType] ?? 0n;

@@ -7,7 +7,7 @@
 // record each step so that a run after an interruption carries on from it.
 
 import { describe, expect, it } from 'vitest';
-import { DustDoubleSpentError, FeeRepricedError, FeeTooLowError, RERUN_DOUBLE_SPENT_STATUS, RERUN_REPRICED_STATUS } from '@kuiralabs/midnight-cli-core';
+import { DustDoubleSpentError, FeeRepricedError, FeeTooLowError, RERUN_DOUBLE_SPENT_STATUS, RERUN_REPRICED_STATUS, dustShortError } from '@kuiralabs/midnight-cli-core';
 import { repricingPayments } from '../lib/grant/fee-wallet.ts';
 
 /** A wallet whose submit answers each transaction in turn with the next of `answers` (an error, or its hash); every later one goes through. */
@@ -117,5 +117,27 @@ describe('repricingPayments', () => {
     const again = wallet([new DustDoubleSpentError(0), new DustDoubleSpentError(0), third]);
     const more = repricingPayments(again.submit);
     await expect(more.repricing(recordedDeploy(1, more.submit).run, () => {}, undefined)).rejects.toBe(third);
+  });
+
+  it("reports the wallet's Dust shortage as it balanced, not midnight-js's redacted provider failure", async () => {
+    // The wallet's balance refused: 1 DUST held, 16.1 needed, generated in about 6 minutes (past the 5 a command waits).
+    const short = dustShortError(1_000_000_000_000_000n, 16_100_000_000_000_000n, 6 * 60_000);
+    const payments = repricingPayments(async () => 'never', async () => { throw short; });
+    const deploy = async () => {
+      try {
+        await payments.balance('the-deploy');
+      } catch (err) {
+        // midnight-js's ProviderFailedError: its message, with the provider's own failure redacted.
+        throw new Error("balanceTx rejected the transaction. The provider's own failure is on `cause`, with its message redacted", { cause: new Error('[redacted]') });
+      }
+      return 'account-address';
+    };
+
+    const err = await payments.repricing(deploy, () => {}, undefined).catch((e: unknown) => e);
+
+    expect(err).toBe(short);
+    expect(err).toMatchObject({ code: 'DUST_REQUIRED' });
+    expect((err as Error).message).toContain('Available: 1.000000 DUST, need ≥16.100000 DUST.');
+    expect((err as Error).message).toContain("This wallet's NIGHT generates that in about 6 minutes; retry then.");
   });
 });
