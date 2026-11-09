@@ -85,6 +85,8 @@ At step 5 the user is ready to transact.
 ### User wants to deploy a contract
 Use `midnight_contract_*` MCP tools (or `mn contract` CLI). Flow: `compact compile` in the project → `midnight_contract_inspect({ path })` to verify artifacts → `midnight_contract_deploy({ path, wallet, network })` → returns address → `midnight_contract_call({ address, circuit, args, ... })` to exercise it. State reads via `midnight_contract_state({ address, ... })`.
 
+**Cost before confirming.** `midnight_contract_deploy` prices the deploy before it issues its token (the wallet syncs and the transaction is built; nothing is proven or sent), and the token's description gives the expected fee, the Dust the wallet commits to it (the fee with its margin, all of it burned), the Dust it holds, and whether that covers it or how long its NIGHT takes to. Show that to the user before they confirm. When the price can't be had (the chain out of reach, a wallet with no NIGHT), the description says why in its place. On the CLI, `mn contract deploy --dry-run` and `mn contract call --dry-run` price and stop.
+
 **Project layouts handled.** The scan looks for `managed/<name>/compiler/contract-info.json` under: project root, `contract/`, `contract/src/`, `contracts/`, `contracts/src/`, `src/`. If none match, pass `managed: "<full path to managed/<name>/>"` directly.
 
 **Multi-contract projects.** Inspect returns a `siblings: string[]` field listing other contracts under the same `managed/`. Pick one with `name: "<contract>"` on inspect/deploy/call/state.
