@@ -114,7 +114,7 @@ describe('buildScaffold', () => {
   it('defaults to undeployed network and the standard CLI prep chain', () => {
     const out = buildScaffold(circuits, { contractName: 'starship' });
     expect(out.dappConfig.network).toBe('undeployed');
-    expect(out.dappConfig.prep).toEqual(['cache-clear', 'localnet-up', 'balance:1000', 'dust', 'mn-serve']);
+    expect(out.dappConfig.prep).toEqual(['cache-clear', 'localnet-up', 'balance:50000', 'dust', 'mn-serve']);
   });
 
   it('honors network and suite-name overrides', () => {
@@ -204,7 +204,7 @@ describe('buildScaffold (browser strategy)', () => {
       browser: { port: 3000, buildCmd: 'pnpm dev', buildDir: 'web', url: 'http://example.test:3000/' },
     });
     expect(out.dappConfig.prep).toEqual([
-      'cache-clear', 'localnet-up', 'balance:1000', 'dust', 'mn-serve', 'build-and-serve',
+      'cache-clear', 'localnet-up', 'balance:50000', 'dust', 'mn-serve', 'build-and-serve',
     ]);
     expect(out.dappConfig.port).toBe(3000);
     expect(out.dappConfig.buildCmd).toBe('pnpm dev');

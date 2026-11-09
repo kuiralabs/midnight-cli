@@ -51,8 +51,8 @@ Midnight shut its own preprod and mainnet indexers down on 2026-10-09. Blockfros
 | "Send 100 NIGHT to alice" | `midnight_transfer({ to: "alice", amount: "100" })` — ask consent first |
 | "Pay alice 10 and bob 5" | `midnight_transfer({ recipients: [{ to: "alice", amount: "10" }, { to: "bob", amount: "5" }] })` — one transaction; ask consent first |
 | "Send shielded" | add `--shielded` (the CLI command) or use shielded address directly |
-| "Fund my wallet" (localnet only) | `midnight_airdrop({ amount: "1000" })` |
-| "Fund this address …" (localnet only) | `midnight_airdrop({ amount: "1000", wallet: "mn_addr_undeployed1…" })` — `wallet` accepts a name, path, or raw bech32m address |
+| "Fund my wallet" (localnet only) | `midnight_airdrop({ amount: "50000" })` |
+| "Fund this address …" (localnet only) | `midnight_airdrop({ amount: "50000", wallet: "mn_addr_undeployed1…" })` — `wallet` accepts a name, path, or raw bech32m address |
 | "Register dust" / "I need fees" | `midnight_dust_register()` |
 | "Am I registered for dust?" | `midnight_dust_status()` |
 | "Start localnet" / "start a local network" | `midnight_localnet_up()` |
@@ -63,7 +63,7 @@ Midnight shut its own preprod and mainnet indexers down on 2026-10-09. Blockfros
 ### New user, first session (localnet)
 1. Make sure a ledger-9 stack is running and reachable (see the note at the top); `midnight_localnet_up()` won't start one on this build.
 2. `midnight_wallet_generate({ name: "alice" })` — create wallet, set active.
-3. `midnight_airdrop({ amount: "1000" })` — fund from genesis.
+3. `midnight_airdrop({ amount: "50000" })` — fund from genesis.
 4. `midnight_dust_register()` — make wallet able to pay fees.
 5. `midnight_balance()` — confirm funds visible.
 

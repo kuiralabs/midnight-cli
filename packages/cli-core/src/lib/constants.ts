@@ -52,6 +52,27 @@ export const INITIAL_NIGHT_DUST_RATIO = 5_000_000_000n;
 export const INITIAL_GENERATION_DECAY_RATE = 8_267n;
 export const INITIAL_DUST_GRACE_PERIOD_SECONDS = 10_800n; // 3h (3 * 60 * 60)
 
+// The NIGHT mn airdrops to a wallet its own local flows create: mn dev's
+// wallets and the balance step mn test create writes. A wallet's Dust comes
+// only from its registered NIGHT, at INITIAL_GENERATION_DECAY_RATE specks per
+// STAR a second: 8,267 * 10^6 / 10^15 = 0.000008267 DUST per NIGHT a second
+// (measured on a ledger-9 local chain on 2026-11-09: 100,000 NIGHT gained
+// 0.8267 DUST a second). It counts from the airdrop's block, and registering
+// carries what has accrued into the wallet's Dust.
+//
+// 50,000 NIGHT generates 0.41 DUST a second, 24.8 a minute:
+// - the registration's 0.29 DUST fee, paid about 25 s after the airdrop, has
+//   10 DUST behind it;
+// - a counter deploy (1.08 DUST) is generated again in 2.6 s, a transfer
+//   (0.55) in 1.3 s, a counter call (0.23 with the wallet's margin) in 0.6 s;
+// - the first minute's 24.8 DUST covers a registration, a deploy and about
+//   twenty calls or transfers.
+// 1000 NIGHT, the amount before, generates 0.0083 DUST a second: mn test
+// run's deploy waited 141 s and each call 4 to 11 s (a deploy and three calls
+// took 316 s; with 50,000 NIGHT 136 s, with no wait). On a local chain the genesis wallet holds about 249
+// million NIGHT, so this is 0.02% of it.
+export const LOCAL_WALLET_FUNDING_NIGHT = 50_000;
+
 // Timeouts (milliseconds)
 export const SYNC_TIMEOUT_MS = 300_000;       // 5 minutes — full wallet sync (used by dust/balance commands)
 export const SYNC_ATTEMPT_TIMEOUT_MS = 30_000;        // 30 seconds — per sync attempt on localnet

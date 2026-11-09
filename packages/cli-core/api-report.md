@@ -295,6 +295,7 @@ export declare const DIR_MODE = 448;
 export declare const FILE_MODE = 384;
 export declare const GENESIS_SEED = "0000000000000000000000000000000000000000000000000000000000000001";
 export declare function isValidWalletName(name: string): boolean;
+export declare const LOCAL_WALLET_FUNDING_NIGHT = 50000;
 export declare const LOCALNET_DIR_NAME = "localnet";
 export declare const MAX_WALLET_NAME_LENGTH = 64;
 export declare const MIDNIGHT_DIR = ".midnight";

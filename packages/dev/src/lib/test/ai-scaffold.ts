@@ -7,7 +7,7 @@
 // Code auth — no API key plumbing needed.
 
 import { execFileSync, spawn } from 'node:child_process';
-import { CancelledError } from '@kuiralabs/midnight-cli-core';
+import { CancelledError, LOCAL_WALLET_FUNDING_NIGHT } from '@kuiralabs/midnight-cli-core';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -93,7 +93,7 @@ const DEFAULT_SERVE_PORT = 9932;
 const DEFAULT_TIMEOUT_CLI = 300;
 const DEFAULT_TIMEOUT_BROWSER = 600;
 
-const CLI_PREP: readonly PrepStepId[] = ['cache-clear', 'localnet-up', 'balance:1000', 'dust', 'mn-serve'];
+const CLI_PREP: readonly PrepStepId[] = ['cache-clear', 'localnet-up', `balance:${LOCAL_WALLET_FUNDING_NIGHT}`, 'dust', 'mn-serve'];
 const BROWSER_PREP: readonly PrepStepId[] = [...CLI_PREP, 'build-and-serve'];
 
 // ── Production claude runner ───────────────────────────────────────

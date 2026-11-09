@@ -6,6 +6,7 @@
 // defaults so the user can `mn test create && mn test run` and see a passing
 // suite immediately, then edit args / add assertions to taste.
 
+import { LOCAL_WALLET_FUNDING_NIGHT } from '@kuiralabs/midnight-cli-core';
 import type { CircuitInfo, CompactType } from '@kuiralabs/midnight-contract';
 import type {
   BrowserMode,
@@ -142,7 +143,7 @@ const DEFAULT_SERVE_PORT = 9932;
 const CLI_PREP: readonly PrepStepId[] = [
   'cache-clear',
   'localnet-up',
-  'balance:1000',
+  `balance:${LOCAL_WALLET_FUNDING_NIGHT}`,
   'dust',
   'mn-serve',
 ];

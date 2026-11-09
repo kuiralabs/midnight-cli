@@ -69,8 +69,8 @@ midnight localnet up
 midnight wallet generate alice
 midnight config set network undeployed
 
-# 3. Fund your wallet and register dust (needed for fees)
-midnight airdrop 1000
+# 3. Fund your wallet and register dust (needed for fees; 50,000 NIGHT generates it fast enough that the first transactions don't wait)
+midnight airdrop 50000
 midnight dust register
 
 # 4. Check balance and transfer

@@ -9,7 +9,7 @@
 //      file required, useful for funding externally-generated addresses.
 //      A shielded address implies --shielded; the flag is optional there.
 
-import { UsageError, type ParsedArgs, getFlag, hasFlag, looksLikeShieldedAddress, looksLikeUnshieldedAddress, rejectNoCacheForWrites, networkChoiceFromArgs, nightAmountJson, nightAmountText, parseAmount, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { UsageError, LOCAL_WALLET_FUNDING_NIGHT, type ParsedArgs, getFlag, hasFlag, looksLikeShieldedAddress, looksLikeUnshieldedAddress, rejectNoCacheForWrites, networkChoiceFromArgs, nightAmountJson, nightAmountText, parseAmount, type CallContext } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, divider, formatAddress, successMessage, bold, dim, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { airdropNight, type AirdropAddressed, type AirdropRecipient, type NightAirdrop } from '../lib/wallet/airdrop.ts';
 import { receiptJson } from '@kuiralabs/midnight-chain';
@@ -22,7 +22,7 @@ export default async function airdropCommand(args: ParsedArgs, ctx: CallContext)
     throw new UsageError(
       'Missing amount.\n' +
       'Usage: midnight airdrop <amount> [--wallet <name|file|address>]\n' +
-      'Example: midnight airdrop 1000\n' +
+      `Example: midnight airdrop ${LOCAL_WALLET_FUNDING_NIGHT}\n` +
       'Example: midnight airdrop 1000 --wallet alice\n' +
       'Example: midnight airdrop 1000 --wallet mn_addr_undeployed1...'
     );
@@ -91,5 +91,5 @@ function printAirdrop({ network, txHash, recipient, shielded, receipt }: NightAi
   ctx.output.stderr(dim('  Verify:         midnight balance') + '\n');
   ctx.output.stderr(dim('  Register dust:  midnight dust register') + '\n');
   ctx.output.stderr(dim('  Note: registering pays its fee from Dust this NIGHT generates, so it waits longer the less NIGHT')
-    + '\n' + dim('        there is (about a minute for 1000 NIGHT). dust register says how long.') + '\n\n');
+    + '\n' + dim(`        there is (about a minute for 1000 NIGHT, none for ${LOCAL_WALLET_FUNDING_NIGHT}). dust register says how long.`) + '\n\n');
 }

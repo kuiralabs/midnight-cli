@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { provisionDevWallets, type ProvisionSteps } from '../lib/dev/provision-wallets.ts';
+import { DEFAULT_DEV_AIRDROP_AMOUNT, provisionDevWallets, type ProvisionSteps } from '../lib/dev/provision-wallets.ts';
 import { stateRootIn } from '../../../../test-support/state-root-in.ts';
 
 let home: string;
@@ -36,6 +36,11 @@ function recordingSteps(calls: string[], unregistered: string[] = []): Provision
 }
 
 describe('provisionDevWallets', () => {
+  it("funds mn dev's wallets with 50,000 NIGHT, so their first transactions don't wait for Dust", () => {
+    // 0.41 DUST a second: a deploy's 1.08 DUST fee comes back in 3 s (LOCAL_WALLET_FUNDING_NIGHT has the arithmetic).
+    expect(DEFAULT_DEV_AIRDROP_AMOUNT).toBe(50_000);
+  });
+
   it('funds every new wallet before registering any, and leaves existing ones alone', async () => {
     writeFileSync(join(home, '.midnight', 'wallets', 'dev-bob.json'), '{}');
     const calls: string[] = [];

@@ -1,6 +1,6 @@
 // The `airdrop` command, described once.
 
-import { type CommandDefinition, ENDPOINT_PARAMS, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core';
+import { type CommandDefinition, ENDPOINT_PARAMS, LOCAL_WALLET_FUNDING_NIGHT, NETWORK_PARAM } from '@kuiralabs/midnight-cli-core';
 import { ENGINE_SYNC, LOADS_ENGINE, PAYS, READS_OFFERS, RESOLVES_NETWORK } from '@kuiralabs/midnight-cli-core/commands';
 import { READS_CHAIN } from '@kuiralabs/midnight-chain/commands';
 import { OPENS_WALLET } from './wallet.codes.ts';
@@ -62,7 +62,7 @@ export const airdropDefinition: CommandDefinition = {
       { flag: 'verbose' },
     ],
     examples: [
-      'midnight airdrop 1000',
+      `midnight airdrop ${LOCAL_WALLET_FUNDING_NIGHT}`,
       'midnight airdrop 1000 --wallet alice',
       'midnight airdrop 10000 --wallet mn_addr_undeployed1...',
       'midnight airdrop 100 --shielded',

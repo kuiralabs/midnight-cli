@@ -3,7 +3,7 @@
 // skills, each naming its section and its place there, and its tools' rows in
 // the manual's tools table.
 
-import { codeGuidancePieces, type PackageGuidance } from '@kuiralabs/midnight-cli-core';
+import { codeGuidancePieces, LOCAL_WALLET_FUNDING_NIGHT, type PackageGuidance } from '@kuiralabs/midnight-cli-core';
 import { walletCodes } from './wallet.codes.ts';
 
 export const walletGuidance: PackageGuidance = {
@@ -100,7 +100,7 @@ included), it's used as an address directly.
   1. midnight_config_set           → Set network (key: "network", value: "undeployed")
   2. midnight_wallet_generate      → Create wallet (name: "alice")
   3. midnight_localnet_up          → Start node, indexer, proof server
-  4. midnight_airdrop              → Fund wallet (amount: "1000")
+  4. midnight_airdrop              → Fund wallet (amount: "${LOCAL_WALLET_FUNDING_NIGHT}": its Dust pays fees without waiting)
   5. midnight_dust_register        → Register for fee tokens
   6. midnight_balance              → Check unshielded + shielded balance
   7. midnight_transfer             → Returns pending token + description
@@ -169,7 +169,7 @@ included), it's used as an address directly.
 | "Send 100 NIGHT to alice" | \`midnight_transfer({ to: "alice", amount: "100" })\` — ask consent first |
 | "Pay alice 10 and bob 5" | \`midnight_transfer({ recipients: [{ to: "alice", amount: "10" }, { to: "bob", amount: "5" }] })\` — one transaction; ask consent first |
 | "Send shielded" | use the shielded address directly, or pass \`--shielded\` via the CLI |
-| "Fund my wallet" (localnet only) | \`midnight_airdrop({ amount: "1000" })\` |
+| "Fund my wallet" (localnet only) | \`midnight_airdrop({ amount: "${LOCAL_WALLET_FUNDING_NIGHT}" })\` |
 | "Register dust" / "I need fees" | \`midnight_dust_register()\` |
 | "Am I registered for dust?" | \`midnight_dust_status()\` |
 `,
@@ -186,8 +186,8 @@ included), it's used as an address directly.
 | "Send 100 NIGHT to alice" | \`midnight_transfer({ to: "alice", amount: "100" })\` — ask consent first |
 | "Pay alice 10 and bob 5" | \`midnight_transfer({ recipients: [{ to: "alice", amount: "10" }, { to: "bob", amount: "5" }] })\` — one transaction; ask consent first |
 | "Send shielded" | add \`--shielded\` (the CLI command) or use shielded address directly |
-| "Fund my wallet" (localnet only) | \`midnight_airdrop({ amount: "1000" })\` |
-| "Fund this address …" (localnet only) | \`midnight_airdrop({ amount: "1000", wallet: "mn_addr_undeployed1…" })\` — \`wallet\` accepts a name, path, or raw bech32m address |
+| "Fund my wallet" (localnet only) | \`midnight_airdrop({ amount: "${LOCAL_WALLET_FUNDING_NIGHT}" })\` |
+| "Fund this address …" (localnet only) | \`midnight_airdrop({ amount: "${LOCAL_WALLET_FUNDING_NIGHT}", wallet: "mn_addr_undeployed1…" })\` — \`wallet\` accepts a name, path, or raw bech32m address |
 | "Register dust" / "I need fees" | \`midnight_dust_register()\` |
 | "Am I registered for dust?" | \`midnight_dust_status()\` |
 `,
@@ -199,7 +199,7 @@ included), it's used as an address directly.
       body: `### New user, first session (localnet)
 1. Make sure a ledger-9 stack is running and reachable (see the note at the top); \`midnight_localnet_up()\` won't start one on this build.
 2. \`midnight_wallet_generate({ name: "alice" })\` — create wallet, set active.
-3. \`midnight_airdrop({ amount: "1000" })\` — fund from genesis.
+3. \`midnight_airdrop({ amount: "${LOCAL_WALLET_FUNDING_NIGHT}" })\` — fund from genesis.
 4. \`midnight_dust_register()\` — make wallet able to pay fees.
 5. \`midnight_balance()\` — confirm funds visible.
 

@@ -5,14 +5,14 @@
 
 import { existsSync } from 'node:fs';
 import { getActiveWalletName, loadWalletConfig, resolveWalletPath, setActiveWallet, unlockWallet, type UnlockHost, createWallet, walletFilePath, walletSecretFrom, passphraseForNewSecret } from '@kuiralabs/midnight-wallet';
-import { sdkSetOf, resolveNetwork, type NetworkSettings, type NetworkConfig, type CallSdkWarnings, throwIfCancelled, nightToMicro } from '@kuiralabs/midnight-cli-core';
+import { sdkSetOf, resolveNetwork, type NetworkSettings, type NetworkConfig, type CallSdkWarnings, throwIfCancelled, nightToMicro, LOCAL_WALLET_FUNDING_NIGHT } from '@kuiralabs/midnight-cli-core';
 import { checkBalance } from '@kuiralabs/midnight-chain';
 
 /** Default dev wallet names — one per common test persona. */
 export const DEFAULT_DEV_WALLET_NAMES = ['dev-alice', 'dev-bob', 'dev-carol'] as const;
 
-/** Default NIGHT amount to airdrop to each dev wallet. */
-export const DEFAULT_DEV_AIRDROP_AMOUNT = 1000;
+/** NIGHT airdropped to each new dev wallet: enough that its first transactions don't wait for Dust (the arithmetic is at LOCAL_WALLET_FUNDING_NIGHT). */
+export const DEFAULT_DEV_AIRDROP_AMOUNT = LOCAL_WALLET_FUNDING_NIGHT;
 
 export type WalletProvisionState = 'reused' | 'created';
 
@@ -58,9 +58,9 @@ function walletSteps(root: string, host: UnlockHost, network: NetworkConfig, sdk
  * Always targets the `undeployed` network — airdrop is localnet-only.
  *
  * Every new wallet is funded before any registers: a ledger-9 registration
- * waits for its NIGHT to generate the fee (about a minute for 1000 NIGHT),
- * and generation starts at the airdrop, so the later wallets' waits run
- * while the earlier ones register instead of one after another.
+ * pays its fee from the Dust its NIGHT has generated since the airdrop, so
+ * funding them all first gives each the most time to generate before it
+ * registers (with DEFAULT_DEV_AIRDROP_AMOUNT none waits).
  */
 export async function provisionDevWallets(opts: ProvisionOptions): Promise<ProvisionedWallet[]> {
   const { root } = opts;
