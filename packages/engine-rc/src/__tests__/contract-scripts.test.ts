@@ -5,7 +5,7 @@
 // read only the names of the indexer's environment variables from them.
 
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
-import type { NetworkConfig } from '@kuiralabs/midnight-cli-core';
+import { type NetworkConfig, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
 import type { ScriptParts } from '@kuiralabs/midnight-cli-core/engine';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -29,7 +29,7 @@ import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
-import { PROVIDER_IMPORTS, generateCallScript, generateDeployScript, providerSetupCode as providerSetupCodeFor, walletProviderCode } from '../contract-scripts.ts';
+import { PROVIDER_IMPORTS, generateCallScript, generateDeployScript, pricingProofProviderCode, providerSetupCode as providerSetupCodeFor, walletProviderCode } from '../contract-scripts.ts';
 
 /** The script parts, as plain values: the fragments under test read only the indexer's environment variable names. */
 const TEST_PARTS: ScriptParts = {
@@ -48,6 +48,8 @@ const TEST_PARTS: ScriptParts = {
   privateStateName: (address) => `contract ${address}`,
   privateStateBusyWaitMs: 1_000,
   noticeMarker: '__MN_TEST_NOTICE__',
+  pricedMarker: '__MN_TEST_PRICED__',
+  dryRunEnv: 'MN_TEST_DRY_RUN',
   witnessCandidates: [],
   indexerUrlEnv: 'MN_TEST_INDEXER_URL',
   indexerWsUrlEnv: 'MN_TEST_INDEXER_WS_URL',
@@ -185,6 +187,90 @@ describe('generated midnightProvider', () => {
     const submitCall = calls.find((c) => c.method === 'submitTransaction');
     expect(submitCall?.params).toEqual({ tx: toHex(finalizedTx.serialize()) });
     expect(txId).toBe(finalizedTx.identifiers()[0]);
+  });
+});
+
+describe('generated pricing proof provider', () => {
+  /** What the script's process would do: its environment, the lines it writes to stderr, and an exit, which ends the proof here. */
+  class Exited extends Error {
+    constructor(readonly code: number) { super(`exited ${code}`); }
+  }
+  const scriptProcess = (env: Record<string, string>) => {
+    const stderr: string[] = [];
+    return { stderr, process: { env, stderr: { write: (text: string) => { stderr.push(text); return true; } }, exit: (code: number) => { throw new Exited(code); } } };
+  };
+  /** The price mn serve answers with, as it crosses JSON-RPC. */
+  const PRICE = { committed: '1234000000000000', have: '5000000000000000', covers: true, waitMs: 0, marginBlocks: 3 };
+  /** midnight-js's proof provider at the SDK's boundary: says what it was handed to prove. */
+  const proving = () => {
+    const proved: unknown[] = [];
+    return { proved, provider: { supportedEras: ['v9'], proveTx: async (tx: unknown) => { proved.push(tx); return 'proven'; } } };
+  };
+  const unprovenHandle = () => LedgerTransaction.seal('v9', 'Unproven', ledger.Transaction.fromParts(
+    'undeployed', undefined, undefined, ledger.Intent.new(new Date(Date.UTC(2030, 0, 1))),
+  ));
+
+  /** The fragment, evaluated with the script's bindings: mn serve's RPC, the prelude's fail, and the process given. */
+  async function evalPricing(rpcCall: unknown, process: unknown, failed: unknown[] = [], globals: Record<string, unknown> = {}) {
+    const fn = new AsyncFunction(
+      'rpcCall', 'rpcClose', 'toHex', 'fail', 'process', 'globalThis',
+      `${pricingProofProviderCode(TEST_PARTS)}\nreturn pricingProofProvider;`,
+    );
+    const fail = (err: unknown) => { failed.push(err); throw new Exited(1); };
+    return await fn(rpcCall, () => {}, toHex, fail, process, globals) as (proving: unknown) => { supportedEras: readonly string[]; proveTx(tx: unknown): Promise<unknown> };
+  }
+
+  it('prices the transaction it is handed through mn serve, says the price on its marked line, then proves it', async () => {
+    const { calls, rpcCall } = makeRpcStub({ [PRICE_TRANSACTION_METHOD]: PRICE });
+    const { stderr, process } = scriptProcess({});
+    const { proved, provider } = proving();
+    const pricing = (await evalPricing(rpcCall, process))(provider);
+    const tx = unprovenHandle();
+
+    expect(pricing.supportedEras).toEqual(['v9']);
+    expect(await pricing.proveTx(tx)).toBe('proven');
+    expect(calls).toEqual([{ method: PRICE_TRANSACTION_METHOD, params: { tx: toHex(tx.serialize()) } }]);
+    expect(stderr.join('')).toBe(`\n__MN_TEST_PRICED__ ${JSON.stringify(PRICE)}\n`);
+    expect(proved).toEqual([tx]);
+  });
+
+  it('stops once priced on a dry run: nothing is proven', async () => {
+    const { rpcCall } = makeRpcStub({ [PRICE_TRANSACTION_METHOD]: PRICE });
+    const { stderr, process } = scriptProcess({ MN_TEST_DRY_RUN: '1' });
+    const { proved, provider } = proving();
+    const pricing = (await evalPricing(rpcCall, process))(provider);
+
+    const stopped = await pricing.proveTx(unprovenHandle()).catch((e: unknown) => e);
+    expect(stopped).toEqual(new Exited(0));
+    expect(stderr.join('')).toContain(`__MN_TEST_PRICED__ ${JSON.stringify(PRICE)}`);
+    expect(proved).toEqual([]);
+  });
+
+  it('proves as before when mn serve gives no price, saying so', async () => {
+    // An mn serve from before the price: the method is unknown to it.
+    const { rpcCall } = makeRpcStub({});
+    const { stderr, process } = scriptProcess({});
+    const { proved, provider } = proving();
+    // The RPC client keeps mn serve's last refusal for the prelude to report; this one refused no transaction.
+    const globals: Record<string, unknown> = { mnServeRefusal: new Error('the price refused') };
+    const pricing = (await evalPricing(rpcCall, process, [], globals))(provider);
+
+    expect(await pricing.proveTx(unprovenHandle())).toBe('proven');
+    expect(globals.mnServeRefusal).toBeUndefined();
+    expect(stderr.join('')).toBe(`Could not price the transaction before proving it: unexpected RPC ${PRICE_TRANSACTION_METHOD}\n`);
+    expect(proved).toHaveLength(1);
+  });
+
+  it('fails a dry run whose price mn serve refuses, with mn serve\'s failure', async () => {
+    const { rpcCall } = makeRpcStub({});
+    const { process } = scriptProcess({ MN_TEST_DRY_RUN: '1' });
+    const { proved, provider } = proving();
+    const failed: unknown[] = [];
+    const pricing = (await evalPricing(rpcCall, process, failed))(provider);
+
+    expect(await pricing.proveTx(unprovenHandle()).catch((e: unknown) => e)).toEqual(new Exited(1));
+    expect(failed).toEqual([new Error(`unexpected RPC ${PRICE_TRANSACTION_METHOD}`)]);
+    expect(proved).toEqual([]);
   });
 });
 

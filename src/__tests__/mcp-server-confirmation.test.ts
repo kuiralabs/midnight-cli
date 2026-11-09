@@ -19,10 +19,16 @@ const TSX = path.join(REPO, 'node_modules', '.bin', 'tsx');
 const ENDPOINTS = { node: 'ws://localhost:29944', 'indexer-ws': 'ws://localhost:28088/api/v4/graphql/ws', 'proof-server': 'http://localhost:26300' };
 // How a confirmation names those endpoints.
 const VIA = '. Endpoints: node ws://localhost:29944, indexer ws://localhost:28088/api/v4/graphql/ws, proof server http://localhost:26300';
+// Endpoints nothing listens on, for a check that would read the chain (a deploy's confirmation prices the deploy first), and how a confirmation names them.
+const CLOSED = { node: 'ws://127.0.0.1:1', 'indexer-ws': 'ws://127.0.0.1:1/api/v4/graphql/ws', 'proof-server': 'http://127.0.0.1:1' };
+const VIA_CLOSED = '. Endpoints: node ws://127.0.0.1:1, indexer ws://127.0.0.1:1/api/v4/graphql/ws, proof server http://127.0.0.1:1';
 
 // An account's records as mn 0.6.0-rc.10 left them.
 const ACCOUNT = '5e'.repeat(32);
 const OWNER_RECORD = { contractAddress: ACCOUNT, deviceArm: 'k1', deviceSk: '4f'.repeat(32), bootSalt: '3a'.repeat(32), encryptionSecret: '2b'.repeat(32) };
+
+/** `text` as a regular expression matching it literally. */
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 let home: string;
 let recordsDir: string;
@@ -100,7 +106,9 @@ describe('every tool that acts answers with a token, and does nothing until it i
     ['midnight_transfer', () => ({ to: 'carol', amount: '5', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => 'Send 5 NIGHT from alice to carol on undeployed' + VIA],
     ['midnight_transfer', () => ({ recipients: [{ to: 'carol', amount: '5' }, { to: 'bob', amount: '2.5' }, { to: 'carol', amount: '1' }], wallet: 'alice', network: 'undeployed', ...ENDPOINTS }),
       () => 'Send 8.5 NIGHT in all from alice on undeployed, in one transaction: 5 NIGHT to carol, 2.5 NIGHT to bob, 1 NIGHT to carol' + VIA],
-    ['midnight_contract_deploy', () => ({ path: dappDir, wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => `Deploy contract from ${dappDir} as alice on undeployed` + VIA],
+    // The deploy is priced first; with the chain out of reach the confirmation says why its cost is missing.
+    ['midnight_contract_deploy', () => ({ path: dappDir, wallet: 'alice', network: 'undeployed', ...CLOSED }),
+      () => new RegExp(`^${escapeRegExp(`Deploy contract from ${dappDir} as alice on undeployed. Its cost could not be worked out first (`)}.+\\)${escapeRegExp(VIA_CLOSED)}$`)],
     ['midnight_contract_call', () => ({ path: dappDir, address: ADDRESS, circuit: 'increment', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => `Call circuit increment on contract ${ADDRESS} as alice on undeployed` + VIA],
     ['midnight_grant_deploy', () => ({ wallet: 'carol', network: 'undeployed', ...ENDPOINTS }), () => "Deploy an account for carol on undeployed; its owner key is made on this machine and kept encrypted under mn's passphrase" + VIA],
     ['midnight_grant_deposit', () => ({ amount: '2', wallet: 'alice', network: 'undeployed', ...ENDPOINTS }), () => `Deposit 2 shielded NIGHT (2000000 in the smallest unit) from wallet alice into its account ${ACCOUNT} on undeployed` + VIA],

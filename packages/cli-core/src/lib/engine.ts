@@ -57,6 +57,8 @@ export interface BlockLimits {
 export interface EngineLedger {
   /** The block limits in serialized ledger parameters (hex), as the indexer serves them. Throws when the bytes aren't this set's ledger parameters. */
   blockLimits(parametersHex: string): BlockLimits;
+  /** The most the fee prices can rise in one block, as a factor (1.046 for 4.6%), in serialized ledger parameters (hex). Throws when the bytes aren't this set's ledger parameters. */
+  maxPriceAdjustment(parametersHex: string): number;
   /** The raw id of the unshielded NIGHT token, as wallet balances are keyed. */
   nightTokenId(): string;
   /** What a serialized transaction (hex) is, as an approval prompt shows it; never throws. */
@@ -101,6 +103,10 @@ export interface ScriptParts {
   readonly privateStateBusyWaitMs: number;
   /** Marks a line a script writes for mn's notices (JSON text after it), apart from its progress lines. */
   readonly noticeMarker: string;
+  /** Marks the line a deploy or call script writes with the price mn serve gave its transaction before proving (JSON text after it). */
+  readonly pricedMarker: string;
+  /** The environment variable that, set to `1`, stops a deploy or call script once its transaction is priced: nothing is proven or sent. */
+  readonly dryRunEnv: string;
   /** Where the dApp's witnesses may be, relative to its folder. */
   readonly witnessCandidates: readonly string[];
   /** The environment variables carrying the indexer's URLs, which never go into a script's text. */

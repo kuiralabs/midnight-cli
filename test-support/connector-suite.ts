@@ -14,7 +14,7 @@ import { HISTORY, NO_TERMINAL, TEST_NETWORK_CONFIG, connectorStub, type BundleOv
 import { startLocalIndexer, type LocalIndexer } from './local-indexer.ts';
 import { ledgerTx, type Ledger } from './ledger-tx.ts';
 import { SWAP_OFFER_HEX, OFFER_GIVE } from './fixtures/swap-offer.ts';
-import { OfferCoinsInUseError, type OpenOffer, type RpcHandlerContext, classifyError, type NetworkName } from '@kuiralabs/midnight-cli-core';
+import { OfferCoinsInUseError, type OpenOffer, type RpcHandlerContext, classifyError, type NetworkName, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
 import { createCoinPicking, NotAnOfferError, signedMessageBytes, PROOF_TIMEOUT_MS, toEngineError, withDustShortfall, type FeeLimits, type ApprovalOptions } from '@kuiralabs/midnight-cli-core/engine';
 import type { SignatureVerifyingKey } from '@midnightntwrk/ledger-v9';
 import { CORE_CODES } from './core-codes.ts';
@@ -97,7 +97,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         })).toThrow('Unknown networkId: Mainnet');
       });
 
-      it('returns all 18 handler methods', () => {
+      it('returns all 18 handler methods, and mn\'s own price', () => {
         connector = createConnector();
         const methods = Object.keys(connector.handlers);
         expect(methods).toContain('connect');
@@ -118,7 +118,8 @@ export function connectorSuite(engine: ConnectorEngine): void {
         expect(methods).toContain('signData');
         expect(methods).toContain('getProvingProvider');
         expect(methods).toContain('hintUsage');
-        expect(methods.length).toBe(18);
+        expect(methods).toContain(PRICE_TRANSACTION_METHOD);
+        expect(methods.length).toBe(19);
       });
 
       it('dispose() unsubscribes from state', () => {
@@ -182,6 +183,74 @@ export function connectorSuite(engine: ConnectorEngine): void {
         });
         const result = await connector.handlers.getShieldedBalances({}, ctx());
         expect(result).toEqual(balances);
+      });
+    });
+
+    describe(PRICE_TRANSACTION_METHOD, () => {
+      const SPECK = 1_000_000_000_000_000n;
+      /** The transaction a dApp is about to prove, as hex: unproven. */
+      let UNPROVEN_TX: string;
+      beforeAll(() => {
+        UNPROVEN_TX = Buffer.from(agentPaysMerchant().serialize()).toString('hex');
+      });
+
+      it('prices the transaction with the wallet\'s own estimate (its Dust spend and margin added), against the Dust it has', async () => {
+        const estimate = vi.fn().mockResolvedValue(1_236n * SPECK / 1000n);
+        connector = createConnector({ bundleOverrides: { estimateTransactionFee: estimate, stateFn: () => rx.of(mockState({ dustBalance: 5n * SPECK })) } });
+
+        const price = await connector.handlers[PRICE_TRANSACTION_METHOD]!({ tx: UNPROVEN_TX }, ctx());
+
+        expect(price).toEqual({ committed: '1236000000000000', have: '5000000000000000', covers: true, waitMs: 0, marginBlocks: 3 });
+        expect(estimate).toHaveBeenCalledTimes(1);
+        const [priced, options] = estimate.mock.calls[0]!;
+        expect(priced.stage).toBe('Unproven');
+        expect(engine.handleHex(priced)).toBe(UNPROVEN_TX);
+        expect(options.ttl).toBeInstanceOf(Date);
+      });
+
+      it('prices with the margin the wallet prices with now, a raised one included', async () => {
+        const bundle = createBundleStub({ estimateTransactionFee: vi.fn().mockResolvedValue(SPECK) });
+        bundle.feePricing.feeBlocksMargin = 5;
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        const price = await connector.handlers[PRICE_TRANSACTION_METHOD]!({ tx: UNPROVEN_TX }, ctx()) as { marginBlocks: number };
+        expect(price.marginBlocks).toBe(5);
+      });
+
+      it('prices a fee the wallet\'s Dust falls short of at what the fee takes, with how long its NIGHT needs for the rest, and waits for nothing', async () => {
+        // 0.35 DUST, +0.0075 a second; the fee takes 1 DUST: 0.65 more, 87 seconds.
+        const start = Date.now();
+        const growing = () => rx.of({
+          ...mockState(),
+          dust: { balance: (at: Date) => 350n * SPECK / 1000n + 75n * SPECK / 10_000n * BigInt(Math.max(0, Math.floor((at.getTime() - start) / 1000))), availableCoins: [{}], totalCoins: [], address: 'dust' },
+        });
+        const short = withDustShortfall(Object.assign(new Error('Insufficient Funds: could not balance dust'), { _tag: 'Wallet.InsufficientFunds', tokenType: 'dust' }), { needed: SPECK, available: 350n * SPECK / 1000n });
+        const estimate = vi.fn().mockRejectedValue(short);
+        connector = createConnector({ bundleOverrides: { estimateTransactionFee: estimate, stateFn: growing } });
+
+        const price = await connector.handlers[PRICE_TRANSACTION_METHOD]!({ tx: UNPROVEN_TX }, ctx()) as Record<string, unknown>;
+
+        expect(price).toMatchObject({ committed: '1000000000000000', have: '350000000000000', covers: false, marginBlocks: 3 });
+        // 87 seconds from when the state was read, give or take the second the test runs in.
+        expect(price.waitMs).toBeGreaterThanOrEqual(86_000);
+        expect(price.waitMs).toBeLessThanOrEqual(88_000);
+        expect(estimate).toHaveBeenCalledTimes(1);
+      });
+
+      it('asks the operator nothing: it books, signs and sends nothing', async () => {
+        // An operator who would refuse anything: the price is given without asking them.
+        const prompts: string[] = [];
+        const refusing = { isInteractive: () => true, ask: async (question: string) => { prompts.push(question); return 'n'; }, askSecret: async () => null };
+        connector = createConnector({ approvalOptions: { ...NO_TERMINAL, prompter: refusing } });
+        await expect(connector.handlers[PRICE_TRANSACTION_METHOD]!({ tx: UNPROVEN_TX }, ctx())).resolves.toMatchObject({ covers: true });
+        expect(prompts).toEqual([]);
+      });
+
+      it('refuses a call without a transaction', async () => {
+        connector = createConnector();
+        const missing: any = await connector.handlers[PRICE_TRANSACTION_METHOD]!({}, ctx()).catch((e: unknown) => e);
+        expect(missing.code).toBe('InvalidRequest');
+        expect(missing.message).toBe('tx is required');
       });
     });
 

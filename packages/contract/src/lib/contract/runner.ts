@@ -11,7 +11,7 @@ import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdir
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { assertEndpointUsable, type ContractKeys, type NetworkConfig, type NetworkName, sdkSetOf, type EngineContractScripts, type HostEngines, type ScriptParts, CancelledError, throwIfCancelled, isTransportFailure, sleep, stateDecodeFailureOf, ContractStateUnreadableError } from '@kuiralabs/midnight-cli-core';
+import { assertEndpointUsable, type ContractKeys, type NetworkConfig, type NetworkName, sdkSetOf, type EngineContractScripts, type HostEngines, type ScriptParts, CancelledError, throwIfCancelled, isTransportFailure, sleep, stateDecodeFailureOf, ContractStateUnreadableError, type TransactionPrice, transactionPriceFromWire } from '@kuiralabs/midnight-cli-core';
 import { findContractInfo } from './inspect.ts';
 import { assertContractRunsOn } from './runtime-check.ts';
 import { WITNESS_FILE_CANDIDATES } from './witness-discovery.ts';
@@ -54,6 +54,8 @@ export interface RunnerOptions {
   onMessage?: (msg: string) => void;
   /** Where a note for the person goes (the private-state store moved out of the dApp): the host's notices. */
   notice?: (line: string) => void;
+  /** The price mn serve gave the transaction before it was proven, when it gave one. */
+  onPriced?: (price: TransactionPrice) => void;
   /** Cancels the run: the script's process is stopped. */
   signal?: AbortSignal;
 }
@@ -128,6 +130,10 @@ const PRIVATE_STATE_PASSWORD_ENV = 'MN_PRIVATE_STATE_PASSWORD';
 const PRIVATE_STATE_ACCOUNT_ENV = 'MN_PRIVATE_STATE_ACCOUNT';
 // The store's folder, under mn's state root (private-state.ts).
 const PRIVATE_STATE_DIR_ENV = 'MN_PRIVATE_STATE_DIR';
+// Set to 1, a deploy or call script stops once its transaction is priced.
+const DRY_RUN_ENV = 'MN_DRY_RUN';
+/** Marks the line a deploy or call script writes with its transaction's price (JSON after it). */
+export const SCRIPT_PRICED_MARKER = '__MN_PRICED__';
 
 /** What a deploy or call script keeps the wallet's private state with: the secret it seeds, and the store's password and account. */
 export function privateStateEnvironment({ contractKeys, privateStateSecretKey }: Pick<RunnerOptions, 'contractKeys' | 'privateStateSecretKey'>): Record<string, string> {
@@ -162,7 +168,8 @@ export async function runState(options: StateOptions): Promise<StateResult> {
   }
 }
 
-export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
+/** A deploy script's run: what it wrote to stdout, and the folder of the deploy's own private-state store. A failed run's store is dropped when empty, or said to be kept. */
+async function executeDeployScript(options: DeployOptions, extraEnv: Record<string, string>): Promise<{ stdout: string; staging: string }> {
   // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
   throwIfCancelled(options.signal);
   await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network, options.root, options.engines);
@@ -173,22 +180,63 @@ export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
   noteMovedStore(moveDappStore(options.root, options.dappDir), notice);
   // The deploy's own store until its address is known.
   const staging = deployStateDir(options.root, options.network);
-  const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options), [PRIVATE_STATE_DIR_ENV]: staging };
+  const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options), [PRIVATE_STATE_DIR_ENV]: staging, ...extraEnv };
+  try {
+    const stdout = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, onPriced: options.onPriced, env, signal: options.signal });
+    return { stdout, staging };
+  } catch (err) {
+    keepFailedDeployState(staging, notice);
+    throw err;
+  }
+}
+
+/** Drops the store of a deploy that failed or never ran when it is empty; says where it is kept otherwise. */
+function keepFailedDeployState(staging: string, notice: (line: string) => void): void {
+  if (!dropEmptyDeployState(staging)) notice(`The private state of the deploy that failed is kept at ${staging}.`);
+}
+
+export async function runDeploy(options: DeployOptions): Promise<DeployResult> {
+  const notice = options.notice ?? (() => {});
+  const { stdout, staging } = await executeDeployScript(options, {});
   let deployed: DeployResult;
   try {
-    const result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, env, signal: options.signal });
-    try {
-      deployed = JSON.parse(result) as DeployResult;
-    } catch {
-      throw new Error(`Deploy script returned unexpected output:\n${result}`);
-    }
-  } catch (err) {
-    if (!dropEmptyDeployState(staging)) notice(`The private state of the deploy that failed is kept at ${staging}.`);
-    throw err;
+    deployed = JSON.parse(stdout) as DeployResult;
+  } catch {
+    keepFailedDeployState(staging, notice);
+    throw new Error(`Deploy script returned unexpected output:\n${stdout}`);
   }
   const kept = keepDeployState(staging, options.root, options.network, deployed.contractAddress);
   if (kept === staging) notice(`A private-state store for contract ${deployed.contractAddress} was there already; the deploy's is kept at ${staging}.`);
   return deployed;
+}
+
+/** The script ended without the price it stops at on a dry run: mn serve gave none. */
+export class NotPricedError extends Error {
+  constructor(what: string) {
+    super(`The ${what} script ended without a price for its transaction: mn serve gave none.`);
+    this.name = 'NotPricedError';
+    Object.setPrototypeOf(this, NotPricedError.prototype);
+  }
+}
+
+/** Runs `run` with `options` reporting their price to it as well, and returns the price; NotPricedError when none came. */
+async function pricedBy<O extends RunnerOptions>(options: O, what: string, run: (options: O) => Promise<unknown>): Promise<TransactionPrice> {
+  let priced: TransactionPrice | undefined;
+  await run({ ...options, onPriced: (price) => { priced = price; options.onPriced?.(price); } });
+  if (priced === undefined) throw new NotPricedError(what);
+  return priced;
+}
+
+/**
+ * A deploy's price, from the deploy script stopped once midnight-js hands it
+ * the transaction to prove: nothing is proven or sent, and the deploy's
+ * private-state store, empty, is dropped.
+ */
+export function priceDeploy(options: DeployOptions): Promise<TransactionPrice> {
+  return pricedBy(options, 'deploy', async (priced) => {
+    const { staging } = await executeDeployScript(priced, { [DRY_RUN_ENV]: '1' });
+    keepFailedDeployState(staging, options.notice ?? (() => {}));
+  });
 }
 
 /** Says where the store an earlier mn kept in the dApp went. */
@@ -196,7 +244,8 @@ function noteMovedStore(moved: { from: string; to: string } | undefined, notice:
   if (moved !== undefined) notice(`Moved the contract private-state store out of the dApp: ${moved.from} is now ${moved.to} (mn keeps private state under its state root, one store per contract).`);
 }
 
-export async function runCall(options: CallOptions): Promise<CallResult> {
+/** A call script's run, with the contract's call lock held: what it wrote to stdout. */
+async function executeCallScript(options: CallOptions, extraEnv: Record<string, string>): Promise<string> {
   // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
   throwIfCancelled(options.signal);
   await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network, options.root, options.engines);
@@ -207,7 +256,7 @@ export async function runCall(options: CallOptions): Promise<CallResult> {
   noteMovedStore(moveDappStore(options.root, options.dappDir), notice);
   const store = callStateDir(options.root, options.network, options.contractAddress, options.dappDir);
   if (store.copiedFrom !== undefined) notice(`Contract ${options.contractAddress} had no private-state store of its own yet: it starts from a copy of the one moved out of the dApp (${store.copiedFrom}), now at ${store.dir}.`);
-  const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options), [PRIVATE_STATE_DIR_ENV]: store.dir };
+  const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options), [PRIVATE_STATE_DIR_ENV]: store.dir, ...extraEnv };
   // One call at a time on the contract's private state, for the script's whole run: it reads the state before it submits and writes it after the transaction lands.
   const release = await acquireContractCallLock(
     { fs: { existsSync, mkdirSync, openSync, writeSync, closeSync, readFileSync, renameSync, linkSync, rmSync }, join, isAlive: processIsAlive, now: () => Date.now(), sleep },
@@ -215,19 +264,31 @@ export async function runCall(options: CallOptions): Promise<CallResult> {
     { pid: process.pid, command: holderCommandOf(process.argv) },
     { address: options.contractAddress, timeoutMs: PRIVATE_STATE_BUSY_WAIT_MS, notice, progress: (line) => options.onMessage?.(line), signal: options.signal },
   );
-  let result: string;
   try {
-    result = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, env, signal: options.signal });
+    return await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, onPriced: options.onPriced, env, signal: options.signal });
   } catch (err) {
     throw namingUnreadableState(err, options.contractAddress);
   } finally {
     release();
   }
+}
+
+export async function runCall(options: CallOptions): Promise<CallResult> {
+  const result = await executeCallScript(options, {});
   try {
     return JSON.parse(result) as CallResult;
   } catch {
     throw new Error(`Call script returned unexpected output:\n${result}`);
   }
+}
+
+/**
+ * A circuit call's price, from the call script stopped once midnight-js hands
+ * it the transaction to prove: the circuit ran on the contract's state, and
+ * nothing is proven, sent, or written to its private state.
+ */
+export function priceCall(options: CallOptions): Promise<TransactionPrice> {
+  return pricedBy(options, 'call', (priced) => executeCallScript(priced, { [DRY_RUN_ENV]: '1' }));
 }
 
 // ── Shared script fragments ──
@@ -391,6 +452,19 @@ export function scriptFailureOf(stderr: string, exitCode: number | null): Script
   return { message: stderr.trim() || `Script exited with code ${exitCode}` };
 }
 
+/** The last price a generated script reported for its transaction (SCRIPT_PRICED_MARKER) in `stderr`, or undefined when it reported none; throws when the line isn't a price. */
+export function scriptPriceOf(stderr: string): TransactionPrice | undefined {
+  const marked = [...stderr.matchAll(new RegExp(`^${SCRIPT_PRICED_MARKER} (.*)$`, 'gm'))].at(-1);
+  if (marked === undefined) return undefined;
+  let reported: unknown;
+  try {
+    reported = JSON.parse(marked[1]!);
+  } catch {
+    throw new Error(`A contract script reported a price that isn't JSON: ${marked[1]}`);
+  }
+  return transactionPriceFromWire(reported);
+}
+
 /** The message of the failure a generated script reported, or its whole stderr when it reported none. */
 export function scriptFailureMessage(stderr: string, exitCode: number | null): string {
   return scriptFailureOf(stderr, exitCode).message;
@@ -431,6 +505,8 @@ export const SCRIPT_PARTS: ScriptParts = {
   privateStateName: privateStateNameOf,
   privateStateBusyWaitMs: PRIVATE_STATE_BUSY_WAIT_MS,
   noticeMarker: SCRIPT_NOTICE_MARKER,
+  pricedMarker: SCRIPT_PRICED_MARKER,
+  dryRunEnv: DRY_RUN_ENV,
   privateStateSecretEnv: PRIVATE_STATE_SECRET_ENV,
   privateStatePasswordEnv: PRIVATE_STATE_PASSWORD_ENV,
   privateStateAccountEnv: PRIVATE_STATE_ACCOUNT_ENV,
@@ -610,6 +686,8 @@ export interface ScriptRun {
   onMessage?: (msg: string) => void;
   /** Each notice the script writes (a line marked SCRIPT_NOTICE_MARKER): the private-state store is in use and the script waits for it. */
   onNotice?: (line: string) => void;
+  /** The price the script wrote for its transaction (a line marked SCRIPT_PRICED_MARKER). */
+  onPriced?: (price: TransactionPrice) => void;
   /** Set over mn's own environment; a variable given as undefined is cleared. */
   env?: Record<string, string | undefined>;
   /** The script's working directory; `dir` when not given. */
@@ -659,7 +737,7 @@ export function scriptRuntime(
 }
 
 /** Runs a generated script and returns what it wrote to stdout. Throws its marked error when it fails. */
-export async function executeScript({ dir: dappDir, script, packages, onMessage, onNotice, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal, findRuntime = scriptRuntime }: ScriptRun): Promise<string> {
+export async function executeScript({ dir: dappDir, script, packages, onMessage, onNotice, onPriced, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal, findRuntime = scriptRuntime }: ScriptRun): Promise<string> {
   throwIfCancelled(signal);
   // ESM resolution walks up from the importing file's location to find
   // node_modules; NODE_PATH does NOT work for ESM. Three different files
@@ -719,17 +797,35 @@ export async function executeScript({ dir: dappDir, script, packages, onMessage,
       stdout += chunk.toString();
     });
 
+    // stderr by whole lines (a pipe read can cut one in two): a notice, the
+    // price (said at once: mn shows it before the script goes on to prove),
+    // or the script's progress.
+    let partLine = '';
+    let badPrice: unknown;
+    const readLines = (lines: readonly string[]): void => {
+      const progress: string[] = [];
+      for (const line of lines) {
+        if (line.startsWith(SCRIPT_NOTICE_MARKER + ' ')) {
+          try { onNotice?.(String(JSON.parse(line.slice(SCRIPT_NOTICE_MARKER.length + 1)))); } catch { /* not a notice mn wrote: left out */ }
+        } else if (line.startsWith(SCRIPT_PRICED_MARKER + ' ')) {
+          try { onPriced?.(scriptPriceOf(line)!); } catch (err) { badPrice ??= err; }
+        } else {
+          progress.push(line);
+        }
+      }
+      const message = progress.join('\n').trim();
+      if (message && !message.includes(SCRIPT_ERROR_MARKER)) onMessage?.(message);
+    };
     child.stderr?.on('data', (chunk: Buffer) => {
       stderrRaw += chunk.toString();
-      const notices = chunk.toString().split('\n').filter((line) => line.startsWith(SCRIPT_NOTICE_MARKER + ' '));
-      for (const marked of notices) {
-        try { onNotice?.(String(JSON.parse(marked.slice(SCRIPT_NOTICE_MARKER.length + 1)))); } catch { /* a line cut across two reads: its progress lines still say it */ }
-      }
-      const line = chunk.toString().split('\n').filter((part) => !part.startsWith(SCRIPT_NOTICE_MARKER + ' ')).join('\n').trim();
-      if (line && !line.includes(SCRIPT_ERROR_MARKER)) onMessage?.(line);
+      const lines = (partLine + chunk.toString()).split('\n');
+      partLine = lines.pop()!;
+      readLines(lines);
     });
 
     child.on('close', (code) => {
+      // A last line the script ended without a newline.
+      if (partLine !== '') readLines([partLine]);
       settle();
       if (signal?.aborted) {
         reject(new CancelledError());
@@ -737,6 +833,10 @@ export async function executeScript({ dir: dappDir, script, packages, onMessage,
       }
       if (code !== 0) {
         reject(scriptErrorOf(scriptFailureOf(stderrRaw, code)));
+        return;
+      }
+      if (badPrice !== undefined) {
+        reject(badPrice);
         return;
       }
       resolve(stdout.trim());

@@ -1,10 +1,12 @@
 // Contract commands — inspect, deploy, call, and query state for compiled Midnight contracts.
+// A deploy or call says its cost before it is proven; with --dry-run it stops there.
 
 import { type ParsedArgs, getFlag, hasFlag, requireFlag, UsageError, type CallContext, type CallOutput, networkChoiceFromArgs, type Payer, payerFor, type RawStateValue } from '@kuiralabs/midnight-cli-core';
-import { header, keyValue, bold, dim, teal, yellow, green, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
+import { header, keyValue, bold, dim, teal, yellow, green, spinnerReporter, toDust } from '@kuiralabs/midnight-cli-core/ui';
 
-import { deployContract } from '../lib/contract/deploy.ts';
-import { callContract } from '../lib/contract/call.ts';
+import { deployContract, type DeployContractOptions, priceContractDeploy } from '../lib/contract/deploy.ts';
+import { callContract, type CallContractOptions, priceContractCall } from '../lib/contract/call.ts';
+import { type ContractCost, contractCostJson, dustWaitPhrase } from '../lib/contract/cost.ts';
 import { readContractState } from '../lib/contract/state.ts';
 import { showPaidStep } from '@kuiralabs/midnight-wallet/commands';
 import { receiptJson } from '@kuiralabs/midnight-chain';
@@ -101,19 +103,59 @@ async function handleInspect(args: ParsedArgs, ctx: CallContext): Promise<void> 
   ctx.output.stderr('\n');
 }
 
+// ── Cost ──
+
+/** What a cost's figures mean for the transaction priced: a deploy proves no circuit, a call's proofs are priced at the ledger's estimate. */
+const COST_BASIS: Record<'deploy' | 'call', string> = {
+  deploy: 'Priced before proving: this deploy\'s own transaction with the Dust spend this wallet adds, as the wallet prices it when it pays. A deploy proves no circuit, so what it commits comes out the same, and the chain\'s fee within about 0.1%, at the same fee prices; those move with how full blocks are.',
+  call: 'Priced before proving, each circuit\'s proof at the ledger\'s estimate of 4832 bytes. The proven call is priced with its real proofs, which differ by circuit (a counter\'s increment costs about 3% less than this).',
+};
+
+/** A cost as lines for the terminal: the fee, what the wallet commits, and whether its Dust covers that or how long it takes to. */
+function costLines(cost: ContractCost, what: 'deploy' | 'call'): string[] {
+  const held = cost.covers
+    ? `${toDust(cost.have)} DUST, ${green('covers it')}`
+    : `${toDust(cost.have)} DUST, ${yellow('short')}: ${dustWaitPhrase(cost.waitSeconds)}`;
+  return [
+    keyValue('Expected fee', `${bold(toDust(cost.fee))} DUST`),
+    keyValue('Dust committed', `${toDust(cost.committed)} DUST ${dim(`(the fee with ${cost.marginBlocks} blocks of margin, all of it burned)`)}`),
+    keyValue('Dust held', held),
+    dim(`  ${COST_BASIS[what]}`),
+  ];
+}
+
+/** Writes `lines` above the step's spinner that is running, or to stderr when none is. */
+function writeAboveSpinner(ctx: CallContext, lines: string[]): void {
+  const running = ctx.progress.active();
+  for (const line of lines) {
+    if (running) running.log(line);
+    else ctx.output.stderr(line + '\n');
+  }
+}
+
+/** What a dry run prints: the cost and that nothing was sent, or `--json`'s result. */
+function writeDryRun(ctx: CallContext, jsonMode: boolean, result: Record<string, unknown>, cost: ContractCost): void {
+  if (jsonMode) {
+    ctx.output.result({ ...result, dryRun: true, cost: contractCostJson(cost) });
+    return;
+  }
+  ctx.output.stderr('\n' + dim('  Dry run: nothing was proven or sent.') + '\n\n');
+}
+
 // ── Deploy ──
 
 async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
+  const dryRun = hasFlag(args, 'dry-run');
   const request = resolveContractDeployRequest(args, process.cwd());
   const { info, constructorArgs } = request;
 
   if (!jsonMode) {
-    ctx.output.stderr('\n' + header('Contract Deploy') + '\n\n');
+    ctx.output.stderr('\n' + header(dryRun ? 'Contract Deploy (dry run)' : 'Contract Deploy') + '\n\n');
   }
 
   const progress = spinnerReporter(ctx.progress, jsonMode);
-  const deployed = await deployContract(ctx.host, {
+  const options: DeployContractOptions = {
     ...networkChoiceFromArgs(args),
     request,
     payer,
@@ -121,6 +163,10 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
     sdkWarnings: ctx.sdkWarnings,
     signal: ctx.signal,
     onProgress: (event) => {
+      if (event.kind === 'contract-priced') {
+        if (!jsonMode) writeAboveSpinner(ctx, costLines(event.cost, 'deploy'));
+        return;
+      }
       if (event.kind !== 'contract-checked') return showPaidStep(progress, event);
       if (jsonMode) return;
       ctx.output.stderr(keyValue('Contract', info.name) + '\n');
@@ -130,7 +176,15 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
       }
       ctx.output.stderr('\n');
     },
-  });
+  };
+
+  if (dryRun) {
+    const priced = await priceContractDeploy(ctx.host, options);
+    writeDryRun(ctx, jsonMode, { subcommand: 'deploy', contractName: priced.contractName, network: priced.network }, priced.cost);
+    return;
+  }
+
+  const deployed = await deployContract(ctx.host, options);
 
   if (jsonMode) {
     // JSON path emits a single line of structured output on stdout. The
@@ -143,6 +197,7 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
       network: deployed.network,
       ...(deployed.txHash === undefined ? {} : { txHash: deployed.txHash }),
       ...(deployed.receipt === undefined ? {} : receiptJson(deployed.receipt)),
+      ...(deployed.cost === undefined ? {} : { cost: contractCostJson(deployed.cost) }),
     });
   } else {
     ctx.output.stderr('\n');
@@ -179,15 +234,16 @@ function writeNextStepsHint(output: CallOutput, address: string, circuits: { nam
 
 async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
+  const dryRun = hasFlag(args, 'dry-run');
   const request = resolveContractCallRequest(args, process.cwd());
   const { info, address, circuit } = request;
 
   if (!jsonMode) {
-    ctx.output.stderr('\n' + header('Contract Call') + '\n\n');
+    ctx.output.stderr('\n' + header(dryRun ? 'Contract Call (dry run)' : 'Contract Call') + '\n\n');
   }
 
   const progress = spinnerReporter(ctx.progress, jsonMode);
-  const called = await callContract(ctx.host, {
+  const options: CallContractOptions = {
     ...networkChoiceFromArgs(args),
     request,
     payer,
@@ -195,13 +251,25 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
     sdkWarnings: ctx.sdkWarnings,
     signal: ctx.signal,
     onProgress: (event) => {
+      if (event.kind === 'contract-priced') {
+        if (!jsonMode) writeAboveSpinner(ctx, costLines(event.cost, 'call'));
+        return;
+      }
       if (event.kind !== 'contract-checked') return showPaidStep(progress, event);
       if (jsonMode) return;
       ctx.output.stderr(keyValue('Contract', info.name) + '\n');
       ctx.output.stderr(keyValue('Circuit', circuit) + '\n');
       ctx.output.stderr(keyValue('Address', address.slice(0, 20) + '...') + '\n\n');
     },
-  });
+  };
+
+  if (dryRun) {
+    const priced = await priceContractCall(ctx.host, options);
+    writeDryRun(ctx, jsonMode, { subcommand: 'call', contractName: priced.contractName, circuit, address, network: priced.network }, priced.cost);
+    return;
+  }
+
+  const called = await callContract(ctx.host, options);
 
   if (jsonMode) {
     ctx.output.result({
@@ -213,6 +281,7 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
       status: called.status,
       ...(called.txHash === undefined ? {} : { txHash: called.txHash }),
       ...(called.receipt === undefined ? {} : receiptJson(called.receipt)),
+      ...(called.cost === undefined ? {} : { cost: contractCostJson(called.cost) }),
     });
   } else {
     if (called.txHash !== undefined) ctx.output.stderr('\n' + keyValue('Tx hash', called.txHash) + '\n');

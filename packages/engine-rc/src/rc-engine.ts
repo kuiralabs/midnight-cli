@@ -9,7 +9,7 @@ import type { RcEngineOptions } from './index.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { checkRuntimeVersion, versionString as compactRuntimeVersion } from '@midnight-ntwrk/compact-runtime';
 import { validatePassword } from '@midnight-ntwrk/midnight-js-utils';
-import { blockLimitsOf } from './ledger-parameters.ts';
+import { blockLimitsOf, maxPriceAdjustmentOf } from './ledger-parameters.ts';
 import { rawContractState } from './contract-providers.ts';
 import { assertAddress } from './addresses.ts';
 import { inspectTxHex } from './tx-inspect.ts';
@@ -59,6 +59,7 @@ const SHARED: Omit<Engine, 'wallet'> = {
   },
   ledger: {
     blockLimits: blockLimitsOf,
+    maxPriceAdjustment: maxPriceAdjustmentOf,
     nightTokenId: () => ledger.unshieldedToken().raw,
     readTransaction: inspectTxHex,
     readOffer,
