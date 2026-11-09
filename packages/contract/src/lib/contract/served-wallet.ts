@@ -4,7 +4,7 @@
 // refused as too low runs again: mn serve then prices with a larger margin
 // (FEE_REPRICED), until it has none larger left (FEE_TOO_LOW).
 
-import { type Payer, type PayingTarget, type CallSdkWarnings, type ServedWallet, DUST_DOUBLE_SPEND_RETRIES, DUST_FEE_MARGIN_STEPS, isDustDoubleSpent, isFeeRepriced, RERUN_DOUBLE_SPENT_STATUS, RERUN_REPRICED_STATUS, rerunWhenRepriced, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { type Payer, type PayingTarget, type CallSdkWarnings, type ServedWallet, DUST_DOUBLE_SPEND_RETRIES, DUST_FEE_MARGIN_STEPS, isSpentFirst, isFeeRepriced, RERUN_REPRICED_STATUS, rerunSpentFirstStatus, rerunWhenRepriced, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 
 export interface ServedWalletParams {
@@ -52,18 +52,19 @@ export async function withServedWallet<T>(
 /**
  * Runs `run`, and again each time it fails with FEE_REPRICED, at most once per
  * margin mn serve can move to (the next balance is priced with the larger
- * margin), or with DUST_DOUBLE_SPENT, at most DUST_DOUBLE_SPEND_RETRIES times
- * (the next balance pays with free Dust): nothing was spent either way. Any
- * other failure, or one past those, is the run's.
+ * margin), or with DUST_DOUBLE_SPENT or TX_INVALIDATED, at most
+ * DUST_DOUBLE_SPEND_RETRIES times (the next balance pays with free Dust):
+ * nothing was spent either way. Any other failure, or one past those, is the
+ * run's.
  */
 export async function runRepricing<T>(run: () => Promise<T>, onStatus: (message: string) => void, signal: AbortSignal | undefined): Promise<T> {
   let repriced = 0;
   let doubleSpent = 0;
   return rerunWhenRepriced(
     run,
-    (err) => (isFeeRepriced(err) && repriced++ < DUST_FEE_MARGIN_STEPS.length - 1) || (isDustDoubleSpent(err) && doubleSpent++ < DUST_DOUBLE_SPEND_RETRIES),
+    (err) => (isFeeRepriced(err) && repriced++ < DUST_FEE_MARGIN_STEPS.length - 1) || (isSpentFirst(err) && doubleSpent++ < DUST_DOUBLE_SPEND_RETRIES),
     onStatus,
     signal,
-    (err) => (isDustDoubleSpent(err) ? RERUN_DOUBLE_SPENT_STATUS : RERUN_REPRICED_STATUS),
+    (err) => (isSpentFirst(err) ? rerunSpentFirstStatus(err) : RERUN_REPRICED_STATUS),
   );
 }

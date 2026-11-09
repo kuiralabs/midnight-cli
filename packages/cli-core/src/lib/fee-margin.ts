@@ -15,7 +15,7 @@
 
 import { BALANCE_OVERSPEND_ERROR_CODE, DUST_COST_OVERHEAD, DUST_FEE_BLOCKS_MARGIN } from './constants.ts';
 import { FeeTooLowError, throwIfCancelled } from './errors.ts';
-import { nodeRefusalOf } from './sdk-errors.ts';
+import { DROPPED_FROM_POOL_WORDS, nodeRefusalOf } from './sdk-errors.ts';
 
 /** The margins, in blocks, a fee is priced with in turn: the first, then one more each time the node refuses the fee as too low. */
 export const DUST_FEE_MARGIN_STEPS: readonly number[] = [DUST_FEE_BLOCKS_MARGIN, 5, 8];
@@ -88,6 +88,19 @@ export function isFeeShortRefusal(err: unknown): boolean {
 /** Whether the node refused the transaction because another spent its Dust coin first (error 196), anywhere in the error's causes. */
 export function isDustDoubleSpendRefusal(err: unknown): boolean {
   return refusalSays(err, DOUBLE_SPEND);
+}
+
+/**
+ * Whether the node took the transaction into its pool and then dropped it as
+ * invalid while building a block, anywhere in the error's causes. A Midnight
+ * node validates a transaction against the latest block as it arrives, so one
+ * that is valid then and dropped later conflicts with a transaction the block
+ * took first: two from one wallet in the pool at once, spending the same Dust
+ * or coin (the node logs "Rejecting transaction ... at pre-dispatch: ...
+ * double spend", and tells the submitter only that it is invalid).
+ */
+export function isDroppedFromPool(err: unknown): boolean {
+  return refusalSays(err, DROPPED_FROM_POOL_WORDS);
 }
 
 /** Whether the node's words, or a message or reason among the error's causes, match `pattern`. */
@@ -173,8 +186,29 @@ export const RERUN_REPRICED_STATUS = 'The node refused the fee as too low: runni
 /** What a paying command says while it runs a payment again after DUST_DOUBLE_SPENT. */
 export const RERUN_DOUBLE_SPENT_STATUS = 'Another transaction from this wallet spent the same Dust first: running it again, paying with Dust that is still free...';
 
-/** How many times a payment is built again after its Dust was spent by another transaction of the wallet's. */
+/** How many times a payment is built again after its Dust (or coin) was spent by another transaction of the wallet's. */
 export const DUST_DOUBLE_SPEND_RETRIES = 2;
+
+/** The code of a payment the node dropped from its pool as invalid, as another transaction from the wallet spent its Dust or coin first (TransactionInvalidatedError). */
+export const TX_INVALIDATED_CODE = 'TX_INVALIDATED';
+
+/** Whether `err` is a TX_INVALIDATED refusal, by the code it carries. */
+export function isTxInvalidated(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === TX_INVALIDATED_CODE;
+}
+
+/** What a paying command says while it runs a payment again after TX_INVALIDATED. */
+export const RERUN_INVALIDATED_STATUS = 'The node dropped it: another transaction from this wallet spent the same Dust or coin first. Running it again with what is still free...';
+
+/** Whether a payment that failed with `err` had its Dust or coin spent first by another transaction of the wallet's (DUST_DOUBLE_SPENT, TX_INVALIDATED): nothing of it was spent, and run again it pays with what is still free. */
+export function isSpentFirst(err: unknown): boolean {
+  return isDustDoubleSpent(err) || isTxInvalidated(err);
+}
+
+/** What a paying command says while it runs a payment again after `err` (isSpentFirst). */
+export function rerunSpentFirstStatus(err: unknown): string {
+  return isTxInvalidated(err) ? RERUN_INVALIDATED_STATUS : RERUN_DOUBLE_SPENT_STATUS;
+}
 
 /**
  * Runs `pay`, and again after each failure `rerunAfter` accepts (a payment mn

@@ -254,6 +254,35 @@ export class DustDoubleSpentError extends Error {
   }
 }
 
+/**
+ * The node took a transaction into its pool, then dropped it as invalid while
+ * building a block (the SDK's TransactionInvalidError, "Transaction is invalid
+ * and was rejected by the node", with no error code). On Midnight that is a
+ * transaction that was valid when it arrived and conflicts with one the block
+ * took first: another transaction from the same wallet, in the pool at the
+ * same time, spent the same Dust or coin (the node logs "Rejecting
+ * transaction ... at pre-dispatch: ... double spend"). Nothing of the dropped
+ * one was spent. `rebuilt` is how many times mn built it again already.
+ */
+export class TransactionInvalidatedError extends Error {
+  readonly code = 'TX_INVALIDATED';
+  readonly rebuilt: number;
+
+  constructor(rebuilt: number, options?: { cause?: unknown }) {
+    super(
+      'The node accepted this transaction, then dropped it as invalid when it built the next block: almost always because another transaction from this wallet, '
+      + 'sent at the same time from another process or machine with the same seed, spent the same Dust or coin and went in first. Nothing of this one was spent. '
+      + (rebuilt === 0
+        ? 'Balance it again and submit it once the other transaction has landed.'
+        : `mn built it again ${rebuilt === 1 ? 'once' : `${rebuilt} times`} and another transaction of this wallet's took its Dust or coin each time: run it again once the wallet's other transactions have landed, and don't pay from one wallet in parallel.`),
+      options,
+    );
+    this.name = 'TransactionInvalidatedError';
+    this.rebuilt = rebuilt;
+    Object.setPrototypeOf(this, TransactionInvalidatedError.prototype);
+  }
+}
+
 /** Not enough NIGHT for the amount asked for: raised by the engines with the message the command gives them. */
 export class InsufficientBalanceError extends Error {
   readonly code = 'INSUFFICIENT_BALANCE';

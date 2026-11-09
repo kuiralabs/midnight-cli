@@ -4,16 +4,18 @@
 // themselves before the SDK moved behind the engine.
 
 import { deriveUnshieldedAddress } from './derive-address.ts';
-import { assertSpendsNoOfferCoin, type DAppConnector, type EngineWallet, type OpenedConnector, type PrepWallet, type ServedWalletSession, type ShieldedTransferParams, reportingEngineErrors, getNetworkId, bindCachesToIndexer, describeIndexerChange, loadWalletCache, saveWalletCache, DUST_SHORT_WAIT_MS, payWhenDustCovers, proveWithin, submitWithin, PROOF_TIMEOUT_MS, DUST_DOUBLE_SPEND_RETRIES, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin } from '@kuiralabs/midnight-cli-core/engine';
-import { readOpenOffers, InsufficientBalanceError, throwIfCancelled, walletDustLock, walletDustLockFile, DustDoubleSpentError, RERUN_DOUBLE_SPENT_STATUS } from '@kuiralabs/midnight-cli-core';
+import { assertSpendsNoOfferCoin, type DAppConnector, type EngineWallet, type OpenedConnector, type PrepWallet, type ServedWalletSession, type ShieldedTransferParams, reportingEngineErrors, getNetworkId, bindCachesToIndexer, describeIndexerChange, loadWalletCache, saveWalletCache, DUST_SHORT_WAIT_MS, payWhenDustCovers, proveWithin, submitWithin, PROOF_TIMEOUT_MS, DUST_DOUBLE_SPEND_RETRIES, isDroppedFromPool, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin } from '@kuiralabs/midnight-cli-core/engine';
+import { readOpenOffers, InsufficientBalanceError, throwIfCancelled, walletDustLock, walletDustLockFile, DustDoubleSpentError, RERUN_DOUBLE_SPENT_STATUS, RERUN_INVALIDATED_STATUS, TransactionInvalidatedError } from '@kuiralabs/midnight-cli-core';
 import { trackElapsed } from '@kuiralabs/midnight-cli-core/ui';
 import { spentNullifiers } from './offer-reader.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
+import * as rx from 'rxjs';
 import { MidnightBech32m } from '@midnightntwrk/wallet-sdk/address-format';
 import { assertLedgerSupported } from '@kuiralabs/midnight-chain';
 import { decodeShieldedAddress } from './addresses.ts';
 import { buildFacade, hasDustAvailable, isFacadeSynced, quickSync, startAndSyncFacade, stopFacade, waitForDustAvailable } from './facade.ts';
 import { refusedFeeCheck } from './fee-refusal.ts';
+import { awaitDustSpendSeen, pendingDustNonces } from './dust-spend-seen.ts';
 import { ensureDust, executeTransfer, transactionIdOf } from './transfer.ts';
 import { airdropNight } from './airdrop.ts';
 import { registerDust } from './dust-register.ts';
@@ -98,8 +100,9 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
       };
 
       // From balancing to submit this wallet's Dust is held from another mn's payments. A fee the node refuses as
-      // too low is priced again with a larger margin while the Dust covers it; Dust another transaction of the
-      // wallet's spent first is paid with again from free Dust, at most DUST_DOUBLE_SPEND_RETRIES times.
+      // too low is priced again with a larger margin while the Dust covers it; Dust or a coin another transaction of
+      // the wallet's spent first (refused as 196, or dropped from the node's pool) is paid with again from what is
+      // still free, at most DUST_DOUBLE_SPEND_RETRIES times.
       const dustLock = walletDustLock(walletDustLockFile(root, network, deriveUnshieldedAddress(seed, network)));
       let doubleSpends = 0;
       try {
@@ -107,13 +110,20 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
           await dustLock.hold({ notice, progress: (line) => progress.update(line) }, signal);
           try {
             const finalized = await buildAndProveShielded();
+            // The Dust coins it pays with, by nonce: a rebuild waits until the wallet saw them spent.
+            const paidWith = pendingDustNonces(await rx.firstValueFrom(bundle.facade.state()));
             try {
               return await submitShielded(finalized);
             } catch (err) {
-              if (isDustDoubleSpendRefusal(err)) {
-                if (doubleSpends++ >= DUST_DOUBLE_SPEND_RETRIES) throw new DustDoubleSpentError(DUST_DOUBLE_SPEND_RETRIES, { cause: err });
+              const dropped = isDroppedFromPool(err);
+              if (dropped || isDustDoubleSpendRefusal(err)) {
+                if (doubleSpends++ >= DUST_DOUBLE_SPEND_RETRIES) {
+                  throw dropped ? new TransactionInvalidatedError(DUST_DOUBLE_SPEND_RETRIES, { cause: err }) : new DustDoubleSpentError(DUST_DOUBLE_SPEND_RETRIES, { cause: err });
+                }
+                progress.update(dropped ? RERUN_INVALIDATED_STATUS : RERUN_DOUBLE_SPENT_STATUS);
+                // Built again before the wallet has seen the other's spend, it would pay with the same Dust.
+                await awaitDustSpendSeen(bundle.facade.state(), paidWith, { signal });
                 await quickSync(bundle, 'lite');
-                progress.update(RERUN_DOUBLE_SPENT_STATUS);
                 continue;
               }
               if (!isFeeShortRefusal(err)) throw err;

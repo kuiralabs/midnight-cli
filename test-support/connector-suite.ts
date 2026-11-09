@@ -1010,6 +1010,32 @@ export function connectorSuite(engine: ConnectorEngine): void {
         expect(err.message).toContain('Balance it again and submit it');
       });
 
+      it('answers a transaction the node took and then dropped from its pool as TX_INVALIDATED, once the wallet has seen its Dust spent', async () => {
+        // The SDK's submit failing as it does when the node drops the transaction while building a block (TransactionInvalidError, no code).
+        const dropped = () => {
+          const failure = Effect.runPromise(Effect.fail(new engine.SubmissionError({ message: 'Transaction submission error', cause: Object.assign(new Error('Transaction is invalid and was rejected by the node'), { _tag: 'TransactionInvalidError' }) })));
+          failure.catch(() => {});
+          return failure;
+        };
+        // The transaction pays with Dust coin 7, pending; the wallet sees another transaction's spend of it a moment after the drop.
+        const states = new rx.BehaviorSubject(mockState({ pendingDustNonces: [7n] }));
+        const order: string[] = [];
+        const submitTransaction = vi.fn(async () => {
+          setTimeout(() => { order.push('spend seen'); states.next(mockState()); }, 50);
+          return dropped();
+        });
+        const bundle = createBundleStub({ stateFn: () => states, submitTransaction });
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        const err: any = await connector.handlers.submitTransaction({ tx: SEALED_AGENT_TX }, ctx()).catch((e: any) => { order.push('answered'); return e; });
+
+        expect(err.code).toBe('TX_INVALIDATED');
+        expect(err.message).toContain('another transaction from this wallet');
+        expect(err.message).toContain('Balance it again and submit it');
+        // Answered after the wallet saw the spend: the dApp's next balance pays with what is still free.
+        expect(order).toEqual(['spend seen', 'answered']);
+      });
+
       it('keeps the raised margin for the payments after one that goes through', async () => {
         const bundle = createBundleStub({ submitTransaction: vi.fn().mockResolvedValue('tx-id') });
         bundle.feePricing.feeBlocksMargin = 5;

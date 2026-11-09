@@ -3,8 +3,8 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, priceTransaction, transactionPriceToWire } from '@kuiralabs/midnight-cli-core/engine';
-import { type NoticeSink, DustDoubleSpentError, FeeRepricedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
+import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isDroppedFromPool, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, priceTransaction, transactionPriceToWire } from '@kuiralabs/midnight-cli-core/engine';
+import { type NoticeSink, DustDoubleSpentError, FeeRepricedError, TransactionInvalidatedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
 import { dim, roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
@@ -13,6 +13,7 @@ import type { FinalizedTx } from '@midnightntwrk/wallet-sdk';
 
 import { type FacadeBundle, hasDustAvailable } from './facade.ts';
 import { refusedFeeCheck } from './fee-refusal.ts';
+import { awaitDustSpendSeen, pendingDustNonces } from './dust-spend-seen.ts';
 import { inspectTxHex } from './tx-inspect.ts';
 import { readOffer, spentNullifiers } from './offer-reader.ts';
 import { expiredIntents, feeOnlyRefusals, readDAppTransaction, type DAppTxStage, type FeeCheckTransaction } from './fee-only-check.ts';
@@ -1067,6 +1068,9 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
       // Adopt for submission (the chain doesn't need object identity)
       const sealedTx = adopt(txHex, 'Finalized');
+      // The Dust coins it pays with, by nonce (with any other pending transaction's): refused for Dust spent first, the
+      // answer waits until the wallet saw them spent, so the dApp's next balance doesn't pick them again.
+      const paidWith = pendingDustNonces(getState());
       tracker.start('submitting');
       try {
         // Bounded: against a node that went away the SDK's submit never returns.
@@ -1083,8 +1087,14 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
         // Revert pending tx to release locked dust coins
         await release();
         releaseDustIfIdle();
-        // Another transaction from this wallet spent the same Dust first: nothing of this one was spent, and balanced again it pays with free Dust.
-        if (isDustDoubleSpendRefusal(submitErr)) throw new DustDoubleSpentError(0, { cause: submitErr });
+        // Another transaction from this wallet spent the same Dust first, refused as it arrived (196) or dropped from the
+        // node's pool as invalid when the other went into a block first: nothing of this one was spent, and balanced
+        // again once the wallet has seen that spend, it pays with free Dust.
+        const doubleSpent = isDustDoubleSpendRefusal(submitErr);
+        if (doubleSpent || isDroppedFromPool(submitErr)) {
+          await awaitDustSpendSeen(facade.state().pipe(rx.filter(isCurrent)), paidWith);
+          throw doubleSpent ? new DustDoubleSpentError(0, { cause: submitErr }) : new TransactionInvalidatedError(0, { cause: submitErr });
+        }
         // The fee refused as too low while the Dust covers it: the next balance
         // is priced with a larger margin, and the dApp balances this one again.
         // Not rebuilt here: the dApp holds this transaction and follows it by
