@@ -118,6 +118,13 @@ export interface ScriptParts {
    * arguments never go into a script's text or argv.
    */
   readonly contractArgsFn: string;
+  /**
+   * Defines callPrivateStateOptions(states, privateStateId, seed), the
+   * private-state options of a call's findDeployedContract: the seeded
+   * initialPrivateState only when the contract's store holds none, so a call
+   * starts from the state the last call's witnesses left.
+   */
+  readonly callPrivateStateFn: string;
   /** The environment variable naming a deploy's or call's arguments file (a 0600 file under mn's state root). */
   readonly contractArgsFileEnv: string;
   /** The private-state key a call script records the coins a call gave the contract under, by nonce (hex): `{ nonce, color, value, mt_index }`. */

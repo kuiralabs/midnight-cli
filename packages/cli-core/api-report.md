@@ -443,6 +443,7 @@ export interface ScriptParts {
     readonly indexerUrlEnv: string;
     readonly indexerWsUrlEnv: string;
     readonly contractArgsFn: string;
+    readonly callPrivateStateFn: string;
     readonly contractArgsFileEnv: string;
     readonly heldCoinsKey: string;
 }
@@ -1608,6 +1609,7 @@ export interface ScriptParts {
     readonly indexerUrlEnv: string;
     readonly indexerWsUrlEnv: string;
     readonly contractArgsFn: string;
+    readonly callPrivateStateFn: string;
     readonly contractArgsFileEnv: string;
     readonly heldCoinsKey: string;
 }

@@ -7,7 +7,7 @@
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdirSync, rmdirSync, rmSync, openSync, writeSync, closeSync, renameSync, linkSync, readdirSync, statSync } from 'node:fs';
+import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdirSync, rmdirSync, rmSync, openSync, writeSync, closeSync, renameSync, linkSync, readdirSync, statSync, chmodSync } from 'node:fs';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -23,6 +23,7 @@ import { callStateDir, deployStateDir, dropEmptyDeployState, keepDeployState, mo
 import { CONTRACT_ARGS_FILE_ENV, contractArgsDir, processRuns, readContractArgsFile, removeContractArgsFile, writeContractArgsFile } from './contract-args-file.ts';
 import { HELD_COINS_KEY, heldCoinArgumentsOf, type HeldCoin } from './held-coins.ts';
 import { redactArgumentValues } from './redact-arguments.ts';
+import { callPrivateStateOptions } from './call-private-state.ts';
 
 // The generated deploy/call script imports SDK packages by bare specifier
 // (`@midnight-ntwrk/midnight-js-contracts`, `ws`, etc.); without help, Node
@@ -414,6 +415,9 @@ const REDACT_ARGUMENTS_FN = `\nconst redactArgumentValues = (${redactArgumentVal
 // readContractArgsFile serialized for the generated script, the same way.
 const CONTRACT_ARGS_FN = `\nconst readContractArgsFile = (${readContractArgsFile.toString()});\n`;
 
+// callPrivateStateOptions serialized for the generated call script, the same way.
+const CALL_PRIVATE_STATE_FN = `\nconst callPrivateStateOptions = (${callPrivateStateOptions.toString()});\n`;
+
 /** The code a script reports a contract state the ledger can't decode with: the runner names the contract (ContractStateUnreadableError). */
 const CONTRACT_STATE_UNREADABLE = 'CONTRACT_STATE_UNREADABLE';
 
@@ -532,6 +536,7 @@ export const SCRIPT_PARTS: ScriptParts = {
   indexerUrlEnv: INDEXER_URL_ENV,
   indexerWsUrlEnv: INDEXER_WS_URL_ENV,
   contractArgsFn: CONTRACT_ARGS_FN,
+  callPrivateStateFn: CALL_PRIVATE_STATE_FN,
   contractArgsFileEnv: CONTRACT_ARGS_FILE_ENV,
   heldCoinsKey: HELD_COINS_KEY,
 };
@@ -650,8 +655,14 @@ export function undoOverlay(made: readonly Made[]): void {
   }
 }
 
-/** The record, in a dApp folder, of the overlay its running scripts share. */
+/** The record, in a dApp folder, of the overlay its running scripts share: owner-only, as everything mn writes there. */
 const OVERLAY_RECORD = '.mn-overlay.json';
+
+/** Writes the overlay record 0600, tightening one an older mn wrote 0644. */
+function writeOverlayRecord(record: string, held: OverlayRecord): void {
+  writeFileSync(record, JSON.stringify(held), { mode: 0o600 });
+  chmodSync(record, 0o600);
+}
 interface OverlayRecord { pids: number[]; made: Made[]; set?: string }
 
 const isAlive = (pid: number): boolean => {
@@ -679,7 +690,7 @@ export function acquireOverlay(dappDir: string, scriptPackages: ScriptPackages):
     held = null;
   }
   const made = held !== null ? held.made : overlayScriptPackages(join(dappDir, 'node_modules'), scriptPackages);
-  writeFileSync(record, JSON.stringify({ pids: [...live, process.pid], made, set: scriptPackages.set } satisfies OverlayRecord));
+  writeOverlayRecord(record, { pids: [...live, process.pid], made, set: scriptPackages.set });
 }
 
 /** Gives back this run's share; the last run out undoes the overlay and removes the record. */
@@ -690,7 +701,7 @@ export function releaseOverlay(dappDir: string): void {
   const mine = held.pids.indexOf(process.pid);
   const pids = held.pids.filter((pid, at) => at !== mine && isAlive(pid));
   if (pids.length > 0) {
-    writeFileSync(record, JSON.stringify({ pids, made: held.made, ...(held.set === undefined ? {} : { set: held.set }) } satisfies OverlayRecord));
+    writeOverlayRecord(record, { pids, made: held.made, ...(held.set === undefined ? {} : { set: held.set }) });
     return;
   }
   undoOverlay(held.made);

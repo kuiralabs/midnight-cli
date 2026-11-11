@@ -364,28 +364,6 @@ try {
 `;
 }
 
-/**
- * The private state a call starts from. midnight-js stores the find's
- * initialPrivateState over what the store holds, and mn seeds it afresh on
- * every call (from the wallet's secret or --secret-key), so the coins the
- * contract holds for this wallet, recorded under the held-coins key by an
- * earlier call, are carried over from the stored state into the fresh one.
- */
-function carriedPrivateStateCode(opts: CallScript, parts: ScriptParts, privateStateKey: string): string {
-  return `
-const isPlainState = (state) => state !== null && typeof state === 'object' && Object.getPrototypeOf(state) === Object.prototype;
-let callPrivateState = makeInitialPrivateState();
-try {
-  const stored = await providers.privateStateProvider.forContract(${JSON.stringify(opts.contractAddress)}).get(${JSON.stringify(privateStateKey)});
-  if (isPlainState(stored) && isPlainState(callPrivateState) && stored.${parts.heldCoinsKey} !== undefined) {
-    callPrivateState = { ...callPrivateState, ${parts.heldCoinsKey}: stored.${parts.heldCoinsKey} };
-  }
-} catch (err) {
-  process.stderr.write('\\n${parts.noticeMarker} ' + JSON.stringify('The coins this contract holds for the wallet could not be read from its private state: ' + String(err?.message ?? err)) + '\\n');
-}
-`;
-}
-
 // ── Script generation ──
 
 export function generateDeployScript(opts: DeployScript, parts: ScriptParts): string {
@@ -445,12 +423,15 @@ ${providerSetupCode(opts.networkConfig, privateStateKey, parts, opts.contractAdd
 import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 
 process.stderr.write('Finding deployed contract...\\n');
-${carriedPrivateStateCode(opts, parts, privateStateKey)}
+// The call starts from the private state the contract's store holds (what the
+// last call's witnesses left), seeded only when it holds none: midnight-js
+// stores a given initialPrivateState over the stored one.
+${parts.callPrivateStateFn}
 const deployed = await findDeployedContract(providers, {
   compiledContract: compiled,
   contractAddress: ${JSON.stringify(opts.contractAddress)},
   privateStateId: ${JSON.stringify(privateStateKey)},
-  initialPrivateState: callPrivateState,
+  ...(await callPrivateStateOptions(providers.privateStateProvider.forContract(${JSON.stringify(opts.contractAddress)}), ${JSON.stringify(privateStateKey)}, makeInitialPrivateState)),
 });
 
 process.stderr.write('Calling ${opts.circuit}...\\n');

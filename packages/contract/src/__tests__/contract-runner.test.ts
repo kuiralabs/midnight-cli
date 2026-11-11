@@ -105,7 +105,7 @@ describe('the functions the runner inlines into a script', () => {
     const { runInNewContext } = await import('node:vm');
     const secret = runInNewContext(`${SCRIPT_PARTS.privateStateSecretFn}\nresolvePrivateStateSecretKey('ab'.repeat(32), undefined);`, { Uint8Array, parseInt });
     expect(Buffer.from(secret).toString('hex')).toBe('ab'.repeat(32));
-    for (const fn of [SCRIPT_PARTS.privateStateSecretFn, SCRIPT_PARTS.privateStateStoreFn, SCRIPT_PARTS.coerceArgFn, SCRIPT_PARTS.contractArgsFn, `const redactArgumentValues = (${redactArgumentValues.toString()});`]) {
+    for (const fn of [SCRIPT_PARTS.privateStateSecretFn, SCRIPT_PARTS.privateStateStoreFn, SCRIPT_PARTS.coerceArgFn, SCRIPT_PARTS.contractArgsFn, SCRIPT_PARTS.callPrivateStateFn, `const redactArgumentValues = (${redactArgumentValues.toString()});`]) {
       expect(fn).not.toContain('__name');
       // A function given a name inside them is what keepNames wraps (vitest's transform doesn't, tsx's and bun's do).
       expect(fn.match(/(?:(?:const|let|var)\s+[\w$]+\s*=|[\w$]+\s*:)\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>/g)).toBeNull();

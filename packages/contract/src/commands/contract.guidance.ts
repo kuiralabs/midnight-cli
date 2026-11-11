@@ -64,7 +64,8 @@ Compile with Compact 0.36 (language 0.28): mn bundles compact-runtime
   Coins the contract holds (call): after a call whose circuit takes a
   ShieldedCoinInfo lands, mn finds the output it made for the contract,
   its Merkle tree index from the indexer, and records the coin in the
-  contract's private state, keyed by its nonce in hex:
+  contract's private state, keyed by its nonce in hex, where the next
+  call finds it:
     privateState.mnHeldCoins["<nonce hex>"] = { nonce, color, value, mt_index }
   (heldCoins in the result: argument, commitment, mtIndex). A witness that
   spends a coin the contract keeps privately (only a commitment of it on
@@ -90,7 +91,10 @@ Compile with Compact 0.36 (language 0.28): mn bundles compact-runtime
 
   Private state (deploy, call): kept under mn's state root, one store per
   contract, ~/.midnight/contract-state/<network>/<address>/ (owner-only),
-  so a call from any folder finds what its deploy left. A
+  so a call from any folder finds what its deploy left. A call starts
+  from the stored private state, what the last call's witnesses left; it
+  is seeded (the wallet's secret, or --secret-key) only when none is
+  stored yet, as on the first call from a machine with no store. A
   midnight-level-db folder an earlier mn left in the dApp is moved out once
   (said on stderr; with --json, in "warnings").
 

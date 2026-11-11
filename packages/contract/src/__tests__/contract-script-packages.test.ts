@@ -128,6 +128,18 @@ describe('a dApp laid out unlike ours', () => {
     expect(fs.readdirSync(dir)).toEqual([]);
   });
 
+  it('keeps its record owner-only, and tightens one an older mn wrote 0644', () => {
+    const record = path.join(dir, '.mn-overlay.json');
+    acquireOverlay(dir);
+    expect(fs.statSync(record).mode & 0o777).toBe(0o600);
+    fs.chmodSync(record, 0o644);
+    acquireOverlay(dir);
+    expect(fs.statSync(record).mode & 0o777).toBe(0o600);
+    releaseOverlay(dir);
+    expect(fs.statSync(record).mode & 0o777).toBe(0o600);
+    releaseOverlay(dir);
+  });
+
   it('a run whose holder died: the stale share is dropped and the overlay still undone', () => {
     acquireOverlay(dir);
     const record = path.join(dir, '.mn-overlay.json');

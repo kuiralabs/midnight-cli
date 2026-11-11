@@ -122,7 +122,7 @@ export const contractDefinition: CommandDefinition = {
       takesValue: true,
       subcommands: ['deploy', 'call'],
       help: [
-        '--secret-key <64-hex>         The private-state secret (deploy, call), for a contract whose owner is public_key(secret_key()). Default: one derived from the wallet\'s seed, the same on every run. It reaches the contract script through its environment, never argv; the private state it seeds is kept under mn\'s state root (~/.midnight/contract-state/<network>/<address>/, one store per contract, owner-only), encrypted with a key derived from the wallet\'s seed',
+        '--secret-key <64-hex>         The private-state secret (deploy, call), for a contract whose owner is public_key(secret_key()). Default: one derived from the wallet\'s seed, the same on every run. It reaches the contract script through its environment, never argv; the private state it seeds is kept under mn\'s state root (~/.midnight/contract-state/<network>/<address>/, one store per contract, owner-only), encrypted with a key derived from the wallet\'s seed. A call starts from the private state stored for the contract (what the last call\'s witnesses left), so on call the secret seeds it only when none is stored yet',
         '--secret-key legacy           (call) The secret an mn before 0.6.0 used by default: the wallet\'s public coin key. Only for calling a contract deployed with that default',
       ],
       agent: {

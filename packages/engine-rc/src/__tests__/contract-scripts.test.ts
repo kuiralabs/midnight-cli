@@ -54,6 +54,7 @@ const TEST_PARTS: ScriptParts = {
   indexerUrlEnv: 'MN_TEST_INDEXER_URL',
   indexerWsUrlEnv: 'MN_TEST_INDEXER_WS_URL',
   contractArgsFn: 'const readContractArgsFile = () => [];',
+  callPrivateStateFn: 'const callPrivateStateOptions = async () => ({});',
   contractArgsFileEnv: 'MN_TEST_CONTRACT_ARGS_FILE',
   heldCoinsKey: 'mnHeldCoins',
 };

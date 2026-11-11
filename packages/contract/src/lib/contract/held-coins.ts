@@ -21,10 +21,8 @@
 //     [privateState, privateState.mnHeldCoins[Buffer.from(nonce).toString('hex')]]
 //
 // The record is added to the private state the call left (a plain object).
-// mn seeds each call's private state afresh (createPrivateState with the
-// wallet's secret or --secret-key) and carries HELD_COINS_KEY over from the
-// stored state into it, so the record stays until a witness returns a private
-// state without it.
+// A call starts from the stored private state (call-private-state.ts), so the
+// record stays until a witness returns a private state without it.
 
 import type { ContractInfo, CompactType } from './inspect.ts';
 
