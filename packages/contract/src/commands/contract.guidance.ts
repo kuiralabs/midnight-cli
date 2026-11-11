@@ -88,6 +88,14 @@ Compile with Compact 0.36 (language 0.28): mn bundles compact-runtime
   counter's increment: about 3% less than priced).
   --dry-run prices and stops: nothing is proven or sent, exit 0, and the
   result has dryRun: true and no address, txHash or receipt.
+  A wallet short of Dust waits for it, saying so on stderr every 15 s, in
+  --json too (plain lines; stdout stays the result):
+    Dust: waited 45 s of 104 s, 0.76 of 1.23 DUST
+
+  A failed assert in the circuit (or the constructor, for a deploy) is
+  CONTRACT_ASSERTION_FAILED, exit 2: the message names the contract, the
+  circuit and the assert's own text. Nothing was sent or paid; the same
+  call fails the same way until its arguments or the contract's state change.
 
   Private state (deploy, call): kept under mn's state root, one store per
   contract, ~/.midnight/contract-state/<network>/<address>/ (owner-only),

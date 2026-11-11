@@ -17,7 +17,7 @@ export interface ServeHandle {
 }
 export interface ServeManagerOptions {
     root: string;
-    host: UnlockHost;
+    host: UnlockHost & Pick<Host, 'waiting'>;
     port?: number;
     network?: string;
     endpoints?: EndpointOverrides;

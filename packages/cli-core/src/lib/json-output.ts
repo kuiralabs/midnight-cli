@@ -1,7 +1,9 @@
 // JSON output utilities for --json mode
 // Structured JSON result/error output to stdout. Under --json stderr stays
 // quiet: commands show no spinner or heading, and the CLI gives a --json call
-// an output whose stderr writes nothing (the shell, not this module). The
+// an output whose stderr writes nothing (the shell, not this module). Only
+// the lines of a long wait (Dust for a fee) are written there, plain, by the
+// host's `waiting`. The
 // process's stderr stream itself is never patched: an earlier version that
 // monkey-patched process.stderr.write broke Node's write() callback contract
 // (libraries awaiting writes could hang).

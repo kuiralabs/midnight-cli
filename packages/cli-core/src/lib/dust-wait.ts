@@ -75,6 +75,51 @@ export async function awaitDustForFee(
   await sleep(waitMs, signal);
 }
 
+/** How often a wait for Dust says how far it is: often enough that a wait of minutes never looks like a hang, seldom enough for a log. */
+export const DUST_WAIT_REPORT_MS = 15_000;
+
+/** Whole seconds, for a wait's lines: "89 s". */
+const seconds = (ms: number): string => `${Math.round(ms / 1000)} s`;
+
+/** A wait's opening line: what the wallet has, what the fee takes, how long its NIGHT takes to generate the rest. */
+export function dustWaitOpening(have: bigint, needed: bigint, waitMs: number): string {
+  return `Dust: ${roughDust(have)} of the ${roughDust(needed, true)} DUST this fee takes; waiting ${formatWait(waitMs)} (${seconds(waitMs)}) for its registered NIGHT to generate the rest...`;
+}
+
+/** A line of a wait under way: the time waited of the whole, and the Dust the wallet has now of what the fee takes. */
+export function dustWaitProgress(waitedMs: number, waitMs: number, have: bigint, needed: bigint): string {
+  return `Dust: waited ${seconds(waitedMs)} of ${seconds(waitMs)}, ${roughDust(have)} of ${roughDust(needed, true)} DUST`;
+}
+
+/**
+ * Waits `waitMs` for the wallet's NIGHT to generate the Dust a fee takes,
+ * saying so on `say`: the opening line first (`opening` true), then every
+ * `everyMs` the time waited and the Dust the wallet has by then (`have`
+ * plus what `dust` grew since the wait began). Nothing is said at the end:
+ * the payment goes on.
+ */
+export async function waitForDustGrowth(
+  plan: { have: bigint; needed: bigint; waitMs: number },
+  dust: DustBalanceSource,
+  say: (line: string, opening: boolean) => void,
+  options: { everyMs?: number; signal?: AbortSignal } = {},
+): Promise<void> {
+  const { have, needed, waitMs } = plan;
+  const everyMs = options.everyMs ?? DUST_WAIT_REPORT_MS;
+  const started = Date.now();
+  const startBalance = dust.balance(new Date(started));
+  say(dustWaitOpening(have, needed, waitMs), true);
+  for (;;) {
+    const left = waitMs - (Date.now() - started);
+    if (left <= 0) return;
+    await sleep(Math.min(everyMs, left), options.signal);
+    const now = Date.now();
+    if (now - started >= waitMs) return;
+    const grown = dust.balance(new Date(now)) - startBalance;
+    say(dustWaitProgress(now - started, waitMs, have + (grown > 0n ? grown : 0n), needed), false);
+  }
+}
+
 /** A fee the wallet's Dust doesn't cover yet: what it has, what the fee takes, and how long its NIGHT needs for the rest (null: not within a day). */
 export interface DustWaitPlan {
   have: bigint;

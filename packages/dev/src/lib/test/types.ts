@@ -2,7 +2,7 @@
 
 import type { ServeHandle } from '@kuiralabs/midnight-connect';
 import type { UnlockHost } from '@kuiralabs/midnight-wallet';
-import type { CallSdkWarnings, NetworkName } from '@kuiralabs/midnight-cli-core';
+import type { CallSdkWarnings, Host, NetworkName } from '@kuiralabs/midnight-cli-core';
 
 // ── DApp Test Config (dapp.test.json in dApp root) ──
 
@@ -148,8 +148,8 @@ export interface BuildHandle {
 export interface PrepContext {
   /** The state root the wallets, config and caches live under. */
   root: string;
-  /** The host the run is in: who unlocks the wallet, and where the steps' notices go. */
-  host: UnlockHost;
+  /** The host the run is in: who unlocks the wallet, and where the steps' notices and waits go. */
+  host: UnlockHost & Pick<Host, 'waiting'>;
   /** The SDK warnings of the call that runs the prep: the steps that run the SDK listen to them. */
   sdkWarnings: CallSdkWarnings;
   /** The run's cancellation: no step starts after it aborts, and the waits inside a step stop. */
@@ -160,7 +160,7 @@ export interface PrepContext {
   addCleanup(fn: () => Promise<void>): void;
 }
 
-export function createPrepContext(root: string, host: UnlockHost, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): PrepContext {
+export function createPrepContext(root: string, host: UnlockHost & Pick<Host, 'waiting'>, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined): PrepContext {
   const cleanups: (() => Promise<void>)[] = [];
   return {
     root,

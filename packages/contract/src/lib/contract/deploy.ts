@@ -40,7 +40,7 @@ export interface DeployedContract {
  * served whatever happens.
  */
 export async function deployContract(host: Host, options: DeployContractOptions): Promise<DeployedContract> {
-  return withDeployScript(host, options, { running: 'Deploying contract...', done: 'Contract deployed', failed: 'Deploy failed' }, async (deploy, target, cost) => {
+  return withDeployScript(host, options, { running: 'Deploying contract...', done: 'Contract deployed', failed: 'Deploy failed', paying: `deploying ${options.request.info.name}` }, async (deploy, target, cost) => {
     const { runDeploy } = await import('./runner.ts');
     const result = await runDeploy(deploy);
     const receipt = result.txHash === undefined ? undefined : await receiptOf(target.networkConfig.indexer, result.txHash, options.signal);
@@ -61,7 +61,7 @@ export async function deployContract(host: Host, options: DeployContractOptions)
  * transaction to prove. Nothing is proven or sent.
  */
 export async function priceContractDeploy(host: Host, options: DeployContractOptions): Promise<PricedContract> {
-  return withDeployScript(host, options, { running: 'Pricing the deploy...', done: 'Deploy priced', failed: 'Pricing failed' }, async (deploy, target, cost) => {
+  return withDeployScript(host, options, { running: 'Pricing the deploy...', done: 'Deploy priced', failed: 'Pricing failed', paying: `deploying ${options.request.info.name}` }, async (deploy, target, cost) => {
     const { priceDeploy } = await import('./runner.ts');
     await priceDeploy(deploy);
     return { network: target.network, contractName: options.request.info.name, cost: cost()! };

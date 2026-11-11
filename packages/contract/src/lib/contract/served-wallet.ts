@@ -20,11 +20,13 @@ export interface ServedWalletParams {
   signal: AbortSignal | undefined;
 }
 
-/** What the progress line says while the script runs, when it succeeds, and when it fails. */
+/** What the progress line says while the script runs, when it succeeds, and when it fails; and what the payment is for, as a refusal names it. */
 export interface ServedRunLabels {
   running: string;
   done: string;
   failed: string;
+  /** "deploying escrow", "calling withdraw on escrow". */
+  paying: string;
 }
 
 export async function withServedWallet<T>(
@@ -33,7 +35,7 @@ export async function withServedWallet<T>(
   run: (served: Pick<ServedWallet, 'port' | 'contractKeys'>, spinner: Spinner) => Promise<T>,
 ): Promise<T> {
   // Before anything is served: the payer's wallet has NIGHT and Dust to pay with.
-  await payer.assertCanPay(target, wallet, progress('Checking wallet...'), signal);
+  await payer.assertCanPay(target, wallet, progress('Checking wallet...'), signal, labels.paying);
   throwIfCancelled(signal);
   const serve = await payer.serve(target, wallet, progress('Starting mn serve...'), sdkWarnings, signal);
   const spinner = progress(labels.running);

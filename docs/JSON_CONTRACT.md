@@ -125,6 +125,7 @@ Stable identifiers used in error messages and structured error objects, with the
 | `CONTRACT_NOT_COMPILED` | 1 | No compiled contract was found where the command looked (managed/<name>/compiler/contract-info.json). |
 | `CONTRACT_INFO_INVALID` | 1 | A compiled contract's contract-info.json is not what the Compact compiler writes (not JSON, or its circuits or witnesses missing or malformed). |
 | `CONTRACT_STATE_BUSY` | 1 | A contract's private-state store stayed in use by another process (another mn running a call of the same contract) for the 3 minutes a call waits for it. The message names the contract and, when it is an mn, its pid and command. |
+| `CONTRACT_ASSERTION_FAILED` | 2 | A Compact `assert` in the circuit called (or in the constructor, for a deploy) failed while the contract ran on this machine, before anything was proven or sent. The message names the contract, the circuit and the assert's own text (e.g. "Still locked"). |
 | `NO_ACCOUNT` | 1 | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. |
 | `ACCOUNT_KEYS_UNAVAILABLE` | 1 | A proving key of the account contract couldn't be had: the installed account build's keys are not published (HTTP 404), or fetching them failed. Nothing was submitted. |
 | `WRONG_PASSPHRASE` | 2 | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. |

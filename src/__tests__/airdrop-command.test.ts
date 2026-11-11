@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { parseArgs, GENESIS_SEED } from '@kuiralabs/midnight-cli-core';
+import { parseArgs, GENESIS_SEED, LOCAL_WALLET_FUNDING_NIGHT } from '@kuiralabs/midnight-cli-core';
 import { airdropDefinition } from '@kuiralabs/midnight-wallet/commands';
 import { saveWalletConfig, type PlainWalletConfig as WalletConfig } from '../../test-support/plain-wallet.ts';
 import { rcKeys } from '../../test-support/rc-engine.ts';
@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { cliCall } from './helpers/cli-call.ts';
+import { closedPort } from '../../test-support/closed-port.ts';
 
 // The handler, as the shell loads it.
 const { default: airdropCommand } = await airdropDefinition.load();
@@ -30,7 +31,9 @@ afterEach(() => {
 });
 
 describe('airdrop command — argument validation', () => {
-  it('throws when no amount is given', async () => {
+  it('airdrops LOCAL_WALLET_FUNDING_NIGHT when no amount is given', async () => {
+    // Before, no amount was refused ("Missing amount"). The heading names the
+    // amount before the chain is reached; nothing listens here, so it stops there.
     const walletFile = path.join(TEST_DIR, 'wallet.json');
     const config: WalletConfig = {
       seed: TEST_SEED,
@@ -38,9 +41,12 @@ describe('airdrop command — argument validation', () => {
       createdAt: new Date().toISOString(),
     };
     saveWalletConfig(config, walletFile);
+    const port = await closedPort();
 
-    const args = parseArgs(['airdrop', '--wallet', walletFile]);
-    await expect(cliCall(airdropCommand, args)).rejects.toThrow('Missing amount');
+    const args = parseArgs(['airdrop', '--wallet', walletFile, '--network', 'undeployed',
+      '--node', `ws://127.0.0.1:${port}`, '--indexer-ws', `ws://127.0.0.1:${port}/api/v4/graphql/ws`, '--proof-server', `http://127.0.0.1:${port}`]);
+    await expect(cliCall(airdropCommand, args)).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+    expect(io.stderr()).toMatch(new RegExp(`Amount:\\s+${LOCAL_WALLET_FUNDING_NIGHT} NIGHT`));
   });
 
   it('throws for non-numeric amount', async () => {
@@ -215,16 +221,12 @@ describe('airdrop command — shielded flag', () => {
     await expect(cliCall(airdropCommand, args)).rejects.toThrow('only available on the "undeployed" network');
   });
 
-  it('throws when no amount given with --shielded', async () => {
-    const walletFile = path.join(TEST_DIR, 'wallet.json');
-    const config: WalletConfig = {
-      seed: TEST_SEED,
-      addresses: rcKeys.unshieldedAddresses(Buffer.from(TEST_SEED, 'hex')),
-      createdAt: new Date().toISOString(),
-    };
-    saveWalletConfig(config, walletFile);
-
-    const args = parseArgs(['airdrop', '--shielded', '--wallet', walletFile]);
-    await expect(cliCall(airdropCommand, args)).rejects.toThrow('Missing amount');
+  it('airdrops LOCAL_WALLET_FUNDING_NIGHT shielded when no amount is given with --shielded', async () => {
+    const port = await closedPort();
+    const shielded = rcKeys.shieldedAddress(Buffer.from(TEST_SEED, 'hex'), 'undeployed');
+    const args = parseArgs(['airdrop', '--shielded', '--wallet', shielded, '--network', 'undeployed',
+      '--node', `ws://127.0.0.1:${port}`, '--indexer-ws', `ws://127.0.0.1:${port}/api/v4/graphql/ws`, '--proof-server', `http://127.0.0.1:${port}`]);
+    await expect(cliCall(airdropCommand, args)).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+    expect(io.stderr()).toMatch(new RegExp(`Amount:\\s+${LOCAL_WALLET_FUNDING_NIGHT} NIGHT \\(shielded\\)`));
   });
 });

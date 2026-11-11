@@ -59,6 +59,13 @@ export interface DeployedContract {
 }
 export declare function deployContract(host: Host, options: DeployContractOptions): Promise<DeployedContract>;
 export declare function priceContractDeploy(host: Host, options: DeployContractOptions): Promise<PricedContract>;
+export declare class ContractAssertionError extends Error {
+    readonly code = "CONTRACT_ASSERTION_FAILED";
+    readonly contract: string;
+    readonly circuit: string | undefined;
+    readonly assertion: string;
+    constructor(contract: string, circuit: string | undefined, assertion: string, options?: ErrorOptions);
+}
 export declare function contractExists(indexerUrl: string, address: string, timeoutMs?: number): Promise<boolean | undefined>;
 export declare const HELD_COINS_KEY = "mnHeldCoins";
 export interface HeldCoin {
@@ -301,6 +308,13 @@ export declare const contractCodes: readonly [
         readonly order: 207;
         readonly summary: "A contract's private-state store stayed in use by another process (another mn running a call of the same contract) for the 3 minutes a call waits for it. The message names the contract and, when it is an mn, its pid and command.";
         readonly recovery: "Let the other mn finish, or stop it if it is stuck. A call reads the store before it submits and writes it after, so read the contract state (`midnight_contract_state`) to see whether the call landed before retrying it.";
+    },
+    {
+        readonly code: "CONTRACT_ASSERTION_FAILED";
+        readonly exitCode: 2;
+        readonly order: 208;
+        readonly summary: "A Compact `assert` in the circuit called (or in the constructor, for a deploy) failed while the contract ran on this machine, before anything was proven or sent. The message names the contract, the circuit and the assert's own text (e.g. \"Still locked\").";
+        readonly recovery: "Nothing was sent or paid. Tell the user the contract refused the call and why, in the assert's words. Don't retry the same call: change its arguments, or wait until the contract's state allows it (a time lock, another party's step).";
     }
 ];
 export declare const RUNS_CONTRACTS: import("@kuiralabs/midnight-cli-core").CodeSet;

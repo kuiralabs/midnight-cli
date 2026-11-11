@@ -6,3 +6,12 @@
 
 /** Where a library's lines for the person go: one line, already formatted. */
 export type NoticeSink = (line: string) => void;
+
+/**
+ * Where the lines of a wait go (Dust for a fee): one line, already formatted;
+ * `opening` marks the first line of each wait, which says how long it takes
+ * and why. A wait of minutes with nothing said looks like a hang, so a host
+ * shows these even where it shows no notices (mn's --json keeps stderr for
+ * them alone).
+ */
+export type WaitSink = (line: string, opening: boolean) => void;

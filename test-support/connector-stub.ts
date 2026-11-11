@@ -158,12 +158,15 @@ export function connectorStub(engine: StubEngine) {
     approvalOptions?: ApprovalOptions;
     /** Where the connector's lines go; dropped when not given. */
     notice?: (line: string) => void;
+    /** Where the lines of its waits for Dust go; `notice` when not given. */
+    waiting?: (line: string, opening: boolean) => void;
   }): StubConnector {
     return engine.createDAppConnector({
       bundle: createBundleStub(overrides?.bundleOverrides),
       networkConfig: overrides?.networkConfig ?? TEST_NETWORK_CONFIG,
       approvalOptions: overrides?.approvalOptions ?? { ...NO_TERMINAL, approveAll: true },
       notice: overrides?.notice ?? NO_TERMINAL.notice,
+      ...(overrides?.waiting === undefined ? {} : { waiting: overrides.waiting }),
     });
   }
 

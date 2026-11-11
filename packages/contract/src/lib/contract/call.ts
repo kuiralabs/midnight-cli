@@ -46,7 +46,7 @@ export interface CalledCircuit {
  */
 export async function callContract(host: Host, options: CallContractOptions): Promise<CalledCircuit> {
   const { circuit, address } = options.request;
-  return withCallScript(host, options, { running: `Calling ${circuit}...`, done: `${circuit} called`, failed: 'Call failed' }, async (call, target, cost) => {
+  return withCallScript(host, options, { running: `Calling ${circuit}...`, done: `${circuit} called`, failed: 'Call failed', paying: callPayment(options.request) }, async (call, target, cost) => {
     const { runCall } = await import('./runner.ts');
     const result = await runCall(call);
     const receipt = result.txHash === undefined ? undefined : await receiptOf(target.networkConfig.indexer, result.txHash, options.signal);
@@ -71,12 +71,15 @@ export async function callContract(host: Host, options: CallContractOptions): Pr
  * proven or sent, and its private state is not written.
  */
 export async function priceContractCall(host: Host, options: CallContractOptions): Promise<PricedContract> {
-  return withCallScript(host, options, { running: 'Pricing the call...', done: 'Call priced', failed: 'Pricing failed' }, async (call, target, cost) => {
+  return withCallScript(host, options, { running: 'Pricing the call...', done: 'Call priced', failed: 'Pricing failed', paying: callPayment(options.request) }, async (call, target, cost) => {
     const { priceCall } = await import('./runner.ts');
     await priceCall(call);
     return { network: target.network, contractName: options.request.info.name, cost: cost()! };
   });
 }
+
+/** What a call pays for, as a refusal names it. */
+const callPayment = ({ circuit, info }: ContractCallRequest): string => `calling ${circuit} on ${info.name}`;
 
 /** The call script's options for the request, against the served wallet, with `run` given them; the shared path of callContract and priceContractCall. */
 async function withCallScript<T>(

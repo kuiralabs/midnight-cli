@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { dustShortError, msUntilDust } from '../lib/dust-wait.ts';
-import { DUST_SHORT_WAIT_MS, awaitDustForFee, payWhenDustCovers, planDustWait, sleep } from '../lib/dust-wait.ts';
+import { DUST_SHORT_WAIT_MS, DUST_WAIT_REPORT_MS, awaitDustForFee, payWhenDustCovers, planDustWait, sleep, waitForDustGrowth } from '../lib/dust-wait.ts';
 import { withDustShortfall } from '../lib/sdk-errors.ts';
 
 const DUST = 10n ** 15n;
@@ -185,5 +185,51 @@ describe('a Dust shortage that says what the wallet is short by', () => {
       expect(pay).toHaveBeenCalledTimes(1);
       vi.useRealTimers();
     });
+  });
+});
+
+describe('waitForDustGrowth', () => {
+  // A deploy that waited 181 s for its Dust said nothing on stderr until it ended.
+  it('says the wait as it goes: how long and why first, then the time waited and the Dust there is by then', async () => {
+    vi.useFakeTimers({ now: NOW });
+    try {
+      const said: Array<[string, boolean]> = [];
+      let done = false;
+      // 0.66 of 0.9 DUST: 29 s at 0.0083 DUST/s.
+      const waiting = waitForDustGrowth({ have: 660_000_000_000_000n, needed: NEEDED, waitMs: 29_000 }, JUST_REGISTERED, (line, opening) => said.push([line, opening]), { everyMs: 10_000 })
+        .then(() => { done = true; });
+      expect(said).toEqual([['Dust: 0.66 of the 0.90 DUST this fee takes; waiting about 29 seconds (29 s) for its registered NIGHT to generate the rest...', true]]);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(said.at(-1)).toEqual(['Dust: waited 10 s of 29 s, 0.74 of 0.90 DUST', false]);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(said.at(-1)).toEqual(['Dust: waited 20 s of 29 s, 0.82 of 0.90 DUST', false]);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(9_000);
+      await waiting;
+      // Nothing at the end: the payment goes on.
+      expect(said).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports every DUST_WAIT_REPORT_MS by default', async () => {
+    vi.useFakeTimers({ now: NOW });
+    try {
+      const said: string[] = [];
+      const waiting = waitForDustGrowth({ have: 0n, needed: DUST, waitMs: 3 * DUST_WAIT_REPORT_MS + 1_000 }, growing(0n, 0n), (line) => said.push(line));
+      await vi.advanceTimersByTimeAsync(3 * DUST_WAIT_REPORT_MS + 1_000);
+      await waiting;
+      expect(said).toHaveLength(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops when cancelled', async () => {
+    const controller = new AbortController();
+    const waiting = waitForDustGrowth({ have: 0n, needed: DUST, waitMs: 60_000 }, growing(0n, 0n), () => {}, { signal: controller.signal });
+    controller.abort();
+    await expect(waiting).rejects.toMatchObject({ code: 'CANCELLED' });
   });
 });

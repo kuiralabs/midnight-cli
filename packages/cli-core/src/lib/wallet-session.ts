@@ -13,7 +13,7 @@
 
 import { sdkSetOf, type DAppConnector, type HostEngines, type OpenedConnector, type TransactionDetail } from './engine.ts';
 import type { NetworkConfig, NetworkName } from './network.ts';
-import type { NoticeSink } from './notices.ts';
+import type { NoticeSink, WaitSink } from './notices.ts';
 import { resolveNetwork, type NetworkSettings } from './resolve-network.ts';
 import { settingsFromEnvironment } from './settings.ts';
 import { shieldedSyncEnabled } from './shielded-policy.ts';
@@ -268,6 +268,8 @@ export interface OpenWalletSessionOptions {
   root: string;
   /** Where the wallet's lines for the person go (a cache it can't restore from, the connector's waits for Dust). */
   notice: NoticeSink;
+  /** Where the lines of the connector's waits for Dust go, shown in every mode (a host's `waiting`); `notice` when not given. */
+  waiting?: WaitSink;
   /** The engines of the host the session opens in: the network's SDK set is loaded from them. */
   engines: HostEngines;
   /** The network's endpoints; when absent, as a command without endpoint flags resolves them (the saved config, then the defaults). */
@@ -326,6 +328,7 @@ async function openSession(options: OpenWalletSessionOptions): Promise<WalletSes
     seed,
     root,
     notice: options.notice,
+    waiting: options.waiting,
     network,
     networkConfig,
     address: engine.keys.unshieldedAddress(seed, network),

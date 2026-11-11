@@ -11,7 +11,7 @@ import type { NetworkConfig, NetworkName } from './network.ts';
 import type { CallSdkWarnings } from './sdk-warnings.ts';
 import type { VerboseLog } from './verbose.ts';
 import type { ApprovalOptions } from './approval.ts';
-import type { NoticeSink } from './notices.ts';
+import type { NoticeSink, WaitSink } from './notices.ts';
 import type { FeeLimits } from './fee-limits.ts';
 import type { RpcHandler } from './connector-api.ts';
 import type { Spinner } from '../ui/spinner.ts';
@@ -516,9 +516,9 @@ export interface EngineWallet {
   /** Makes sure a test wallet has Dust, registering and then waiting up to `waitMs` for it. */
   prepDust(wallet: PrepWallet, waitMs: number): Promise<{ alreadyAvailable: boolean; dustAvailable: boolean }>;
   /** The connector over a seed's wallet, synced and its Dust ready, for a command of mn's own. */
-  openConnector(options: { seed: Buffer; root: string; notice: NoticeSink; network: NetworkName; networkConfig: NetworkConfig; address: string; syncMode: 'full' | 'lite'; dustWaitMs?: number; signal?: AbortSignal; onMessage: (message: string) => void }): Promise<OpenedConnector>;
+  openConnector(options: { seed: Buffer; root: string; notice: NoticeSink; waiting?: WaitSink; network: NetworkName; networkConfig: NetworkConfig; address: string; syncMode: 'full' | 'lite'; dustWaitMs?: number; signal?: AbortSignal; onMessage: (message: string) => void }): Promise<OpenedConnector>;
   /** Syncs a seed's wallet strictly for mn serve and runs `serve` with it; the wallet stops when `serve` ends. */
-  serveWallet<T>(options: { seed: Buffer; root: string; notice: NoticeSink; networkConfig: NetworkConfig; network: NetworkName; address: string; syncMode: 'full' | 'lite' } & WalletSyncHooks, serve: (session: ServedWalletSession) => Promise<T>): Promise<T>;
+  serveWallet<T>(options: { seed: Buffer; root: string; notice: NoticeSink; waiting?: WaitSink; networkConfig: NetworkConfig; network: NetworkName; address: string; syncMode: 'full' | 'lite' } & WalletSyncHooks, serve: (session: ServedWalletSession) => Promise<T>): Promise<T>;
 }
 
 /** The entry points of the account package (@kuiralabs/midnight-account-chain) an engine loads, by their subpath. */

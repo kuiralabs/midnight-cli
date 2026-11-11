@@ -5,7 +5,7 @@
 
 import { Socket, type AddressInfo } from 'node:net';
 import { resolveWalletPath, unlockWallet, walletAddress, type UnlockHost } from '@kuiralabs/midnight-wallet';
-import { resolveNetwork, applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName, sdkSetOf, type DAppConnectorCallbacks, type OpenedConnector, DEFAULT_SERVE_PORT, type CallSdkWarnings, shieldedSyncEnabled, CancelledError, throwIfCancelled, type ContractKeys, contractKeysFromSeed, type RpcHandler } from '@kuiralabs/midnight-cli-core';
+import { resolveNetwork, applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName, sdkSetOf, type DAppConnectorCallbacks, type OpenedConnector, DEFAULT_SERVE_PORT, type CallSdkWarnings, shieldedSyncEnabled, CancelledError, throwIfCancelled, type ContractKeys, contractKeysFromSeed, type RpcHandler, type Host } from '@kuiralabs/midnight-cli-core';
 import { createRpcServer, type RpcServer } from './ws-rpc.ts';
 
 /** A running mn serve, and how to stop it. */
@@ -19,8 +19,8 @@ export interface ServeHandle {
 export interface ServeManagerOptions {
   /** The state root the wallets, config and caches live under. */
   root: string;
-  /** The host: who unlocks the wallet, where the wallet's and the server's notices go, and its connection ids. */
-  host: UnlockHost;
+  /** The host: who unlocks the wallet, where the wallet's and the server's notices and waits go, and its connection ids. */
+  host: UnlockHost & Pick<Host, 'waiting'>;
   port?: number;
   network?: string;
   /** Explicit endpoints; they win over the network defaults and docker auto-detection. */
@@ -293,6 +293,8 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
       seed: seedBuffer,
       root: options.root,
       notice: options.host.notice,
+      // A wait for Dust is said in every mode (--json too), as the host shows waits.
+      waiting: options.host.waiting,
       network: networkName,
       networkConfig,
       address,

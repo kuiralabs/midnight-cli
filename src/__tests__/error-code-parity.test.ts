@@ -144,7 +144,7 @@ const ROWS: Row[] = [
   ['generate with a seed and a mnemonic', run(generateCommand, 'generate', '--seed', 'ab'.repeat(32), '--mnemonic', 'one two'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
   ['generate with a mnemonic off the wordlist', run(generateCommand, 'generate', '--mnemonic', 'not a mnemonic'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
   ['address with a negative key index', run(addressCommand, 'address', '--seed', 'ab'.repeat(32), '--index', '-1'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
-  ['airdrop with no amount', run(airdropCommand, 'airdrop'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
+  ['airdrop of an amount that is no number', run(airdropCommand, 'airdrop', 'abc'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
   ["balance of an address on another network than --network", run(balanceCommand, 'balance', OTHER_ADDRESSES.undeployed, '--network', 'preprod'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
   ["the shielded balance of someone else's address", run(balanceCommand, 'balance', OTHER_ADDRESSES.preview, '--shielded', '--network', 'preview'), as('INVALID_ARGS', 2), as('INVALID_ARGS', 2)],
   // A shielded transfer where shielded is off is refused by the wallet's transfer request: its row is in the wallet's tests (transfer-request.test.ts).

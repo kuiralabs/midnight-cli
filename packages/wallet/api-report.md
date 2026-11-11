@@ -170,6 +170,7 @@ export interface NightAirdrop {
     readonly recipient: string;
     readonly shielded: boolean;
     readonly receipt?: Receipt;
+    readonly dustRegistered?: boolean;
 }
 export interface AddressBalance {
     readonly address: string;
@@ -284,7 +285,7 @@ export interface WalletOpened {
     readonly address: string;
     readonly shieldedAddress?: string;
 }
-export declare function assertWalletCanPay({ network, root, host, networkConfig }: PayingTarget, wallet: string | undefined, progress: Spinner, signal?: AbortSignal): Promise<{
+export declare function assertWalletCanPay({ network, root, host, networkConfig }: PayingTarget, wallet: string | undefined, progress: Spinner, signal?: AbortSignal, paying?: string): Promise<{
     nightBalance: bigint;
     dustBalance: bigint;
 }>;

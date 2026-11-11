@@ -732,6 +732,7 @@ export interface Host {
     paths(): HostPaths;
     notice(line: string): void;
     collectNotices(call: CallSdkWarnings, collect: (line: string) => void): void;
+    waiting: WaitSink;
     readonly prompter: Prompter | null;
     readonly sdkWarnings: SdkWarningCalls;
     readonly engines: HostEngines;
@@ -741,6 +742,7 @@ export interface HostOptions {
     readonly paths?: Supplied<HostPaths>;
     readonly settings?: Supplied<Settings>;
     readonly notice?: (line: string) => void;
+    readonly waiting?: (line: string) => void;
     readonly prompter?: Prompter | null;
     readonly sdkWarnings?: SdkWarningCalls;
     readonly engineLoader?: EngineLoader;
@@ -825,6 +827,7 @@ export interface NetworkChoice extends EndpointOverrides {
 export declare function networkChoiceFromArgs(args: ParsedArgs): NetworkChoice;
 export declare function networkTargetOf(host: Host, choice?: NetworkChoice): PayingTarget;
 export type NoticeSink = (line: string) => void;
+export type WaitSink = (line: string, opening: boolean) => void;
 export declare function assertEnvelopeMatches(envelope: OfferEnvelope, read: OfferContents): void;
 export declare function assertOfferUnexpired(envelope: OfferEnvelope, now: Date): void;
 export declare function decodeOfferEnvelope(text: string): OfferEnvelope;
@@ -868,7 +871,7 @@ export declare class NoPayerError extends Error {
     constructor(command: string);
 }
 export interface Payer {
-    assertCanPay: (target: PayingTarget, wallet: string | undefined, progress: Spinner, signal: AbortSignal | undefined) => Promise<PayingFunds>;
+    assertCanPay: (target: PayingTarget, wallet: string | undefined, progress: Spinner, signal: AbortSignal | undefined, paying?: string) => Promise<PayingFunds>;
     serve: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined) => Promise<ServedWallet>;
     connect: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined, options?: ConnectOptions) => Promise<WalletSession>;
 }
@@ -1020,6 +1023,7 @@ export interface OpenWalletSessionOptions {
     network: NetworkName;
     root: string;
     notice: NoticeSink;
+    waiting?: WaitSink;
     engines: HostEngines;
     networkConfig?: NetworkConfig;
     settings?: NetworkSettings;
@@ -1406,6 +1410,9 @@ export interface DustCoinGeneration {
 export declare function dustGenerationCap(coins: readonly DustCoinGeneration[]): bigint;
 export declare function awaitDustForFee(dust: DustBalanceSource, needed: bigint, onStatus?: (status: string) => void, signal?: AbortSignal): Promise<void>;
 export declare const DUST_SHORT_WAIT_MS: number;
+export declare const DUST_WAIT_REPORT_MS = 15000;
+export declare function dustWaitOpening(have: bigint, needed: bigint, waitMs: number): string;
+export declare function dustWaitProgress(waitedMs: number, waitMs: number, have: bigint, needed: bigint): string;
 export interface DustWaitPlan {
     have: bigint;
     needed: bigint;
@@ -1418,6 +1425,14 @@ export declare function payWhenDustCovers<T>(pay: () => Promise<T>, dust: DustBa
 }): Promise<T>;
 export declare function planDustWait(err: unknown, dust: DustBalanceSource, now: Date): DustWaitPlan | undefined;
 export declare function sleep(ms: number, signal?: AbortSignal): Promise<void>;
+export declare function waitForDustGrowth(plan: {
+    have: bigint;
+    needed: bigint;
+    waitMs: number;
+}, dust: DustBalanceSource, say: (line: string, opening: boolean) => void, options?: {
+    everyMs?: number;
+    signal?: AbortSignal;
+}): Promise<void>;
 export type AccountEntryPoint = 'artefacts' | 'connector' | 'context' | 'contract' | 'deposit' | 'errors' | 'owner';
 export type AirdropParams = Omit<TransferParams, 'seedBuffer' | 'extraRecipients'>;
 export interface BlockLimits {
@@ -1530,6 +1545,7 @@ export interface EngineWallet {
         seed: Buffer;
         root: string;
         notice: NoticeSink;
+        waiting?: WaitSink;
         network: NetworkName;
         networkConfig: NetworkConfig;
         address: string;
@@ -1542,6 +1558,7 @@ export interface EngineWallet {
         seed: Buffer;
         root: string;
         notice: NoticeSink;
+        waiting?: WaitSink;
         networkConfig: NetworkConfig;
         network: NetworkName;
         address: string;

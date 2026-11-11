@@ -16,6 +16,7 @@ export { type CallContractOptions, type CalledCircuit, callContract, priceContra
 export { COIN_SHORTHAND_KEY, type FreshCoin } from './lib/contract/coin-shorthand.ts';
 export { type ContractCost, contractCostJson, contractCostOf, type ContractPriced, type PricedContract } from './lib/contract/cost.ts';
 export { type DeployContractOptions, type DeployedContract, deployContract, priceContractDeploy } from './lib/contract/deploy.ts';
+export { ContractAssertionError } from './lib/contract/assertion.ts';
 export { contractExists } from './lib/contract/exists.ts';
 export { HELD_COINS_KEY, type HeldCoin } from './lib/contract/held-coins.ts';
 export { type CircuitInfo, type CompactType, type ContractInfo, ContractInfoInvalidError, ContractNotCompiledError, findContractInfo, type WitnessInfo } from './lib/contract/inspect.ts';

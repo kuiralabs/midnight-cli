@@ -1302,12 +1302,12 @@ export function connectorSuite(engine: ConnectorEngine): void {
           dust: { balance: (at: Date) => HAS + PER_SECOND * BigInt(Math.max(0, Math.floor((at.getTime() - start) / 1000))), availableCoins: [{}], address: 'dust' },
         });
 
-        it('waits the time the wallet takes to generate the rest, then pays', async () => {
+        it('waits the time the wallet takes to generate the rest, saying how far it is as it goes, then pays', async () => {
           vi.useFakeTimers();
-          const written: string[] = [];
+          const said: Array<[string, boolean]> = [];
           // 1 DUST: 0.65 more and a little over, 89 seconds at this rate.
           const balance = vi.fn().mockRejectedValueOnce(shortOf(SPECK)).mockResolvedValue({ type: 'UNBOUND' });
-          connector = createConnector({ bundleOverrides: { stateFn: growingFrom(Date.now()), balanceUnboundTransaction: balance }, notice: (line) => written.push(line) });
+          connector = createConnector({ bundleOverrides: { stateFn: growingFrom(Date.now()), balanceUnboundTransaction: balance }, waiting: (line, opening) => said.push([line.replace(/\x1b\[[0-9;]*m/g, '').trim(), opening]) });
 
           const paid = connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx());
           await vi.advanceTimersByTimeAsync(88_000);
@@ -1315,7 +1315,9 @@ export function connectorSuite(engine: ConnectorEngine): void {
           await vi.advanceTimersByTimeAsync(1_500);
           await paid;
           expect(balance).toHaveBeenCalledTimes(2);
-          expect(written.join('')).toContain('Dust: 0.35 of the 1.00 DUST this fee takes; waiting about 2 minutes for the rest...');
+          // How long and why first; then every 15 s the time waited and the Dust there is by then.
+          expect(said[0]).toEqual(['Dust: 0.35 of the 1.00 DUST this fee takes; waiting about 2 minutes (89 s) for its registered NIGHT to generate the rest...', true]);
+          expect(said.slice(1)).toEqual([[15, '0.46'], [30, '0.57'], [45, '0.68'], [60, '0.80'], [75, '0.91']].map(([s, has]) => [`Dust: waited ${s} s of 89 s, ${has} of 1.00 DUST`, false]));
           vi.useRealTimers();
         });
 

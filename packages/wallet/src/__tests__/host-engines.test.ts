@@ -65,16 +65,16 @@ describe('a library given one host', () => {
     const hostB = hostNamed('B');
     const target = (host: Host): PayingTarget => ({ network: 'undeployed', root, host, networkConfig: NETWORK, endpoints: {} });
 
-    await expect(assertWalletCanPay(target(hostB), 'alice', silentSpinner(), undefined)).rejects.toThrow('Wallet has 0 NIGHT on undeployed');
+    await expect(assertWalletCanPay(target(hostB), 'alice', silentSpinner(), undefined)).rejects.toThrow("Can't pay for this transaction on undeployed: the wallet has no unshielded NIGHT.");
     expect(loaded).toStrictEqual(['B']);
     expect(fetched).toStrictEqual([`B ${ADDRESSES.undeployed}`]);
 
-    await expect(assertWalletCanPay(target(hostA), 'alice', silentSpinner(), undefined)).rejects.toThrow('Wallet has 0 NIGHT on undeployed');
+    await expect(assertWalletCanPay(target(hostA), 'alice', silentSpinner(), undefined)).rejects.toThrow("Can't pay for this transaction on undeployed: the wallet has no unshielded NIGHT.");
     expect(loaded).toStrictEqual(['B', 'A']);
     expect(fetched).toStrictEqual([`B ${ADDRESSES.undeployed}`, `A ${ADDRESSES.undeployed}`]);
 
     // Host B's repository has the balance at this tip; host A's read never filled it.
-    await expect(assertWalletCanPay(target(hostB), 'alice', silentSpinner(), undefined)).rejects.toThrow('Wallet has 0 NIGHT on undeployed');
+    await expect(assertWalletCanPay(target(hostB), 'alice', silentSpinner(), undefined)).rejects.toThrow("Can't pay for this transaction on undeployed: the wallet has no unshielded NIGHT.");
     expect(fetched).toHaveLength(2);
     expect(loaded).toStrictEqual(['B', 'A']);
   });

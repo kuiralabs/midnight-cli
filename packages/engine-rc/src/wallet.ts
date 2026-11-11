@@ -221,7 +221,7 @@ async function prepDust(wallet: PrepWallet, waitMs: number): Promise<{ alreadyAv
 }
 
 async function openConnector(repo: WalletDataRepository, options: Parameters<EngineWallet['openConnector']>[0]): Promise<OpenedConnector> {
-  const { seed, root, notice, network, networkConfig, address, syncMode, signal, onMessage } = options;
+  const { seed, root, notice, waiting, network, networkConfig, address, syncMode, signal, onMessage } = options;
   // On a ledger-8 chain the SDK's sync would retry forever.
   await assertLedgerSupported(network, networkConfig, undefined, signal);
   // A failure before the connector is handed back stops what was started, so
@@ -274,6 +274,7 @@ async function openConnector(repo: WalletDataRepository, options: Parameters<Eng
       // Approves every request: nobody is asked.
       approvalOptions: { approveAll: true, autoApproveReads: true, prompter: null, notice },
       notice,
+      waiting,
       // Reads answer from the state this sync ended on, and from every later
       // one that is synced by the rule the sync used.
       initialState: syncedState,
@@ -305,7 +306,7 @@ async function openConnector(repo: WalletDataRepository, options: Parameters<Eng
 }
 
 function serveWallet<T>(repo: WalletDataRepository, options: Parameters<EngineWallet['serveWallet']>[0], serve: (session: ServedWalletSession) => Promise<T>): Promise<T> {
-  const { seed, root, notice, networkConfig, network, address, syncMode } = options;
+  const { seed, root, notice, waiting, networkConfig, network, address, syncMode } = options;
   // The repository owns validating the caches, priming Dust, building the
   // facade, syncing (with retries) and stopping it. Its save is skipped: mn
   // serve saves only when no transaction is pending, since the SDK drops
@@ -325,6 +326,7 @@ function serveWallet<T>(repo: WalletDataRepository, options: Parameters<EngineWa
         networkConfig,
         approvalOptions,
         notice,
+        waiting,
         feeLimits,
         callbacks,
         // Reads answer from the state this sync ended on, and from every later

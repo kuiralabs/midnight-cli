@@ -65,10 +65,11 @@ if (needsWalletSdk) await ensureHeapForSync();
 hideProjectIdsInOutput();
 
 // What the libraries get from their host: the SDK noise filters, notices on
-// stderr (none under --json, unless --verbose asks for its lines), settings
-// from the environment, the state root ~/.midnight, and the terminal to ask
-// their questions (passphrase, approvals) at.
-const host = createCliHost({ prompter: createTerminalPrompter(), notices: !jsonMode || hasFlag(args, 'verbose') });
+// stderr (none under --json, unless --verbose asks for its lines), a wait's
+// lines on stderr in every mode (plain under --json), settings from the
+// environment, the state root ~/.midnight, and the terminal to ask their
+// questions (passphrase, approvals) at.
+const host = createCliHost({ prompter: createTerminalPrompter(), notices: !jsonMode || hasFlag(args, 'verbose'), plainWaits: jsonMode });
 
 // Auto-migrate old ~/.midnight/wallet.json → wallets/default.json (silent, one-time)
 migrateOldWallet(host.paths().stateRoot);
@@ -101,7 +102,7 @@ async function run(): Promise<CommandOutcome | void> {
   // The command, what the shell gives its handler, a notice or a refusal: all from its definition.
   return dispatchCommand(installedCommands, command, args, {
     signal,
-    // --json keeps stderr quiet: the result (or the error) on stdout is all there is.
+    // --json keeps stdout to the result (or the error), and stderr quiet but for a wait's lines.
     output: jsonMode ? jsonModeOutput(processOutput) : processOutput,
     host,
     payer: async () => (await import('@kuiralabs/midnight-connect')).servePayer,
