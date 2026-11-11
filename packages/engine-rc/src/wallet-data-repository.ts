@@ -33,8 +33,9 @@ import {
   DustSnapshotLedgerMismatchError,
 } from './facade.ts';
 import { loadDustCache, saveDustCache, dustPublicKeyHexFromSeed, validateDustCacheChainId } from './dust-direct-cache.ts';
-import { getChainGenesisHash, checkLedgerSupported, fetchGenesisProtocolVersion, fetchProtocolVersion, checkBalance, type BalanceSummary, callNodeRpc, fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain';
+import { getChainGenesisHash, checkLedgerSupported, fetchGenesisProtocolVersion, fetchProtocolVersion, isDustTimelineEmpty, checkBalance, type BalanceSummary, callNodeRpc, fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain';
 import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from './dust-direct.ts';
+import { DustEventFold } from './dust-event-fold.ts';
 import { dustKeysFromSeed, type DustLedgerState } from './dust-ledger-state.ts';
 import { isHostedNetwork, runDustSyncNative, sidecarSkipReason, sidecarUnavailableReason, wasmDustNotice } from './dust-sync-native.ts';
 import { deriveDustSeed } from './derivation.ts';
@@ -423,6 +424,31 @@ export class WalletDataRepository {
       cached = null;
     }
     const startedFromCache = cached !== null;
+
+    // A chain with no Dust events at all (a fresh localnet nobody registered
+    // NIGHT on, say): a cold read would wait for a first event that never
+    // comes, for its whole window, and resume it three times. The wallet's
+    // Dust is the empty state, read from nothing.
+    if (!cached && await isDustTimelineEmpty(network.indexer, network.indexerWS, opts.signal)) {
+      opts.log?.('dust', 'The chain has no Dust events: the Dust state is the empty one');
+      const empty = new DustEventFold({ keys: dustKeysFromSeed(deriveDustSeed(seed)), networkId: network.networkId, startFromId: 0, collapse: true })
+        .finish({ partial: false, chainProtocolVersion, now: new Date() });
+      try { saveDustCache(networkName, pubkeyHex, empty.state, -1, opts.root, chainId, empty.retention); } catch { /* best-effort */ }
+      const view: DustView = {
+        state: empty.state,
+        balance: empty.balance,
+        availableCoins: empty.availableCoins,
+        ownedUtxoCount: empty.ownedUtxoCount,
+        syncTime: empty.syncTime,
+        fromCache: false,
+        eventsApplied: 0,
+        lastAppliedEventId: -1,
+        partial: false,
+        fetchedAt: this.now(),
+      };
+      await this.memoize(this.dustMemo, memoKey, view, network, opts.signal, opts.log);
+      return view;
+    }
     let totalEventsApplied = 0;
     let lastAppliedEventId = cached?.lastAppliedEventId ?? -1;
     let result: DustDirectResult | null = null;

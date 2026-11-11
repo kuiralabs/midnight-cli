@@ -8,7 +8,7 @@ export { type BalanceSummary, checkBalance, isNativeToken } from './lib/balance-
 export { assertChainClockCurrent, ChainClockBehindError, fetchChainTime } from './lib/chain-clock.ts';
 export { getChainGenesisHash } from './lib/chain-id.ts';
 export { assertEndpointsReachable, assertNetworkAnswers, assertNetworkReady, endpointsOf, type NeededEndpoints, REACHABILITY_TIMEOUT_MS, type ReachabilityOptions } from './lib/endpoint-check.ts';
-export { fetchEventTip, isCursorBeyondTip, isStreamEmpty, type LedgerEventStream } from './lib/event-tip.ts';
+export { fetchEventTip, isCursorBeyondTip, isDustTimelineEmpty, isStreamEmpty, type LedgerEventStream } from './lib/event-tip.ts';
 export { subscribeGraphqlWs } from './lib/graphql-ws-subscription.ts';
 export { queryIndexer } from './lib/indexer-graphql.ts';
 export { waitForAddressFunded } from './lib/indexer-ready.ts';

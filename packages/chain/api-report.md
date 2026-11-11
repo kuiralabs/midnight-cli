@@ -38,6 +38,7 @@ export interface ReachabilityOptions {
 }
 export declare function fetchEventTip(indexerWS: string, stream: LedgerEventStream): Promise<number | null>;
 export declare function isCursorBeyondTip(lastAppliedEventId: number, tip: number | null): boolean;
+export declare function isDustTimelineEmpty(indexerHttpUrl: string, indexerWS: string, signal?: AbortSignal): Promise<boolean>;
 export declare function isStreamEmpty(indexerWS: string, stream: LedgerEventStream): Promise<boolean>;
 export type LedgerEventStream = 'dust' | 'zswap';
 export declare function subscribeGraphqlWs<TResult>(wsUrl: string, sub: GraphqlWsSubscription<TResult>): Promise<TResult>;

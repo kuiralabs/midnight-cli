@@ -5,6 +5,7 @@
 // state would be served as current.
 
 import { subscribeGraphqlWs, type WsFinishReason } from './graphql-ws-subscription.ts';
+import { queryIndexer } from './indexer-graphql.ts';
 
 export type LedgerEventStream = 'dust' | 'zswap';
 
@@ -61,4 +62,23 @@ export async function isStreamEmpty(indexerWS: string, stream: LedgerEventStream
 /** The cache's cursor is past the chain's latest event: the chain was reset under it. */
 export function isCursorBeyondTip(lastAppliedEventId: number, tip: number | null): boolean {
   return tip !== null && lastAppliedEventId > tip;
+}
+
+/**
+ * Whether the chain has no Dust events at all: its tip block's Dust commitment
+ * and generation trees have never grown (the indexer's `dustCommitmentEndIndex`
+ * and `dustGenerationEndIndex` are 0: no NIGHT was ever registered and no Dust
+ * spent), and the indexer, asked for the Dust stream, sends nothing. Both, so
+ * a slow first event on a chain that has Dust is never taken for an empty
+ * stream. False when either can't be read.
+ */
+export async function isDustTimelineEmpty(indexerHttpUrl: string, indexerWS: string, signal?: AbortSignal): Promise<boolean> {
+  try {
+    const data = await queryIndexer<{ block?: { dustCommitmentEndIndex?: unknown; dustGenerationEndIndex?: unknown } }>(
+      indexerHttpUrl, '{ block { dustCommitmentEndIndex dustGenerationEndIndex } }', undefined, 5_000, signal);
+    if (data.block?.dustCommitmentEndIndex !== 0 || data.block?.dustGenerationEndIndex !== 0) return false;
+  } catch {
+    return false;
+  }
+  return isStreamEmpty(indexerWS, 'dust');
 }
