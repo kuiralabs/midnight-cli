@@ -40,7 +40,7 @@ Install the prerelease with npm 11 or older (or run it with `npx`; with npm 12, 
 | `midnight address (--seed <hex> \| --wallet <name>) [--network <name>] [--index <n>]` | Derive and display an unshielded address from a seed or a saved wallet (one of --seed, MN_SEED or --wallet is needed) |
 | `midnight genesis-address [--network <name>]` | Display the genesis wallet address (seed 0x01) for a network |
 | `midnight inspect-cost [--network <name>] [--node <url>] [--indexer-ws <url>] [--proof-server <url>]` | Display the chain's current block limits, from its latest block's ledger parameters |
-| `midnight airdrop <amount> [--shielded] [--wallet <name\|file\|address>] [--network <name>] [--node <url>] [--indexer-ws <url>] [--proof-server <url>] [--verbose]` | Fund a wallet from the genesis wallet (undeployed network only) |
+| `midnight airdrop [<amount>] [--shielded] [--wallet <name\|file\|address>] [--network <name>] [--node <url>] [--indexer-ws <url>] [--proof-server <url>] [--verbose]` | Fund a wallet from the genesis wallet (undeployed network only) |
 | `midnight transfer <to> <amount> [<to> <amount> ...] \| --to-file <file> [--shielded [--force-shielded]] [--wallet <name\|file>] [--network <name>] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--verbose]` | Send NIGHT tokens to another address, or to several in one transaction (unshielded or --shielded) |
 | `midnight dust <register\|status\|export> [--wallet <name\|file>] [--seed <hex> (export only)] [--proof-server <url>] [--node <url>] [--indexer-ws <url>] [--no-cache (status only)]` | Register UTXOs for dust (fee token) generation, check status, or export a restorable snapshot |
 | `midnight config get [key] [--network <name>] \| midnight config <set\|unset> <key> [value] [--network <name>]` | Manage persistent config (default network, endpoints, etc.) |
@@ -222,7 +222,7 @@ midnight transfer alice 10 bob 5 --json
 
 When `--json` is active:
 - stdout receives a single line of JSON (the data)
-- stderr keeps showing chrome (spinners, headers, progress) — pipe through `2>/dev/null` if you need it gone
+- stderr stays quiet (no spinner, heading or notice), except for the plain lines of a long wait, such as a deploy waiting for its wallet's Dust: `Dust: waited 45 s of 104 s, 0.76 of 1.23 DUST`. Pipe through `2>/dev/null` if you need it gone
 - Errors produce: `{"error":true,"code":"...","message":"...","exitCode":N}`
 
 Run `midnight help --json` for a full capability manifest, or `midnight help --agent` for a comprehensive AI agent reference.
