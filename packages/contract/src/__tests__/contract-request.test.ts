@@ -49,9 +49,9 @@ describe('resolveContractCallRequest', () => {
     [['--address', ADDRESS], 'circuit name'],
     [['--address', 'deadbeef', '--circuit', 'increment'], 'A contract address is 64 hex characters'],
     [['--address', ADDRESS, '--circuit', 'decrement'], 'counter has no circuit "decrement"'],
-    [['--address', ADDRESS, '--circuit', 'add', '--args', '[1]'], 'add takes 2 arguments (x, y); --args gave 1.'],
-    [['--address', ADDRESS, '--circuit', 'add', '--args', '[1,'], 'Invalid --args JSON'],
-    [['--address', ADDRESS, '--circuit', 'add', '--args', '"12"'], 'Invalid --args JSON: expected an array or an object, got "12"'],
+    [['--address', ADDRESS, '--circuit', 'add', '--args', '[1]'], 'add takes 2 arguments (x, y); 1 was given.'],
+    [['--address', ADDRESS, '--circuit', 'add', '--args', '[1,'], 'The arguments in --args are not valid JSON'],
+    [['--address', ADDRESS, '--circuit', 'add', '--args', '"12"'], 'The arguments in --args are JSON of type string: give an array or an object of the arguments.'],
   ])('refuses %j', (flags, message) => {
     expect(() => call(...flags)).toThrow(message);
   });
@@ -87,10 +87,11 @@ describe('resolveContractDeployRequest', () => {
 
 describe('the plain builders', () => {
   it('build the same request from plain values a program holds, with no flags and no working directory', () => {
+    // The readers say where the arguments came from as well (argsSource).
     expect(contractCallRequest({ dappDir: dir, address: ADDRESS, circuit: 'add', args: [1, 2] }))
-      .toEqual(call('--address', ADDRESS, '--circuit', 'add', '--args', '[1,2]'));
+      .toEqual({ ...call('--address', ADDRESS, '--circuit', 'add', '--args', '[1,2]'), argsSource: undefined });
     const key = 'ab'.repeat(32);
-    expect(contractDeployRequest({ dappDir: dir, args: [7], secretKey: key })).toEqual(deploy('--args', '[7]', '--secret-key', key));
+    expect(contractDeployRequest({ dappDir: dir, args: [7], secretKey: key })).toEqual({ ...deploy('--args', '[7]', '--secret-key', key), argsSource: undefined });
     expect(contractDeployRequest({ dappDir: dir })).toMatchObject({ constructorArgs: [], privateStateSecretKey: undefined });
   });
 
@@ -105,7 +106,7 @@ describe('the plain builders', () => {
   it('refuse a call\'s bad address, unknown circuit and wrong count of arguments as usage mistakes', () => {
     expect(() => contractCallRequest({ dappDir: dir, address: 'deadbeef', circuit: 'increment' })).toThrow(UsageError);
     expect(() => contractCallRequest({ dappDir: dir, address: ADDRESS, circuit: 'decrement' })).toThrow('counter has no circuit "decrement"');
-    expect(() => contractCallRequest({ dappDir: dir, address: ADDRESS, circuit: 'add', args: [1] })).toThrow('add takes 2 arguments (x, y); --args gave 1.');
+    expect(() => contractCallRequest({ dappDir: dir, address: ADDRESS, circuit: 'add', args: [1] })).toThrow('add takes 2 arguments (x, y); 1 was given.');
   });
 });
 

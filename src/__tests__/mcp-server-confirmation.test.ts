@@ -52,7 +52,10 @@ beforeAll(async () => {
   fs.mkdirSync(compiler, { recursive: true });
   fs.writeFileSync(path.join(compiler, 'contract-info.json'), JSON.stringify({
     'compiler-version': '0.36.0', 'language-version': '0.28.0', 'runtime-version': '0.21.0',
-    circuits: [{ name: 'increment', pure: false, proof: true, arguments: [], 'result-type': { 'type-name': 'Tuple', types: [] } }],
+    circuits: [
+      { name: 'increment', pure: false, proof: true, arguments: [], 'result-type': { 'type-name': 'Tuple', types: [] } },
+      { name: 'bid', pure: false, proof: true, arguments: [{ name: 'amount', type: { 'type-name': 'Uint', maxval: 18446744073709551615 } }], 'result-type': { 'type-name': 'Tuple', types: [] } },
+    ],
     witnesses: [],
   }));
 
@@ -364,5 +367,40 @@ describe('midnight_wallet_generate', () => {
     const { tools } = await client.listTools();
     expect(tools.find((tool) => tool.name === 'midnight_wallet_generate')?.description).toContain('make it the active wallet');
     await call('midnight_wallet_use', { name: 'alice' });
+  }, 60_000);
+});
+
+// A circuit's arguments are private inputs to its proof: the text the user
+// confirms (which the agent and its host keep) says arguments were given,
+// never what they are.
+describe('a contract call or deploy given arguments', () => {
+  const ADDRESS = 'ab'.repeat(32);
+  const SECRET = 913_377_331;
+
+  it('confirms the call without its arguments, given inline or in a file', async () => {
+    const inline = await call('midnight_contract_call', { path: dappDir, address: ADDRESS, circuit: 'bid', args: JSON.stringify({ amount: SECRET }), wallet: 'alice', network: 'undeployed', ...ENDPOINTS });
+    expect(inline.description).toBe(`Call circuit bid on contract ${ADDRESS} as alice on undeployed with arguments (given, not shown)` + VIA);
+    expect(JSON.stringify(inline)).not.toContain(String(SECRET));
+
+    const file = path.join(home, 'bid.json');
+    fs.writeFileSync(file, JSON.stringify({ amount: SECRET }), { mode: 0o600 });
+    const fromFile = await call('midnight_contract_call', { path: dappDir, address: ADDRESS, circuit: 'bid', 'args-file': file, wallet: 'alice', network: 'undeployed', ...ENDPOINTS });
+    expect(fromFile.description).toBe(`Call circuit bid on contract ${ADDRESS} as alice on undeployed with arguments from the file ${file}` + VIA);
+    expect(JSON.stringify(fromFile)).not.toContain(String(SECRET));
+  }, 60_000);
+
+  it('confirms a deploy without its constructor arguments', async () => {
+    const pending = await call('midnight_contract_deploy', { path: dappDir, args: JSON.stringify([SECRET]), wallet: 'alice', network: 'undeployed', ...CLOSED });
+    expect(pending.description).toMatch(new RegExp(`^${escapeRegExp(`Deploy contract from ${dappDir} as alice on undeployed with constructor arguments (given, not shown). `)}`));
+    expect(JSON.stringify(pending)).not.toContain(String(SECRET));
+  }, 60_000);
+
+  it('refuses --args - (the standard input is the server\'s protocol channel), and a refusal quotes no argument', async () => {
+    const stdin = await call('midnight_contract_call', { path: dappDir, address: ADDRESS, circuit: 'bid', args: '-', wallet: 'alice', network: 'undeployed', ...ENDPOINTS });
+    expect(stdin.pending).toBeUndefined();
+    expect(String(stdin.message)).toContain('Give them with --args-file <path>');
+    const wrong = await call('midnight_contract_call', { path: dappDir, address: ADDRESS, circuit: 'bid', args: JSON.stringify(String(SECRET)), wallet: 'alice', network: 'undeployed', ...ENDPOINTS });
+    expect(wrong.pending).toBeUndefined();
+    expect(JSON.stringify(wrong)).not.toContain(String(SECRET));
   }, 60_000);
 });

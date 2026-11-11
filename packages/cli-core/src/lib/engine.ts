@@ -112,6 +112,16 @@ export interface ScriptParts {
   /** The environment variables carrying the indexer's URLs, which never go into a script's text. */
   readonly indexerUrlEnv: string;
   readonly indexerWsUrlEnv: string;
+  /**
+   * Defines readContractArgsFile(fs, path), which reads a deploy's or call's
+   * arguments (a JSON array) from the file `path` names and deletes it: the
+   * arguments never go into a script's text or argv.
+   */
+  readonly contractArgsFn: string;
+  /** The environment variable naming a deploy's or call's arguments file (a 0600 file under mn's state root). */
+  readonly contractArgsFileEnv: string;
+  /** The private-state key a call script records the coins a call gave the contract under, by nonce (hex): `{ nonce, color, value, mt_index }`. */
+  readonly heldCoinsKey: string;
 }
 
 /** A compiled contract, as the scripts load it. */
@@ -121,18 +131,20 @@ export interface ScriptContract {
   contractName: string;
 }
 
+/** A deploy script: its arguments come through the arguments file (ScriptParts.contractArgsFileEnv), never its text. */
 export interface DeployScript extends ScriptContract {
   servePort: number;
   privateStateKey?: string;
-  args?: unknown[];
 }
 
+/** A call script: its arguments come through the arguments file (ScriptParts.contractArgsFileEnv), never its text. */
 export interface CallScript extends ScriptContract {
   servePort: number;
   contractAddress: string;
   circuit: string;
-  args?: unknown[];
   privateStateKey?: string;
+  /** The circuit's ShieldedCoinInfo arguments (place and name): the coins a call may give the contract, recorded under ScriptParts.heldCoinsKey once it lands. */
+  heldCoinArguments?: readonly { index: number; name: string }[];
 }
 
 export interface StateScript extends ScriptContract {

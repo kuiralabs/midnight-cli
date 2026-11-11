@@ -12,6 +12,7 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SCRIPT_PARTS, SCRIPT_PRELUDE, runCall, runDeploy, runState } from '../lib/contract/runner.ts';
+import { redactArgumentValues } from '../lib/contract/redact-arguments.ts';
 import { rcEngine } from '../../../../test-support/rc-engine.ts';
 import { testHost } from '../../../../test-support/test-host.ts';
 
@@ -32,11 +33,11 @@ describe('generated scripts', () => {
   const scripts = {
     deploy: generateDeployScript({
       dappDir: '/tmp/dapp', networkConfig: NETWORK, managedDir: '/tmp/dapp/managed/counter',
-      contractName: 'counter', servePort: 9932, args: [1, 'x'],
+      contractName: 'counter', servePort: 9932,
     }),
     call: generateCallScript({
       dappDir: '/tmp/dapp', networkConfig: NETWORK, managedDir: '/tmp/dapp/managed/counter',
-      contractName: 'counter', servePort: 9932, contractAddress: 'ab'.repeat(32), circuit: 'increment', args: [],
+      contractName: 'counter', servePort: 9932, contractAddress: 'ab'.repeat(32), circuit: 'increment',
     }),
     state: generateStateScript({
       dappDir: '/tmp/dapp', networkConfig: NETWORK, managedDir: '/tmp/dapp/managed/counter',
@@ -104,12 +105,14 @@ describe('the functions the runner inlines into a script', () => {
     const { runInNewContext } = await import('node:vm');
     const secret = runInNewContext(`${SCRIPT_PARTS.privateStateSecretFn}\nresolvePrivateStateSecretKey('ab'.repeat(32), undefined);`, { Uint8Array, parseInt });
     expect(Buffer.from(secret).toString('hex')).toBe('ab'.repeat(32));
-    for (const fn of [SCRIPT_PARTS.privateStateSecretFn, SCRIPT_PARTS.privateStateStoreFn, SCRIPT_PARTS.coerceArgFn]) {
+    for (const fn of [SCRIPT_PARTS.privateStateSecretFn, SCRIPT_PARTS.privateStateStoreFn, SCRIPT_PARTS.coerceArgFn, SCRIPT_PARTS.contractArgsFn, `const redactArgumentValues = (${redactArgumentValues.toString()});`]) {
       expect(fn).not.toContain('__name');
       // A function given a name inside them is what keepNames wraps (vitest's transform doesn't, tsx's and bun's do).
       expect(fn.match(/(?:(?:const|let|var)\s+[\w$]+\s*=|[\w$]+\s*:)\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>/g)).toBeNull();
       expect(fn.match(/(?:(?:const|let|var)\s+[\w$]+\s*=|[\w$]+\s*:)\s*(?:async\s+)?function\b/g)).toBeNull();
     }
+    const read = runInNewContext(`${SCRIPT_PARTS.contractArgsFn}\nreadContractArgsFile`, { JSON, Array, Error });
+    expect(read({ readFileSync: () => '[1,"x"]', unlinkSync: () => {} }, '/args.json')).toEqual([1, 'x']);
     const store = runInNewContext(`${SCRIPT_PARTS.privateStateStoreFn}\nopenPrivateStateStore`, { JSON, String, Array, Error });
     await expect(store({}, { dir: '/x', storeName: 's', password: undefined, accountId: undefined })).rejects.toThrow(/MN_PRIVATE_STATE_PASSWORD/);
   });

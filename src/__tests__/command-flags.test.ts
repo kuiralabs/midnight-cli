@@ -124,8 +124,8 @@ describe('the accepted flags match the code', () => {
     'resolveTransferRequest(': ['shielded', 'force-shielded', 'wallet', 'network', 'to-file'],
     'resolveScanDir(': ['managed', 'path'],
     'resolveDappDir(': ['path'],
-    'resolveContractDeployRequest(': ['path', 'managed', 'name', 'args', 'secret-key'],
-    'resolveContractCallRequest(': ['path', 'managed', 'name', 'address', 'circuit', 'args'],
+    'resolveContractDeployRequest(': ['path', 'managed', 'name', 'args', 'args-file', 'secret-key'],
+    'resolveContractCallRequest(': ['path', 'managed', 'name', 'address', 'circuit', 'args', 'args-file'],
   };
 
   function flagsReadBy(source: string): Set<string> {

@@ -77,7 +77,7 @@ function installedFolder(name: string, dir: string): string | null {
  */
 export const PROVIDER_IMPORTS = `
 import { createLedger9WalletProvider, createLedger9MidnightProvider } from '@midnight-ntwrk/midnight-js-types';
-import { Transaction } from '@midnightntwrk/ledger-v9';
+import { Transaction, ZswapOutput } from '@midnightntwrk/ledger-v9';
 import { toHex, fromHex } from '@midnight-ntwrk/midnight-js-utils';
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -291,17 +291,108 @@ const providers = {
 `;
 }
 
+/**
+ * The arguments, read first from the file mn names in the environment and
+ * deleted at once (readContractArgsFile): never in the script's text, which
+ * sits in the dApp's folder while it runs. coerceArg then turns number →
+ * BigInt and number[] → Uint8Array, the coercions Compact circuits need.
+ */
+function contractArgsCode(parts: ScriptParts): string {
+  return `
+${parts.contractArgsFn}
+${parts.coerceArgFn}
+const contractArgs = readContractArgsFile(mnFs, process.env.${parts.contractArgsFileEnv}).map(coerceArg);
+`;
+}
+
+/**
+ * After a call lands: each coin the circuit took as a ShieldedCoinInfo
+ * argument that the transaction gave the contract (an output to it with the
+ * coin's commitment, in the guaranteed offer) is recorded in the contract's
+ * private state under the held-coins key, by its nonce in hex, with its Merkle
+ * tree index: the transaction's first Zswap index (the indexer's
+ * zswapStartIndex) plus the output's place among its outputs. A witness then
+ * spends it (held-coins.ts in the contract package says how it reads it).
+ * Recorded coins are listed in the script's result; one that can't be recorded
+ * is said as mn's notice, and the call still succeeds.
+ */
+function heldCoinsCode(opts: CallScript, parts: ScriptParts, privateStateKey: string): string {
+  const coinArguments = opts.heldCoinArguments ?? [];
+  if (coinArguments.length === 0) return 'const heldCoins = [];';
+  return `
+const heldCoins = [];
+const HELD_COIN_ARGUMENTS = ${JSON.stringify(coinArguments)};
+const heldCoinNotice = (line) => process.stderr.write('\\n${parts.noticeMarker} ' + JSON.stringify(line) + '\\n');
+try {
+  const finalized = callTx?.tx?.deserialize({ v9: Transaction });
+  const outputs = finalized?.guaranteedOffer?.outputs ?? [];
+  const given = HELD_COIN_ARGUMENTS.flatMap(({ index, name }) => {
+    const coin = contractArgs[index];
+    if (!(coin?.nonce instanceof Uint8Array) || !(coin?.color instanceof Uint8Array) || typeof coin?.value !== 'bigint') return [];
+    const commitment = ZswapOutput.newContractOwned({ type: toHex(coin.color), nonce: toHex(coin.nonce), value: coin.value }, 0, ${JSON.stringify(opts.contractAddress)}).commitment;
+    const position = outputs.findIndex((output) => output.commitment === commitment);
+    return position < 0 ? [] : [{ name, coin, commitment, position }];
+  });
+  if (given.length > 0) {
+    const response = await fetch(process.env.${parts.indexerUrlEnv}, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'query ($id: HexEncoded!) { transactions(offset: { identifier: $id }) { ... on RegularTransaction { zswapStartIndex } } }', variables: { id: callTx.txId } }),
+    });
+    if (!response.ok) throw new Error('the indexer answered HTTP ' + response.status);
+    const body = await response.json();
+    if (body.errors?.length) throw new Error('the indexer said: ' + body.errors[0].message);
+    const start = body.data?.transactions?.find((t) => typeof t?.zswapStartIndex === 'number')?.zswapStartIndex;
+    if (start === undefined) throw new Error('the indexer gave no Zswap index for transaction ' + callTx.txId);
+    const states = providers.privateStateProvider.forContract(${JSON.stringify(opts.contractAddress)});
+    const state = await states.get(${JSON.stringify(privateStateKey)});
+    if (state === null || typeof state !== 'object' || Object.getPrototypeOf(state) !== Object.prototype) {
+      heldCoinNotice('The coin the call gave the contract is not recorded in its private state: the private state is not an object mn can add ${parts.heldCoinsKey} to.');
+    } else {
+      const held = { ...(state.${parts.heldCoinsKey} ?? {}) };
+      for (const { name, coin, commitment, position } of given) {
+        const mtIndex = BigInt(start + position);
+        held[toHex(coin.nonce)] = { nonce: coin.nonce, color: coin.color, value: coin.value, mt_index: mtIndex };
+        heldCoins.push({ argument: name, commitment, mtIndex: String(mtIndex) });
+      }
+      await states.set(${JSON.stringify(privateStateKey)}, { ...state, ${parts.heldCoinsKey}: held });
+    }
+  }
+} catch (err) {
+  heldCoinNotice('The call landed, but the coin it gave the contract could not be recorded in its private state: ' + String(err?.message ?? err));
+}
+`;
+}
+
+/**
+ * The private state a call starts from. midnight-js stores the find's
+ * initialPrivateState over what the store holds, and mn seeds it afresh on
+ * every call (from the wallet's secret or --secret-key), so the coins the
+ * contract holds for this wallet, recorded under the held-coins key by an
+ * earlier call, are carried over from the stored state into the fresh one.
+ */
+function carriedPrivateStateCode(opts: CallScript, parts: ScriptParts, privateStateKey: string): string {
+  return `
+const isPlainState = (state) => state !== null && typeof state === 'object' && Object.getPrototypeOf(state) === Object.prototype;
+let callPrivateState = makeInitialPrivateState();
+try {
+  const stored = await providers.privateStateProvider.forContract(${JSON.stringify(opts.contractAddress)}).get(${JSON.stringify(privateStateKey)});
+  if (isPlainState(stored) && isPlainState(callPrivateState) && stored.${parts.heldCoinsKey} !== undefined) {
+    callPrivateState = { ...callPrivateState, ${parts.heldCoinsKey}: stored.${parts.heldCoinsKey} };
+  }
+} catch (err) {
+  process.stderr.write('\\n${parts.noticeMarker} ' + JSON.stringify('The coins this contract holds for the wallet could not be read from its private state: ' + String(err?.message ?? err)) + '\\n');
+}
+`;
+}
+
 // ── Script generation ──
 
 export function generateDeployScript(opts: DeployScript, parts: ScriptParts): string {
   const privateStateKey = opts.privateStateKey ?? `${opts.contractName}PrivateState`;
-  // Constructor args are pre-serialized to JSON here (still in our process)
-  // so the generated script just spreads them. The coerceArg helper inside
-  // the bridge then upgrades number → BigInt and number[] → Uint8Array, the
-  // two coercions Compact circuits invariably need.
-  const argsLiteral = JSON.stringify(opts.args ?? []);
 
   return `${parts.prelude}
+${contractArgsCode(parts)}
 ${parts.rpcClientCode(opts.servePort)}
 ${contractSetupCode(opts.contractName, opts.managedDir, parts)}
 
@@ -315,8 +406,7 @@ ${providerSetupCode(opts.networkConfig, privateStateKey, parts)}
 
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
 
-${parts.coerceArgFn}
-const constructorArgs = (${argsLiteral}).map(coerceArg);
+const constructorArgs = contractArgs;
 process.stderr.write('Deploying contract' + (constructorArgs.length ? ' with ' + constructorArgs.length + ' constructor arg(s)...' : '...') + '\\n');
 const deployed = await deployContract(providers, {
   compiledContract: compiled,
@@ -340,6 +430,7 @@ export function generateCallScript(opts: CallScript, parts: ScriptParts): string
   const privateStateKey = opts.privateStateKey ?? `${opts.contractName}PrivateState`;
 
   return `${parts.prelude}
+${contractArgsCode(parts)}
 ${parts.rpcClientCode(opts.servePort)}
 ${contractSetupCode(opts.contractName, opts.managedDir, parts)}
 
@@ -354,21 +445,21 @@ ${providerSetupCode(opts.networkConfig, privateStateKey, parts, opts.contractAdd
 import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 
 process.stderr.write('Finding deployed contract...\\n');
+${carriedPrivateStateCode(opts, parts, privateStateKey)}
 const deployed = await findDeployedContract(providers, {
   compiledContract: compiled,
   contractAddress: ${JSON.stringify(opts.contractAddress)},
   privateStateId: ${JSON.stringify(privateStateKey)},
-  initialPrivateState: makeInitialPrivateState(),
+  initialPrivateState: callPrivateState,
 });
 
 process.stderr.write('Calling ${opts.circuit}...\\n');
-${parts.coerceArgFn}
-const args = (${JSON.stringify(opts.args ?? [])}).map(coerceArg);
-const called = await deployed.callTx.${opts.circuit}(...args);
+const called = await deployed.callTx.${opts.circuit}(...contractArgs);
 
 // The call's transaction, as the indexer listed it once midnight-js saw it final.
 const callTx = called?.public;
-console.log(JSON.stringify({ status: 'success', circuit: ${JSON.stringify(opts.circuit)}, txHash: callTx?.txHash, txId: callTx?.txId }));
+${heldCoinsCode(opts, parts, privateStateKey)}
+console.log(JSON.stringify({ status: 'success', circuit: ${JSON.stringify(opts.circuit)}, txHash: callTx?.txHash, txId: callTx?.txId, ...(heldCoins.length > 0 ? { heldCoins } : {}) }));
 rpcClose();
 process.exit(0);
 `;

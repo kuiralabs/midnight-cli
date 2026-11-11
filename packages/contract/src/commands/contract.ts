@@ -1,7 +1,7 @@
 // Contract commands — inspect, deploy, call, and query state for compiled Midnight contracts.
 // A deploy or call says its cost before it is proven; with --dry-run it stops there.
 
-import { type ParsedArgs, getFlag, hasFlag, requireFlag, UsageError, type CallContext, type CallOutput, networkChoiceFromArgs, type Payer, payerFor, type RawStateValue } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, getFlag, hasFlag, requireFlag, UsageError, type CallContext, type CallOutput, networkChoiceFromArgs, type Payer, payerFor, type RawStateValue, MINIMAL_FLAG } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, bold, dim, teal, yellow, green, spinnerReporter, toDust } from '@kuiralabs/midnight-cli-core/ui';
 
 import { deployContract, type DeployContractOptions, priceContractDeploy } from '../lib/contract/deploy.ts';
@@ -10,7 +10,10 @@ import { type ContractCost, contractCostJson, dustWaitPhrase } from '../lib/cont
 import { readContractState } from '../lib/contract/state.ts';
 import { showPaidStep } from '@kuiralabs/midnight-wallet/commands';
 import { receiptJson } from '@kuiralabs/midnight-chain';
-import { resolveContractCallRequest, resolveContractDeployRequest, resolveDappDir, resolveScanDir } from '../lib/contract/request.ts';
+import { resolveContractCallRequest, resolveContractDeployRequest, resolveDappDir, resolveScanDir, type ContractCallRequest } from '../lib/contract/request.ts';
+import { readProcessStdin, type StdinReader } from '../lib/contract/args-input.ts';
+import type { FreshCoin } from '../lib/contract/coin-shorthand.ts';
+import type { HeldCoin } from '../lib/contract/held-coins.ts';
 import {
   findContractInfo,
   formatCircuitSignature,
@@ -103,6 +106,39 @@ async function handleInspect(args: ParsedArgs, ctx: CallContext): Promise<void> 
   ctx.output.stderr('\n');
 }
 
+// ── Arguments ──
+
+/**
+ * What reads `--args -`: this process's standard input, except in an MCP call
+ * (it carries MINIMAL_FLAG), whose server's standard input is its protocol
+ * channel: there `--args -` is refused.
+ */
+function stdinReaderFor(args: ParsedArgs): StdinReader | undefined {
+  return hasFlag(args, MINIMAL_FLAG) ? undefined : readProcessStdin;
+}
+
+/**
+ * A warning when the circuit's arguments came on the command line (`--args`,
+ * or an MCP tool's `args`) and its proof keeps some of them private, as its
+ * ZK IR shows: there they are in `ps`, the shell's history or the agent's
+ * transcript. None when mn can't tell.
+ */
+export function inlinePrivateArgumentsWarning(request: Pick<ContractCallRequest, 'argsSource' | 'privateArguments' | 'circuit'>): string | undefined {
+  const kept = request.privateArguments ?? [];
+  if (request.argsSource !== 'inline' || kept.length === 0) return undefined;
+  const named = kept.map((name) => `"${name}"`).join(', ');
+  return `${request.circuit}'s proof keeps ${kept.length === 1 ? `its argument ${named}` : `its arguments ${named}`} private, and --args (an MCP tool's args) put ${kept.length === 1 ? 'it' : 'them'} on the command line, where other users see ${kept.length === 1 ? 'it' : 'them'} in ps and the shell keeps ${kept.length === 1 ? 'it' : 'them'} in its history, or in the agent's transcript. Give private arguments with --args-file <path> (an MCP tool's args-file) or --args - (the standard input).`;
+}
+
+/** The fresh coins mn made and the coins the call recorded for the contract's witnesses, as lines for the terminal. */
+function coinLines(freshCoins: readonly FreshCoin[], heldCoins: readonly HeldCoin[] | undefined): string[] {
+  const lines = freshCoins.map((coin) => keyValue(`Fresh coin ${coin.argument}`, `nonce ${coin.nonce}`));
+  for (const coin of heldCoins ?? []) {
+    lines.push(keyValue(`Held coin ${coin.argument}`, `tree index ${coin.mtIndex} ${dim('(recorded in the contract\'s private state for its witnesses)')}`));
+  }
+  return lines;
+}
+
 // ── Cost ──
 
 /** What a cost's figures mean for the transaction priced: a deploy proves no circuit, a call's proofs are priced at the ledger's estimate. */
@@ -147,7 +183,7 @@ function writeDryRun(ctx: CallContext, jsonMode: boolean, result: Record<string,
 async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
   const dryRun = hasFlag(args, 'dry-run');
-  const request = resolveContractDeployRequest(args, process.cwd());
+  const request = resolveContractDeployRequest(args, process.cwd(), stdinReaderFor(args));
   const { info, constructorArgs } = request;
 
   if (!jsonMode) {
@@ -235,8 +271,10 @@ function writeNextStepsHint(output: CallOutput, address: string, circuits: { nam
 async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Promise<void> {
   const jsonMode = hasFlag(args, 'json');
   const dryRun = hasFlag(args, 'dry-run');
-  const request = resolveContractCallRequest(args, process.cwd());
+  const request = resolveContractCallRequest(args, process.cwd(), stdinReaderFor(args));
   const { info, address, circuit } = request;
+  const exposed = inlinePrivateArgumentsWarning(request);
+  if (exposed !== undefined) ctx.warn(exposed);
 
   if (!jsonMode) {
     ctx.output.stderr('\n' + header(dryRun ? 'Contract Call (dry run)' : 'Contract Call') + '\n\n');
@@ -282,9 +320,12 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
       ...(called.txHash === undefined ? {} : { txHash: called.txHash }),
       ...(called.receipt === undefined ? {} : receiptJson(called.receipt)),
       ...(called.cost === undefined ? {} : { cost: contractCostJson(called.cost) }),
+      ...(request.freshCoins.length === 0 ? {} : { freshCoins: request.freshCoins }),
+      ...(called.heldCoins === undefined ? {} : { heldCoins: called.heldCoins }),
     });
   } else {
     if (called.txHash !== undefined) ctx.output.stderr('\n' + keyValue('Tx hash', called.txHash) + '\n');
+    for (const line of coinLines(request.freshCoins, called.heldCoins)) ctx.output.stderr(line + '\n');
     ctx.output.stderr('\n' + green('  ✓ Circuit call successful') + '\n\n');
   }
 }

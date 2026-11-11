@@ -53,6 +53,9 @@ const TEST_PARTS: ScriptParts = {
   witnessCandidates: [],
   indexerUrlEnv: 'MN_TEST_INDEXER_URL',
   indexerWsUrlEnv: 'MN_TEST_INDEXER_WS_URL',
+  contractArgsFn: 'const readContractArgsFile = () => [];',
+  contractArgsFileEnv: 'MN_TEST_CONTRACT_ARGS_FILE',
+  heldCoinsKey: 'mnHeldCoins',
 };
 
 const providerSetupCode = (networkConfig: NetworkConfig, key: string): string => providerSetupCodeFor(networkConfig, key, TEST_PARTS);
@@ -319,11 +322,11 @@ describe('generated scripts', () => {
   const scripts = {
     deploy: generateDeployScript({
       networkConfig: NETWORK, managedDir: '/tmp/dapp/managed/counter',
-      contractName: 'counter', servePort: 9932, args: [1, 'x'],
+      contractName: 'counter', servePort: 9932,
     }, TEST_PARTS),
     call: generateCallScript({
       networkConfig: NETWORK, managedDir: '/tmp/dapp/managed/counter',
-      contractName: 'counter', servePort: 9932, contractAddress: 'ab'.repeat(32), circuit: 'increment', args: [],
+      contractName: 'counter', servePort: 9932, contractAddress: 'ab'.repeat(32), circuit: 'increment',
     }, TEST_PARTS),
   };
 

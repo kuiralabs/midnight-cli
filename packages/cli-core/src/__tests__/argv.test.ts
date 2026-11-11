@@ -84,6 +84,10 @@ describe('parseArgs', () => {
     expect(parseArgs(['x', '--fee', '-5']).flags).toEqual({ fee: '-5' });
   });
 
+  it('reads a lone - after a flag as its value, the standard input (--args -)', () => {
+    expect(parseArgs(['contract', 'call', '--args', '-', '--circuit', 'lock']).flags).toEqual({ args: '-', circuit: 'lock' });
+  });
+
   it('uses process.argv.slice(2) by default when no argv provided', () => {
     // Just verifying the function signature works without args
     const result = parseArgs(undefined);

@@ -25,8 +25,8 @@ describe('validateCallRequest', () => {
   });
 
   it('says how many arguments a circuit takes, counting only the caller\'s', () => {
-    expect(() => validateCallRequest(COUNTER, 'increment', [1, 2, 3])).toThrow('increment takes 0 arguments; --args gave 3.');
-    expect(() => validateCallRequest(COUNTER, 'add', [1])).toThrow('add takes 2 arguments (x, y); --args gave 1.');
+    expect(() => validateCallRequest(COUNTER, 'increment', [1, 2, 3])).toThrow('increment takes 0 arguments; 3 were given.');
+    expect(() => validateCallRequest(COUNTER, 'add', [1])).toThrow('add takes 2 arguments (x, y); 1 was given.');
   });
 
   it('refuses a pure circuit, which makes no transaction', () => {

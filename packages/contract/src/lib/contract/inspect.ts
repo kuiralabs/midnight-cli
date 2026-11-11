@@ -12,7 +12,14 @@ export interface CompactType {
   length?: number;
   maxval?: number;
   tsType?: string;
+  /** A Tuple's types. */
   types?: CompactType[];
+  /** A Vector's element type. */
+  type?: CompactType;
+  /** A Struct's name (ShieldedCoinInfo, ...). */
+  name?: string;
+  /** A Struct's fields. */
+  elements?: { name: string; type: CompactType }[];
 }
 
 export interface CircuitInfo {

@@ -11,6 +11,7 @@ import { assertContractRunsOn, type ContractChecked } from './runtime-check.ts';
 import { type ContractCost, type ContractPriced, costRecorder, maxPriceAdjustmentOn, type PricedContract } from './cost.ts';
 import type { ContractCallRequest } from './request.ts';
 import type { CallOptions } from './runner.ts';
+import type { HeldCoin } from './held-coins.ts';
 
 export interface CallContractOptions extends PaidCallOptions<ContractChecked | ContractPriced> {
   /** The circuit to call, on which contract (contractCallRequest). */
@@ -31,6 +32,8 @@ export interface CalledCircuit {
   readonly receipt?: Receipt;
   /** What the call was priced at before it was proven; absent when the mn serve that paid gave no price. */
   readonly cost?: ContractCost;
+  /** The coins the call gave the contract, recorded in its private state for a witness to spend (held-coins.ts); absent when none. */
+  readonly heldCoins?: readonly HeldCoin[];
 }
 
 /**
@@ -56,6 +59,7 @@ export async function callContract(host: Host, options: CallContractOptions): Pr
       status: result.status,
       ...(result.txHash === undefined ? {} : { txHash: result.txHash, receipt }),
       ...(priced === undefined ? {} : { cost: priced }),
+      ...(result.heldCoins === undefined || result.heldCoins.length === 0 ? {} : { heldCoins: result.heldCoins }),
     };
   });
 }

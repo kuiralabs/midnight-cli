@@ -7,7 +7,7 @@
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdirSync, rmdirSync, rmSync, openSync, writeSync, closeSync, renameSync, linkSync } from 'node:fs';
+import { writeFileSync, unlinkSync, existsSync, symlinkSync, readFileSync, mkdirSync, rmdirSync, rmSync, openSync, writeSync, closeSync, renameSync, linkSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -20,6 +20,9 @@ import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
 import { openPrivateStateStore } from './private-state-store.ts';
 import { CONTRACT_STATE_BUSY, ContractStateBusyError, PRIVATE_STATE_BUSY_WAIT_MS, SCRIPT_NOTICE_MARKER, acquireContractCallLock, holderCommandOf, privateStateBusyText, privateStateNameOf, processIsAlive, waitForPrivateState } from './private-state-lock.ts';
 import { callStateDir, deployStateDir, dropEmptyDeployState, keepDeployState, moveDappStore } from './private-state.ts';
+import { CONTRACT_ARGS_FILE_ENV, contractArgsDir, processRuns, readContractArgsFile, removeContractArgsFile, writeContractArgsFile } from './contract-args-file.ts';
+import { HELD_COINS_KEY, heldCoinArgumentsOf, type HeldCoin } from './held-coins.ts';
+import { redactArgumentValues } from './redact-arguments.ts';
 
 // The generated deploy/call script imports SDK packages by bare specifier
 // (`@midnight-ntwrk/midnight-js-contracts`, `ws`, etc.); without help, Node
@@ -66,7 +69,8 @@ export interface DeployOptions extends RunnerOptions {
    * Constructor arguments passed to the contract's `Constructor` (the WASM
    * function the SDK invokes during `deployContract`). Forwarded to
    * `deployContract({ args: [...] })`. Order matters — match the contract's
-   * Compact `constructor(...)` signature.
+   * Compact `constructor(...)` signature. They reach the script through a
+   * 0600 file under mn's state root (contract-args-file.ts), never its text.
    */
   args?: unknown[];
 }
@@ -74,6 +78,7 @@ export interface DeployOptions extends RunnerOptions {
 export interface CallOptions extends RunnerOptions {
   contractAddress: string;
   circuit: string;
+  /** The circuit's arguments: through a 0600 file under mn's state root, never the script's text. */
   args?: unknown[];
   privateStateKey?: string;
 }
@@ -110,6 +115,8 @@ export interface CallResult {
   txHash?: string;
   /** One of its identifiers. */
   txId?: string;
+  /** The coins the call gave the contract that the script recorded in the private state (held-coins.ts); absent when none. */
+  heldCoins?: HeldCoin[];
 }
 
 export interface StateResult {
@@ -182,7 +189,7 @@ async function executeDeployScript(options: DeployOptions, extraEnv: Record<stri
   const staging = deployStateDir(options.root, options.network);
   const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options), [PRIVATE_STATE_DIR_ENV]: staging, ...extraEnv };
   try {
-    const stdout = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, onPriced: options.onPriced, env, signal: options.signal });
+    const stdout = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, onPriced: options.onPriced, env, signal: options.signal, args: { dir: contractArgsDir(options.root), values: options.args ?? [] } });
     return { stdout, staging };
   } catch (err) {
     keepFailedDeployState(staging, notice);
@@ -251,7 +258,8 @@ async function executeCallScript(options: CallOptions, extraEnv: Record<string, 
   await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network, options.root, options.engines);
   const engine = await options.engines.load(sdkSetOf(options.network, options.root));
   const scripts = { ...engine.contracts.scripts, set: engine.set };
-  const script = scripts.call(options, SCRIPT_PARTS);
+  const info = findContractInfo(options.managedDir).info;
+  const script = scripts.call({ ...options, heldCoinArguments: heldCoinArgumentsOf(info, options.circuit) }, SCRIPT_PARTS);
   const notice = options.notice ?? (() => {});
   noteMovedStore(moveDappStore(options.root, options.dappDir), notice);
   const store = callStateDir(options.root, options.network, options.contractAddress, options.dappDir);
@@ -265,7 +273,7 @@ async function executeCallScript(options: CallOptions, extraEnv: Record<string, 
     { address: options.contractAddress, timeoutMs: PRIVATE_STATE_BUSY_WAIT_MS, notice, progress: (line) => options.onMessage?.(line), signal: options.signal },
   );
   try {
-    return await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, onPriced: options.onPriced, env, signal: options.signal });
+    return await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, onPriced: options.onPriced, env, signal: options.signal, args: { dir: contractArgsDir(options.root), values: options.args ?? [] } });
   } catch (err) {
     throw namingUnreadableState(err, options.contractAddress);
   } finally {
@@ -399,6 +407,13 @@ const TRANSPORT_FAILURE_FN = `\nconst isTransportFailure = (${isTransportFailure
 // contract state the ledger can't decode is reported with what the ledger said.
 const STATE_DECODE_FAILURE_FN = `\nconst stateDecodeFailureOf = (${stateDecodeFailureOf.toString()});\n`;
 
+// redactArgumentValues serialized for the generated script, the same way: a
+// failure never carries the value of an argument out of the script.
+const REDACT_ARGUMENTS_FN = `\nconst redactArgumentValues = (${redactArgumentValues.toString()});\n`;
+
+// readContractArgsFile serialized for the generated script, the same way.
+const CONTRACT_ARGS_FN = `\nconst readContractArgsFile = (${readContractArgsFile.toString()});\n`;
+
 /** The code a script reports a contract state the ledger can't decode with: the runner names the contract (ContractStateUnreadableError). */
 const CONTRACT_STATE_UNREADABLE = 'CONTRACT_STATE_UNREADABLE';
 
@@ -414,9 +429,11 @@ const CONTRACT_STATE_UNREADABLE = 'CONTRACT_STATE_UNREADABLE';
  * rebuilding the provider's error on `cause` with its message and nothing
  * else, so mn serve's code is lost there. The script's client for mn serve
  * keeps the last refusal it received (rpcClientCode), and a failure of the
- * providers backed by mn serve is reported as that refusal.
+ * providers backed by mn serve is reported as that refusal. A value the
+ * compact runtime quotes in its type error (an argument's) is left out
+ * (redactArgumentValues).
  */
-export const SCRIPT_PRELUDE = `${TRANSPORT_FAILURE_FN}${STATE_DECODE_FAILURE_FN}
+export const SCRIPT_PRELUDE = `${TRANSPORT_FAILURE_FN}${STATE_DECODE_FAILURE_FN}${REDACT_ARGUMENTS_FN}
 const SERVE_BACKED_PROVIDER_METHODS = ['balanceTx', 'submitTx'];
 const fail = (e) => {
   const refusal = globalThis.mnServeRefusal;
@@ -425,7 +442,7 @@ const fail = (e) => {
   if (unreadable !== undefined) e = Object.assign(new Error(unreadable), { code: '${CONTRACT_STATE_UNREADABLE}' });
   const carried = typeof e?.code === 'string' && !isTransportFailure({ code: e.code }) ? e.code : undefined;
   const code = carried ?? (isTransportFailure(e) ? 'NETWORK_ERROR' : undefined);
-  const failure = { message: String(e?.message ?? e), ...(code === undefined ? {} : { code }) };
+  const failure = { message: redactArgumentValues(String(e?.message ?? e)), ...(code === undefined ? {} : { code }) };
   process.stderr.write('\\n${SCRIPT_ERROR_MARKER} ' + JSON.stringify(failure) + '\\n');
   process.exit(1);
 };
@@ -514,6 +531,9 @@ export const SCRIPT_PARTS: ScriptParts = {
   witnessCandidates: WITNESS_FILE_CANDIDATES,
   indexerUrlEnv: INDEXER_URL_ENV,
   indexerWsUrlEnv: INDEXER_WS_URL_ENV,
+  contractArgsFn: CONTRACT_ARGS_FN,
+  contractArgsFileEnv: CONTRACT_ARGS_FILE_ENV,
+  heldCoinsKey: HELD_COINS_KEY,
 };
 
 // ── Script execution ──
@@ -702,12 +722,57 @@ export interface ScriptRun {
   signal?: AbortSignal;
   /** Finds the Node.js to run the script with; scriptRuntime unless given. */
   findRuntime?: () => string;
+  /**
+   * The script's arguments, written to a 0600 file in `dir` (under mn's state
+   * root, never the dApp's folder) that its environment names
+   * (CONTRACT_ARGS_FILE_ENV); the file is deleted when the script ends,
+   * however it ends.
+   */
+  args?: { dir: string; values: readonly unknown[] };
 }
 
 // How long a cancelled script has to exit on SIGTERM before it is killed outright.
 const CANCEL_GRACE_MS = 5_000;
-/** Random bytes in a generated script's name, beside the time. */
+/** Random bytes in a generated script's name, beside the pid and the time. */
 const SCRIPT_NAME_RANDOM_BYTES = 4;
+/** A generated script's name: its label, the pid of the mn that wrote it, the time, random hex. */
+const SCRIPT_NAME = /^\.mn-contract-(\d+)-\d+-[0-9a-f]+\.mjs$/;
+/** A script name of an mn before the pid was in it: the time and random hex. */
+const OLD_SCRIPT_NAME = /^\.mn-contract-\d{13}-[0-9a-f]{8}\.mjs$/;
+/** How old a script of an mn before the pid was in its name is when it is taken for a leftover: Node has long read it by then. */
+const OLD_SCRIPT_LEFTOVER_MS = 10 * 60_000;
+
+/**
+ * Deletes the generated scripts in `dappDir` that a run killed before it could
+ * clean up left (an older mn's held its arguments): one whose mn is no longer
+ * running, or, named by an mn before the pid was in the name, one older than
+ * ten minutes. Returns the names it deleted.
+ */
+export function sweepLeftoverScripts(dappDir: string, isAlive: (pid: number) => boolean = processRuns, now: number = Date.now()): string[] {
+  let names: string[];
+  try {
+    names = readdirSync(dappDir);
+  } catch {
+    return [];
+  }
+  const removed: string[] = [];
+  for (const name of names) {
+    const current = SCRIPT_NAME.exec(name);
+    let leftover = false;
+    if (current !== null) {
+      const pid = Number(current[1]);
+      leftover = pid !== process.pid && !isAlive(pid);
+    } else if (OLD_SCRIPT_NAME.test(name)) {
+      try { leftover = now - statSync(join(dappDir, name)).mtimeMs > OLD_SCRIPT_LEFTOVER_MS; } catch { /* gone */ }
+    }
+    if (!leftover) continue;
+    try {
+      unlinkSync(join(dappDir, name));
+      removed.push(name);
+    } catch { /* already gone */ }
+  }
+  return removed;
+}
 
 /** No Node.js to run a generated script with: mn runs under another runtime and none is on PATH. */
 export class NoNodeRuntimeError extends Error {
@@ -737,7 +802,7 @@ export function scriptRuntime(
 }
 
 /** Runs a generated script and returns what it wrote to stdout. Throws its marked error when it fails. */
-export async function executeScript({ dir: dappDir, script, packages, onMessage, onNotice, onPriced, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal, findRuntime = scriptRuntime }: ScriptRun): Promise<string> {
+export async function executeScript({ dir: dappDir, script, packages, onMessage, onNotice, onPriced, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal, findRuntime = scriptRuntime, args }: ScriptRun): Promise<string> {
   throwIfCancelled(signal);
   // ESM resolution walks up from the importing file's location to find
   // node_modules; NODE_PATH does NOT work for ESM. Three different files
@@ -750,17 +815,24 @@ export async function executeScript({ dir: dappDir, script, packages, onMessage,
   // last run out removes only what was made, so the dApp ends as we found it.
   // Resolved before anything is written, so a missing Node leaves the dApp as it was.
   const runtime = findRuntime();
-  // Unique to this run, so two at once in one directory never share a script.
-  const scriptPath = join(dappDir, `.mn-${label}-${Date.now()}-${randomBytes(SCRIPT_NAME_RANDOM_BYTES).toString('hex')}.mjs`);
+  sweepLeftoverScripts(dappDir);
+  // Unique to this run, so two at once in one directory never share a script;
+  // the pid lets the next run tell a leftover of a killed one.
+  const scriptPath = join(dappDir, `.mn-${label}-${process.pid}-${Date.now()}-${randomBytes(SCRIPT_NAME_RANDOM_BYTES).toString('hex')}.mjs`);
   if (overlaySdk) acquireOverlay(dappDir, packages);
+  // Deleted when the script ends; one an mn killed first left is swept by the next run (writeContractArgsFile).
+  let argsPath: string | undefined;
   const cleanup = () => {
     try { unlinkSync(scriptPath); } catch {}
+    if (argsPath !== undefined) removeContractArgsFile(argsPath);
     // Our share of the overlay goes back; the last run out undoes it (links
     // go, never their targets; a folder we made goes only once empty).
     if (overlaySdk) releaseOverlay(dappDir);
   };
   try {
-    writeFileSync(scriptPath, script);
+    // Owner-only, and never over a file that is there: it holds no argument, but is the user's.
+    writeFileSync(scriptPath, script, { mode: 0o600, flag: 'wx' });
+    if (args !== undefined) argsPath = writeContractArgsFile(args.dir, args.values);
   } catch (err) {
     cleanup();
     throw err;
@@ -774,6 +846,7 @@ export async function executeScript({ dir: dappDir, script, packages, onMessage,
         ...process.env,
         NODE_NO_WARNINGS: '1',
         ...extraEnv,
+        ...(argsPath === undefined ? {} : { [CONTRACT_ARGS_FILE_ENV]: argsPath }),
       },
     });
 

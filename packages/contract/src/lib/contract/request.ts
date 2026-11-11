@@ -10,12 +10,17 @@ import { findContractInfo, type ContractInfo } from './inspect.ts';
 import { findWitnessFile, buildMissingWitnessError } from './witness-discovery.ts';
 import { validateCallRequest, validateContractAddress } from './validate.ts';
 import { LEGACY_SECRET_KEY } from './private-state-secret.ts';
+import { type ArgsSource, readGivenArgs, type StdinReader } from './args-input.ts';
+import { expandCoinShorthands, type FreshCoin } from './coin-shorthand.ts';
+import { privateArgumentsOf } from './private-arguments.ts';
 
 export interface ContractDeployRequest {
   /** The dApp's root: the runner loads witnesses.js and keeps its level-db cache there. */
   dappDir: string;
   info: ContractInfo;
   constructorArgs: unknown[];
+  /** Where the arguments were given (--args, --args-file, --args -); absent from a request built from values. */
+  argsSource?: ArgsSource;
   /** --secret-key: seeds the contract's initial private state (32-byte hex) instead of the wallet's own secret. The script gets it through its environment. */
   privateStateSecretKey?: string;
 }
@@ -25,7 +30,14 @@ export interface ContractCallRequest {
   info: ContractInfo;
   address: string;
   circuit: string;
+  /** The circuit's arguments, every fresh-coin shorthand expanded (coin-shorthand.ts). */
   callArgs: unknown[];
+  /** The fresh coins mn made for `{"@coin": ...}` arguments, in order: where each is and its nonce. */
+  freshCoins: FreshCoin[];
+  /** Where the arguments were given (--args, --args-file, --args -); absent from a request built from values. */
+  argsSource?: ArgsSource;
+  /** The circuit's arguments its proof keeps private, as its ZK IR shows them; undefined when mn can't tell (privateArgumentsOf). */
+  privateArguments?: string[];
   /** --secret-key: the private-state secret the contract was deployed with, when not the wallet's own: 32-byte hex, or `legacy` (the default of an mn before 0.6.0). */
   privateStateSecretKey?: string;
 }
@@ -66,7 +78,9 @@ export function contractDeployRequest(location: ContractLocation & { args?: unkn
   }
   assertSecretKey(privateStateSecretKey, false);
 
-  return { dappDir, info, constructorArgs: location.args ?? [], privateStateSecretKey };
+  // A constructor's argument types aren't in contract-info.json: a fresh-coin shorthand is refused there.
+  const { args: constructorArgs } = expandCoinShorthands(location.args ?? [], undefined);
+  return { dappDir, info, constructorArgs, privateStateSecretKey };
 }
 
 /**
@@ -77,11 +91,18 @@ export function contractDeployRequest(location: ContractLocation & { args?: unkn
 export function contractCallRequest(location: ContractLocation & { address: string; circuit: string; args?: unknown[]; secretKey?: string }): ContractCallRequest {
   const { dappDir, address, circuit } = location;
   const { info } = findContractInfo(location.managedDir ?? dappDir, location.name);
-  const callArgs = location.args ?? [];
+  const given = location.args ?? [];
   validateContractAddress(address);
-  validateCallRequest(info, circuit, callArgs);
+  validateCallRequest(info, circuit, given);
   assertSecretKey(location.secretKey, true);
-  return { dappDir, info, address, circuit, callArgs, ...(location.secretKey === undefined ? {} : { privateStateSecretKey: location.secretKey }) };
+  const called = info.circuits.find((c) => c.name === circuit)!;
+  const { args: callArgs, freshCoins } = expandCoinShorthands(given, called.arguments);
+  const privateArguments = called.arguments.length === 0 ? [] : privateArgumentsOf(info.managedDir, called);
+  return {
+    dappDir, info, address, circuit, callArgs, freshCoins,
+    ...(privateArguments === undefined ? {} : { privateArguments }),
+    ...(location.secretKey === undefined ? {} : { privateStateSecretKey: location.secretKey }),
+  };
 }
 
 /** Refuses a --secret-key that is not 32 bytes of hex (or, where `legacyAllowed`, `legacy`). */
@@ -112,44 +133,52 @@ function managedDirOf(args: ParsedArgs, cwd: string): string | undefined {
   return managed === undefined ? undefined : resolve(cwd, managed);
 }
 
-/** `deploy [--args <json>] [--secret-key <hex>]` for the contract found from --managed/--path, else `cwd`. */
-export function resolveContractDeployRequest(args: ParsedArgs, cwd: string): ContractDeployRequest {
+/** The arguments a command's --args or --args-file give (args-input.ts), `--args -` read with `readStdin`. */
+function givenArgsOf(args: ParsedArgs, cwd: string, readStdin: StdinReader | undefined) {
+  return readGivenArgs({ args: getFlag(args, 'args'), argsFile: getFlag(args, 'args-file') }, cwd, readStdin);
+}
+
+/**
+ * `deploy [--args <json>|-] [--args-file <path>] [--secret-key <hex>]` for the
+ * contract found from --managed/--path, else `cwd`; `--args -` reads the
+ * standard input with `readStdin`, and is refused without one.
+ */
+export function resolveContractDeployRequest(args: ParsedArgs, cwd: string, readStdin?: StdinReader): ContractDeployRequest {
+  const given = givenArgsOf(args, cwd, readStdin);
   // --managed only says where contract-info.json lives; the runner still
   // needs the project root (--path or cwd) for witnesses.js.
-  return contractDeployRequest({
-    dappDir: resolveDappDir(args, cwd),
-    managedDir: managedDirOf(args, cwd),
-    name: getFlag(args, 'name'),
-    args: parseArgsJson(getFlag(args, 'args')),
-    secretKey: getFlag(args, 'secret-key'),
-  });
+  return {
+    ...contractDeployRequest({
+      dappDir: resolveDappDir(args, cwd),
+      managedDir: managedDirOf(args, cwd),
+      name: getFlag(args, 'name'),
+      args: given.args,
+      secretKey: getFlag(args, 'secret-key'),
+    }),
+    argsSource: given.source,
+  };
 }
 
-/** `call --address <hex> --circuit <name> [--args <json>] [--secret-key <hex|legacy>]` for the contract found from --managed/--path, else `cwd`. */
-export function resolveContractCallRequest(args: ParsedArgs, cwd: string): ContractCallRequest {
+/**
+ * `call --address <hex> --circuit <name> [--args <json>|-] [--args-file <path>]
+ * [--secret-key <hex|legacy>]` for the contract found from --managed/--path,
+ * else `cwd`; `--args -` reads the standard input with `readStdin`, and is
+ * refused without one.
+ */
+export function resolveContractCallRequest(args: ParsedArgs, cwd: string, readStdin?: StdinReader): ContractCallRequest {
   const address = requireFlag(args, 'address', 'contract address');
   const circuit = requireFlag(args, 'circuit', 'circuit name');
-  return contractCallRequest({
-    dappDir: resolveDappDir(args, cwd),
-    managedDir: managedDirOf(args, cwd),
-    name: getFlag(args, 'name'),
-    address,
-    circuit,
-    args: parseArgsJson(getFlag(args, 'args')),
-    secretKey: getFlag(args, 'secret-key'),
-  });
-}
-
-/** --args '<json>': an array is passed positionally, an object as its values in order. */
-function parseArgsJson(argsJson: string | undefined): unknown[] {
-  if (!argsJson) return [];
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(argsJson);
-  } catch (err) {
-    throw new UsageError(`Invalid --args JSON: ${(err as Error).message}`);
-  }
-  if (Array.isArray(parsed)) return parsed;
-  if (parsed !== null && typeof parsed === 'object') return Object.values(parsed);
-  throw new UsageError(`Invalid --args JSON: expected an array or an object, got ${JSON.stringify(parsed)}`);
+  const given = givenArgsOf(args, cwd, readStdin);
+  return {
+    ...contractCallRequest({
+      dappDir: resolveDappDir(args, cwd),
+      managedDir: managedDirOf(args, cwd),
+      name: getFlag(args, 'name'),
+      address,
+      circuit,
+      args: given.args,
+      secretKey: getFlag(args, 'secret-key'),
+    }),
+    argsSource: given.source,
+  };
 }

@@ -16,8 +16,12 @@ export interface ParsedArgs {
   repeated?: Record<string, Array<string | true>>;
 }
 
-/** A token that starts like a flag but is a value: a negative number such as -5 (refused later as an amount, not taken for a flag). */
-const isValueToken = (token: string): boolean => !token.startsWith('-') || /^-\d/.test(token);
+/**
+ * A token that starts like a flag but is a value: a negative number such as -5
+ * (refused later as an amount, not taken for a flag), or a lone `-`, which
+ * names the standard input (`--args -`).
+ */
+const isValueToken = (token: string): boolean => !token.startsWith('-') || token === '-' || /^-\d/.test(token);
 
 /**
  * Parse process.argv into structured command, subcommand, positionals, and flags.

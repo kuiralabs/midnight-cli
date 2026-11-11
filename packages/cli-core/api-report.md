@@ -442,6 +442,9 @@ export interface ScriptParts {
     readonly witnessCandidates: readonly string[];
     readonly indexerUrlEnv: string;
     readonly indexerWsUrlEnv: string;
+    readonly contractArgsFn: string;
+    readonly contractArgsFileEnv: string;
+    readonly heldCoinsKey: string;
 }
 export type SdkSet = 'rc';
 export declare function sdkSetOf(network: NetworkName, root: string): SdkSet;
@@ -1431,8 +1434,11 @@ export interface CallScript extends ScriptContract {
     servePort: number;
     contractAddress: string;
     circuit: string;
-    args?: unknown[];
     privateStateKey?: string;
+    heldCoinArguments?: readonly {
+        index: number;
+        name: string;
+    }[];
 }
 export interface DAppConnector {
     handlers: Record<string, RpcHandler>;
@@ -1451,7 +1457,6 @@ export interface DAppConnectorCallbacks {
 export interface DeployScript extends ScriptContract {
     servePort: number;
     privateStateKey?: string;
-    args?: unknown[];
 }
 export interface DustBalance {
     balance: bigint;
@@ -1602,6 +1607,9 @@ export interface ScriptParts {
     readonly witnessCandidates: readonly string[];
     readonly indexerUrlEnv: string;
     readonly indexerWsUrlEnv: string;
+    readonly contractArgsFn: string;
+    readonly contractArgsFileEnv: string;
+    readonly heldCoinsKey: string;
 }
 export interface ServedWalletSession {
     waitForDust(): Promise<boolean>;

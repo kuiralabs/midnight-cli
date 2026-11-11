@@ -49,8 +49,8 @@ describe('the packages the scripts need', () => {
   it('are exactly what the deploy, call and state scripts import, and the compact runtime', () => {
     const base = { dappDir: dir, networkConfig: NETWORK, managedDir: path.join(dir, 'managed', 'counter'), contractName: 'counter', servePort: 9932 };
     const imported = new Set([
-      ...bareImports(generateDeployScript({ ...base, args: [] })),
-      ...bareImports(generateCallScript({ ...base, contractAddress: 'ab'.repeat(32), circuit: 'increment', args: [] })),
+      ...bareImports(generateDeployScript(base)),
+      ...bareImports(generateCallScript({ ...base, contractAddress: 'ab'.repeat(32), circuit: 'increment' })),
       ...bareImports(generateStateScript({ dappDir: dir, networkConfig: NETWORK, managedDir: base.managedDir, contractName: 'counter', contractAddress: 'ab'.repeat(32) })),
       // The user's compiled contract imports it.
       '@midnight-ntwrk/compact-runtime',

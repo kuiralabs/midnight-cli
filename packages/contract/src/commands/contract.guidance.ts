@@ -36,9 +36,41 @@ Compile with Compact 0.36 (language 0.28): mn bundles compact-runtime
     Requires: funded wallet with dust. Auto-starts mn serve if needed.
 
   Call — call a circuit on a deployed contract:
-    midnight contract call --address <addr> --circuit <name> [--args '<json>'] [--dry-run] [--json]
-    → { contractName, circuit, address, network, status, txHash, receipt, cost }
+    midnight contract call --address <addr> --circuit <name> [--args '<json>' | --args-file <path> | --args -] [--dry-run] [--json]
+    → { contractName, circuit, address, network, status, txHash, receipt, cost, freshCoins, heldCoins }
     Example: midnight contract call --address abc123... --circuit post --args '["Hello!"]'
+
+  Arguments (deploy, call): a circuit's arguments are private inputs to
+  its proof unless the contract discloses them (a bid, a vote, a coin's
+  nonce). --args '<json>' is for public values: on the command line they
+  are in ps and the shell's history. Give private ones with
+  --args-file <path> or --args - (the standard input):
+    echo '{"bid": 5}' | midnight contract call --address <addr> --circuit bid --args -
+  mn warns (stderr; with --json, in "warnings") when --args gives an
+  argument the circuit's ZK IR shows it keeps private. Either way the
+  contract script gets its arguments through a 0600 file under
+  ~/.midnight/contract-args/, deleted when it ends: never in its text, its
+  argv or the dApp's folder.
+
+  A fresh shielded coin as an argument (call), wherever the circuit takes
+  a ShieldedCoinInfo:
+    {"@coin": {"amount": "3", "token": "NIGHT"}}
+  mn makes a random nonce, the token's colour (NIGHT, or a token's raw
+  type as 64 hex) and the value in its smallest unit (a NIGHT amount has
+  up to 6 decimals; another token's is a whole number of its smallest
+  unit). The result's freshCoins gives each one's nonce (hex), by which a
+  contract may name the coin later.
+
+  Coins the contract holds (call): after a call whose circuit takes a
+  ShieldedCoinInfo lands, mn finds the output it made for the contract,
+  its Merkle tree index from the indexer, and records the coin in the
+  contract's private state, keyed by its nonce in hex:
+    privateState.mnHeldCoins["<nonce hex>"] = { nonce, color, value, mt_index }
+  (heldCoins in the result: argument, commitment, mtIndex). A witness that
+  spends a coin the contract keeps privately (only a commitment of it on
+  chain) returns it from there:
+    held_coin: ({ privateState }, nonce) =>
+      [privateState, privateState.mnHeldCoins[Buffer.from(nonce).toString('hex')]]
 
   Cost (deploy, call): after the wallet syncs and before anything is
   proven, mn prices the transaction the way the wallet will pay for it.
@@ -108,7 +140,7 @@ Compile with Compact 0.36 (language 0.28): mn bundles compact-runtime
       body: `| "Inspect this contract" / "what circuits does this dApp expose" | \`midnight_contract_inspect({ path })\` |
 | "Deploy this contract" / "deploy on undeployed" | \`midnight_contract_deploy({ path, wallet, network })\` — two-step pending token, whose description gives the expected cost |
 | "What would deploying this cost?" | \`midnight_contract_deploy({ path, wallet, network })\` — the pending token's description gives the cost; don't confirm it |
-| "Call circuit X" / "submit a score" | \`midnight_contract_call({ address, circuit, args })\` — two-step pending token |
+| "Call circuit X" / "submit a score" | \`midnight_contract_call({ address, circuit, args })\` — two-step pending token; private arguments (a bid, a vote, a coin's nonce) go in a JSON file: \`args-file\` |
 | "What's the contract state?" / "read the ledger" | \`midnight_contract_state({ address, path })\` |
 `,
     },
@@ -134,6 +166,10 @@ Use \`midnight_contract_*\` MCP tools (or \`mn contract\` CLI). Flow: \`compact 
 
 Plain strings, booleans, fractional numbers, and \`null\` pass through unchanged. No hex-string detection — \`"1234"\` stays a string.
 
+**Private arguments.** A circuit's arguments are private inputs to its proof unless the contract discloses them. \`args\` is text in your tool call, which the host keeps: give private values in a JSON file with \`args-file\` instead (the same array or object). The confirmation and results never repeat argument values, only that arguments were given; a call whose \`args\` hold one the circuit keeps private says so in \`warnings\`. The contract script gets them through an owner-only file mn deletes, never its text or argv.
+
+**A fresh coin.** \`{"@coin": {"amount": "3", "token": "NIGHT"}}\` stands for a new shielded coin wherever the circuit takes a \`ShieldedCoinInfo\` (a random nonce, NIGHT's colour or a raw type given as 64 hex, the value in the smallest unit). The result's \`freshCoins\` gives its nonce. After the call lands, mn records each coin it gave the contract in the contract's private state under \`mnHeldCoins\` (by nonce, with its Merkle tree index), where a witness that spends a privately held coin reads it.
+
 **Compatibility caveat — runtime version skew.** Contracts must be compiled with Compact 0.36 (language 0.28). The CLI bundles \`@midnight-ntwrk/compact-runtime\` \`0.21.0\`, so contracts have to target runtime \`0.21.0\`. Artifacts built for another runtime (e.g. \`0.16.0\`, from a ledger-8 toolchain) are rejected at deploy/call with a message like \`CompactError: Version mismatch: compiled code expects 0.16.0\`. The fix is to recompile with Compact 0.36 (\`compact compile\`) rather than asking the user to change \`mn\`; a contract that must stay on the ledger-8 toolchain belongs with \`midnight-wallet-cli\` 0.5.x. \`midnight_contract_inspect\` shows the compiled \`runtimeVersion\` so you can flag the mismatch before attempting deploy.
 
 `,
@@ -146,6 +182,6 @@ Plain strings, booleans, fractional numbers, and \`null\` pass through unchanged
     { tool: 'midnight_contract_inspect', group: 'contracts', order: 10, description: ['Read circuits, witnesses, ledger shape from', 'compiled artifact (no chain access needed)'], params: ['path / managed / name'] },
     { tool: 'midnight_contract_state', group: 'contracts', order: 20, description: ["Query a deployed contract's ledger state"], params: ['address, path'] },
     { tool: 'midnight_contract_deploy', group: 'contracts', order: 30, description: ['Deploy a compiled contract (two-step pending token,', 'whose description gives the expected cost)'], params: ['path / managed'] },
-    { tool: 'midnight_contract_call', group: 'contracts', order: 40, description: ['Call a circuit on a deployed contract', '(two-step pending token; args auto-coerce numbers', 'and "123n" strings to BigInt, [0–255] to Uint8Array)'] },
+    { tool: 'midnight_contract_call', group: 'contracts', order: 40, description: ['Call a circuit on a deployed contract', '(two-step pending token; args auto-coerce numbers', 'and "123n" strings to BigInt, [0–255] to Uint8Array;', 'private ones in args-file; {"@coin": ...} a fresh coin)'] },
   ],
 };

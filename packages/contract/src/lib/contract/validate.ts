@@ -35,7 +35,7 @@ export function validateCallRequest(info: ContractInfo, circuitName: string, arg
   if (args.length !== takes) {
     const params = circuit.arguments.map((a) => a.name).join(', ');
     throw new UsageError(
-      `${circuitName} takes ${takes} argument${takes === 1 ? '' : 's'}${takes > 0 ? ` (${params})` : ''}; --args gave ${args.length}.`,
+      `${circuitName} takes ${takes} argument${takes === 1 ? '' : 's'}${takes > 0 ? ` (${params})` : ''}; ${args.length} ${args.length === 1 ? 'was' : 'were'} given.`,
     );
   }
 }

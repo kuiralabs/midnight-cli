@@ -16,11 +16,28 @@ async function checkSendingWallet(params: Readonly<Record<string, unknown>>, roo
   await loadWalletConfig(resolveWalletPath(root, params.wallet as string | undefined), engines);
 }
 
-/** What a deploy confirmation names: the dApp, the wallet, the network, the constructor's arguments. */
+/**
+ * How a confirmation names the arguments a deploy or call is given: that they
+ * were given and how, never what they are. A circuit's arguments are private
+ * inputs to its proof, and the confirmation is text the agent and its host
+ * keep.
+ */
+export function describeGivenArgs(params: Readonly<Record<string, unknown>>, what: string): string {
+  if (typeof params['args-file'] === 'string' && params['args-file'] !== '') return ` with ${what} from the file ${params['args-file']}`;
+  if (params.args !== undefined && params.args !== '') return ` with ${what} (given, not shown)`;
+  return '';
+}
+
+/** What a deploy confirmation names: the dApp, the wallet, the network, and whether constructor arguments were given (never their values). */
 function describeDeploy(params: Readonly<Record<string, unknown>>): string {
   const { network, wallet } = confirmationTarget(params);
-  const argsHint = params.args ? ` with args ${params.args}` : '';
-  return `Deploy contract from ${params.path ?? 'current directory'} as ${wallet} on ${network}${argsHint}`;
+  return `Deploy contract from ${params.path ?? 'current directory'} as ${wallet} on ${network}${describeGivenArgs(params, 'constructor arguments')}`;
+}
+
+/** What a call confirmation names: the circuit, the contract, the wallet, the network, and whether arguments were given (never their values). */
+function describeCall(params: Readonly<Record<string, unknown>>): string {
+  const { network, wallet } = confirmationTarget(params);
+  return `Call circuit ${params.circuit} on contract ${params.address} as ${wallet} on ${network}${describeGivenArgs(params, 'arguments')}`;
 }
 
 export const contractDefinition: CommandDefinition = {
@@ -40,9 +57,20 @@ export const contractDefinition: CommandDefinition = {
       takesValue: true,
       subcommands: ['deploy', 'call'],
       help: [
-        '--args \'<json>\'               JSON arguments — constructor args (deploy) or circuit args (call). Numbers auto-coerce to BigInt; "123n" strings parse as BigInt; arrays of 0–255 ints become Uint8Array',
+        '--args \'<json>\'               JSON arguments, for public values only: constructor args (deploy) or circuit args (call). Numbers auto-coerce to BigInt; "123n" strings parse as BigInt; arrays of 0–255 ints become Uint8Array. On the command line they are in ps and the shell\'s history: a circuit\'s arguments are private inputs to its proof, so give private ones with --args-file or --args -, and mn warns when it sees a circuit keep one private',
+        '--args -                      Read the JSON arguments from the standard input (deploy, call): echo \'{"bid": 5}\' | mn contract call ... --args -',
+        '"@coin" in the arguments      {"@coin": {"amount": "3", "token": "NIGHT"}} is a fresh shielded coin, anywhere the circuit takes a ShieldedCoinInfo (call): mn makes a random nonce, the token\'s colour (NIGHT, or a raw type as 64 hex) and the value in its smallest unit (a NIGHT amount has up to 6 decimals; another token\'s is a whole number of its smallest unit). The result gives each fresh coin\'s nonce (freshCoins)',
       ],
-      agent: { type: 'string', description: 'JSON-encoded array or object of circuit arguments' },
+      agent: { type: 'string', description: 'JSON-encoded array or object of circuit arguments, for public values: the confirmation and results never repeat them, but they are text in the tool call. Give private ones (a bid, a vote, a coin\'s nonce) with args-file. {"@coin": {"amount": "3", "token": "NIGHT"}} stands for a fresh shielded coin wherever the circuit takes a ShieldedCoinInfo; the result gives its nonce (freshCoins)' },
+    },
+    {
+      name: 'args-file',
+      takesValue: true,
+      subcommands: ['deploy', 'call'],
+      help: [
+        '--args-file <path>            Read the JSON arguments from a file (deploy, call), for private values: they stay off the command line. The contract script gets them through a 0600 file under ~/.midnight/contract-args/ that is deleted when it ends; no argument is ever written into the dApp\'s folder',
+      ],
+      agent: { type: 'string', description: 'Path of a JSON file of the arguments (an array, or an object in the circuit\'s order): for private values, which then never appear in the tool call. Not with args' },
     },
     {
       name: 'circuit',
@@ -144,6 +172,7 @@ export const contractDefinition: CommandDefinition = {
       { flag: 'address' },
       { flag: 'circuit' },
       { flag: 'args' },
+      { flag: 'args-file' },
       { flag: 'network' },
       { flag: 'path' },
       { flag: 'managed' },
@@ -162,6 +191,9 @@ export const contractDefinition: CommandDefinition = {
       'midnight contract deploy',
       'midnight contract deploy --args \'{"deadlineSecs": 300}\'',
       'midnight contract call --address 0x123 --circuit submit_score --args \'{"score": 100, "alias": "TEST"}\'',
+      'midnight contract call --address 0x123 --circuit bid --args-file bid.json',
+      'echo \'{"vote": 1}\' | midnight contract call --address 0x123 --circuit vote --args -',
+      'midnight contract call --address 0x123 --circuit lock --args \'{"coin": {"@coin": {"amount": "3", "token": "NIGHT"}}, "unlock": 1794378400}\'',
       'midnight contract state --address 0x123',
       'midnight contract deploy --json',
       'midnight contract deploy --dry-run',
@@ -179,6 +211,9 @@ export const contractDefinition: CommandDefinition = {
       status: 'What the call reported (call)',
       cost: 'The deploy\'s or call\'s price before it was proven (deploy, call; absent when the mn serve that paid gave none): fee (expected fee at the chain\'s fee prices now, DUST as a decimal string), committed (Dust the wallet commits to it: the fee with its margin, all of it burned), have (Dust the wallet holds), covers (whether have covers committed), waitSeconds (how long its registered NIGHT takes to generate the rest; 0 when it covers, null when not within a day), marginBlocks',
       dryRun: 'true when --dry-run priced the deploy or call and stopped: nothing was proven or sent, and there is no address, txHash or receipt (deploy, call)',
+      freshCoins: 'The fresh coins mn made for {"@coin": ...} arguments: [{argument, nonce}], the nonce in hex, by which a contract may name the coin later (call; absent when none)',
+      heldCoins: 'The coins the call gave the contract, recorded in its private state under mnHeldCoins (by nonce) for a witness to spend: [{argument, commitment, mtIndex}] (call; absent when none)',
+      warnings: 'Notes on the call: --args gave arguments its circuit keeps private, which belong in --args-file or --args - (call)',
       fields: 'Ledger fields, each a string (state)',
       maps: 'Ledger maps, each with its size (state)',
       raw: 'The ledger state undecoded, when the compiled contract is not at hand (state)',
@@ -237,8 +272,9 @@ export const contractDefinition: CommandDefinition = {
         params: [
           { flag: 'wallet' },
           { flag: 'network' },
-          // As this tool showed it before tool schemas came from the flags.
-          { flag: 'args', schema: { type: 'string', description: 'JSON-encoded array or object of constructor arguments' } },
+          // As this tool showed it before tool schemas came from the flags, saying what it is for.
+          { flag: 'args', schema: { type: 'string', description: 'JSON-encoded array or object of constructor arguments, for public values: the confirmation and results never repeat them. Give private ones with args-file' } },
+          { flag: 'args-file' },
           { flag: 'path' },
           { flag: 'managed' },
           { flag: 'name' },
@@ -286,6 +322,7 @@ export const contractDefinition: CommandDefinition = {
           { flag: 'wallet' },
           { flag: 'network' },
           { flag: 'args' },
+          { flag: 'args-file' },
           { flag: 'path' },
           { flag: 'managed' },
           { flag: 'name' },
@@ -293,11 +330,7 @@ export const contractDefinition: CommandDefinition = {
         required: ['address', 'circuit'],
         argv: { subcommand: 'call', flags: 'rest' },
         confirmation: {
-          describe: (params) => {
-            const { network, wallet } = confirmationTarget(params);
-            const argsHint = params.args ? ` with args ${params.args}` : '';
-            return `Call circuit ${params.circuit} on contract ${params.address} as ${wallet} on ${network}${argsHint}`;
-          },
+          describe: describeCall,
           async check(params, call) {
             const { resolveContractCallRequest } = await import('../lib/contract/request.ts');
             const args = call.argv();
