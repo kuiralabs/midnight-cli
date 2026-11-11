@@ -1,6 +1,6 @@
 {
   "name": "@kuiralabs/midnight-cli-core",
-  "version": "0.1.0-rc.3",
+  "version": "0.1.0",
   "type": "module",
   "description": "The base of the Midnight CLI packages: arguments, typed errors and exit codes, JSON output, config, the state root, network endpoints, terminal formatting, the command registry contract, the payer and the SDK engine interface",
   "license": "Apache-2.0",

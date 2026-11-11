@@ -1,6 +1,6 @@
 {
   "name": "@kuiralabs/midnight-grant",
-  "version": "0.1.0-rc.3",
+  "version": "0.1.0",
   "type": "module",
   "description": "Grants for the Midnight CLI packages: mn grant (the wallet owner's account and the grants that let an agent spend from it, its owner devices and backups) over @kuiralabs/midnight-account-chain, and the protector wallet protect seals the accounts' records with",
   "license": "Apache-2.0",
@@ -37,9 +37,9 @@
   },
   "dependencies": {
     "@kuiralabs/midnight-account": "0.2.0-rc.1",
-    "@kuiralabs/midnight-chain": "0.1.0-rc.3",
-    "@kuiralabs/midnight-cli-core": "0.1.0-rc.3",
-    "@kuiralabs/midnight-contract": "0.1.0-rc.3",
-    "@kuiralabs/midnight-wallet": "0.1.0-rc.3"
+    "@kuiralabs/midnight-chain": "0.1.0",
+    "@kuiralabs/midnight-cli-core": "0.1.0",
+    "@kuiralabs/midnight-contract": "0.1.0",
+    "@kuiralabs/midnight-wallet": "0.1.0"
   }
 }
