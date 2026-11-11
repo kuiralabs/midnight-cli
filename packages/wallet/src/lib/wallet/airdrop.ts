@@ -5,7 +5,7 @@
 
 import { type Host, throwIfCancelled, UsageError, type NetworkName, addressPrefix, looksLikeShieldedAddress, networkTargetOf, refuseOnMainnet, progressSteps, withCallSdkWarnings, nightAmountText, GENESIS_SEED, type HostEngines } from '@kuiralabs/midnight-cli-core';
 import { silentSpinner } from '@kuiralabs/midnight-cli-core/ui';
-import { assertNetworkReady, explainProofFailure, type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
+import { assertNetworkReady, checkBalance, explainProofFailure, type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
 import { resolveWalletPath, saveShieldedAddress, walletAddress, walletShieldedAddress, type UnlockHost } from '../wallet-config.ts';
 import { receiptOfSubmitted, saySyncPercent, submitSteps } from './submit-steps.ts';
 import { networkChoiceOf, type WalletCallOptions } from './wallet-call.ts';
@@ -46,6 +46,13 @@ export interface NightAirdrop {
   readonly shielded: boolean;
   /** The transaction once the indexer lists it, or why it is missing; absent when `receiptWaitMs` is 0. */
   readonly receipt?: Receipt;
+  /**
+   * Whether the recipient's unshielded NIGHT is registered for Dust
+   * generation, read once the indexer lists the airdrop: false means the
+   * wallet can't pay a fee until it registers (`midnight dust register`).
+   * Absent for a shielded airdrop, or when it couldn't be read.
+   */
+  readonly dustRegistered?: boolean;
 }
 
 /**
@@ -134,7 +141,23 @@ export async function airdropNight(host: Host, options: AirdropNightOptions): Pr
   }).catch(async (err: unknown) => { throw await explainProofFailure(err, networkConfig.proofServer, signal); });
 
   const receipt = await receiptOfSubmitted(networkConfig.indexer, txHash, steps, signal, receiptWaitMs);
-  return { network, txHash, recipient, shielded, ...(receipt === undefined ? {} : { receipt }) };
+  const dustRegistered = shielded ? undefined : await dustRegistrationOf(recipient, networkConfig.indexerWS, signal);
+  return { network, txHash, recipient, shielded, ...(receipt === undefined ? {} : { receipt }), ...(dustRegistered === undefined ? {} : { dustRegistered }) };
+}
+
+/**
+ * Whether `address` has unshielded NIGHT registered for Dust generation, from
+ * the indexer's coins alone (no seed, no passphrase), as `mn dev` reads it of
+ * a wallet it reuses: NIGHT arriving at a registered address generates Dust
+ * with the rest. Undefined when the read fails: the airdrop stands either way.
+ */
+async function dustRegistrationOf(address: string, indexerWS: string, signal: AbortSignal | undefined): Promise<boolean | undefined> {
+  try {
+    return (await checkBalance(address, indexerWS, undefined, signal)).registeredUtxos > 0;
+  } catch {
+    throwIfCancelled(signal);
+    return undefined;
+  }
 }
 
 /** Where an airdrop goes: its address, and the wallet file to keep it when it is a wallet's shielded address. */

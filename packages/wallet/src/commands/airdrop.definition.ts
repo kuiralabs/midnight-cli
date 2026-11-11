@@ -50,9 +50,10 @@ export const airdropDefinition: CommandDefinition = {
   ],
   help: {
     description: 'Fund a wallet from the genesis wallet (undeployed network only)',
-    usage: 'midnight airdrop <amount> [--shielded] [--wallet <name|file|address>] [--network <name>] [--node <url>] [--indexer-ws <url>] [--proof-server <url>] [--verbose]',
+    usage: 'midnight airdrop [<amount>] [--shielded] [--wallet <name|file|address>] [--network <name>] [--node <url>] [--indexer-ws <url>] [--proof-server <url>] [--verbose]',
     flags: [
-      '<amount>             Amount in NIGHT to airdrop',
+      `<amount>             Amount in NIGHT to airdrop (default: ${LOCAL_WALLET_FUNDING_NIGHT}, whose Dust`,
+      '                     pays fees without waiting once registered)',
       { flag: 'shielded' },
       { flag: 'wallet' },
       { flag: 'network' },
@@ -62,7 +63,7 @@ export const airdropDefinition: CommandDefinition = {
       { flag: 'verbose' },
     ],
     examples: [
-      `midnight airdrop ${LOCAL_WALLET_FUNDING_NIGHT}`,
+      'midnight airdrop',
       'midnight airdrop 1000 --wallet alice',
       'midnight airdrop 10000 --wallet mn_addr_undeployed1...',
       'midnight airdrop 100 --shielded',
@@ -76,6 +77,7 @@ export const airdropDefinition: CommandDefinition = {
       recipient: 'Recipient address (the shielded address with --shielded)',
       shieldedAddress: 'The same shielded address as recipient (--shielded airdrop; kept for older readers)',
       network: 'Network name',
+      dustRegistered: 'Whether the wallet\'s unshielded NIGHT is registered for Dust generation (unshielded airdrop; absent when it could not be read). false: run midnight dust register before the wallet pays a fee',
     },
   },
   intro: { brief: 'Fund from genesis wallet', order: 7 },
@@ -87,14 +89,13 @@ export const airdropDefinition: CommandDefinition = {
     tools: [
       {
         name: 'midnight_airdrop',
-        description: 'Fund from genesis (undeployed). `wallet` accepts a wallet name, a wallet JSON path, or a raw bech32m address (mn_addr_… or mn_shield-addr_…). Add `shielded: true` to fund a shielded balance.',
+        description: `Fund from genesis (undeployed). \`amount\` defaults to ${LOCAL_WALLET_FUNDING_NIGHT} NIGHT, whose Dust pays fees without waiting once registered. \`wallet\` accepts a wallet name, a wallet JSON path, or a raw bech32m address (mn_addr_… or mn_shield-addr_…). Add \`shielded: true\` to fund a shielded balance. The result's \`dustRegistered: false\` means the wallet must register (\`midnight_dust_register\`) before it can pay a fee.`,
         annotations: { destructiveHint: true, openWorldHint: true },
         params: [
-          { name: 'amount', schema: { type: 'string', description: 'NIGHT' } },
+          { name: 'amount', schema: { type: 'string', description: `NIGHT (default ${LOCAL_WALLET_FUNDING_NIGHT})` } },
           { flag: 'wallet' },
           { flag: 'shielded' },
         ],
-        required: ['amount'],
         argv: { subcommand: { param: 'amount' }, flags: 'rest' },
         order: 11,
       },
