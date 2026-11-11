@@ -1,7 +1,7 @@
 // Minimal in-process indexer for the direct readers: speaks the
 // graphql-transport-ws handshake and replays a fixture's ledger events from the
 // subscription's start id, under the subscription field the reader asks for
-// (`zswapLedgerEvents` or `dustLedgerEvents`). Stubs the external indexer
+// (`zswapLedgerEvents` or `dustLedgerEvents`), and refuses a subscription to the other. Stubs the external indexer
 // boundary only — the reader under test is real. It records each subscription
 // it takes, and leaves the socket open: the reader finishes when it sees
 // id >= maxId, or goes idle.
@@ -37,6 +37,11 @@ export function startFakeEventIndexer(
         }
         if (msg.type === 'subscribe') {
           subscriptions.push({ query: msg.payload?.query, variables: msg.payload?.variables });
+          // A subscription to another stream than this indexer's is refused, as an indexer refuses a field it lacks.
+          if (!String(msg.payload?.query ?? '').includes(field)) {
+            socket.send(JSON.stringify({ id: msg.id, type: 'error', payload: [{ message: `This indexer serves ${field} only` }] }));
+            return;
+          }
           const startId: number = msg.payload?.variables?.id ?? 0;
           for (const e of events) {
             if (e.id < startId) continue;

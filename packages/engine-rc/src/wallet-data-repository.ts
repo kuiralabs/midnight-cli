@@ -287,6 +287,30 @@ export class WalletDataRepository {
     opts.log?.('shielded', `Shielded checkpoint at event ${read.lastAppliedEventId}${read.partial ? ' (partial)' : ''}`);
   }
 
+  /**
+   * A facade to write with, for a caller that syncs and stops it itself (mn
+   * serve's DApp connector for a session, a test's preparation): the Dust and
+   * shielded checkpoints read first, as withFacade reads them, then the
+   * wallet's saved state restored, or a new wallet's on the Dust checkpoint.
+   * Each read is best-effort: one that fails leaves its wallet to sync itself
+   * (on a forked chain the facade then refuses to build, WALLET_BEHIND_FORK).
+   */
+  async primedFacade(seed: Buffer, network: NetworkConfig, opts: { root: string; notice: NoticeSink; signal?: AbortSignal; onStatus?: (status: string) => void; log?: VerboseLog }): Promise<FacadeBundle> {
+    const { root, notice, signal, onStatus, log } = opts;
+    try {
+      await this.dust(seed, network, { root, notice, signal, onStatus, log });
+    } catch {
+      throwIfCancelled(signal); // a cancel is not a failed read
+    }
+    try {
+      await this.primeShielded(seed, network, { root, signal, onStatus, log });
+    } catch {
+      throwIfCancelled(signal);
+    }
+    const cache = await this.walletStateToRestore(seed, network, networkNameOf(network), root, notice, log);
+    return buildFacade(seed, network, root, notice, cache, log);
+  }
+
   // ── Reads ─────────────────────────────────────────
 
   async dust(seed: Buffer, network: NetworkConfig, opts: CachedReadOptions): Promise<DustView> {

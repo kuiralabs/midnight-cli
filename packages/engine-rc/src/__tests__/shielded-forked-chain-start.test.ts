@@ -137,6 +137,20 @@ describe('a wallet on a chain that forked from ledger 8 (preprod)', () => {
     }
   });
 
+  it('mn serve\'s connector and a test\'s preparation build a new wallet with its shielded wallet on ledger 9', async () => {
+    // Both build through primedFacade (wallet.ts: openConnector, syncedPrepWallet); the test preparation built from
+    // its saved state alone, so on preprod a new wallet's shielded wallet started at 22000 and its Dust registration was refused.
+    // The Dust read finds no Dust stream here and is skipped, as a failed read is.
+    const bundle = await new WalletDataRepository(testHost()).primedFacade(SEED, network, { root, notice: (line) => notices.push(line) });
+    try {
+      const shielded = await shieldedOf(bundle);
+      expect(shielded.protocolVersion).toBe(BigInt(PREPROD_TIP.protocolVersion));
+      expect(shielded.night).toBe(NIGHT_150M);
+    } finally {
+      await stopFacade(bundle);
+    }
+  });
+
   it('reads nothing when the saved shielded wallet is past the fork already', async () => {
     await new WalletDataRepository(testHost()).primeShielded(SEED, network, { root });
     const bundle = await built();

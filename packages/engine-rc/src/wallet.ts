@@ -4,7 +4,7 @@
 // themselves before the SDK moved behind the engine.
 
 import { deriveUnshieldedAddress } from './derive-address.ts';
-import { assertSpendsNoOfferCoin, type DAppConnector, type EngineWallet, type OpenedConnector, type PrepWallet, type ServedWalletSession, type ShieldedTransferParams, reportingEngineErrors, getNetworkId, bindCachesToIndexer, describeIndexerChange, loadWalletCache, saveWalletCache, DUST_SHORT_WAIT_MS, payWhenDustCovers, proveWithin, submitWithin, PROOF_TIMEOUT_MS, DUST_DOUBLE_SPEND_RETRIES, isDroppedFromPool, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin } from '@kuiralabs/midnight-cli-core/engine';
+import { assertSpendsNoOfferCoin, type DAppConnector, type EngineWallet, type OpenedConnector, type PrepWallet, type ServedWalletSession, type ShieldedTransferParams, reportingEngineErrors, getNetworkId, bindCachesToIndexer, describeIndexerChange, saveWalletCache, DUST_SHORT_WAIT_MS, payWhenDustCovers, proveWithin, submitWithin, PROOF_TIMEOUT_MS, DUST_DOUBLE_SPEND_RETRIES, isDroppedFromPool, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin } from '@kuiralabs/midnight-cli-core/engine';
 import { readOpenOffers, InsufficientBalanceError, throwIfCancelled, walletDustLock, walletDustLockFile, DustDoubleSpentError, RERUN_DOUBLE_SPENT_STATUS, RERUN_INVALIDATED_STATUS, TransactionInvalidatedError } from '@kuiralabs/midnight-cli-core';
 import { trackElapsed } from '@kuiralabs/midnight-cli-core/ui';
 import { spentNullifiers } from './offer-reader.ts';
@@ -13,7 +13,7 @@ import * as rx from 'rxjs';
 import { MidnightBech32m } from '@midnightntwrk/wallet-sdk/address-format';
 import { assertLedgerSupported } from '@kuiralabs/midnight-chain';
 import { decodeShieldedAddress } from './addresses.ts';
-import { buildFacade, hasDustAvailable, isFacadeSynced, quickSync, startAndSyncFacade, stopFacade, waitForDustAvailable } from './facade.ts';
+import { hasDustAvailable, isFacadeSynced, type FacadeBundle, quickSync, startAndSyncFacade, stopFacade, waitForDustAvailable } from './facade.ts';
 import { refusedFeeCheck } from './fee-refusal.ts';
 import { awaitDustSpendSeen, pendingDustNonces } from './dust-spend-seen.ts';
 import { ensureDust, executeTransfer, transactionIdOf } from './transfer.ts';
@@ -153,10 +153,15 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
   );
 }
 
-/** The wallet a test's preparation checks, built from its saved state and synced quickly (no shielded sync). */
-async function syncedPrepWallet(wallet: PrepWallet, reportSync: boolean, beforeSync?: () => void) {
+/**
+ * The wallet a test's preparation checks and pays with, synced quickly (no
+ * shielded sync): built as mn serve's is, on the Dust and shielded checkpoints
+ * read first, so on a chain that forked from ledger 8 all three of its wallets
+ * start past the fork.
+ */
+async function syncedPrepWallet(repo: WalletDataRepository, wallet: PrepWallet, reportSync: boolean, beforeSync?: () => void) {
   bindCachesToIndexer(wallet.network, wallet.networkConfig.indexerWS, wallet.root);
-  const bundle = await buildFacade(wallet.seed, wallet.networkConfig, wallet.root, wallet.notice, loadWalletCache(wallet.address, wallet.network, wallet.root));
+  const bundle = await repo.primedFacade(wallet.seed, wallet.networkConfig, { root: wallet.root, notice: wallet.notice, signal: wallet.signal, onStatus: wallet.onMessage });
   try {
     beforeSync?.();
     const state = await startAndSyncFacade(bundle, {
@@ -181,8 +186,8 @@ async function syncedPrepWallet(wallet: PrepWallet, reportSync: boolean, beforeS
   }
 }
 
-async function prepNightBalance(wallet: PrepWallet): Promise<bigint> {
-  const { bundle, state } = await syncedPrepWallet(wallet, true);
+async function prepNightBalance(repo: WalletDataRepository, wallet: PrepWallet): Promise<bigint> {
+  const { bundle, state } = await syncedPrepWallet(repo, wallet, true);
   try {
     const balance = state.unshielded.balances[ledger.unshieldedToken().raw] ?? 0n;
     if (balance > 0n) {
@@ -194,8 +199,8 @@ async function prepNightBalance(wallet: PrepWallet): Promise<bigint> {
   }
 }
 
-async function prepDust(wallet: PrepWallet, waitMs: number): Promise<{ alreadyAvailable: boolean; dustAvailable: boolean }> {
-  const { bundle } = await syncedPrepWallet(wallet, false, () => wallet.onMessage('Syncing wallet...'));
+async function prepDust(repo: WalletDataRepository, wallet: PrepWallet, waitMs: number): Promise<{ alreadyAvailable: boolean; dustAvailable: boolean }> {
+  const { bundle } = await syncedPrepWallet(repo, wallet, false, () => wallet.onMessage('Syncing wallet...'));
   try {
     // Register dust (auto-registers UTXOs if needed, no-op if already available)
     wallet.onMessage('Ensuring dust...');
@@ -226,30 +231,17 @@ async function openConnector(repo: WalletDataRepository, options: Parameters<Eng
   await assertLedgerSupported(network, networkConfig, undefined, signal);
   // A failure before the connector is handed back stops what was started, so
   // the facade doesn't keep syncing.
-  let bundle: Awaited<ReturnType<typeof buildFacade>> | undefined;
+  let bundle: FacadeBundle | undefined;
   let connector: DAppConnector;
   try {
     // Build & sync facade
     onMessage('Building wallet facade...');
     const indexerChange = bindCachesToIndexer(network, networkConfig.indexerWS, root);
     if (indexerChange) onMessage(describeIndexerChange(network, indexerChange));
-    // As the repository's own borrowers do: warm the Dust checkpoint, then
-    // restore from it when there is no saved wallet, instead of the SDK
-    // replaying the chain's whole Dust history (minutes on a hosted network).
-    // Best-effort, as there: a failed warm-up leaves the sync below to do it.
-    try {
-      await repo.dust(seed, networkConfig, { root, notice, signal, onStatus: onMessage });
-    } catch {
-      throwIfCancelled(signal); // a cancel is not a failed warm-up
-    }
-    // And the shielded checkpoint, on a chain that forked from ledger 8.
-    try {
-      await repo.primeShielded(seed, networkConfig, { root, signal, onStatus: onMessage });
-    } catch {
-      throwIfCancelled(signal);
-    }
-    const cache = await repo.walletStateToRestore(seed, networkConfig, network, root, notice);
-    const built = await buildFacade(seed, networkConfig, root, notice, cache);
+    // As the repository's own borrowers do: warm the Dust and shielded
+    // checkpoints, then restore from them when there is no saved wallet,
+    // instead of the SDK replaying the chain's whole history.
+    const built = await repo.primedFacade(seed, networkConfig, { root, notice, signal, onStatus: onMessage });
     bundle = built;
 
     onMessage('Syncing wallet...');
@@ -376,8 +368,8 @@ export function createRcWallet(repo: WalletDataRepository): EngineWallet {
     shieldedTransfer: (params) => shieldedTransfer(repo, params),
     registerDust: (seed, networkConfig, options) => registerDust(repo, seed, networkConfig, options),
     exportDust: (seed, network, networkConfig, options) => exportDustSnapshot(seed, network, networkConfig, { ...options, repository: repo }),
-    prepNightBalance,
-    prepDust,
+    prepNightBalance: (wallet) => prepNightBalance(repo, wallet),
+    prepDust: (wallet, waitMs) => prepDust(repo, wallet, waitMs),
     openConnector: (options) => openConnector(repo, options),
     serveWallet: (options, serve) => serveWallet(repo, options, serve),
   });
