@@ -39,5 +39,8 @@
     "@kuiralabs/midnight-cli-core": "0.1.0",
     "@kuiralabs/midnight-wallet": "0.1.0",
     "ws": "^8.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

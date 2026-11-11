@@ -38,5 +38,8 @@
     "@kuiralabs/midnight-chain": "0.1.0",
     "@kuiralabs/midnight-cli-core": "0.1.0",
     "@scure/bip39": "^2.0.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

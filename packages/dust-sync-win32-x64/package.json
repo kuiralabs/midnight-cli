@@ -19,5 +19,8 @@
   },
   "bugs": {
     "url": "https://github.com/kuiralabs/midnight-cli/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
