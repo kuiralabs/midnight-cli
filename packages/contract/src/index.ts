@@ -12,6 +12,7 @@
 export { type CallContractOptions, type CalledCircuit, callContract, priceContractCall } from './lib/contract/call.ts';
 export { type ContractCost, contractCostJson, contractCostOf, type ContractPriced, type PricedContract } from './lib/contract/cost.ts';
 export { type DeployContractOptions, type DeployedContract, deployContract, priceContractDeploy } from './lib/contract/deploy.ts';
+export { ContractAssertionError } from './lib/contract/assertion.ts';
 export { contractExists } from './lib/contract/exists.ts';
 export { type CircuitInfo, type CompactType, type ContractInfo, ContractInfoInvalidError, ContractNotCompiledError, findContractInfo, type WitnessInfo } from './lib/contract/inspect.ts';
 export { clearDappPrivateState, clearNetworkContractState, contractStateDir, PRIVATE_STATE_DATABASE } from './lib/contract/private-state.ts';

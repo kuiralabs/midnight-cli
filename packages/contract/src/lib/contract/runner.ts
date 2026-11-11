@@ -20,6 +20,7 @@ import { resolvePrivateStateSecretKey } from './private-state-secret.ts';
 import { openPrivateStateStore } from './private-state-store.ts';
 import { CONTRACT_STATE_BUSY, ContractStateBusyError, PRIVATE_STATE_BUSY_WAIT_MS, SCRIPT_NOTICE_MARKER, acquireContractCallLock, holderCommandOf, privateStateBusyText, privateStateNameOf, processIsAlive, waitForPrivateState } from './private-state-lock.ts';
 import { callStateDir, deployStateDir, dropEmptyDeployState, keepDeployState, moveDappStore } from './private-state.ts';
+import { CONTRACT_ASSERTION_FAILED, failedAssertionOf, namingFailedAssertion } from './assertion.ts';
 
 // The generated deploy/call script imports SDK packages by bare specifier
 // (`@midnight-ntwrk/midnight-js-contracts`, `ws`, etc.); without help, Node
@@ -186,7 +187,7 @@ async function executeDeployScript(options: DeployOptions, extraEnv: Record<stri
     return { stdout, staging };
   } catch (err) {
     keepFailedDeployState(staging, notice);
-    throw err;
+    throw namingFailedAssertion(err, options.contractName, undefined);
   }
 }
 
@@ -267,7 +268,7 @@ async function executeCallScript(options: CallOptions, extraEnv: Record<string, 
   try {
     return await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, onPriced: options.onPriced, env, signal: options.signal });
   } catch (err) {
-    throw namingUnreadableState(err, options.contractAddress);
+    throw namingFailedAssertion(namingUnreadableState(err, options.contractAddress), options.contractName, options.circuit);
   } finally {
     release();
   }
@@ -399,16 +400,23 @@ const TRANSPORT_FAILURE_FN = `\nconst isTransportFailure = (${isTransportFailure
 // contract state the ledger can't decode is reported with what the ledger said.
 const STATE_DECODE_FAILURE_FN = `\nconst stateDecodeFailureOf = (${stateDecodeFailureOf.toString()});\n`;
 
+// failedAssertionOf serialized for the generated script, the same way: an
+// assert the circuit or constructor failed is reported with its own text.
+const FAILED_ASSERTION_FN = `\nconst failedAssertionOf = (${failedAssertionOf.toString()});\n`;
+
 /** The code a script reports a contract state the ledger can't decode with: the runner names the contract (ContractStateUnreadableError). */
 const CONTRACT_STATE_UNREADABLE = 'CONTRACT_STATE_UNREADABLE';
 
 /**
  * First in every generated script: report any failure (a rejected top-level
  * await included) as one marked line, its message and its code, then exit 1:
- * the code it carries (mn serve's code for a failure there), or NETWORK_ERROR
+ * the code it carries (mn serve's code for a failure there), NETWORK_ERROR
  * for a connection that could not be made, which carries only the socket's
- * (ECONNREFUSED) or none. Without it Node prints the uncaught exception with
- * its source context, and that became mn's error.
+ * (ECONNREFUSED) or none, or CONTRACT_ASSERTION_FAILED with the assert's own
+ * text for a Compact assert that failed (midnight-js's error carries a code of
+ * its own, MIDNIGHT_JS_P_CONTRACT_EXECUTION_FAILED, which mn doesn't define).
+ * Without it Node prints the uncaught exception with its source context, and
+ * that became mn's error.
  *
  * midnight-js 5 reports a provider's failure as its own ProviderFailedError,
  * rebuilding the provider's error on `cause` with its message and nothing
@@ -416,13 +424,15 @@ const CONTRACT_STATE_UNREADABLE = 'CONTRACT_STATE_UNREADABLE';
  * keeps the last refusal it received (rpcClientCode), and a failure of the
  * providers backed by mn serve is reported as that refusal.
  */
-export const SCRIPT_PRELUDE = `${TRANSPORT_FAILURE_FN}${STATE_DECODE_FAILURE_FN}
+export const SCRIPT_PRELUDE = `${TRANSPORT_FAILURE_FN}${STATE_DECODE_FAILURE_FN}${FAILED_ASSERTION_FN}
 const SERVE_BACKED_PROVIDER_METHODS = ['balanceTx', 'submitTx'];
 const fail = (e) => {
   const refusal = globalThis.mnServeRefusal;
   if (e?.name === 'ProviderFailedError' && SERVE_BACKED_PROVIDER_METHODS.includes(e.method) && refusal) e = refusal;
   const unreadable = stateDecodeFailureOf(e);
   if (unreadable !== undefined) e = Object.assign(new Error(unreadable), { code: '${CONTRACT_STATE_UNREADABLE}' });
+  const assertion = failedAssertionOf(e);
+  if (assertion !== undefined) e = Object.assign(new Error(assertion), { code: '${CONTRACT_ASSERTION_FAILED}' });
   const carried = typeof e?.code === 'string' && !isTransportFailure({ code: e.code }) ? e.code : undefined;
   const code = carried ?? (isTransportFailure(e) ? 'NETWORK_ERROR' : undefined);
   const failure = { message: String(e?.message ?? e), ...(code === undefined ? {} : { code }) };
