@@ -17,7 +17,7 @@ import type { RpcHandler } from './connector-api.ts';
 import type { Spinner } from '../ui/spinner.ts';
 import type { Host } from './host.ts';
 
-/** The SDK set mn runs on: the SDK's release candidates. */
+/** The SDK set mn runs on: the ledger-9 set (wallet SDK 2.0.0, ledger-v9 1.0.0, midnight-js 5.0.0), named `rc` from when it was built on the SDK's release candidates. */
 export type SdkSet = 'rc';
 
 /** A wallet's keys and addresses, derived from its seed. Every set derives the same ones. */

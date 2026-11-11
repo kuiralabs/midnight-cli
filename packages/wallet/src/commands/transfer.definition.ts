@@ -110,6 +110,7 @@ export const transferDefinition: CommandDefinition = {
       recipient: 'Recipient address (bech32m); with one recipient only',
       recipients: 'With several recipients: each as { recipient, amount }, in order, plus selfTransfer: true on one that is the sending wallet itself',
       network: 'Network name',
+      type: '"shielded" with --shielded (absent otherwise)',
       selfTransfer: 'With one recipient: true when it is the sending wallet itself (absent otherwise)',
       note: 'With selfTransfer: the NIGHT paid to the sending wallet itself stays in it',
     },

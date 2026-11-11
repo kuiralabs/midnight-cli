@@ -5,7 +5,7 @@
 // search and scroll. Disable with --no-pager.
 
 import { spawn } from 'node:child_process';
-import { type ParsedArgs, hasFlag, getFlag, type CallContext, type CallOutput } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, hasFlag, getFlag, type CallContext, type CallOutput, PROOF_SERVER_DOCKER_RUN } from '@kuiralabs/midnight-cli-core';
 import { bold, dim, teal, yellow, white, isColorEnabled } from '@kuiralabs/midnight-cli-core/ui';
 import { helpSpecs, type CommandSpec } from './help.ts';
 import { PKG_NAME, PKG_VERSION, PKG_REPOSITORY_URL } from '../lib/pkg.ts';
@@ -82,28 +82,36 @@ export function buildManual(): string {
   out.push(`    JSON via --json for use with AI agents and scripts. An MCP`);
   out.push(`    server ships with the package.`);
   out.push('');
-  out.push(`    ${bold('Ledger 9 only.')} This build refuses a chain still on ledger 8;`);
-  out.push(`    use midnight-wallet-cli 0.5.x for such a chain.`);
+  out.push(`    ${bold('Ledger 9.')} mainnet, preprod and preview run ledger 9, and so does`);
+  out.push(`    the stack mn localnet up starts. Contracts are compiled with Compact 0.36.`);
   out.push('');
   out.push(`${bold('INSTALLATION')}`);
-  out.push(`    ${dim('$')} ${dim('npm install -g midnight-wallet-cli@next')}   ${dim('# this ledger-9 prerelease')}`);
-  out.push(`    ${dim('$')} ${dim('npm install -g midnight-wallet-cli')}        ${dim('# stable 0.5.x, ledger 8')}`);
+  out.push(`    ${dim('$')} ${dim('npm install -g midnight-wallet-cli')}`);
+  out.push(`    With npm 11 or older (npm 12 doesn't read the engine's shrinkwrap).`);
   out.push('');
   out.push(`    Optional dependencies:`);
   out.push(`      Compact toolchain: https://docs.midnight.network/develop`);
   out.push(`      Docker:            for the local development network (mn localnet)`);
+  out.push(`                         and the proof server on a hosted network`);
 
   // ── Concepts ──────────────────────────────────────────────
   out.push(subhead('CONCEPTS'));
   out.push(`  ${bold('Networks')}`);
   out.push(`    ${teal('undeployed')}   Local network. Free dev tokens, fast iteration.`);
-  out.push(`    ${teal('preprod')}      Public testnet. Persistent, real ZK proofs. (Ledger 8 today: refused.)`);
+  out.push(`    ${teal('preprod')}      Public testnet. Persistent, real ZK proofs.`);
   out.push(`                 Served by Blockfrost: needs your own project id (see Configuration).`);
-  out.push(`    ${teal('preview')}      Public testnet, smaller scale. (Ledger 8 today: refused.)`);
+  out.push(`    ${teal('preview')}      Public testnet, smaller scale.`);
   out.push(`    ${teal('mainnet')}      Real value. Only when named per command (--network mainnet);`);
   out.push(`                 never the saved network. Served by Blockfrost: needs your own`);
   out.push(`                 mainnet project id (nightmainnet...). No faucet: airdrop,`);
   out.push(`                 mn test and mn grant are refused there.`);
+  out.push('');
+  out.push(`  ${bold('Proof server')}`);
+  out.push(`    Every write is proven on your machine, on every network`);
+  out.push(`    (default http://localhost:6300). mn localnet up starts one for`);
+  out.push(`    undeployed; on preview, preprod and mainnet start one yourself:`);
+  out.push(`    ${dim('$')} ${dim(PROOF_SERVER_DOCKER_RUN)}`);
+  out.push(`    or point mn at yours: mn config set proof-server <url>.`);
   out.push('');
   out.push(`  ${bold('Tokens')}`);
   out.push(`    ${yellow('NIGHT')}        Native asset. Used for transfers and contract value.`);
@@ -135,8 +143,9 @@ export function buildManual(): string {
   out.push(`    ${dim('$')} ${dim('mn dust register --wallet alice')}`);
   out.push(`    ${dim('$')} ${dim('mn balance --wallet alice')}`);
   out.push('');
-  out.push(`  ${bold('First wallet on preprod')} ${dim('(once preprod runs ledger 9)')}`);
+  out.push(`  ${bold('First wallet on preprod')}`);
   out.push(`    ${dim('# once: a Midnight preprod project id from https://blockfrost.io')}`);
+  out.push(`    ${dim('$')} ${dim(PROOF_SERVER_DOCKER_RUN)}   ${dim('# in another terminal')}`);
   out.push(`    ${dim('$')} ${dim('mn config set blockfrost-project-id nightpreprod...')}`);
   out.push(`    ${dim('$')} ${dim('mn wallet generate alice --network preprod')}`);
   out.push(`    ${dim('# fund from the preprod faucet:')}`);

@@ -34,7 +34,8 @@ import { accountArtifactsDir } from './account-records.ts';
 
 /**
  * The networks the account package acts on, by the network id midnight-js
- * keeps (mn's own, lower-cased): ledger 9's, a local network.
+ * keeps (mn's own, lower-cased): a local network, the only one its current
+ * build has been tested on.
  */
 const ACCOUNT_NETWORKS: readonly NetworkName[] = ['undeployed'];
 

@@ -73,8 +73,11 @@ export const dustDefinition: CommandDefinition = {
       { flag: 'indexer-ws' },
       { flag: 'no-cache' },
       '',
-      'Native dust sidecar: not used on this ledger-9 build (it is built for ledger 8);',
-      '  MN_DUST_SYNC_BIN and MN_DISABLE_NATIVE_DUST are ignored. Dust sync runs in WASM.',
+      'Native dust reader: Dust syncs run the native dust-sync sidecar',
+      '  (@kuiralabs/dust-sync-<os>-<arch>, built on ledger 9) when it reports ledger 9',
+      '  and the chain is past its fork; otherwise, or if it fails, the WASM reader',
+      '  syncs (on a hosted network mn says so). MN_DUST_SYNC_BIN=<path> runs a binary',
+      '  of your own; MN_DISABLE_NATIVE_DUST=1 always uses the WASM reader.',
     ],
     examples: [
       'midnight dust register',

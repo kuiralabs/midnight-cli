@@ -53,7 +53,7 @@ describe('prepareGrant', () => {
   it('refuses a network the account package can\'t reach, saying which it reaches, creating nothing', async () => {
     const refusal = asAlice('status', '--network', 'preprod');
     await expect(refusal).rejects.toThrow(UnreachableByAccountError);
-    await expect(refusal).rejects.toThrow('mn grant runs on ledger 9, which only a local network (undeployed) runs so far; PreProd is not one.');
+    await expect(refusal).rejects.toThrow("mn grant runs on a local network (undeployed) only: the account contract's current build has been tested there and nowhere else; PreProd is not one.");
     expect(fs.existsSync(accounts())).toBe(false);
   });
 

@@ -13,20 +13,19 @@ A standalone CLI wallet for the Midnight blockchain. Manage wallets, check balan
 Built for two audiences: **beginners** starting their first Midnight project (a local chain + funded wallets + contract deploy in minutes), and **AI agents** (Cursor, Claude Code, any MCP client) using the same primitives via a built-in MCP server.
 
 > [!IMPORTANT]
-> **0.6.0 (prerelease, `npm install -g midnight-wallet-cli@next`) is ledger-9 only.** It is built on wallet-sdk 2.0.0, ledger-v9 1.0.0, midnight-js 5.0.0 and compact-runtime 0.21.0 (contracts compiled with Compact 0.36 / language 0.28). It refuses any chain still on ledger 8 up front (`UNSUPPORTED_LEDGER`): stay on 0.5.x (`npm install -g midnight-wallet-cli@latest`) for such a chain. `preview` and `mainnet` run ledger 9.
+> **0.6.0 is ledger-9 only.** Mainnet, preprod and preview all run ledger 9, and 0.5.x no longer works on any of them: upgrade to 0.6.0. It is built on wallet-sdk 2.0.0, ledger-v9 1.0.0, midnight-js 5.0.0 and compact-runtime 0.21.0, so recompile your contracts with Compact 0.36 (language 0.28). A local stack still on ledger 8 is refused up front (`UNSUPPORTED_LEDGER`).
 >
 > `midnight localnet up` starts a ledger-9 stack (node 2.1.0-rc.4, indexer 4.4.0-rc.6, proof server 9.0.0). To use another ledger-9 stack instead: on the default ports (node 9944, indexer 8088, proof server 6300) `--network undeployed` reaches it with no configuration. On other ports pass `--node`, `--indexer-ws` and `--proof-server` per command, or save them once with `midnight config set node <url>`, `midnight config set indexer-ws <url>` and `midnight config set proof-server <url>`.
 
 ## Install
 
 ```bash
-npm install -g midnight-wallet-cli        # stable 0.5.x (ledger 8)
-npm install -g midnight-wallet-cli@next   # this ledger-9 prerelease
+npm install -g midnight-wallet-cli
 ```
 
 This installs two commands: `midnight` (or `mn` for short) and `midnight-wallet-mcp`.
 
-Install the prerelease with npm 11 or older (or run it with `npx`; with npm 12, `npx -y npm@11 install -g midnight-wallet-cli@next`). The engine ships an `npm-shrinkwrap.json` that pins the SDK set it was tested with; npm 12 and bun's installer ignore it and resolve the packages again, so the engine either installed is refused before any SDK loads, saying so (`MIXED_SDK_LAYOUT`). bun can run what npm installed.
+Install it with npm 11 or older (with npm 12, `npx -y npm@11 install -g midnight-wallet-cli`). The engine ships an `npm-shrinkwrap.json` that pins the SDK set it was tested with; npm 12 and bun's installer ignore it and resolve the packages again, so the engine either installed is refused before any SDK loads, saying so (`MIXED_SDK_LAYOUT`). bun can run what npm installed.
 
 ## Commands
 
@@ -80,9 +79,12 @@ midnight transfer mn_addr_undeployed1... 100
 
 ### Preprod / Preview (testnet)
 
-Preview runs ledger 9. This build refuses a chain still on ledger 8 (use 0.5.x there), so preprod works with it once it runs ledger 9. The flow:
+Preprod and preview run ledger 9. mn proves every transaction on your machine, so start a local proof server first (see [Proof server](#proof-server)). The flow:
 
 ```bash
+# 0. Start a local proof server (in another terminal; it needs Docker)
+docker run -p 6300:6300 midnightntwrk/proof-server:9.0.0 midnight-proof-server -v
+
 # 1. Create a wallet and set the network
 midnight wallet generate alice
 midnight config set network preprod   # or: preview
@@ -122,7 +124,7 @@ Every flag applies to the whole transaction (`--shielded` pays every recipient s
 | Network | Description |
 |---------|-------------|
 | `undeployed` | Local network (`midnight localnet up` starts it) |
-| `preprod` | Midnight pre-production testnet (refused by this build while it is on ledger 8; use 0.5.x there). Its indexer and node are served by Blockfrost: needs a project id |
+| `preprod` | Midnight pre-production testnet (ledger 9). Its indexer and node are served by Blockfrost: needs a project id |
 | `preview` | Midnight preview testnet (ledger 9) |
 | `mainnet` | Midnight Mainnet (ledger 9). Reached only through Blockfrost, with a mainnet project id (it starts with `nightmainnet`); the proof server is your local one. No faucet. Real value: it must be named on every command with `--network mainnet` (it can't be the saved network), and `airdrop`, `mn test` and `mn grant` are refused there with `MAINNET_REFUSED`. Its addresses have no network segment: `mn_addr1…`, `mn_shield-addr1…` |
 
@@ -139,7 +141,7 @@ midnight config set blockfrost-project-id nightmainnet...   # filed under mainne
 midnight balance --network mainnet
 ```
 
-There is no faucet: fund a mainnet wallet by transferring NIGHT to it. `airdrop`, `mn test` (it deploys throwaway contracts) and `mn grant` (the account contract has no released key set for mainnet yet) are refused there before anything runs, with `MAINNET_REFUSED`. `mn dev` works on the local network only.
+There is no faucet: fund a mainnet wallet by transferring NIGHT to it. `airdrop`, `mn test` (it deploys throwaway contracts) and `mn grant` are refused there before anything runs, with `MAINNET_REFUSED`. `mn dev` and `mn grant` work on the local network only (`mn grant` refuses preview and preprod too: the account contract's current build has been tested on a local network only). Proofs are made by your local proof server (see [Proof server](#proof-server)).
 
 ### Preprod and Blockfrost
 
@@ -150,11 +152,35 @@ midnight config set blockfrost-project-id <project id>   # or: export BLOCKFROST
 ```
 
 - Project ids are per network: a preprod id starts with `nightpreprod`, a mainnet id with `nightmainnet`. mn files each under its own network and never sends one to the other network.
-- Without one, a command that reaches preprod stops with `BLOCKFROST_PROJECT_ID_REQUIRED` and these instructions. A refused id is `BLOCKFROST_PROJECT_ID_REJECTED`. Requests count against your Blockfrost plan. (While preprod is on ledger 8, this ledger-9 build then refuses it with `UNSUPPORTED_LEDGER`.)
+- Without one, a command that reaches preprod stops with `BLOCKFROST_PROJECT_ID_REQUIRED` and these instructions. A refused id is `BLOCKFROST_PROJECT_ID_REJECTED`. Requests count against your Blockfrost plan.
 - The project id is a secret. mn keeps it in `~/.midnight/config.json` (mode 0600), shows it masked in `config get`, and hides it in everything it prints, errors and `--verbose` logs included.
 - `mn serve` gives a connected dApp the wallet's indexer and node URLs (the DApp connector's `getConfiguration`), and on preprod those carry your project id: connect only dApps you trust with it.
 - An old `indexer-ws` setting that points at `indexer.preprod.midnight.network` fails with `ENDPOINT_SHUT_DOWN`: remove it with `midnight config unset indexer-ws --network preprod`.
 - Preview and the local network need no project id.
+
+### Proof server
+
+mn proves every transaction with a proof server on your own machine, on every network; its default is `http://localhost:6300`. On `undeployed`, `midnight localnet up` starts one. On preview, preprod and mainnet, run one yourself (it needs Docker, and the proof server's version must match the network's ledger):
+
+```bash
+docker run -p 6300:6300 midnightntwrk/proof-server:9.0.0 midnight-proof-server -v
+```
+
+To use a proof server elsewhere, pass `--proof-server <url>` or save it with `midnight config set proof-server <url>` (per network with `--network`). Without one, a write fails with `NETWORK_ERROR` naming the proof server and this command. Reads (balances, contract state) need no proof server.
+
+### Configuration
+
+`midnight config set <key> <value>` saves a setting in `~/.midnight/config.json`; endpoint settings are kept per network with `--network <name>`. The keys:
+
+| Key | What it sets |
+|-----|--------------|
+| `network` | The network a command uses when it names none (never `mainnet`) |
+| `wallet` | The wallet a command uses when it names none |
+| `node`, `indexer-ws`, `proof-server` | The endpoints mn reaches, instead of the network's defaults |
+| `blockfrost-project-id` | Your Blockfrost project id for preprod or mainnet, filed under its network by its prefix (or `MN_BLOCKFROST_PROJECT_ID` / `BLOCKFROST_PROJECT_ID`) |
+| `account-artifacts` | Where `mn grant` gets the account contract's proving keys (see below) |
+
+`account-artifacts` (or `MN_ACCOUNT_ARTIFACTS`, which wins) tells `mn grant` where the account contract's proving artefacts come from. By default mn fetches them from the account build's published release, the first time a command needs them, into `~/.midnight/account-artifacts`, checking each file against the build's manifest: the verifier keys (under 0.1 MB) when a command first reads the account, and each circuit's proving key (up to a few hundred MB) when one first proves with it. Set it to the absolute path of a local build (the folder holding its `keys/` and `zkir/`), or to an http(s) URL laid out as a release, to use those instead. It applies to every network.
 
 ## Native dust acceleration
 
@@ -211,13 +237,13 @@ Every command supports `--json` for structured output:
 
 ```bash
 midnight balance --json
-# → {"address":"mn_addr_...","shieldedAddress":"mn_shield-addr_...","network":"undeployed","unshielded":{"NIGHT":"1000.000000","utxoCount":1},"shielded":{"NIGHT":"10.000000","availableCoins":1,"pendingCoins":0}}
+# → {"address":"mn_addr_...","shieldedAddress":"mn_shield-addr_...","network":"undeployed","unshielded":{"NIGHT":"1000.000000","utxoCount":1},"shielded":{"NIGHT":"10.000000","availableCoins":1,"pendingCoins":0,"tokens":{}},"shieldedSynced":true}
 
 midnight transfer alice 100 --json
-# → {"txHash":"00ab...","amount":"100","recipient":"mn_addr_...","network":"undeployed"}
+# → {"txHash":"00ab...","amount":"100","recipient":"mn_addr_...","network":"undeployed","receipt":{"kind":"regular","hash":"00ab...",...,"fee":"0.548120","blockHeight":1234,...}}
 
 midnight transfer alice 10 bob 5 --json
-# → {"txHash":"00cd...","amount":"15","recipients":[{"recipient":"mn_addr_...","amount":"10"},{"recipient":"mn_addr_...","amount":"5"}],"network":"undeployed"}
+# → {"txHash":"00cd...","amount":"15","recipients":[{"recipient":"mn_addr_...","amount":"10"},{"recipient":"mn_addr_...","amount":"5"}],"network":"undeployed","receipt":{...}}
 ```
 
 When `--json` is active:
@@ -225,7 +251,7 @@ When `--json` is active:
 - stderr stays quiet (no spinner, heading or notice), except for the plain lines of a long wait, such as a deploy waiting for its wallet's Dust: `Dust: waited 45 s of 104 s, 0.76 of 1.23 DUST`. Pipe through `2>/dev/null` if you need it gone
 - Errors produce: `{"error":true,"code":"...","message":"...","exitCode":N}`
 
-Run `midnight help --json` for a full capability manifest, or `midnight help --agent` for a comprehensive AI agent reference.
+Run `midnight help --json` for a full capability manifest, or `midnight help --agent` for a comprehensive AI agent reference. [docs/JSON_CONTRACT.md](docs/JSON_CONTRACT.md) lists the shapes mn keeps stable.
 
 ## MCP Server for AI Agents
 
@@ -302,7 +328,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 }
 ```
 
-> **Tip:** If you haven't installed globally, use `"command": "npx"` with `"args": ["-y", "midnight-wallet-cli@latest", "--mcp"]` instead (`midnight-wallet-cli@next` for this ledger-9 prerelease).
+> **Tip:** If you haven't installed globally, use `"command": "npx"` with `"args": ["-y", "midnight-wallet-cli@latest", "--mcp"]` instead.
 
 > **Passphrase:** mn keeps every secret (wallet seeds, account owner keys) encrypted under one passphrase, which the MCP server cannot ask for. Give it the passphrase in its environment, `"env": { "MN_PASSPHRASE": "<your passphrase>" }`, to let it sign; without it, tools that need a secret are refused and change nothing. The passphrase then sits in that config file, so keep the file readable by you alone. Set the passphrase first in a terminal with `midnight wallet protect`.
 
@@ -374,8 +400,8 @@ The CLI human paths (`mn wallet list --json`, etc.) are unchanged.
 
 Two markdown resources teach agents how to use the CLI:
 
-- `midnight-wallet://skill/core` — intent routing + safety rules. ~890 tokens. Fetch on session start.
-- `midnight-wallet://skill/full` — canonical flows, error recovery, concept primers. ~2.4k tokens. Fetch on demand (errors, multi-step flows).
+- `midnight-wallet://skill/core` — intent routing + safety rules. About 1.5k tokens (5.5 KB). Fetch on session start.
+- `midnight-wallet://skill/full` — canonical flows, error recovery, concept primers. About 10k tokens (39 KB). Fetch on demand (errors, multi-step flows).
 
 The legacy `midnight-wallet://skill` URI still works as an alias for `/full`.
 
@@ -385,7 +411,7 @@ Every tool error returns `{ error: true, code: <CODE>, message: <human prose> }`
 
 ## Using mn's packages in your program
 
-mn is built from packages a program can install on its own: `@kuiralabs/midnight-cli-core` (the host, typed errors and codes, running a command), `@kuiralabs/midnight-chain`, `@kuiralabs/midnight-wallet` (with swap), `@kuiralabs/midnight-contract`, `@kuiralabs/midnight-connect`, `@kuiralabs/midnight-dev`, `@kuiralabs/midnight-grant`, and the SDK engine, `@kuiralabs/midnight-engine-rc`. A program calls their functions with plain values (bigint amounts, typed results and receipts), or mounts their commands in its own command line or MCP server, with its own state root, settings, prompter and output; errors carry a `code` it can act on without reading messages. All are release candidates on the `next` tag; install them with npm.
+mn is built from packages a program can install on its own: `@kuiralabs/midnight-cli-core` (the host, typed errors and codes, running a command), `@kuiralabs/midnight-chain`, `@kuiralabs/midnight-wallet` (with swap), `@kuiralabs/midnight-contract`, `@kuiralabs/midnight-connect`, `@kuiralabs/midnight-dev`, `@kuiralabs/midnight-grant`, and the SDK engine, `@kuiralabs/midnight-engine-rc`. A program calls their functions with plain values (bigint amounts, typed results and receipts), or mounts their commands in its own command line or MCP server, with its own state root, settings, prompter and output; errors carry a `code` it can act on without reading messages. Install them with npm 11 or older.
 
 Start with [core's README](packages/cli-core/README.md): mounting commands, and what a program does to its own process for the wallet SDK. Each package's README lists its entry points, its codes and one example, and its `api-report.md` lists every export.
 
@@ -396,8 +422,8 @@ Found a bug or have a feature request? [Open an issue](https://github.com/kuiral
 ## Requirements
 
 - Node.js >= 22
-- Docker (for `midnight localnet` commands)
-- A ledger-9 chain to talk to: node, indexer (4.4) and proof server. The proof server defaults to `localhost:6300` and is required for transactions on every network
+- Docker (for `midnight localnet`, and for the proof server on a hosted network)
+- A ledger-9 chain to talk to: node, indexer (4.4) and proof server. The proof server defaults to `localhost:6300` and is required for transactions on every network (see [Proof server](#proof-server))
 
 ## Development
 
@@ -415,21 +441,20 @@ npm run typecheck   # tsc --noEmit
 Run the CLI directly from source without rebuilding:
 
 ```bash
-npx tsx src/wallet.ts <command>     # or: npm run wallet -- <command>
-npx tsx src/mcp-server.ts           # or: npm run mcp
+npx tsx --conditions=midnight-cli-source src/wallet.ts <command>     # or: npm run wallet -- <command>
+npx tsx --conditions=midnight-cli-source src/mcp-server.ts           # or: npm run mcp
 ```
 
 ## Contributing
 
-Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow,
-coding standards, and testing requirements.
+Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow, coding standards, and testing requirements.
 
 Quick checklist before opening a PR:
 
 - `npm run typecheck` clean
 - `npm test` green
-- New behavior covered by a test in `src/__tests__/`
-- Commit messages follow the repo style (`feat(scope): …`, `fix(scope): …`, etc.)
+- New behavior covered by a test (`src/__tests__/`, or the package's own `packages/<name>/src/__tests__/`)
+- Commit messages say what changed for the user, in a plain sentence (see `git log`)
 
 ## License
 

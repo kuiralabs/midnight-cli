@@ -77,6 +77,7 @@ export const airdropDefinition: CommandDefinition = {
       recipient: 'Recipient address (the shielded address with --shielded)',
       shieldedAddress: 'The same shielded address as recipient (--shielded airdrop; kept for older readers)',
       network: 'Network name',
+      type: '"shielded" with --shielded (absent otherwise)',
       dustRegistered: 'Whether the wallet\'s unshielded NIGHT is registered for Dust generation (unshielded airdrop; absent when it could not be read). false: run midnight dust register before the wallet pays a fee',
     },
   },

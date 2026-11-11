@@ -5,10 +5,10 @@ Grants for the Midnight CLI packages: `mn grant`, the wallet owner's side of an 
 ## Install
 
 ```sh
-npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-wallet@next @kuiralabs/midnight-grant@next @kuiralabs/midnight-connect@next @kuiralabs/midnight-engine-rc@next
+npm install @kuiralabs/midnight-cli-core @kuiralabs/midnight-wallet @kuiralabs/midnight-grant @kuiralabs/midnight-connect @kuiralabs/midnight-engine-rc
 ```
 
-Every package is a release candidate on the `next` tag. Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): the engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it. A program that runs the SDK installs the engine, `@kuiralabs/midnight-engine-rc`, for every network. How a program sets up its process for the SDK (the rejection guard, the heap, Ctrl-C, ending) is in [core's README](https://github.com/kuiralabs/midnight-cli/blob/main/packages/cli-core/README.md#your-process-what-mns-shell-does-that-you-must-do).
+Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): the engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it. A program that runs the SDK installs the engine, `@kuiralabs/midnight-engine-rc`, for every network. How a program sets up its process for the SDK (the rejection guard, the heap, Ctrl-C, ending) is in [core's README](https://github.com/kuiralabs/midnight-cli/blob/main/packages/cli-core/README.md#your-process-what-mns-shell-does-that-you-must-do).
 
 ## Entry points
 

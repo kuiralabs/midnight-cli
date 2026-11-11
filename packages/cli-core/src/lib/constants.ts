@@ -12,6 +12,12 @@ export const INDEXER_API_VERSION = 'v4';
 export const INDEXER_GRAPHQL_PATH = `/api/${INDEXER_API_VERSION}/graphql`;
 export const INDEXER_GRAPHQL_WS_PATH = `/api/${INDEXER_API_VERSION}/graphql/ws`;
 
+// The proof server image mn proves with: the one `midnight localnet up` runs,
+// and the one a hosted network's user starts on their own machine.
+export const PROOF_SERVER_IMAGE = 'midnightntwrk/proof-server:9.0.0';
+/** The command that starts a local proof server on its default port. */
+export const PROOF_SERVER_DOCKER_RUN = `docker run -p 6300:6300 ${PROOF_SERVER_IMAGE} midnight-proof-server -v`;
+
 // NIGHT has 6 decimal places (1 NIGHT = 1_000_000 micro-NIGHT)
 export const TOKEN_DECIMALS = 6;
 export const TOKEN_MULTIPLIER = 1_000_000;

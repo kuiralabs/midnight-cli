@@ -5,10 +5,10 @@ The base of the Midnight CLI packages: the host a program passes to them, typed 
 ## Install
 
 ```sh
-npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-engine-rc@next
+npm install @kuiralabs/midnight-cli-core @kuiralabs/midnight-engine-rc
 ```
 
-Every package is a release candidate on the `next` tag. Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): the engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it. bun's installer ignores it and resolves the packages again, so an engine bun installed refuses to load, before any SDK module does, with `MIXED_SDK_LAYOUT` and the npm command; bun runs what npm installed. A program that runs the SDK installs the engine too, `@kuiralabs/midnight-engine-rc`, for every network.
+Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): the engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it. bun's installer ignores it and resolves the packages again, so an engine bun installed refuses to load, before any SDK module does, with `MIXED_SDK_LAYOUT` and the npm command; bun runs what npm installed. A program that runs the SDK installs the engine too, `@kuiralabs/midnight-engine-rc`, for every network.
 
 ## Entry points
 
@@ -55,7 +55,7 @@ Each error a package throws carries a `code`; `classifyError(err, registry)` giv
 | `BLOCKFROST_PROJECT_ID_REJECTED` | 4 | Blockfrost refused the project id (HTTP 403): mistyped, revoked, or for another network. | Ask the user to check it at blockfrost.io and set it again. Don't retry blindly. |
 | `BLOCKFROST_LIMIT_REACHED` | 4 | Blockfrost's plan limit or rate limit. | Wait and retry once; if it persists, tell the user it is their Blockfrost plan. |
 | `ENDPOINT_SHUT_DOWN` | 4 | An endpoint set by flag or config was shut down by its operator (the old preprod indexer, mainnet's old Midnight-hosted indexer and node). | `midnight_config_unset({ key: "indexer-ws" })` (and `node` if set), then retry. |
-| `MAINNET_REFUSED` | 2 | The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (no released account build there). | Tell the user why (the message says) and don't retry on mainnet; offer undeployed or a test network instead. |
+| `MAINNET_REFUSED` | 2 | The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (its account build has been tested on a local network only). | Tell the user why (the message says) and don't retry on mainnet; offer undeployed instead (for mn grant, the only network it runs on), or a test network for the others. |
 | `MIXED_SDK_LAYOUT` | 1 | mn's packages were installed without the engine's shrinkwrap (bun's installer): the engine's SDK tree isn't the one it was tested with. | Ask the user to install mn with npm. |
 | `NO_STATE_ROOT` | 1 | The host gave mn no place to keep its state (a program's `createHost` without paths). | Give the host its paths (`createHost({ paths })`). |
 | `NO_PAYER` | 1 | A command that submits a transaction was called without a payer. | Give the call a payer. |

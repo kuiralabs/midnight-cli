@@ -3,6 +3,7 @@
 // check. The reachability check before a command starts (chain's
 // endpoint-check.ts), the indexer queries and the proof errors all say it so.
 
+import { PROOF_SERVER_DOCKER_RUN } from './constants.ts';
 import { NetworkError } from './errors.ts';
 
 /** An endpoint a network has. */
@@ -50,6 +51,11 @@ export function transportReason(failure: unknown): string {
   return said ?? 'the connection failed';
 }
 
+/** Where a proof server comes from: every network proves on the user's own machine. */
+const PROOF_SERVER_HINT =
+  `mn proves on this machine on every network. On preview, preprod and mainnet start a proof server with: ${PROOF_SERVER_DOCKER_RUN}`
+  + ' (on undeployed, midnight localnet up starts one).';
+
 /** An endpoint the command needs did not answer: NETWORK_ERROR, naming it, its URL, why, and what to check. */
 export class EndpointUnreachableError extends NetworkError {
   readonly endpoint: EndpointRole;
@@ -59,7 +65,8 @@ export class EndpointUnreachableError extends NetworkError {
     const setting = SETTING_OF[endpoint];
     super(
       `Cannot reach the ${endpoint} at ${url}: ${reason}.\n`
-      + `Check that it is running and that the URL is right (--${setting}, or: midnight config set ${setting} <url>).`,
+      + `Check that it is running and that the URL is right (--${setting}, or: midnight config set ${setting} <url>).`
+      + (endpoint === 'proof server' ? `\n${PROOF_SERVER_HINT}` : ''),
       options,
     );
     this.endpoint = endpoint;

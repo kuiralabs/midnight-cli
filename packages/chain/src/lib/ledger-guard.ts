@@ -11,8 +11,8 @@ export class UnsupportedLedgerError extends Error {
   readonly code = 'UNSUPPORTED_LEDGER';
   constructor(network: string, protocolVersion: bigint) {
     super(
-      `${network} is on ledger 8 (protocol version ${protocolVersion}), and this build of mn supports ledger 9 only.\n` +
-      `Use midnight-wallet-cli 0.5.x for ledger-8 networks.`,
+      `${network} is on ledger 8 (protocol version ${protocolVersion}), and mn supports ledger 9 only.\n` +
+      `If it is a local stack, restart or upgrade it: midnight localnet down, then midnight localnet up, starts a ledger-9 one.`,
     );
     this.name = 'UnsupportedLedgerError';
   }

@@ -2,7 +2,7 @@
 
 You have access to the `midnight-wallet-cli` MCP server. This document teaches you how to use it well. Read it once at the start of a session; use it as reference throughout.
 
-> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 is refused up front with an error saying so: tell the user to use `midnight-wallet-cli` 0.5.x for it, don't retry. `midnight_localnet_up()` starts a ledger-9 stack for `undeployed` on the default ports (node 9944, indexer 8088, proof server 6300); another stack is reached by setting its URLs with `midnight_config_set` (keys `node`, `indexer-ws`, `proof-server`) or passing `--node` / `--indexer-ws` / `--proof-server` on the CLI.
+> **Ledger 9.** mn speaks ledger 9, which mainnet, preprod and preview all run. A local stack still on ledger 8 is refused up front (`UNSUPPORTED_LEDGER`): tell the user to restart or upgrade it, don't retry. `midnight_localnet_up()` starts a ledger-9 stack for `undeployed` on the default ports (node 9944, indexer 8088, proof server 6300); another stack is reached by setting its URLs with `midnight_config_set` (keys `node`, `indexer-ws`, `proof-server`) or passing `--node` / `--indexer-ws` / `--proof-server` on the CLI.
 
 ## What you can do with this CLI
 
@@ -26,10 +26,10 @@ Most commands are MCP tools (`tools/list` shows each, and what it takes). These 
 - **No self-shielding** — a wallet cannot move its own funds from unshielded to shielded. To get shielded NIGHT, receive a shielded transfer from a wallet that already has some (genesis wallet has 250M shielded NIGHT on localnet).
 - **Networks**
   - `undeployed` — local network (`midnight_localnet_up()` starts it). Use this for dev iteration.
-  - `preprod` — public testnet (refused by this build while it is on ledger 8). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod and mainnet need a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware. Its shielded balance is not read by default (the first read takes a while), though a wallet can hold shielded tokens there (contracts mint them): pass `force-shielded` to `midnight_balance`, and to `midnight_transfer` with `shielded`.
+  - `preprod` — public testnet (ledger 9). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod and mainnet need a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware. Its shielded balance is not read by default (the first read takes a while), though a wallet can hold shielded tokens there (contracts mint them): pass `force-shielded` to `midnight_balance`, and to `midnight_transfer` with `shielded`.
   - `preview` — public preview testnet (ledger 9). Same first-sync trade-off and shielded default as preprod.
   - `mainnet` — Midnight Mainnet: real value. Reached only through Blockfrost with the user's mainnet project id (it starts with `nightmainnet`); the proof server is the user's local one. No faucet. Used only when named on each call (`network: "mainnet"`, or `--network mainnet`): it can't be the saved network, and a call without a network never reaches it. `midnight_airdrop`, the test tools and the grant tools are refused there with `MAINNET_REFUSED`.
-- **Proof server** — local HTTP service that generates ZK proofs for transactions. Default port 6300. Version must match the network's ledger version or writes fail with "Custom error 170".
+- **Proof server** — local HTTP service that generates ZK proofs for transactions, on every network. Default `http://localhost:6300`. On `undeployed`, `midnight_localnet_up()` starts one; on preview, preprod and mainnet the user starts one in their own terminal with `docker run -p 6300:6300 midnightntwrk/proof-server:9.0.0 midnight-proof-server -v`, or sets theirs with `midnight config set proof-server <url>`. Version must match the network's ledger version or writes fail with "Custom error 170".
 
 ### mn's secrets are encrypted under one passphrase
 
@@ -61,7 +61,7 @@ Midnight shut its own preprod and mainnet indexers down on 2026-10-09. Blockfros
 ## Canonical flows
 
 ### New user, first session (localnet)
-1. Make sure a ledger-9 stack is running and reachable (see the note at the top); `midnight_localnet_up()` won't start one on this build.
+1. `midnight_localnet_up()` — start a local ledger-9 stack (node, indexer, proof server), or make sure the user's own is reachable (see the note at the top).
 2. `midnight_wallet_generate({ name: "alice" })` — create wallet, set active.
 3. `midnight_airdrop({ amount: "50000" })` — fund from genesis.
 4. `midnight_dust_register()` — make wallet able to pay fees.
@@ -104,7 +104,7 @@ Plain strings, booleans, fractional numbers, and `null` pass through unchanged. 
 
 **A fresh coin.** `{"@coin": {"amount": "3", "token": "NIGHT"}}` stands for a new shielded coin wherever the circuit takes a `ShieldedCoinInfo` (a random nonce, NIGHT's colour or a raw type given as 64 hex, the value in the smallest unit). The result's `freshCoins` gives its nonce. After the call lands, mn records each coin it gave the contract in the contract's private state under `mnHeldCoins` (by nonce, with its Merkle tree index), where a witness that spends a privately held coin reads it.
 
-**Compatibility caveat — runtime version skew.** Contracts must be compiled with Compact 0.36 (language 0.28). The CLI bundles `@midnight-ntwrk/compact-runtime` `0.21.0`, so contracts have to target runtime `0.21.0`. Artifacts built for another runtime (e.g. `0.16.0`, from a ledger-8 toolchain) are rejected at deploy/call with a message like `CompactError: Version mismatch: compiled code expects 0.16.0`. The fix is to recompile with Compact 0.36 (`compact compile`) rather than asking the user to change `mn`; a contract that must stay on the ledger-8 toolchain belongs with `midnight-wallet-cli` 0.5.x. `midnight_contract_inspect` shows the compiled `runtimeVersion` so you can flag the mismatch before attempting deploy.
+**Compatibility caveat — runtime version skew.** Contracts must be compiled with Compact 0.36 (language 0.28). The CLI bundles `@midnight-ntwrk/compact-runtime` `0.21.0`, so contracts have to target runtime `0.21.0`. Artifacts built for another runtime (e.g. `0.16.0`, from a ledger-8 toolchain) are rejected at deploy/call with a message like `CompactError: Version mismatch: compiled code expects 0.16.0`. The fix is to recompile with Compact 0.36 (`compact compile`): no network runs ledger 8 any more, so there is no older `mn` to fall back to. `midnight_contract_inspect` shows the compiled `runtimeVersion` so you can flag the mismatch before attempting deploy.
 
 **Stale MCP server.** Every MCP response carries `_serverVersion`. If the user upgraded `midnight-wallet-cli` but `_serverVersion` lags `mn --version`, the MCP client is talking to a long-lived stale process. Tell them to disconnect and re-add the MCP server (a /mcp reconnect alone will not respawn it).
 
@@ -140,7 +140,7 @@ Running a suite is a CLI command, not an MCP tool: `mn test run --suite <name>` 
 - **Open-world tools** (`openWorldHint: true`) — touch the network/chain/Docker. Can fail non-deterministically; retry is usually safe for reads, risky for writes.
 - **Never** auto-execute a fund-moving operation. Always describe amount + recipient + network first.
 - **Never** invent a mnemonic, seed, or private key. If the user needs one, call `midnight_wallet_generate`.
-- **Some tools use a two-step confirmation token**: `midnight_wallet_generate`, `midnight_wallet_remove`, `midnight_transfer`, `midnight_contract_deploy`, `midnight_contract_call`, `midnight_grant_deploy`, `midnight_grant_deposit`, `midnight_grant_issue`, `midnight_grant_revoke`, `midnight_grant_revoke_all`, `midnight_swap_make`, `midnight_swap_take`, `midnight_swap_cancel`. The first call returns a pending token + description and does nothing else; show the description verbatim, and call `midnight_confirm_operation({ token })` only after the user explicitly says yes The token keeps the wallet and network the first call acted as (the active ones when it named none), and the description names them: confirming runs as them even if the active wallet or network changed since. (`midnight_wallet_generate` asks only with `force: true`, which replaces a wallet.)
+- **Some tools use a two-step confirmation token**: `midnight_wallet_generate`, `midnight_wallet_remove`, `midnight_transfer`, `midnight_contract_deploy`, `midnight_contract_call`, `midnight_grant_deploy`, `midnight_grant_deposit`, `midnight_grant_issue`, `midnight_grant_revoke`, `midnight_grant_revoke_all`, `midnight_swap_make`, `midnight_swap_take`, `midnight_swap_cancel`. The first call returns a pending token + description and does nothing else; show the description verbatim, and call `midnight_confirm_operation({ token })` only after the user explicitly says yes. The token keeps the wallet and network the first call acted as (the active ones when it named none), and the description names them: confirming runs as them even if the active wallet or network changed since. (`midnight_wallet_generate` asks only with `force: true`, which replaces a wallet.)
 
 ## Error recovery recipes
 
@@ -168,7 +168,7 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 | `DUST_REQUIRED` | Wallet has NIGHT but not enough DUST for the fee. | Not registered (`midnight_dust_status()` shows `registered: false`): run `midnight_dust_register()`. Registered: its NIGHT is still generating the fee, which happens with time. mn has already waited when the fee was a few minutes away; the message says how long the rest takes ("generates the rest in about 4 minutes"). Wait that long and retry, don't retry at once. |
 | `DUST_GENERATING` | A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust. | The message says when: run `midnight_dust_register()` again then, or add NIGHT. |
 | `CHAIN_CLOCK_BEHIND` | The chain's clock lags this computer's (a local chain after sleep), so Dust estimates don't hold. | Wait for it to catch up, or ask the user to restart the local chain. |
-| `UNSUPPORTED_LEDGER` | The network is on ledger 8; this build supports ledger 9 only. | Tell the user: this network needs midnight-wallet-cli 0.5.x. Don't retry. |
+| `UNSUPPORTED_LEDGER` | The chain is still on ledger 8; mn supports ledger 9 only. | Don't retry. Every public network runs ledger 9, so it is a local stack on an older ledger: ask the user to restart or upgrade it (`midnight localnet down`, then `midnight localnet up`, starts a ledger-9 one). |
 | `NO_TEST_CONFIG` | No dapp.test.json in the folder the test command ran in. | Ask the user to run it from the dApp's root, or create one with `mn test create`. |
 | `LOCAL_STACK_UNREACHABLE` | No ledger-9 stack answers at the configured endpoints. | Ask the user to start their stack or fix the configured node / indexer-ws / proof-server endpoints. |
 | `AMBIGUOUS_LOCAL_STACKS` | Several local Midnight stacks are running and no endpoints are configured, so mn won't guess. | Ask the user which stack to use; they set its endpoints with `midnight config set`. Don't retry blindly. |
@@ -186,7 +186,7 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 | `BLOCKFROST_PROJECT_ID_REJECTED` | Blockfrost refused the project id (HTTP 403): mistyped, revoked, or for another network. | Ask the user to check it at blockfrost.io and set it again. Don't retry blindly. |
 | `BLOCKFROST_LIMIT_REACHED` | Blockfrost's plan limit or rate limit. | Wait and retry once; if it persists, tell the user it is their Blockfrost plan. |
 | `ENDPOINT_SHUT_DOWN` | An endpoint set by flag or config was shut down by its operator (the old preprod indexer, mainnet's old Midnight-hosted indexer and node). | `midnight_config_unset({ key: "indexer-ws" })` (and `node` if set), then retry. |
-| `MAINNET_REFUSED` | The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (no released account build there). | Tell the user why (the message says) and don't retry on mainnet; offer undeployed or a test network instead. |
+| `MAINNET_REFUSED` | The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (its account build has been tested on a local network only). | Tell the user why (the message says) and don't retry on mainnet; offer undeployed instead (for mn grant, the only network it runs on), or a test network for the others. |
 | `MIXED_SDK_LAYOUT` | mn's packages were installed without the engine's shrinkwrap (bun's installer): the engine's SDK tree isn't the one it was tested with. | Ask the user to install mn with npm. |
 | `NO_STATE_ROOT` | The host gave mn no place to keep its state (a program's `createHost` without paths). | Give the host its paths (`createHost({ paths })`). |
 | `NO_PAYER` | A command that submits a transaction was called without a payer. | Give the call a payer. |
@@ -218,8 +218,8 @@ A tool's description ends with the codes it can fail with: its own, and sets of 
 
 ## When to use which network
 
-- **Developing a contract?** → `undeployed` (a ledger-9 stack the user runs locally). No first-sync cost; everything is local.
-- **Integration testing against a hosted chain?** → `preprod`, once it runs ledger 9 (refused while it is on ledger 8). First sync for a new wallet on this network processes full event history; subsequent syncs restore from cache and are much faster.
+- **Developing a contract?** → `undeployed` (`midnight_localnet_up()` starts a local ledger-9 stack). No first-sync cost; everything is local.
+- **Integration testing against a hosted chain?** → `preprod` (with a local proof server and the user's Blockfrost project id). First sync for a new wallet on this network processes full event history; subsequent syncs restore from cache and are much faster.
 - **Demoing to users?** → `preview` (if the dApp is deployed there) or `undeployed` (if self-contained).
 - **Mainnet?** → `mainnet`, named on every call (`network: "mainnet"`); it is never the default. Needs the user's mainnet Blockfrost project id. Moves real value: describe amount, recipient and network and get the user's go-ahead before any write. No faucet; no airdrop, test suites or grants there.
 

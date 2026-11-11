@@ -50,11 +50,11 @@ export const ERROR_CODES = {
   /** One of a wallet's three wallets hasn't synced past the chain's fork to ledger 9, so no transaction can be built yet. Recovery: run it again; mn reads the shielded and Dust history past the fork first. */
   WALLET_BEHIND_FORK: 'WALLET_BEHIND_FORK',
   CANCELLED: 'CANCELLED',
-  /** The chain is on ledger 8; this build supports ledger 9 only. Recovery: use midnight-wallet-cli 0.5.x for that network. */
+  /** The chain is still on ledger 8; mn supports ledger 9 only. Recovery: restart or upgrade the local stack (`mn localnet down`, then `mn localnet up`). */
   UNSUPPORTED_LEDGER: 'UNSUPPORTED_LEDGER',
   /** No ledger-9 stack answers at the configured endpoints. Recovery: start one, or fix the endpoints. */
   LOCAL_STACK_UNREACHABLE: 'LOCAL_STACK_UNREACHABLE',
-  /** The command is refused on mainnet (an airdrop, a test suite, mn grant) before anything runs. Recovery: run it on undeployed or a test network. */
+  /** The command is refused on mainnet (an airdrop, a test suite, mn grant) before anything runs. Recovery: run it on undeployed (mn grant runs there only) or a test network. */
   MAINNET_REFUSED: 'MAINNET_REFUSED',
   /** Several local Midnight stacks run and no endpoints were given. Recovery: pass endpoint flags or `midnight config set` them. */
   AMBIGUOUS_LOCAL_STACKS: 'AMBIGUOUS_LOCAL_STACKS',
@@ -98,6 +98,22 @@ export const ERROR_CODES = {
   APPROVAL_UNAVAILABLE: 'APPROVAL_UNAVAILABLE',
   /** A command ended with a non-zero exit code without throwing (a test run whose tests failed), run where no process exit code can be set (MCP). */
   COMMAND_FAILED: 'COMMAND_FAILED',
+  /** A Compact `assert` failed while the contract ran on this machine, before anything was proven or sent. Recovery: change the call's arguments, or wait until the contract's state allows it. */
+  CONTRACT_ASSERTION_FAILED: 'CONTRACT_ASSERTION_FAILED',
+  /** No compiled contract was found where the command looked. Recovery: compile the contract, or pass its folder. */
+  CONTRACT_NOT_COMPILED: 'CONTRACT_NOT_COMPILED',
+  /** A contract's private-state store stayed in use by another process for the 3 minutes a call waits. Recovery: let the other mn finish, then check the contract state before retrying. */
+  CONTRACT_STATE_BUSY: 'CONTRACT_STATE_BUSY',
+  /** A contract's state on chain can't be decoded by this mn's ledger. Recovery: none from this side; don't retry. */
+  CONTRACT_STATE_UNREADABLE: 'CONTRACT_STATE_UNREADABLE',
+  /** No dapp.test.json in the folder the test command ran in. Recovery: run it from the dApp's root, or `mn test create`. */
+  NO_TEST_CONFIG: 'NO_TEST_CONFIG',
+  /** A swap offer's coins are already spent: taken, or cancelled by its maker. Recovery: ask the maker for a new offer. */
+  OFFER_TAKEN: 'OFFER_TAKEN',
+  /** mn's record of a wallet's open swap offers can't be read. Recovery: restore the file, or move it aside. */
+  OFFER_RECORD_UNREADABLE: 'OFFER_RECORD_UNREADABLE',
+  /** A proving key of the account contract couldn't be had (not published, or the fetch failed). Recovery: set `account-artifacts` to a local build, or retry a failed fetch once. */
+  ACCOUNT_KEYS_UNAVAILABLE: 'ACCOUNT_KEYS_UNAVAILABLE',
   UNKNOWN: 'UNKNOWN',
 } as const;
 
@@ -135,7 +151,7 @@ export function classifyByCode(err: Error, codes: CodeRegistry): ClassifiedError
  * empty body when the cause did not carry a `.message`. Surface the URL plus
  * a one-line cause hint so the message is actionable.
  *
- * Mirrors the WebSocket-side fix in src/lib/balance-subscription.ts.
+ * Mirrors the WebSocket-side fix in the chain package's balance-subscription.ts.
  */
 export function humanizeNetworkError(message: string): string {
   // Match "request to <URL> failed, reason:" optionally followed by whitespace

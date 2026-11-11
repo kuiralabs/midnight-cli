@@ -2,7 +2,7 @@
   "name": "@kuiralabs/midnight-engine-rc",
   "version": "0.1.0",
   "type": "module",
-  "description": "The Midnight CLI's engine for the SDK's release candidates (wallet SDK 2.0 rc, ledger 9 rc, midnight-js 5 rc): everything the CLI does with that SDK set, behind the engine interface",
+  "description": "The Midnight CLI's engine for the ledger-9 SDK set (wallet SDK 2.0.0, ledger-v9 1.0.0, midnight-js 5.0.0): everything the CLI does with that SDK set, behind the engine interface",
   "license": "Apache-2.0",
   "author": "nel349",
   "repository": {

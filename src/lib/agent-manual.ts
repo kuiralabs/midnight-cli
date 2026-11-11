@@ -6,7 +6,7 @@
 
 import { PKG_VERSION } from './pkg.ts';
 import { codeSetLines } from './code-tables.ts';
-import { GuidanceError, assembleGuidance, sectionsWithAdded, type GuidancePiece, type ToolsTableRow, commandHelpSpecs, type CommandRegistry, type RegisteredTool } from '@kuiralabs/midnight-cli-core';
+import { GuidanceError, PROOF_SERVER_DOCKER_RUN, assembleGuidance, sectionsWithAdded, type GuidancePiece, type ToolsTableRow, commandHelpSpecs, type CommandRegistry, type RegisteredTool } from '@kuiralabs/midnight-cli-core';
 
 /** The manual's sections, in order. */
 export const AGENT_MANUAL_SECTIONS = [
@@ -99,17 +99,25 @@ Without one, a command that
 reaches preprod or mainnet fails with BLOCKFROST_PROJECT_ID_REQUIRED. The project id is
 a secret: mn never prints it. Preview and undeployed need none.
 
-LEDGER 9 ONLY: this build of mn speaks ledger 9 only. A chain still on
-ledger 8 is refused up front with an error saying so (UNSUPPORTED_LEDGER);
-use midnight-wallet-cli 0.5.x for such a chain. localnet up
-starts a ledger-9 stack on undeployed.
+LEDGER 9: mn speaks ledger 9, which mainnet, preprod and preview all run.
+localnet up starts a ledger-9 stack on undeployed. A local stack still on
+ledger 8 is refused up front (UNSUPPORTED_LEDGER): restart or upgrade it.
+
+PROOF SERVER: mn proves every transaction with a proof server on the user's
+machine, on every network (default http://localhost:6300). On undeployed,
+localnet up starts one. On preview, preprod and mainnet the user runs one:
+  ${PROOF_SERVER_DOCKER_RUN}
+or points mn at theirs: midnight config set proof-server <url>. Without
+one, a write fails with NETWORK_ERROR naming the proof server.
 
 STRUCTURED JSON OUTPUT
 ──────────────────────
 
 Every command supports --json. When passed:
   - stdout receives a single line of JSON
-  - stderr is fully suppressed (no spinners, no formatting)
+  - stderr stays quiet (no spinners, headings or notices), except for
+    the plain progress lines of a long wait, such as a deploy waiting for
+    its wallet's Dust ("Dust: waited 45 s of 104 s, 0.76 of 1.23 DUST")
   - Errors: {"error":true,"code":"...","message":"...","exitCode":N}
   - "warnings": the notices the command would print on stderr without
     --json (a hosted Dust read done in WASM, a store moved, ...), one
@@ -297,14 +305,14 @@ The server exposes two MCP Resources — a small core and a fuller guide:
   name      midnight-wallet skill (core)
   mimeType  text/markdown
   Read this first. Intent routing table + non-negotiable safety rules
-  (~830 tokens). Fetch on session start.
+  (about 1.5k tokens, 5.5 KB). Fetch on session start.
 
   uri       midnight-wallet://skill/full
   name      midnight-wallet skill (full)
   mimeType  text/markdown
   Canonical multi-step flows, error-recovery recipes, concept primers
-  (NIGHT/DUST/shielded), network selection. Fetch on demand — on an error,
-  a multi-step flow, or a concept question.
+  (NIGHT/DUST/shielded), network selection (about 10k tokens, 39 KB).
+  Fetch on demand — on an error, a multi-step flow, or a concept question.
 
 The bare midnight-wallet://skill URI stays as a deprecated alias for
 skill/full so existing clients keep working; it is not advertised in

@@ -6,7 +6,7 @@
 // at each resources/read; scripts/write-skill-docs.ts writes the same text to
 // docs/SKILL-CORE.md and docs/SKILL.md, the copies the README links to.
 
-import { assembleGuidance, sectionsWithAdded, type GuidancePiece, declaredCodeSets, type CommandRegistry } from '@kuiralabs/midnight-cli-core';
+import { PROOF_SERVER_DOCKER_RUN, assembleGuidance, sectionsWithAdded, type GuidancePiece, declaredCodeSets, type CommandRegistry } from '@kuiralabs/midnight-cli-core';
 
 /** skill/core's sections, in order. */
 export const SKILL_CORE_SECTIONS = ['title', 'intent-routing', 'safety-rules', 'when-to-fetch'] as const;
@@ -37,7 +37,7 @@ const SERVER_PIECES: readonly GuidancePiece[] = [
 
 You have access to the \`midnight-wallet-cli\` MCP server. This is the **core** skill — intent routing and non-negotiable safety rules. Fetch \`midnight-wallet://skill/full\` on demand for canonical multi-step flows, error-recovery recipes, concept primers (NIGHT, DUST, shielded vs unshielded), network selection, and deeper context.
 
-**Ledger 9 only.** This build refuses a chain still on ledger 8 (such a chain stays on \`midnight-wallet-cli\` 0.5.x). The user runs a ledger-9 stack and points mn at it; details in \`/full\`.
+**Ledger 9.** mainnet, preprod and preview run ledger 9; \`midnight_localnet_up()\` starts a local ledger-9 stack. Every write is proven by a proof server on the user's machine: on a hosted network the user starts one; details in \`/full\`.
 
 `,
     },
@@ -92,7 +92,7 @@ You have access to the \`midnight-wallet-cli\` MCP server. This is the **core** 
 
 You have access to the \`midnight-wallet-cli\` MCP server. This document teaches you how to use it well. Read it once at the start of a session; use it as reference throughout.
 
-> **Ledger 9 only.** This build speaks ledger 9 only. A chain still on ledger 8 is refused up front with an error saying so: tell the user to use \`midnight-wallet-cli\` 0.5.x for it, don't retry. \`midnight_localnet_up()\` starts a ledger-9 stack for \`undeployed\` on the default ports (node 9944, indexer 8088, proof server 6300); another stack is reached by setting its URLs with \`midnight_config_set\` (keys \`node\`, \`indexer-ws\`, \`proof-server\`) or passing \`--node\` / \`--indexer-ws\` / \`--proof-server\` on the CLI.
+> **Ledger 9.** mn speaks ledger 9, which mainnet, preprod and preview all run. A local stack still on ledger 8 is refused up front (\`UNSUPPORTED_LEDGER\`): tell the user to restart or upgrade it, don't retry. \`midnight_localnet_up()\` starts a ledger-9 stack for \`undeployed\` on the default ports (node 9944, indexer 8088, proof server 6300); another stack is reached by setting its URLs with \`midnight_config_set\` (keys \`node\`, \`indexer-ws\`, \`proof-server\`) or passing \`--node\` / \`--indexer-ws\` / \`--proof-server\` on the CLI.
 
 `,
     },
@@ -119,10 +119,10 @@ Act on the user's behalf on Midnight, through what the installed packages bring:
 - **No self-shielding** — a wallet cannot move its own funds from unshielded to shielded. To get shielded NIGHT, receive a shielded transfer from a wallet that already has some (genesis wallet has 250M shielded NIGHT on localnet).
 - **Networks**
   - \`undeployed\` — local network (\`midnight_localnet_up()\` starts it). Use this for dev iteration.
-  - \`preprod\` — public testnet (refused by this build while it is on ledger 8). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod and mainnet need a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware. Its shielded balance is not read by default (the first read takes a while), though a wallet can hold shielded tokens there (contracts mint them): pass \`force-shielded\` to \`midnight_balance\`, and to \`midnight_transfer\` with \`shielded\`.
+  - \`preprod\` — public testnet (ledger 9). Its indexer and node are served by Blockfrost and need the user's own project id (see "Preprod and mainnet need a Blockfrost project id" below). First-time wallet sync processes the full event history and can take significantly longer than subsequent syncs (which restore from cached wallet state). Exact time depends on wallet age, event density, network, and hardware. Its shielded balance is not read by default (the first read takes a while), though a wallet can hold shielded tokens there (contracts mint them): pass \`force-shielded\` to \`midnight_balance\`, and to \`midnight_transfer\` with \`shielded\`.
   - \`preview\` — public preview testnet (ledger 9). Same first-sync trade-off and shielded default as preprod.
   - \`mainnet\` — Midnight Mainnet: real value. Reached only through Blockfrost with the user's mainnet project id (it starts with \`nightmainnet\`); the proof server is the user's local one. No faucet. Used only when named on each call (\`network: "mainnet"\`, or \`--network mainnet\`): it can't be the saved network, and a call without a network never reaches it. \`midnight_airdrop\`, the test tools and the grant tools are refused there with \`MAINNET_REFUSED\`.
-- **Proof server** — local HTTP service that generates ZK proofs for transactions. Default port 6300. Version must match the network's ledger version or writes fail with "Custom error 170".
+- **Proof server** — local HTTP service that generates ZK proofs for transactions, on every network. Default \`http://localhost:6300\`. On \`undeployed\`, \`midnight_localnet_up()\` starts one; on preview, preprod and mainnet the user starts one in their own terminal with \`${PROOF_SERVER_DOCKER_RUN}\`, or sets theirs with \`midnight config set proof-server <url>\`. Version must match the network's ledger version or writes fail with "Custom error 170".
 
 `,
     },
@@ -223,8 +223,8 @@ Every MCP tool error returns \`{ error: true, code: <ERROR_CODE>, message: <huma
       order: 0,
       body: `## When to use which network
 
-- **Developing a contract?** → \`undeployed\` (a ledger-9 stack the user runs locally). No first-sync cost; everything is local.
-- **Integration testing against a hosted chain?** → \`preprod\`, once it runs ledger 9 (refused while it is on ledger 8). First sync for a new wallet on this network processes full event history; subsequent syncs restore from cache and are much faster.
+- **Developing a contract?** → \`undeployed\` (\`midnight_localnet_up()\` starts a local ledger-9 stack). No first-sync cost; everything is local.
+- **Integration testing against a hosted chain?** → \`preprod\` (with a local proof server and the user's Blockfrost project id). First sync for a new wallet on this network processes full event history; subsequent syncs restore from cache and are much faster.
 - **Demoing to users?** → \`preview\` (if the dApp is deployed there) or \`undeployed\` (if self-contained).
 - **Mainnet?** → \`mainnet\`, named on every call (\`network: "mainnet"\`); it is never the default. Needs the user's mainnet Blockfrost project id. Moves real value: describe amount, recipient and network and get the user's go-ahead before any write. No faucet; no airdrop, test suites or grants there.
 
@@ -270,7 +270,7 @@ const confirmedTools = (registry: CommandRegistry): string =>
  * name and the commands no tool runs, which the user runs in a terminal.
  */
 function registryPieces(registry: CommandRegistry): GuidancePiece[] {
-  const confirmation = `- **Some tools use a two-step confirmation token**: ${confirmedTools(registry)}. The first call returns a pending token + description and does nothing else; show the description verbatim, and call \`midnight_confirm_operation({ token })\` only after the user explicitly says yes The token keeps the wallet and network the first call acted as (the active ones when it named none), and the description names them: confirming runs as them even if the active wallet or network changed since. (\`midnight_wallet_generate\` asks only with \`force: true\`, which replaces a wallet.)`;
+  const confirmation = `- **Some tools use a two-step confirmation token**: ${confirmedTools(registry)}. The first call returns a pending token + description and does nothing else; show the description verbatim, and call \`midnight_confirm_operation({ token })\` only after the user explicitly says yes. The token keeps the wallet and network the first call acted as (the active ones when it named none), and the description names them: confirming runs as them even if the active wallet or network changed since. (\`midnight_wallet_generate\` asks only with \`force: true\`, which replaces a wallet.)`;
   const terminalOnly = registry.commands.filter((command) => command.help !== undefined && (command.mcp?.tools.length ?? 0) === 0).map((command) => `\`mn ${command.name}\``);
   return [
     { text: 'skill-core', section: 'safety-rules', order: 500, body: `${confirmation} Full flow in \`midnight-wallet://skill/full\`.\n\n` },

@@ -40,9 +40,11 @@ Compile with Compact 0.36 (language 0.28): mn bundles compact-runtime
     → { contractName, circuit, address, network, status, txHash, receipt, cost, freshCoins, heldCoins }
     Example: midnight contract call --address abc123... --circuit post --args '["Hello!"]'
 
-  Arguments (deploy, call): a circuit's arguments are private inputs to
-  its proof unless the contract discloses them (a bid, a vote, a coin's
-  nonce). --args '<json>' is for public values: on the command line they
+  Arguments (deploy, call): a JSON array, in the circuit's order, or an
+  object, read by its values in order: its keys are not matched to the
+  parameters' names, so list them in the circuit's order. A circuit's
+  arguments are private inputs to its proof unless the contract discloses
+  them (a bid, a vote, a coin's nonce). --args '<json>' is for public values: on the command line they
   are in ps and the shell's history. Give private ones with
   --args-file <path> or --args - (the standard input):
     echo '{"bid": 5}' | midnight contract call --address <addr> --circuit bid --args -
@@ -182,7 +184,7 @@ Plain strings, booleans, fractional numbers, and \`null\` pass through unchanged
 
 **A fresh coin.** \`{"@coin": {"amount": "3", "token": "NIGHT"}}\` stands for a new shielded coin wherever the circuit takes a \`ShieldedCoinInfo\` (a random nonce, NIGHT's colour or a raw type given as 64 hex, the value in the smallest unit). The result's \`freshCoins\` gives its nonce. After the call lands, mn records each coin it gave the contract in the contract's private state under \`mnHeldCoins\` (by nonce, with its Merkle tree index), where a witness that spends a privately held coin reads it.
 
-**Compatibility caveat — runtime version skew.** Contracts must be compiled with Compact 0.36 (language 0.28). The CLI bundles \`@midnight-ntwrk/compact-runtime\` \`0.21.0\`, so contracts have to target runtime \`0.21.0\`. Artifacts built for another runtime (e.g. \`0.16.0\`, from a ledger-8 toolchain) are rejected at deploy/call with a message like \`CompactError: Version mismatch: compiled code expects 0.16.0\`. The fix is to recompile with Compact 0.36 (\`compact compile\`) rather than asking the user to change \`mn\`; a contract that must stay on the ledger-8 toolchain belongs with \`midnight-wallet-cli\` 0.5.x. \`midnight_contract_inspect\` shows the compiled \`runtimeVersion\` so you can flag the mismatch before attempting deploy.
+**Compatibility caveat — runtime version skew.** Contracts must be compiled with Compact 0.36 (language 0.28). The CLI bundles \`@midnight-ntwrk/compact-runtime\` \`0.21.0\`, so contracts have to target runtime \`0.21.0\`. Artifacts built for another runtime (e.g. \`0.16.0\`, from a ledger-8 toolchain) are rejected at deploy/call with a message like \`CompactError: Version mismatch: compiled code expects 0.16.0\`. The fix is to recompile with Compact 0.36 (\`compact compile\`): no network runs ledger 8 any more, so there is no older \`mn\` to fall back to. \`midnight_contract_inspect\` shows the compiled \`runtimeVersion\` so you can flag the mismatch before attempting deploy.
 
 `,
     },

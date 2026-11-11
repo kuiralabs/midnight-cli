@@ -30,8 +30,8 @@ import { skillCore, skillFull } from './lib/mcp/skills.ts';
 
 // Skill resources — teach MCP clients how to use this CLI conversationally.
 // Split into:
-//   - /core: intent routing + safety rules. ~830 tokens. Fetch on session start.
-//   - /full: canonical flows, error recovery, concept primers. ~2.3k tokens.
+//   - /core: intent routing + safety rules. About 1.5k tokens (5.5 KB). Fetch on session start.
+//   - /full: canonical flows, error recovery, concept primers. About 10k tokens (39 KB).
 //           Fetch on demand (errors, multi-step flows, concept questions).
 // The original `midnight-wallet://skill` URI stays as a deprecated alias for
 // /full so existing MCP clients keep working. Both are assembled from the
@@ -65,7 +65,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => ({
     {
       uri: SKILL_CORE_URI,
       name: 'midnight-wallet skill (core)',
-      description: 'Read this first. Intent routing table + non-negotiable safety rules. ~830 tokens. Fetch /full on demand for canonical flows, error recovery, and concept primers.',
+      description: 'Read this first. Intent routing table + non-negotiable safety rules. About 1.5k tokens. Fetch /full on demand for canonical flows, error recovery, and concept primers.',
       mimeType: 'text/markdown',
     },
     {

@@ -37,8 +37,10 @@ key (up to a few hundred MB) when one first proves with it, said as it goes.
 For a build whose artefacts are not published, point mn at a local build of
 the account contract (the folder holding its keys/ and zkir/):
 midnight config set account-artifacts <folder>, or MN_ACCOUNT_ARTIFACTS.
-It needs Node.js 22.18 or newer and reaches the ledger-9 network: an
-undeployed (local) one.
+It needs Node.js 22.18 or newer, and runs on undeployed (a local network)
+only: the account contract's current build has been tested there, so
+preview and preprod are refused with INVALID_ARGS and mainnet with
+MAINNET_REFUSED.
 
   midnight grant deploy [--json]
     → { address, resumed, activated, network, wallet, ownerKey }

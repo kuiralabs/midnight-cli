@@ -2,7 +2,7 @@
 
 You have access to the `midnight-wallet-cli` MCP server. This is the **core** skill — intent routing and non-negotiable safety rules. Fetch `midnight-wallet://skill/full` on demand for canonical multi-step flows, error-recovery recipes, concept primers (NIGHT, DUST, shielded vs unshielded), network selection, and deeper context.
 
-**Ledger 9 only.** This build refuses a chain still on ledger 8 (such a chain stays on `midnight-wallet-cli` 0.5.x). The user runs a ledger-9 stack and points mn at it; details in `/full`.
+**Ledger 9.** mainnet, preprod and preview run ledger 9; `midnight_localnet_up()` starts a local ledger-9 stack. Every write is proven by a proof server on the user's machine: on a hosted network the user starts one; details in `/full`.
 
 ## Intent routing (natural language → tool)
 
@@ -40,7 +40,7 @@ You have access to the `midnight-wallet-cli` MCP server. This is the **core** sk
 - **Open-world tools** (`openWorldHint: true`) — touch the network/chain/Docker. Can fail non-deterministically; retry is usually safe for reads, risky for writes.
 - **Never** auto-execute a fund-moving operation. Always describe amount + recipient + network first.
 - **Never** invent a mnemonic, seed, or private key. If the user needs one, call `midnight_wallet_generate`.
-- **Some tools use a two-step confirmation token**: `midnight_wallet_generate`, `midnight_wallet_remove`, `midnight_transfer`, `midnight_contract_deploy`, `midnight_contract_call`, `midnight_grant_deploy`, `midnight_grant_deposit`, `midnight_grant_issue`, `midnight_grant_revoke`, `midnight_grant_revoke_all`, `midnight_swap_make`, `midnight_swap_take`, `midnight_swap_cancel`. The first call returns a pending token + description and does nothing else; show the description verbatim, and call `midnight_confirm_operation({ token })` only after the user explicitly says yes The token keeps the wallet and network the first call acted as (the active ones when it named none), and the description names them: confirming runs as them even if the active wallet or network changed since. (`midnight_wallet_generate` asks only with `force: true`, which replaces a wallet.) Full flow in `midnight-wallet://skill/full`.
+- **Some tools use a two-step confirmation token**: `midnight_wallet_generate`, `midnight_wallet_remove`, `midnight_transfer`, `midnight_contract_deploy`, `midnight_contract_call`, `midnight_grant_deploy`, `midnight_grant_deposit`, `midnight_grant_issue`, `midnight_grant_revoke`, `midnight_grant_revoke_all`, `midnight_swap_make`, `midnight_swap_take`, `midnight_swap_cancel`. The first call returns a pending token + description and does nothing else; show the description verbatim, and call `midnight_confirm_operation({ token })` only after the user explicitly says yes. The token keeps the wallet and network the first call acted as (the active ones when it named none), and the description names them: confirming runs as them even if the active wallet or network changed since. (`midnight_wallet_generate` asks only with `force: true`, which replaces a wallet.) Full flow in `midnight-wallet://skill/full`.
 
 ## When to fetch the full skill
 

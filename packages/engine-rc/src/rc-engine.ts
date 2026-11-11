@@ -1,5 +1,6 @@
-// The engine for the SDK's release candidates (rc): the wallet SDK 2.0
-// release candidates, ledger 9 and midnight-js 5 as mn pins them.
+// The engine for the ledger-9 SDK set as mn pins it: wallet SDK 2.0.0,
+// ledger-v9 1.0.0, midnight-js 5.0.0 and compact-runtime 0.21.0. Its set is
+// still named `rc`, from when it was built on the SDK's release candidates.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

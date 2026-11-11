@@ -1,30 +1,20 @@
 # JSON Contract
 
-What `mn` (`midnight-wallet-cli`) and `midnight-wallet-mcp` promise to never
-break, in exchange for integrators getting a stable surface to build on.
+What `mn` (`midnight-wallet-cli`) and `midnight-wallet-mcp` promise to never break, in exchange for integrators getting a stable surface to build on.
 
-This document is **the line we will not cross without a major version bump.**
-Every shape here is what `--json` mode emits today and what every consumer
-should be able to rely on tomorrow.
+This document is **the line we will not cross without a major version bump.** Every shape here is what `--json` mode emits today and what every consumer should be able to rely on tomorrow.
 
-The non-JSON (human-formatted) stderr output is decorative and may change
-freely. The contract is JSON only.
+The non-JSON (human-formatted) stderr output is decorative and may change freely. The contract is JSON only.
 
 ## Stability rules
 
-1. **Additive only.** New fields may appear at any version. Existing field
-   names, types, and locations stay frozen.
-2. **No renames.** If a field needs a different name, both names exist
-   side by side until the next major bump.
+1. **Additive only.** New fields may appear at any version. Existing field names, types, and locations stay frozen.
+2. **No renames.** If a field needs a different name, both names exist side by side until the next major bump.
 3. **No removals.** A field that ever shipped stays.
 4. **No type changes.** A string stays a string; a number stays a number.
-5. **No nesting changes.** A field at the top level stays at the top level.
-   Nested forms that integrators depend on (see balance.balances.NIGHT)
-   stay nested.
+5. **No nesting changes.** A field at the top level stays at the top level. Nested forms that integrators depend on (see balance.balances.NIGHT) stay nested.
 
-If we must make a breaking change, it's a major version bump and an
-explicit `BREAKING CHANGES` section in the changelog naming every
-field involved.
+If we must make a breaking change, it's a major version bump and an explicit `BREAKING CHANGES` section in the changelog naming every field involved.
 
 ## Surfaces under contract
 
@@ -34,8 +24,7 @@ field involved.
 "undeployed" | "preprod" | "preview" | "mainnet"
 ```
 
-These values are stable. Adding a new network (e.g. `mainnet`)
-is additive. Renaming or removing one is a major bump.
+These values are stable. Adding a new network is additive. Renaming or removing one is a major bump.
 
 ### Address formats
 
@@ -46,8 +35,7 @@ Bech32m, network-tagged in the HRP:
 
 On mainnet the HRP has no network segment: `mn_addr1...` and `mn_shield-addr1...`.
 
-The HRP encoding is stable. Tools may rely on `mn_addr_<network>` as
-a parseable network indicator, and on a missing segment meaning mainnet.
+The HRP encoding is stable. Tools may rely on `mn_addr_<network>` as a parseable network indicator, and on a missing segment meaning mainnet.
 
 ### Wallet file (`~/.midnight/wallets/<name>.json`)
 
@@ -69,11 +57,11 @@ Valid keys:
 - `indexer-ws`
 - `wallet`
 - `blockfrost-project-id` (kept per network under `networks.<name>`; `config get` returns it masked, e.g. `nightpreprod…ab12 (preprod)`, never in full)
+- `account-artifacts` (where `mn grant` gets the account contract's proving artefacts: an absolute folder or an http(s) URL; one for every network; `MN_ACCOUNT_ARTIFACTS` wins over it)
 
 Aliases (transparently resolved to a canonical key):
 
-- `network-id` → `network` (added 2026-04-27 for midnight-expert
-  compatibility)
+- `network-id` → `network` (added 2026-04-27 for midnight-expert compatibility)
 
 ### Exit codes
 
@@ -117,7 +105,7 @@ Stable identifiers used in error messages and structured error objects, with the
 | `DUST_REQUIRED` | 5 | Wallet has NIGHT but not enough DUST for the fee. |
 | `DUST_GENERATING` | 5 | A Dust registration can't pay its fee yet: the wallet's NIGHT hasn't generated enough Dust. |
 | `CHAIN_CLOCK_BEHIND` | 4 | The chain's clock lags this computer's (a local chain after sleep), so Dust estimates don't hold. |
-| `UNSUPPORTED_LEDGER` | 4 | The network is on ledger 8; this build supports ledger 9 only. |
+| `UNSUPPORTED_LEDGER` | 4 | The chain is still on ledger 8; mn supports ledger 9 only. |
 | `NO_TEST_CONFIG` | 1 | No dapp.test.json in the folder the test command ran in. |
 | `LOCAL_STACK_UNREACHABLE` | 4 | No ledger-9 stack answers at the configured endpoints. |
 | `AMBIGUOUS_LOCAL_STACKS` | 4 | Several local Midnight stacks are running and no endpoints are configured, so mn won't guess. |
@@ -135,7 +123,7 @@ Stable identifiers used in error messages and structured error objects, with the
 | `BLOCKFROST_PROJECT_ID_REJECTED` | 4 | Blockfrost refused the project id (HTTP 403): mistyped, revoked, or for another network. |
 | `BLOCKFROST_LIMIT_REACHED` | 4 | Blockfrost's plan limit or rate limit. |
 | `ENDPOINT_SHUT_DOWN` | 4 | An endpoint set by flag or config was shut down by its operator (the old preprod indexer, mainnet's old Midnight-hosted indexer and node). |
-| `MAINNET_REFUSED` | 2 | The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (no released account build there). |
+| `MAINNET_REFUSED` | 2 | The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (its account build has been tested on a local network only). |
 | `MIXED_SDK_LAYOUT` | 1 | mn's packages were installed without the engine's shrinkwrap (bun's installer): the engine's SDK tree isn't the one it was tested with. |
 | `NO_STATE_ROOT` | 1 | The host gave mn no place to keep its state (a program's `createHost` without paths). |
 | `NO_PAYER` | 1 | A command that submits a transaction was called without a payer. |
@@ -156,8 +144,7 @@ Hooks and parsers may rely on substring matching against these.
 
 ## Command JSON shapes (`--json`)
 
-Each entry shows the canonical shape. Fields marked **alias** are
-backward-compatibility mirrors of another field in the same object.
+Each entry shows the canonical shape. Fields marked **alias** are backward-compatibility mirrors of another field in the same object.
 
 Every result may carry `warnings`: an array of strings, the notices the command would print on stderr without `--json` (for example that Dust on a hosted network was read in WASM, without the native sidecar, and why; or that a contract's private-state store was moved), without colour or indent, in the order they were given. It is present only when there is at least one, and only on a result, not on an error. MCP tool results carry it the same way.
 
@@ -176,20 +163,71 @@ Every result may carry `warnings`: an array of strings, the notices the command 
 
 ### `mn balance --wallet <name> --json`
 
-Wallet-based balance also includes shielded fields. Shape per current
-code in `packages/wallet/src/commands/balance.ts`. (Subject to the same additive-only
-rule once formally documented here.)
+```jsonc
+{
+  "address": "mn_addr_undeployed1...",
+  "shieldedAddress": "mn_shield-addr_undeployed1...",
+  "network": "undeployed",
+  "unshielded": { "NIGHT": "1000.000000", "utxoCount": 1 },
+  "shielded": {
+    "NIGHT": "10.000000",
+    "availableCoins": 1,
+    "pendingCoins": 0,
+    "tokens": {}               // other shielded tokens: raw token type → amount in its smallest unit, as a string
+  },
+  "shieldedSynced": true       // false: the shielded balance was not read (preview, preprod and mainnet without --force-shielded), so shielded.NIGHT is not a confirmed zero
+}
+```
+
+### `mn transfer <to> <amount> --json`
+
+```jsonc
+{
+  "txHash": "00ab...",
+  "amount": "100",                         // NIGHT, as a string
+  "recipient": "mn_addr_undeployed1...",
+  "network": "undeployed",
+  "type": "shielded",                      // with --shielded only
+  "receipt": {                             // see "Receipts" below
+    "kind": "regular", "hash": "00ab...", "identifiers": ["..."], "result": "SUCCESS",
+    "fee": "0.548120", "feeSpecks": "548120000000000",
+    "blockHeight": 1234, "blockHash": "...", "blockTime": "2026-11-11T10:00:00.000Z"
+  }
+}
+```
+
+With several recipients, `amount` is their total and `recipient` gives way to `recipients`: `[{ "recipient": "mn_addr_...", "amount": "10" }, ...]`, in order. `selfTransfer: true` (with a `note`) marks a payment to the sending wallet itself.
+
+### `mn airdrop <amount> --json`
+
+```jsonc
+{
+  "txHash": "00ef...",
+  "amount": "50000",
+  "recipient": "mn_addr_undeployed1...",
+  "network": "undeployed",
+  "receipt": { /* see "Receipts" below */ },
+  "dustRegistered": false      // unshielded airdrop, when it could be read: false means run mn dust register before the wallet pays a fee
+}
+```
+
+With `--shielded`, `recipient` is the shielded address, `shieldedAddress` repeats it (**alias**, its older name), and `type` is `"shielded"`.
+
+### Receipts
+
+A command that submits a transaction (transfer, airdrop, dust register, contract deploy and call, the grant and swap commands) returns its `txHash` and waits up to 60 s for the indexer to list it. `receipt` is then the transaction as `mn tx status` gives it: `kind`, `hash`, `identifiers` (regular transactions), `result` (`SUCCESS`, `PARTIAL_SUCCESS` or `FAILURE`), `segments` (a partial success), `fee` (DUST, exact) and `feeSpecks`, `blockHeight`, `blockHash` and `blockTime`. When the indexer has not listed it, `receipt` is `null` and `receiptMissing` says why; check later with `mn tx status <txHash>`.
 
 ### `mn info --wallet <name> --json`
 
 ```jsonc
 {
   "addresses": {
+    "mainnet": "mn_addr1...",
     "preprod": "mn_addr_preprod1...",
     "preview": "mn_addr_preview1...",
     "undeployed": "mn_addr_undeployed1..."
   },
-  "shieldedAddresses": { /* same shape, mn_shield-addr_<net>1... */ },
+  "shieldedAddresses": { /* same shape, mn_shield-addr_<net>1... (mn_shield-addr1... on mainnet) */ },
   "activeNetwork": "undeployed",
   "activeAddress": "mn_addr_undeployed1...",
   "createdAt": "2026-03-26T05:27:33.721Z",
@@ -219,9 +257,9 @@ rule once formally documented here.)
 ```jsonc
 {
   "name": "counter",
-  "compilerVersion": "0.30.0",
-  "languageVersion": "0.22.0",
-  "runtimeVersion": "0.15.0",
+  "compilerVersion": "0.36.0",
+  "languageVersion": "0.28.0",
+  "runtimeVersion": "0.21.0",   // must be the compact-runtime mn bundles (0.21.0), or a deploy or call is refused
   "managedDir": "/path/to/managed/counter",
   "siblings": [],            // names of other contracts in the same managed/ dir; empty for single-contract projects
   "circuits": [{ "name": "increment", "pure": false, "proof": true, "arguments": [], "returnType": "void" }],
@@ -237,6 +275,8 @@ rule once formally documented here.)
   "contractName": "counter",
   "address": "9b3e083bf850ca17983d34110337d384d2dc626da8223c3fb2dbd3f8a2df35a3",
   "network": "preprod",
+  "txHash": "00b1...",                 // the deploy's transaction; absent when the payer gave none
+  "receipt": { /* see "Receipts" above */ },
   // The deploy's price, worked out after the wallet synced and before anything was proven; absent when the mn serve that paid gave none.
   "cost": {
     "fee": "1.075820342856952",        // expected fee at the chain's fee prices then, DUST
@@ -273,10 +313,18 @@ Prices the deploy and stops: nothing is proven or sent, and there is no address,
   "address": "9b3e083bf850ca17983d34110337d384d2dc626da8223c3fb2dbd3f8a2df35a3",
   "network": "preprod",
   "status": "success",
+  "txHash": "00c2...",
+  "receipt": { /* see "Receipts" above */ },
   // As deploy's; a call's proofs are priced at the ledger's estimate, so a few percent off (a counter's increment: about 3% over).
-  "cost": { "fee": "0.201842057142821", "committed": "0.230964870646751", "have": "0.827836439768184", "covers": true, "waitSeconds": 0, "marginBlocks": 3 }
+  "cost": { "fee": "0.201842057142821", "committed": "0.230964870646751", "have": "0.827836439768184", "covers": true, "waitSeconds": 0, "marginBlocks": 3 },
+  // Only when the arguments held {"@coin": ...} shorthands: each fresh coin's nonce, by which the contract may name it later.
+  "freshCoins": [{ "argument": "coin", "nonce": "3f2a..." }],
+  // Only when the call gave the contract coins: recorded in its private state under mnHeldCoins, for a witness to spend.
+  "heldCoins": [{ "argument": "coin", "commitment": "9c41...", "mtIndex": "17" }]
 }
 ```
+
+`warnings` (see above) carries a note when `--args` gave an argument the circuit keeps private, which belongs in `--args-file` or `--args -`.
 
 ### `mn contract state --json`
 
@@ -319,8 +367,7 @@ Prices the deploy and stops: nothing is proven or sent, and there is no address,
 
 ### `mn wallet list --json`
 
-Per `packages/wallet/src/commands/wallet.ts`, list of wallet names, addresses,
-networks, with the active wallet marked. Shape stable.
+Per `packages/wallet/src/commands/wallet.ts`, list of wallet names, addresses, networks, with the active wallet marked. Shape stable.
 
 ### `mn config get <key>`
 
@@ -377,37 +424,28 @@ midnight_grant_deposit        midnight_grant_issue
 midnight_grant_revoke         midnight_grant_revoke_all
 ```
 
-Tool **parameter names** are also stable (the experimental tools excepted). A new optional parameter is
-additive; renaming or removing one is a major bump.
+Tool **parameter names** are also stable (the experimental tools excepted). A new optional parameter is additive; renaming or removing one is a major bump.
 
 ## MCP response envelope
 
-Every MCP tool response — success, error, or pending-confirmation token —
-carries a `_serverVersion` field with the server's `package.json` version.
-Use it to detect a stale server (CLI on disk says X, responses still say
-Y means the user's MCP client is talking to a long-lived process from an
-older install). Underscore prefix marks it as metadata, distinct from
-tool-shape data fields.
+Every MCP tool response — success, error, or pending-confirmation token — carries a `_serverVersion` field with the server's `package.json` version. Use it to detect a stale server (CLI on disk says X, responses still say Y means the user's MCP client is talking to a long-lived process from an older install). Underscore prefix marks it as metadata, distinct from tool-shape data fields.
 
 ```jsonc
 // success:
-{ "subcommand": "deploy", "address": "9b3e…", "_serverVersion": "0.5.0" }
+{ "subcommand": "deploy", "address": "9b3e…", "_serverVersion": "0.6.0" }
 // error:
-{ "error": true, "code": "DUST_REQUIRED", "message": "…", "_serverVersion": "0.5.0" }
+{ "error": true, "code": "DUST_REQUIRED", "message": "…", "_serverVersion": "0.6.0" }
 // pending-token:
-{ "pending": true, "token": "uuid", "description": "…", "_serverVersion": "0.5.0" }
+{ "pending": true, "token": "uuid", "description": "…", "tool": "midnight_transfer", "expiresAt": "2026-11-11T10:05:00.000Z", "nextStep": "…", "_serverVersion": "0.6.0" }
 ```
 
 ## Compatibility aliases (additive shims)
 
-Additions made on our side so existing integrations keep working
-without touching their code:
+Additions made on our side so existing integrations keep working without touching their code:
 
 | Surface | Canonical | Alias | Added | For |
 |---|---|---|---|---|
 | Config key | `network` | `network-id` | 2026-04-27 | midnight-expert setup-test-wallets |
 | Balance JSON | `balances.NIGHT` | top-level `NIGHT` | 2026-04-27 | midnight-expert session-start-health |
 
-If you're an integrator and you depend on a shape we haven't documented
-here yet, **open an issue.** We'd rather codify it now than discover
-it broken in your release later.
+If you're an integrator and you depend on a shape we haven't documented here yet, **open an issue.** We'd rather codify it now than discover it broken in your release later.

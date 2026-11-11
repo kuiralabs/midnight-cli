@@ -48,7 +48,7 @@ export async function prepareGrant(args: ParsedArgs, root: string, host: Host): 
   assertNodeRunsAccount();
   const target = resolvePayingTarget(args, 'grant', request.subcommand, root, host);
   // Refuses a network the account can't reach before anything is created.
-  refuseOnMainnet(target.network, 'mn grant', "the account contract's current build has no released key set for mainnet", 'Use mn grant on undeployed (a local ledger-9 network).');
+  refuseOnMainnet(target.network, 'mn grant', "the account contract's current build has been tested on a local network only", 'Use mn grant on undeployed (a local network).');
   const network = assertAccountNetwork(target.networkConfig);
   const chain = () => accountChainFor(host.engines, network);
   const walletName = accountWalletName(getFlag(args, 'wallet'), () => getActiveWalletName(root));

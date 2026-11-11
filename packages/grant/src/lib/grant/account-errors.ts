@@ -6,10 +6,10 @@
 
 import { UsageError } from '@kuiralabs/midnight-cli-core';
 
-/** A network the account package can't reach yet. */
+/** A network mn grant doesn't run the account package on yet: its current build was tested on a local network only. */
 export class UnreachableByAccountError extends UsageError {
   constructor(networkId: string) {
-    super(`mn grant runs on ledger 9, which only a local network (undeployed) runs so far; ${networkId} is not one.`);
+    super(`mn grant runs on a local network (undeployed) only: the account contract's current build has been tested there and nowhere else; ${networkId} is not one.`);
     this.name = 'UnreachableByAccountError';
     Object.setPrototypeOf(this, UnreachableByAccountError.prototype);
   }

@@ -10,13 +10,14 @@ const PREVIEW = 1000300n;
 const LEDGER9_LOCALNET = 2001000n;
 
 describe('checkLedgerSupported', () => {
-  it('refuses a ledger-8 chain, naming the network, its version, and what to use instead', () => {
+  it('refuses a ledger-8 chain, naming the network, its version, and how to get a ledger-9 local stack', () => {
     let err: unknown;
     try { checkLedgerSupported('preview', PREVIEW); } catch (e) { err = e; }
     expect(err).toBeInstanceOf(UnsupportedLedgerError);
     expect((err as UnsupportedLedgerError).code).toBe('UNSUPPORTED_LEDGER');
     expect((err as Error).message).toContain('preview is on ledger 8 (protocol version 1000300)');
-    expect((err as Error).message).toContain('midnight-wallet-cli 0.5.x');
+    expect((err as Error).message).toContain('midnight localnet down, then midnight localnet up');
+    expect((err as Error).message).not.toContain('0.5.x');
   });
 
   it('accepts a ledger-9 chain', () => {

@@ -5,17 +5,17 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { LOCALNET_DIR_NAME, DIR_MODE, CancelledError, CANCELLED_MESSAGE, throwIfCancelled, type ExecRunner, sleep } from '@kuiralabs/midnight-cli-core';
+import { LOCALNET_DIR_NAME, DIR_MODE, CancelledError, CANCELLED_MESSAGE, PROOF_SERVER_IMAGE, throwIfCancelled, type ExecRunner, sleep } from '@kuiralabs/midnight-cli-core';
 
 // Version tag — bump when compose content changes so stale files get overwritten
 export const COMPOSE_VERSION = '4.0.0';
 
 // Docker image versions: the newest public ledger-9 images, the ones the
 // midnight-examples ledger-9 compatibility matrix runs its local network on.
-// The node and indexer are pre-releases of the 2.1 and 4.4 lines.
+// The node and indexer are pre-releases of the 2.1 and 4.4 lines. The proof
+// server's image is core's, the one hosted-network users run too.
 const NODE_IMAGE = 'midnightntwrk/midnight-node:2.1.0-rc.4';
 const INDEXER_IMAGE = 'midnightntwrk/indexer-standalone:4.4.0-rc.6';
-const PROOF_SERVER_IMAGE = 'midnightntwrk/proof-server:9.0.0';
 
 // Built when used, under the state root the call gives; never when this module loads.
 const localnetDir = (root: string): string => join(root, LOCALNET_DIR_NAME);

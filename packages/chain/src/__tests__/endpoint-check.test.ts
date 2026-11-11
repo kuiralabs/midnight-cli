@@ -99,7 +99,7 @@ describe('assertEndpointsReachable', () => {
       await expect(failure).rejects.toMatchObject({
         code: 'NETWORK_ERROR',
         endpoint: 'proof server',
-        message: `Cannot reach the proof server at http://127.0.0.1:${port}: connection refused.\nCheck that it is running and that the URL is right (--proof-server, or: midnight config set proof-server <url>).`,
+        message: `Cannot reach the proof server at http://127.0.0.1:${port}: connection refused.\nCheck that it is running and that the URL is right (--proof-server, or: midnight config set proof-server <url>).\nmn proves on this machine on every network. On preview, preprod and mainnet start a proof server with: docker run -p 6300:6300 midnightntwrk/proof-server:9.0.0 midnight-proof-server -v (on undeployed, midnight localnet up starts one).`,
       });
     } finally {
       await up.close();

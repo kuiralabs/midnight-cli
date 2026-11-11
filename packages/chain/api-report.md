@@ -100,8 +100,8 @@ export declare const chainCodes: readonly [
         readonly code: "UNSUPPORTED_LEDGER";
         readonly exitCode: 4;
         readonly order: 150;
-        readonly summary: "The network is on ledger 8; this build supports ledger 9 only.";
-        readonly recovery: "Tell the user: this network needs midnight-wallet-cli 0.5.x. Don't retry.";
+        readonly summary: "The chain is still on ledger 8; mn supports ledger 9 only.";
+        readonly recovery: "Don't retry. Every public network runs ledger 9, so it is a local stack on an older ledger: ask the user to restart or upgrade it (`midnight localnet down`, then `midnight localnet up`, starts a ledger-9 one).";
     },
     {
         readonly code: "LOCAL_STACK_UNREACHABLE";

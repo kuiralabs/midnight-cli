@@ -80,11 +80,11 @@ describe('commands refused on mainnet before anything runs', () => {
     expect(fs.readdirSync(dapp)).toEqual(['dapp.test.json']);
   });
 
-  it('mn grant, every subcommand: the account has no released build for mainnet, and no records are made', async () => {
+  it('mn grant, every subcommand: the account build was tested on a local network only, and no records are made', async () => {
     for (const argv of [['grant', 'deploy'], ['grant', 'status'], ['grant', 'list']]) {
       const err = await failureOf(grantDefinition, [...argv, '--network', 'mainnet']);
       expect(classifyError(err, installedCommands).errorCode).toBe('MAINNET_REFUSED');
-      expect(err.message).toContain('no released key set');
+      expect(err.message).toContain('tested on a local network only');
     }
     expect(fs.existsSync(path.join(home, MIDNIGHT_DIR, 'accounts'))).toBe(false);
   });

@@ -5,10 +5,10 @@ Read-only network access for the Midnight CLI packages: whether a node, an index
 ## Install
 
 ```sh
-npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-chain@next @kuiralabs/midnight-engine-rc@next
+npm install @kuiralabs/midnight-cli-core @kuiralabs/midnight-chain @kuiralabs/midnight-engine-rc
 ```
 
-Every package is a release candidate on the `next` tag. Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): the engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it. A program that runs the SDK installs the engine, `@kuiralabs/midnight-engine-rc`, for every network. How a program sets up its process for the SDK (the rejection guard, the heap, Ctrl-C, ending) is in [core's README](https://github.com/kuiralabs/midnight-cli/blob/main/packages/cli-core/README.md#your-process-what-mns-shell-does-that-you-must-do).
+Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): the engine ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it. A program that runs the SDK installs the engine, `@kuiralabs/midnight-engine-rc`, for every network. How a program sets up its process for the SDK (the rejection guard, the heap, Ctrl-C, ending) is in [core's README](https://github.com/kuiralabs/midnight-cli/blob/main/packages/cli-core/README.md#your-process-what-mns-shell-does-that-you-must-do).
 
 ## Entry points
 
@@ -35,7 +35,7 @@ Each error carries a `code`, and `classifyError(err, registry)` gives its code a
 | Code | Exit | What went wrong | What to do |
 |------|------|-----------------|------------|
 | `CHAIN_CLOCK_BEHIND` | 4 | The chain's clock lags this computer's (a local chain after sleep), so Dust estimates don't hold. | Wait for it to catch up, or ask the user to restart the local chain. |
-| `UNSUPPORTED_LEDGER` | 4 | The network is on ledger 8; this build supports ledger 9 only. | Tell the user: this network needs midnight-wallet-cli 0.5.x. Don't retry. |
+| `UNSUPPORTED_LEDGER` | 4 | The chain is still on ledger 8; mn supports ledger 9 only. | Don't retry. Every public network runs ledger 9, so it is a local stack on an older ledger: ask the user to restart or upgrade it (`midnight localnet down`, then `midnight localnet up`, starts a ledger-9 one). |
 | `LOCAL_STACK_UNREACHABLE` | 4 | No ledger-9 stack answers at the configured endpoints. | Ask the user to start their stack or fix the configured node / indexer-ws / proof-server endpoints. |
 <!-- codes: end -->
 

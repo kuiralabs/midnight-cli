@@ -37,26 +37,32 @@ proofs. The CLI provides full shielded support:
     → { address, shieldedAddress, network,
         unshielded: { NIGHT, utxoCount },
         shielded: { NIGHT, availableCoins, pendingCoins,
-                    tokens: { <raw token type>: amount } } }
+                    tokens: { <raw token type>: amount } },
+        shieldedSynced }
 
   Shielded airdrop (localnet only — genesis has 250M shielded NIGHT):
     midnight airdrop 100 --shielded --json
-    → { txHash, amount, shieldedAddress, network, type: "shielded" }
+    → { txHash, amount, recipient, shieldedAddress, network,
+        type: "shielded", receipt }
 
   Shielded transfer (to shielded address or wallet name):
     midnight transfer alice 50 --shielded --json
     midnight transfer mn_shield-addr_... 50 --shielded --json
-    → { txHash, amount, recipient, network, type: "shielded" }
+    → { txHash, amount, recipient, network, type: "shielded", receipt }
+
+  Amounts are NIGHT strings ("50", "2.5"). receipt is the transaction once
+  the indexer lists it (blockHeight, blockHash, blockTime, fee, feeSpecks,
+  result), or null with receiptMissing saying why.
 
   Several recipients in one transaction (one fee, up to 50; --shielded too):
     midnight transfer alice 10 bob 5 mn_addr_... 2.5 --json
     midnight transfer --to-file payments.json --json
       payments.json: [{"to": "alice", "amount": "10"}, {"to": "mn_addr_...", "amount": "2.5"}]
-    → { txHash, amount (the total), recipients: [{ recipient, amount }], network }
+    → { txHash, amount (the total), recipients: [{ recipient, amount }], network, receipt }
 
   Positional address balance (unshielded only, fast GraphQL):
     midnight balance mn_addr_... --json
-    → { address, network, balances, utxoCount, txCount }
+    → { address, network, balances, NIGHT, utxoCount, txCount }
 
   Shielded balance is private — it can't be read from an address alone
   (no secret key). Pass --shielded with a positional address and, if the
@@ -114,11 +120,12 @@ included), it's used as an address directly.
   3. midnight_transfer             → Returns pending token for shielded send
   4. (show + consent) → midnight_confirm_operation
 
-  Testnet (preprod/preview, once the network runs ledger 9; refused
-  while it is still on ledger 8):
+  Testnet (preprod/preview; a local proof server must run, see PROOF SERVER;
+  preprod also needs the user's Blockfrost project id):
   1. midnight_wallet_generate      → Create wallet
   2. midnight_config_set           → Set network (key: "network", value: "preview")
-  3. (fund via faucet: https://faucet.preview.midnight.network/)
+  3. (fund via faucet: https://faucet.preview.midnight.network/
+     or https://faucet.preprod.midnight.network/)
   4. midnight_dust_register        → Register for fees
   5. midnight_balance              → Check balance
   6. midnight_transfer → midnight_confirm_operation → transfer
@@ -137,23 +144,23 @@ included), it's used as an address directly.
       order: 10,
       body: `  # Generate wallet (addresses on every network + seed)
   midnight wallet generate alice --json
-  # → {"name":"alice","addresses":{...},"activeAddress":"mn_addr_...","activeNetwork":"undeployed","seed":"...","file":"..."}
+  # → {"name":"alice","addresses":{...},"shieldedAddresses":{...},"activeAddress":"mn_addr_...","activeNetwork":"undeployed","file":"...","createdAt":"...","active":true,"seed":"...","mnemonic":"..."}
 
   # Balance (full sync — unshielded + shielded)
   midnight balance --json
-  # → {"address":"mn_addr_...","shieldedAddress":"mn_shield-addr_...","network":"undeployed","unshielded":{"NIGHT":"1000.000000","utxoCount":1},"shielded":{"NIGHT":"10.000000","availableCoins":1,"pendingCoins":0}}
+  # → {"address":"mn_addr_...","shieldedAddress":"mn_shield-addr_...","network":"undeployed","unshielded":{"NIGHT":"1000.000000","utxoCount":1},"shielded":{"NIGHT":"10.000000","availableCoins":1,"pendingCoins":0,"tokens":{}},"shieldedSynced":true}
 
   # Transfer by wallet name
   midnight transfer bob 100 --json
-  # → {"txHash":"00ab...","amount":100,"recipient":"mn_addr_...","network":"undeployed"}
+  # → {"txHash":"00ab...","amount":"100","recipient":"mn_addr_...","network":"undeployed","receipt":{...}}
 
   # Shielded transfer
   midnight transfer bob 50 --shielded --json
-  # → {"txHash":"00cd...","amount":50,"recipient":"mn_shield-addr_...","network":"undeployed","type":"shielded"}
+  # → {"txHash":"00cd...","amount":"50","recipient":"mn_shield-addr_...","network":"undeployed","type":"shielded","receipt":{...}}
 
   # Shielded airdrop (localnet only)
   midnight airdrop 100 --shielded --json
-  # → {"txHash":"00ef...","amount":100,"shieldedAddress":"mn_shield-addr_...","network":"undeployed","type":"shielded"}
+  # → {"txHash":"00ef...","amount":"100","recipient":"mn_shield-addr_...","shieldedAddress":"mn_shield-addr_...","network":"undeployed","type":"shielded","receipt":{...}}
 
 `,
     },
@@ -197,7 +204,7 @@ included), it's used as an address directly.
       section: 'canonical-flows',
       order: 10,
       body: `### New user, first session (localnet)
-1. Make sure a ledger-9 stack is running and reachable (see the note at the top); \`midnight_localnet_up()\` won't start one on this build.
+1. \`midnight_localnet_up()\` — start a local ledger-9 stack (node, indexer, proof server), or make sure the user's own is reachable (see the note at the top).
 2. \`midnight_wallet_generate({ name: "alice" })\` — create wallet, set active.
 3. \`midnight_airdrop({ amount: "${LOCAL_WALLET_FUNDING_NIGHT}" })\` — fund from genesis.
 4. \`midnight_dust_register()\` — make wallet able to pay fees.

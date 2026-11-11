@@ -1,11 +1,11 @@
 # @kuiralabs/midnight-engine-rc
 
-The Midnight CLI's engine for the SDK's release candidates (wallet SDK 2.0 rc, ledger 9 rc, midnight-js 5 rc): everything the CLI packages do with that SDK set (wallets, the ledger, contracts, readers, the account package) behind core's engine interface. It runs preprod, preview and a local network (`undeployed`). Only an engine imports the SDK; the other packages reach it through the engine your host loads.
+The Midnight CLI's engine for the ledger-9 SDK set (wallet SDK 2.0.0, ledger-v9 1.0.0, midnight-js 5.0.0, compact-runtime 0.21.0, compact-js 3.0.0, onchain-runtime-v4 4.0.0): everything the CLI packages do with that SDK set (wallets, the ledger, contracts, readers, the account package) behind core's engine interface. It runs mainnet, preprod, preview and a local network (`undeployed`). The SDK set is still named `rc` in the engine interface and the package name, from when it was built on the SDK's release candidates. Only an engine imports the SDK; the other packages reach it through the engine your host loads.
 
 ## Install
 
 ```sh
-npm install @kuiralabs/midnight-cli-core@next @kuiralabs/midnight-engine-rc@next
+npm install @kuiralabs/midnight-cli-core @kuiralabs/midnight-engine-rc
 ```
 
 Install with npm 11 or older (npm 12 no longer reads a package's shrinkwrap): this package ships an `npm-shrinkwrap.json` that pins its SDK set, and npm 11 honours it, so it gets exactly the SDK it was tested with (one copy of each ledger). An install that isn't that tree (bun's installer ignores the shrinkwrap and resolves the packages again) is refused before any SDK module loads, with `MIXED_SDK_LAYOUT` and the npm command; bun can run what npm installed.

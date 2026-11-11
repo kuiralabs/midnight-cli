@@ -302,6 +302,8 @@ export declare const MIDNIGHT_DIR = ".midnight";
 export declare const MN_RPC_METHOD_PREFIX = "mn_";
 export declare const NATIVE_TOKEN_TYPE = "0000000000000000000000000000000000000000000000000000000000000000";
 export declare const PRICE_TRANSACTION_METHOD = "mn_priceTransaction";
+export declare const PROOF_SERVER_DOCKER_RUN = "docker run -p 6300:6300 midnightntwrk/proof-server:9.0.0 midnight-proof-server -v";
+export declare const PROOF_SERVER_IMAGE = "midnightntwrk/proof-server:9.0.0";
 export declare const SYNC_HEAP_MIN_GAIN_MB = 512;
 export declare const SYNC_HEAP_RAM_FRACTION = 0.7;
 export declare const SYNC_HEAP_TARGET_MB = 16384;
@@ -708,6 +710,14 @@ export declare const ERROR_CODES: {
     readonly SERVE_PORT_IN_USE: "SERVE_PORT_IN_USE";
     readonly APPROVAL_UNAVAILABLE: "APPROVAL_UNAVAILABLE";
     readonly COMMAND_FAILED: "COMMAND_FAILED";
+    readonly CONTRACT_ASSERTION_FAILED: "CONTRACT_ASSERTION_FAILED";
+    readonly CONTRACT_NOT_COMPILED: "CONTRACT_NOT_COMPILED";
+    readonly CONTRACT_STATE_BUSY: "CONTRACT_STATE_BUSY";
+    readonly CONTRACT_STATE_UNREADABLE: "CONTRACT_STATE_UNREADABLE";
+    readonly NO_TEST_CONFIG: "NO_TEST_CONFIG";
+    readonly OFFER_TAKEN: "OFFER_TAKEN";
+    readonly OFFER_RECORD_UNREADABLE: "OFFER_RECORD_UNREADABLE";
+    readonly ACCOUNT_KEYS_UNAVAILABLE: "ACCOUNT_KEYS_UNAVAILABLE";
     readonly UNKNOWN: "UNKNOWN";
 };
 export declare const EXIT_CANCELLED = 7;
@@ -1142,8 +1152,8 @@ export declare const coreCodes: readonly [
         readonly code: "MAINNET_REFUSED";
         readonly exitCode: 2;
         readonly order: 275;
-        readonly summary: "The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (no released account build there).";
-        readonly recovery: "Tell the user why (the message says) and don't retry on mainnet; offer undeployed or a test network instead.";
+        readonly summary: "The command is refused on mainnet before anything runs: an airdrop (mainnet has no faucet), a test suite (it deploys throwaway contracts), or mn grant (its account build has been tested on a local network only).";
+        readonly recovery: "Tell the user why (the message says) and don't retry on mainnet; offer undeployed instead (for mn grant, the only network it runs on), or a test network for the others.";
     },
     {
         readonly code: "CANCELLED";

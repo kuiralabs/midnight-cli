@@ -230,7 +230,7 @@ async function connectToLace(networkId: string): Promise<ConnectedAPI> {
 }
 ```
 
-This is the pattern used by the [bboard-ui example](https://github.com/midnight-ntwrk/midnight-examples) — the canonical reference implementation for Midnight dApps.
+This is the pattern used by the [bboard-ui example](https://github.com/midnightntwrk/midnight-examples) — the canonical reference implementation for Midnight dApps.
 
 ## Approval Notifications
 
