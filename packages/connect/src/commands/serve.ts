@@ -93,7 +93,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
   // syncing behind, so its balances may be short until it catches up.
   const syncMode = shieldedSyncEnabled(networkName, hasFlag(args, 'force-shielded')) ? 'full' : 'lite';
 
-  await (await ctx.host.engines.for(networkName)).wallet.serveWallet({ seed: seedBuffer, root, notice: ctx.host.notice, networkConfig, network: networkName, address, syncMode, signal: ctx.signal, log: ctx.diagnostics.line,
+  await (await ctx.host.engines.for(networkName)).wallet.serveWallet({ seed: seedBuffer, root, notice: ctx.host.notice, waiting: ctx.host.waiting, networkConfig, network: networkName, address, syncMode, signal: ctx.signal, log: ctx.diagnostics.line,
     onStatus: (s) => spinner.update(s),
     onSyncProgress: (applied, highest) => {
       if (highest > 0) {

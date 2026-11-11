@@ -13,6 +13,7 @@ import type { Prompter } from './prompter.ts';
 import { createSdkWarningRouter, sdkWarningCallsOn, type CallSdkWarnings, type SdkWarningCalls } from './sdk-warnings.ts';
 import { sdkSetOf, type Engine, type EngineLoader, type HostEngines, type SdkSet } from './engine.ts';
 import type { NetworkName } from './network.ts';
+import type { WaitSink } from './notices.ts';
 
 /** A piece of state a library keeps per host, named by the library that owns it. */
 export interface HostSlot<T> {
@@ -39,6 +40,13 @@ export interface Host {
    * there (the process guard knows); a notice it can't place is not collected.
    */
   collectNotices(call: CallSdkWarnings, collect: (line: string) => void): void;
+  /**
+   * One line of a wait the work is in (Dust for a fee): shown even where
+   * notices are not (a --json run of the CLI), since minutes with nothing
+   * said look like a hang. A wait's opening line, which says how long it
+   * takes and why, is also given to the call it came from, as a notice is.
+   */
+  waiting: WaitSink;
   /** Who answers questions (a passphrase, an approval); null when nobody can. */
   readonly prompter: Prompter | null;
   /** Where the SDK's warnings go, per call. */
@@ -59,6 +67,8 @@ export interface HostOptions {
   readonly settings?: Supplied<Settings>;
   /** Where notices go; dropped when not given. */
   readonly notice?: (line: string) => void;
+  /** Where the lines of a wait go (Host.waiting); where notices go when not given. */
+  readonly waiting?: (line: string) => void;
   /** Who answers questions; nobody when not given. */
   readonly prompter?: Prompter | null;
   /** Where the SDK's warnings go; a router of the host's own when not given. */
@@ -73,7 +83,7 @@ const read = <T>(supplied: Supplied<T>): T => (typeof supplied === 'function' ? 
 
 export function createHost(options: HostOptions = {}): Host {
   const slots = new Map<HostSlot<unknown>, unknown>();
-  const { paths, settings, notice, prompter = null } = options;
+  const { paths, settings, notice, waiting, prompter = null } = options;
   const sdkWarnings = options.sdkWarnings ?? sdkWarningCallsOn(createSdkWarningRouter());
   // The calls that collect their notices, by their SDK warnings: gone with the call.
   const collectors = new WeakMap<CallSdkWarnings, (line: string) => void>();
@@ -89,6 +99,13 @@ export function createHost(options: HostOptions = {}): Host {
       notice?.(line);
     },
     collectNotices: (call, collect) => { collectors.set(call, collect); },
+    waiting: (line, opening) => {
+      if (opening) {
+        const call = sdkWarnings.current?.();
+        if (call !== undefined) collectors.get(call)?.(line);
+      }
+      (waiting ?? notice)?.(line);
+    },
     prompter,
     sdkWarnings,
     engines: hostEngines(() => host, options.engineLoader),

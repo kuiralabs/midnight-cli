@@ -3,8 +3,8 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isDroppedFromPool, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, priceTransaction, transactionPriceToWire } from '@kuiralabs/midnight-cli-core/engine';
-import { type NoticeSink, DustDoubleSpentError, FeeRepricedError, TransactionInvalidatedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
+import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, waitForDustGrowth, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isDroppedFromPool, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, priceTransaction, transactionPriceToWire } from '@kuiralabs/midnight-cli-core/engine';
+import { type NoticeSink, type WaitSink, DustDoubleSpentError, FeeRepricedError, TransactionInvalidatedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
 import { dim, roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
@@ -28,8 +28,10 @@ export interface DAppConnectorOptions {
   bundle: FacadeBundle;
   networkConfig: NetworkConfig;
   approvalOptions: ApprovalOptions;
-  /** Where the connector's lines for the person go (the host's notices): reverted transactions, fee estimates, waits for Dust. */
+  /** Where the connector's lines for the person go (the host's notices): reverted transactions, fee estimates. */
   notice: NoticeSink;
+  /** Where the lines of a wait for Dust go, shown in every mode (the host's `waiting`); `notice` when not given. */
+  waiting?: WaitSink;
   /** Under --approve-fees: the most a transaction may cost, and how many may wait unsubmitted. */
   feeLimits?: FeeLimits;
   /**
@@ -208,6 +210,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
   const isCurrent = options.isCurrent ?? ((state: FacadeState) => state.isSynced);
   const dustWaitMs = options.dustWaitMs ?? DUST_SHORT_WAIT_MS;
+  const waiting: WaitSink = options.waiting ?? ((line) => notice(line));
   let latestState: FacadeState | undefined = options.initialState;
   // From every state, synced or not: the wallets' protocol versions decide
   // which ledger the facade reads a dApp's transaction as.
@@ -878,8 +881,8 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
         if (growth) {
           const { have, needed, waitMs } = growth;
           if (waitMs === null || waitedForGrowthMs + waitMs > dustWaitMs) throw dustTooFarError(have, needed, waitMs);
-          notice(dim(`  Dust: ${roughDust(have)} of the ${roughDust(needed, true)} DUST this fee takes; waiting ${formatWait(waitMs)} for the rest...`));
-          await sleep(waitMs);
+          // Said as it goes, the time waited and the Dust there is by then: a wait of minutes must not look like a hang.
+          await waitForDustGrowth({ have, needed, waitMs }, { balance: (at) => latestState?.dust.balance(at) ?? 0n }, (line, opening) => waiting(dim(`  ${line}`), opening));
           waitedForGrowthMs += waitMs;
           continue;
         }

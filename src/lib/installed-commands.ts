@@ -34,7 +34,7 @@ const GLOBAL_FLAGS: readonly FlagDefinition[] = [
  * accepts, it names --wallet and --network, which most commands take.
  */
 const GLOBAL_FLAGS_HELP: readonly GlobalFlagHelp[] = [
-  { name: '--json', description: 'Output structured JSON to stdout (suppresses all stderr)' },
+  { name: '--json', description: 'Output structured JSON to stdout (stderr stays quiet but for the lines of a long wait, such as Dust for a fee)' },
   { name: '--wallet <name|file>', description: 'Wallet name or path' },
   { name: '--network <name>', description: `Override network (${getValidNetworkNames().join(', ')})` },
   { name: '--version, -v', description: 'Print CLI version' },

@@ -97,7 +97,7 @@ export {
   type NetworkConfig, type NetworkName, NetworkNotNamedError, resolveNetworkConfig, RetiredNetworkError
 } from './lib/network.ts';
 export { type NetworkChoice, networkChoiceFromArgs, networkTargetOf } from './lib/network-target.ts';
-export { type NoticeSink } from './lib/notices.ts';
+export { type NoticeSink, type WaitSink } from './lib/notices.ts';
 export {
   assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope,
   type OfferEnvelope, OfferExpiredError

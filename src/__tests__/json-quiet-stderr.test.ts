@@ -12,7 +12,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { closedPort } from '../../test-support/closed-port.ts';
 import { captureOutput } from '../../test-support/capture-output.ts';
-import { createCliHost } from '../lib/cli-host.ts';
+import { createCliHost, waitLineWriter } from '../lib/cli-host.ts';
 
 const entryPoint = resolve(import.meta.dirname, '../wallet.ts');
 const tsxLoader = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
@@ -83,5 +83,25 @@ describe('the CLI host\'s notices', () => {
       io.restore();
     }
     expect(io.stderr()).toBe('Warning: a plain-text wallet\n');
+  });
+});
+
+describe("the CLI host's waits", () => {
+  // A deploy that waited 181 s for its Dust under --json said nothing at all on stderr.
+  it('reach stderr also when the run is --json, as plain lines', () => {
+    const io = captureOutput();
+    try {
+      createCliHost({ prompter: null, notices: false, plainWaits: true }).waiting('\x1b[2m  Dust: waited 15 s of 269 s, 0.43 of 3.17 DUST\x1b[0m', false);
+    } finally {
+      io.restore();
+    }
+    expect(io.stderr()).toBe('Dust: waited 15 s of 269 s, 0.43 of 3.17 DUST\n');
+  });
+
+  it('at a terminal, are written over the line a spinner draws, which draws itself again below', () => {
+    const written: string[] = [];
+    waitLineWriter(false, true, (text) => written.push(text))('  Dust: waited 15 s of 269 s, 0.43 of 3.17 DUST');
+    waitLineWriter(false, false, (text) => written.push(text))('  Dust: waited 30 s of 269 s, 0.55 of 3.17 DUST');
+    expect(written).toEqual(['\r\x1b[K  Dust: waited 15 s of 269 s, 0.43 of 3.17 DUST\n', '  Dust: waited 30 s of 269 s, 0.55 of 3.17 DUST\n']);
   });
 });

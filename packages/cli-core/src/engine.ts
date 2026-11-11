@@ -18,7 +18,7 @@ export { type CoinPicking, type CoinRule, createCoinPicking, type PickableCoin, 
 export { chooseDustCoins, type DustInput, planDustInputs, spreadFeeAcrossInputs } from './lib/dust-balancing-plan.ts';
 export { DustFeeNotGeneratedError, planRegistration, type RegistrationContext } from './lib/dust-registration-plan.ts';
 export { type DustCoinGeneration, dustGenerationCap } from './lib/dust-cap.ts';
-export { awaitDustForFee, DUST_SHORT_WAIT_MS, type DustWaitPlan, payWhenDustCovers, planDustWait, sleep } from './lib/dust-wait.ts';
+export { awaitDustForFee, DUST_SHORT_WAIT_MS, DUST_WAIT_REPORT_MS, dustWaitOpening, dustWaitProgress, type DustWaitPlan, payWhenDustCovers, planDustWait, sleep, waitForDustGrowth } from './lib/dust-wait.ts';
 export {
   type AccountEntryPoint, type AirdropParams, type BlockLimits, type CachedReadOptions, type CallScript, type DAppConnector,
   type DAppConnectorCallbacks, type DeployScript, type DustBalance, type DustExportResult,

@@ -19,7 +19,8 @@ export const processOutput: CallOutput = {
 /**
  * The CLI's output for a --json call: the result and stdout as `output` has
  * them, and nothing on stderr (no spinner, heading, notice or warning), as
- * help and the manual promise. Errors under --json go to stdout as JSON.
+ * help and the manual promise; only a long wait's lines reach stderr, through
+ * the host (cli-host.ts). Errors under --json go to stdout as JSON.
  */
 export function jsonModeOutput(output: CallOutput): CallOutput {
   return { result: output.result, stdout: output.stdout, stderr: () => {} };
