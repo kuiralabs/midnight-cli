@@ -1,6 +1,6 @@
 // Pin mn's `optionalDependencies` to the per-platform dust-sync packages, at
 // their version exactly. The platform packages move with the other @kuiralabs
-// workspace packages (0.1.0-rc.N), not with mn; they all carry one version, so
+// workspace packages (0.1.0 for mn 0.6.0), not with mn; they all carry one version, so
 // every platform gets a binary built from the same ledger crates. The CLI must
 // load only a sidecar built from those crates, so the pins are exact, never a
 // caret range. Run in CI before publishing (the release workflow does), or by

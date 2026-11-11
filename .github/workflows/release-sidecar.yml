@@ -1,15 +1,17 @@
-# Build the native dust-sync sidecar for every target and publish the per-platform
-# npm packages + the main package, so an `npm install midnight-wallet-cli` gets the
-# fast native cold dust sync (~4.5 min) instead of falling back to WASM (~22 min).
+# Build the native dust-sync sidecar for every target, then publish the five
+# per-platform packages, the eight @kuiralabs workspace packages mn depends on,
+# and mn itself, so an `npm install midnight-wallet-cli` gets the native Dust
+# reader (a cold mainnet Dust read in about 11 minutes, against about 18 in WASM).
 #
 # Trigger: push a `v*` tag (after bumping the versions). Or run manually with
 # dry_run to build without publishing.
 #
-# Prerelease tags (a `-` after the version, e.g. v0.6.0-rc.0) publish under the
-# npm `next` dist-tag so a prerelease never becomes `latest`. The platform
-# packages (@kuiralabs/dust-sync-<os>-<arch>) carry the @kuiralabs workspace
-# packages' version (0.1.0-rc.N), not mn's: one already on npm is not published
-# again, and an -rc version goes to `next` too.
+# Each package goes to the dist-tag of its own version: a prerelease version (a
+# `-` in it, e.g. 0.6.0-rc.0) under `next`, so it never becomes `latest`, and a
+# stable one under `latest`. The platform packages (@kuiralabs/dust-sync-<os>-<arch>)
+# and the workspace packages carry their own version (0.1.0), not mn's; one
+# already on npm is not published again. Nothing is published before the
+# typecheck and the full test suite pass.
 #
 # Auth: OIDC trusted publishing (no long-lived secret) once each package has a
 # trusted publisher configured on npmjs.com (repo kuiralabs/midnight-cli,
@@ -66,7 +68,7 @@ jobs:
         with:
           workspaces: sidecar/dust-sync
       # --locked keeps the ledger crate pins (midnight-ledger-v9 =1.0.0 etc.) so
-      # the serialized DustLocalState round-trips byte-identically with the rc
+      # the serialized DustLocalState round-trips byte-identically with the
       # engine's @midnightntwrk/ledger-v9.
       - name: Build sidecar
         working-directory: sidecar/dust-sync
@@ -103,8 +105,6 @@ jobs:
       ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
       && needs.build-sidecar.result == 'success' }}
     runs-on: ubuntu-latest
-    env:
-      PRERELEASE: ${{ contains(github.ref_name, '-') }}
     permissions:
       contents: read
       id-token: write # mint the OIDC token npm uses for trusted publishing
@@ -137,6 +137,12 @@ jobs:
       - name: Upgrade npm for OIDC trusted publishing
         run: npm install -g npm@11
       - run: npm ci
+      # Nothing is published unless the tree being published typechecks and passes the full test suite.
+      - name: Typecheck
+        run: npm run typecheck
+      - run: npm run build
+      - name: Tests
+        run: npm test
       - name: Download all platform binaries
         uses: actions/download-artifact@v4
         with:
@@ -186,8 +192,7 @@ jobs:
           done
       # mn depends on its workspace packages (core, chain, the engine,
       # wallet, connect, contract, dev, grant) at exact versions: each publishes first, unless that version is
-      # on npm already, under the same dist-tag as mn, in dependency order (a package after those it declares).
-      - run: npm run build
+      # on npm already, under its own version's dist-tag, in dependency order (a package after those it declares).
       - name: Publish the workspace packages mn depends on
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -201,11 +206,12 @@ jobs:
               echo "$name@$version is published already"
             else
               # The engine ships the SDK set the tests ran on, for a program that installs it without mn; so does
-              # grant, whose account chain is built on the rc set.
+              # grant, whose account chain is built on that set.
               case "$name" in @kuiralabs/midnight-engine-*|@kuiralabs/midnight-grant) node scripts/make-shrinkwrap.mjs --package "$dir" ;; esac
               # Packed with the manifest it is published with: no exports entry names a source file.
               tarball="$(node scripts/publish-manifest.mjs "$dir" "$RUNNER_TEMP/workspace-packs")"
-              npm publish "$tarball" --access public ${{ env.PRERELEASE == 'true' && '--tag next' || '' }}
+              tag=""; case "$version" in *-*) tag="--tag next" ;; esac
+              npm publish "$tarball" --access public $tag
             fi
           done
       # The tree the tests ran on, shipped with mn so a user's npm installs it
@@ -215,4 +221,9 @@ jobs:
       - name: Publish main package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public ${{ env.PRERELEASE == 'true' && '--tag next' || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          tag=""; case "$version" in *-*) tag="--tag next" ;; esac
+          npm publish --access public $tag

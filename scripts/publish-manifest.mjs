@@ -65,7 +65,7 @@ export function localTarballsOf(dir) {
 /**
  * The tarball's file name in what `npm pack --json` printed for one package:
  * an array of one entry up to npm 11, an object keyed by the package's name
- * from npm 12 (the release job installs the latest npm).
+ * from npm 12 (the release job holds npm 11; both are read, for a run by hand with npm 12).
  */
 export function packedFilename(output) {
   const parsed = JSON.parse(output);

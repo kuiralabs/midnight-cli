@@ -47,7 +47,7 @@ export function registryDist(registry) {
 /**
  * The one field `npm view <name>@<version> <field> --json` printed: the value
  * itself up to npm 11, an array of one value from npm 12 (the release job
- * installs the latest npm).
+ * holds npm 11; both are read, for a run by hand with npm 12).
  */
 export function viewedField(output) {
   const parsed = JSON.parse(output);
