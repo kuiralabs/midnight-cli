@@ -86,7 +86,7 @@ const withCommand = (command: CommandDefinition, codes: CommandPackage['codes'] 
 describe('the codes a definition declares', () => {
   it('spreads the sets it names, in the order declared', () => {
     expect(declaredCodes(declaring([READS_CHAIN, 'CHAIN_CLOCK_BEHIND', ENGINE_SYNC]))).toStrictEqual([
-      'UNSUPPORTED_LEDGER', 'LOCAL_STACK_UNREACHABLE', 'CHAIN_CLOCK_BEHIND', 'NETWORK_ERROR', 'SYNC_TIMEOUT', 'STALE_CACHE',
+      'UNSUPPORTED_LEDGER', 'LOCAL_STACK_UNREACHABLE', 'CHAIN_CLOCK_BEHIND', 'NETWORK_ERROR', 'SYNC_TIMEOUT', 'STALE_CACHE', 'WALLET_BEHIND_FORK',
     ]);
   });
 
@@ -108,7 +108,7 @@ describe('the codes a definition declares', () => {
     const registry = createPackageRegistry([codesOnly('core', coreCodes), codesOnly('chain', chainCodes), withCommand(declaring([READS_CHAIN, ENGINE_SYNC], [{ exitCode: 9, when: 'it says so' }]))], []);
     const command = registry.find('declaring')!;
     expect(commandErrorCodes(registry, command).map((definition) => [definition.code, definition.exitCode])).toStrictEqual([
-      ['NETWORK_ERROR', 4], ['SYNC_TIMEOUT', 4], ['STALE_CACHE', 6], ['UNSUPPORTED_LEDGER', 4], ['LOCAL_STACK_UNREACHABLE', 4],
+      ['NETWORK_ERROR', 4], ['SYNC_TIMEOUT', 4], ['WALLET_BEHIND_FORK', 4], ['STALE_CACHE', 6], ['UNSUPPORTED_LEDGER', 4], ['LOCAL_STACK_UNREACHABLE', 4],
     ]);
     // Success, its codes' (4, 6), every command's (INVALID_ARGS 2, CANCELLED 7, the rest 1), and its outcome's.
     expect(commandExitCodes(registry, command)).toStrictEqual([0, 1, 2, 4, 6, 7, 9]);

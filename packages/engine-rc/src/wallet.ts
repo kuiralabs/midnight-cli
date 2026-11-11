@@ -242,6 +242,12 @@ async function openConnector(repo: WalletDataRepository, options: Parameters<Eng
     } catch {
       throwIfCancelled(signal); // a cancel is not a failed warm-up
     }
+    // And the shielded checkpoint, on a chain that forked from ledger 8.
+    try {
+      await repo.primeShielded(seed, networkConfig, { root, signal, onStatus: onMessage });
+    } catch {
+      throwIfCancelled(signal);
+    }
     const cache = await repo.walletStateToRestore(seed, networkConfig, network, root, notice);
     const built = await buildFacade(seed, networkConfig, root, notice, cache);
     bundle = built;

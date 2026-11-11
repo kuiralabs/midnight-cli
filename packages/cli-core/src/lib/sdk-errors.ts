@@ -23,8 +23,11 @@ import {
   SyncTimeoutError,
   TransactionInvalidatedError,
   TransactionRefusedError,
+  transactionAcrossForkMessage,
+  WalletBehindForkError,
   type RefusalCode,
 } from './errors.ts';
+import { LEDGER_9_FORK_VERSION } from './network.ts';
 import { OfferCoinsInUseError } from './open-offers.ts';
 import { carriesOwnCode, isTransportFailure } from './transport-failure.ts';
 
@@ -210,6 +213,31 @@ export function nodeRefusalOf(err: unknown): string | undefined {
   return found && said.length > 0 ? said.join(': ') : undefined;
 }
 
+/** The `_tag` of the SDK's refusal of a transaction built on the other side of a protocol boundary than the wallet acts on. */
+const PROTOCOL_VERSION_MISMATCH = '@midnightntwrk/wallet-sdk-abstractions/WalletTransaction/ProtocolVersionMismatchError';
+
+/**
+ * The SDK's ProtocolVersionMismatchError wherever it is among the error's
+ * causes (a FiberFailure's included): the protocol version the transaction was
+ * built at, and the versions the wallet acted at (from, up to but not
+ * including to). Undefined for any other error.
+ */
+export function protocolVersionMismatchOf(err: unknown): { authoredFor: bigint; accepted: readonly [bigint, bigint] } | undefined {
+  const seen = new Set<unknown>();
+  let current: unknown = err;
+  while (current !== null && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    const e = current as Record<PropertyKey, unknown>;
+    if (e._tag === PROTOCOL_VERSION_MISMATCH && typeof e.authoredFor === 'bigint' && Array.isArray(e.accepted)) {
+      const [from, to] = e.accepted as unknown[];
+      if (typeof from === 'bigint' && typeof to === 'bigint') return { authoredFor: e.authoredFor, accepted: [from, to] };
+    }
+    const failure = e[FIBER_FAILURE_CAUSE] as { _tag?: string; error?: unknown; defect?: unknown } | undefined;
+    current = failure?._tag === 'Fail' ? failure.error : failure?._tag === 'Die' ? failure.defect : e.cause;
+  }
+  return undefined;
+}
+
 /** The error as it is reported: a node's refusal as a TransactionRefusedError carrying the node's words; any other error as it is. */
 export function withNodeReason(err: Error): Error {
   if (err instanceof TransactionRefusedError) return err;
@@ -244,6 +272,7 @@ export function refusalCodeOf(reason: string): RefusalCode {
  * anything else); undefined for a failure it doesn't name.
  */
 function engineCodeOf(err: unknown): string | undefined {
+  if (protocolVersionMismatchOf(err) !== undefined) return 'WALLET_BEHIND_FORK';
   const reason = nodeRefusalOf(err);
   if (reason !== undefined) return DROPPED_FROM_POOL_WORDS.test(reason) ? 'TX_INVALIDATED' : refusalCodeOf(reason);
   if (!(err instanceof Error)) return undefined;
@@ -277,6 +306,7 @@ function typedEngineError(code: string, message: string, cause: unknown): Error 
     case 'INSUFFICIENT_BALANCE': return new InsufficientBalanceError(message, options);
     case 'NETWORK_ERROR': return new NetworkError(message, options);
     case 'TX_INVALIDATED': return new TransactionInvalidatedError(0, options);
+    case 'WALLET_BEHIND_FORK': return new WalletBehindForkError(message, options);
     default: return new EngineError(code, message, options);
   }
 }
@@ -310,6 +340,9 @@ export function toEngineError(err: unknown): unknown {
   if (err instanceof TransactionRefusedError || err instanceof FeeRepricedError || err instanceof FeeTooLowError || err instanceof DustDoubleSpentError || err instanceof TransactionInvalidatedError) return err;
   const held = heldCoinRefusalOf(err);
   if (held !== undefined) return held;
+  // The SDK's words name only versions; mn's say which side is behind and what to do.
+  const mismatch = protocolVersionMismatchOf(err);
+  if (mismatch !== undefined) return new WalletBehindForkError(transactionAcrossForkMessage(mismatch.authoredFor, mismatch.accepted, LEDGER_9_FORK_VERSION), { cause: err });
   const reason = nodeRefusalOf(err);
   // Taken into the node's pool and dropped from it: the words alone say nothing of why, the error says what it most likely was.
   if (reason !== undefined && DROPPED_FROM_POOL_WORDS.test(reason)) return new TransactionInvalidatedError(0, { cause: err });

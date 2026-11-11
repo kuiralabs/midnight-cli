@@ -316,6 +316,51 @@ export class NetworkError extends Error {
   }
 }
 
+/** One of a wallet's three wallets, which the facade builds a transaction with. */
+export type WalletPart = 'shielded' | 'unshielded' | 'dust';
+
+const WALLET_PART_NAME: Record<WalletPart, string> = { shielded: 'shielded', unshielded: 'unshielded', dust: 'Dust' };
+
+const RUN_AGAIN =
+  'Run the command again: mn first reads the shielded and Dust history past the fork from the indexer, and starts those wallets there.';
+
+/**
+ * A wallet can't build or take a transaction because its three wallets
+ * (shielded, unshielded, Dust) are not all past the chain's fork to ledger 9:
+ * the facade acts at the lowest of their protocol versions, and a ledger-9
+ * transaction can't be used below the fork. Its message is one of
+ * walletsBehindForkMessage's (mn saw which wallets are behind) or
+ * transactionAcrossForkMessage's (the SDK refused a transaction).
+ */
+export class WalletBehindForkError extends EngineError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super('WALLET_BEHIND_FORK', message, options);
+    this.name = 'WalletBehindForkError';
+    Object.setPrototypeOf(this, WalletBehindForkError.prototype);
+  }
+}
+
+/** What WalletBehindForkError says when the wallets in `behind`, each at the protocol version it has reached, are below the fork at `forkVersion`. */
+export function walletsBehindForkMessage(behind: readonly { wallet: WalletPart; protocolVersion: bigint }[], forkVersion: bigint): string {
+  const which = behind.map(({ wallet, protocolVersion }) => `the ${WALLET_PART_NAME[wallet]} wallet is at protocol version ${protocolVersion}`).join(', ');
+  return `This wallet can't build a transaction yet: ${which}, below the chain's fork to ledger 9 (${forkVersion}), ` +
+    `and a transaction needs all three of its wallets (shielded, unshielded, Dust) past it. ${RUN_AGAIN}`;
+}
+
+/**
+ * What WalletBehindForkError says when the SDK refused a transaction built at
+ * protocol version `authoredFor`, acting at versions `accepted` (from, up to
+ * but not including to), on a chain that forks to ledger 9 at `forkVersion`.
+ */
+export function transactionAcrossForkMessage(authoredFor: bigint, accepted: readonly [bigint, bigint], forkVersion: bigint): string {
+  const [, to] = accepted;
+  return to <= forkVersion
+    ? `A transaction was built on ledger 9 (protocol version ${authoredFor}), and this wallet still acts on ledger 8 (below ${to}): ` +
+      `one of its three wallets (shielded, unshielded, Dust) hasn't synced past the chain's fork to ledger 9 (${forkVersion}). ${RUN_AGAIN}`
+    : `A transaction was built on ledger 8 (protocol version ${authoredFor}), and this wallet now acts on ledger 9: ` +
+      `it crossed the chain's fork (${forkVersion}) while the transaction was being made. Run the command again to build it on ledger 9.`;
+}
+
 /**
  * A command that ended with a non-zero exit code without throwing (a test run
  * whose tests failed): the code, and the JSON result it wrote. A runner with no

@@ -8,6 +8,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { Either, Option } from 'effect';
+import { ProtocolVersion, WalletTransaction } from '@midnightntwrk/wallet-sdk';
 import {
   CUT_IMPORTS,
   DYNAMIC_CLASSES,
@@ -114,7 +116,12 @@ describe("the scan's tables", () => {
 
   it("give toEngineError the codes it names an SDK or node failure by, as its engine's errors and a contract script's carry", () => {
     const failures = ['ZK proof timeout', 'Custom error: 115', 'Custom error: 170', 'chain reset detected', 'Failed to prove transaction', 'sync timed out', 'No dust available', 'Insufficient funds', 'Transaction rejected', 'fetch failed'];
-    const named = new Set(failures.map((message) => (toEngineError(new Error(message)) as { code?: string }).code));
+    // Named by its shape, not its words: the SDK's refusal of a transaction built on the other side of the ledger-9 fork.
+    const acrossFork = Option.getOrThrow(Either.getLeft(WalletTransaction.unwrapWithin(
+      WalletTransaction.adopt('Unproven', { serialize: () => new Uint8Array() }, ProtocolVersion.ProtocolVersion(2_000_000n)),
+      ProtocolVersion.makeRange(ProtocolVersion.MinSupportedVersion, ProtocolVersion.ProtocolVersion(2_000_000n)),
+    )));
+    const named = new Set([...failures.map((message) => new Error(message)), acrossFork].map((failure) => (toEngineError(failure) as { code?: string }).code));
     const sdkErrors = DYNAMIC_MODULES['packages/cli-core/src/lib/sdk-errors.ts']!;
     expect(new Set(sdkErrors.codes)).toStrictEqual(named);
     expect(DYNAMIC_CLASSES.EngineError!.codes).toStrictEqual(sdkErrors.codes);

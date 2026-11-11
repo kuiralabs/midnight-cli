@@ -46,6 +46,7 @@ export declare function waitForAddressFunded(indexerWS: string, address: string,
 export declare function assertLedger9StackReachable(networkName: string, network: NetworkConfig, probes?: StackProbes): Promise<void>;
 export declare function assertLedgerSupported(networkName: string, network: NetworkConfig, fetchVersion?: (indexerHttpUrl: string, signal?: AbortSignal) => Promise<bigint | null>, signal?: AbortSignal): Promise<void>;
 export declare function checkLedgerSupported(network: string, protocolVersion: bigint | null): void;
+export declare function fetchGenesisProtocolVersion(indexerHttpUrl: string, signal?: AbortSignal): Promise<bigint | null>;
 export declare function fetchProtocolVersion(indexerHttpUrl: string, signal?: AbortSignal): Promise<bigint | null>;
 export declare class LocalStackUnreachableError extends Error {
     readonly code = "LOCAL_STACK_UNREACHABLE";

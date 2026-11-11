@@ -3,10 +3,11 @@
 // (an Effect tagged error carrying tokenType), not just matching strings.
 
 import { describe, it, expect } from 'vitest';
-import { Brand, Effect } from 'effect';
+import { Brand, Effect, Either, Option } from 'effect';
+import { ProtocolVersion, WalletTransaction } from '@midnightntwrk/wallet-sdk';
 import { SubmissionError } from '@midnightntwrk/wallet-sdk/capabilities/submission';
 import { NodeClientError } from '@midnightntwrk/wallet-sdk/node-client/effect';
-import { DustRequiredError, InsufficientBalanceError, NetworkError, ProofFailureError, StaleWalletStateError, SyncTimeoutError, TransactionInvalidatedError, TransactionRefusedError } from '../lib/errors.ts';
+import { DustRequiredError, InsufficientBalanceError, NetworkError, ProofFailureError, StaleWalletStateError, SyncTimeoutError, TransactionInvalidatedError, TransactionRefusedError, WalletBehindForkError, walletsBehindForkMessage } from '../lib/errors.ts';
 import { isDroppedFromPool } from '../lib/fee-margin.ts';
 import { classifyError } from '../lib/exit-codes.ts';
 import { createApiError } from '../lib/connector-api.ts';
@@ -291,5 +292,45 @@ describe("the engine contract's reading of a failure", () => {
     const api = createApiError('Rejected', 'User rejected the request', 'TX_REJECTED');
     expect(mnCodeOf(withEngineCode(api))).toBe('TX_REJECTED');
     expect(mnCodeOf(withEngineCode(new Error('Something unexpected happened')))).toBeUndefined();
+  });
+});
+
+describe('a transaction built on the other side of the ledger-9 fork than the wallet acts on', () => {
+  // The SDK's own refusal, as its facade raised it on preprod (regression: reported as UNKNOWN):
+  // a registration the unshielded and Dust wallets built on ledger 9, read by a facade whose shielded wallet was on ledger 8.
+  const refusal = (authoredFor: bigint, accepted: readonly [bigint, bigint]): unknown => Option.getOrThrow(Either.getLeft(WalletTransaction.unwrapWithin(
+    WalletTransaction.adopt('Unproven', { serialize: () => new Uint8Array() }, ProtocolVersion.ProtocolVersion(authoredFor)),
+    ProtocolVersion.makeRange(ProtocolVersion.ProtocolVersion(accepted[0]), ProtocolVersion.ProtocolVersion(accepted[1])),
+  )));
+
+  it('is WALLET_BEHIND_FORK (exit 4), saying the wallet is still on ledger 8 and to run it again', () => {
+    const sdk = refusal(2_000_000n, [0n, 2_000_000n]);
+    const err = toEngineError(sdk) as Error & { code: string };
+    expect(err).toBeInstanceOf(WalletBehindForkError);
+    expect(err.code).toBe('WALLET_BEHIND_FORK');
+    expect(err.cause).toBe(sdk);
+    expect(err.message).toContain('built on ledger 9 (protocol version 2000000)');
+    expect(err.message).toContain('still acts on ledger 8');
+    expect(err.message).toContain('Run the command again');
+    expect(classifyError(err, CORE_CODES)).toEqual({ exitCode: 4, errorCode: 'WALLET_BEHIND_FORK' });
+  });
+
+  it('is recognised under the errors that carry it, and marked for a DApp connector', () => {
+    const sdk = refusal(2_000_000n, [0n, 2_000_000n]);
+    expect(toEngineError(new Error('Failed to finalize the recipe', { cause: sdk }))).toBeInstanceOf(WalletBehindForkError);
+    expect(mnCodeOf(withEngineCode(sdk))).toBe('WALLET_BEHIND_FORK');
+  });
+
+  it('says a ledger-8 transaction is to be built again on ledger 9 when the wallet crossed meanwhile', () => {
+    const err = toEngineError(refusal(22_000n, [2_000_000n, 9_999_999n])) as Error;
+    expect(err).toBeInstanceOf(WalletBehindForkError);
+    expect(err.message).toContain('built on ledger 8 (protocol version 22000)');
+    expect(err.message).toContain('build it on ledger 9');
+  });
+
+  it('names the wallets behind the fork when mn sees them before building', () => {
+    const err = new WalletBehindForkError(walletsBehindForkMessage([{ wallet: 'shielded', protocolVersion: 22_000n }], 2_000_000n));
+    expect(err.code).toBe('WALLET_BEHIND_FORK');
+    expect(err.message).toContain('the shielded wallet is at protocol version 22000, below the chain\'s fork to ledger 9 (2000000)');
   });
 });

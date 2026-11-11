@@ -152,6 +152,7 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 | `WALLET_NOT_FOUND` | Named wallet doesn't exist on disk. | `midnight_wallet_list()` — user may have removed it. |
 | `NETWORK_ERROR` | Indexer/node/proof-server connection refused or DNS failure. | Check `midnight_localnet_status()` (start it with `midnight_localnet_up()`) or the endpoints the user configured. |
 | `SYNC_TIMEOUT` | Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync. | Retry; the cache resumes from the last applied event so progress is preserved. |
+| `WALLET_BEHIND_FORK` | A transaction can't be built yet: one of the wallet's three wallets (shielded, unshielded, Dust) hasn't synced past the chain's fork to ledger 9, and the wallet acts at the lowest of their versions. | Retry; mn reads the shielded and Dust history past the fork first, and the next run starts those wallets there. Nothing was sent. |
 | `INSUFFICIENT_BALANCE` | Wallet doesn't have enough NIGHT to cover the requested amount. | Show the user. On localnet: `midnight_airdrop({ amount: "..." })`. On hosted networks: tell user to fund the address. |
 | `TX_REJECTED` | Chain rejected the submitted transaction (catch-all when no more specific code applies). | Read the message; usually a state mismatch resolved by re-sync + retry. |
 | `STALE_UTXO` | UTXO was already spent on-chain (substrate "error code 115"). | Re-sync (the next call will refresh state) and retry. |
@@ -208,7 +209,7 @@ A tool's description ends with the codes it can fail with: its own, and sets of 
 | network | `AMBIGUOUS_LOCAL_STACKS`, `BLOCKFROST_PROJECT_ID_REQUIRED`, `BLOCKFROST_PROJECT_ID_REJECTED`, `BLOCKFROST_LIMIT_REACHED`, `ENDPOINT_SHUT_DOWN` |
 | wallet | `WALLET_NOT_FOUND`, `WRONG_PASSPHRASE`, `PASSPHRASE_REQUIRED` |
 | engine | `MIXED_SDK_LAYOUT` |
-| sync | `NETWORK_ERROR`, `SYNC_TIMEOUT`, `STALE_CACHE` |
+| sync | `NETWORK_ERROR`, `SYNC_TIMEOUT`, `STALE_CACHE`, `WALLET_BEHIND_FORK` |
 | paying | `TX_REJECTED`, `STALE_UTXO`, `INVALID_DUST_PROOF`, `FEE_TOO_LOW`, `FEE_REPRICED`, `DUST_DOUBLE_SPENT`, `TX_INVALIDATED`, `PROOF_TIMEOUT`, `PROOF_FAILURE`, `DUST_REQUIRED`, `DUST_GENERATING`, `INSUFFICIENT_BALANCE`, `OFFER_COINS_IN_USE`, `OFFER_RECORD_UNREADABLE` |
 | offers | `NOT_AN_OFFER`, `TERMS_MISMATCH` |
 | chain | `UNSUPPORTED_LEDGER`, `LOCAL_STACK_UNREACHABLE` |

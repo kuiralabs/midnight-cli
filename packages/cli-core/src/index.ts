@@ -74,7 +74,7 @@ export {
 export {
   asReported, CANCELLED_MESSAGE, CancelledError, CommandFailedError, ContractStateUnreadableError, DustDoubleSpentError, DustRequiredError,
   FeeRepricedError, FeeTooLowError, InsufficientBalanceError, isUsageError, NetworkError, ProofFailureError, SyncTimeoutError,
-  throwIfCancelled, TransactionInvalidatedError, TransactionRefusedError, UsageError
+  throwIfCancelled, TransactionInvalidatedError, TransactionRefusedError, UsageError, WalletBehindForkError, walletsBehindForkMessage, type WalletPart
 } from './lib/errors.ts';
 export { execProgram, type ExecRun, type ExecRunner, ProgramFailedError, ProgramTimedOutError } from './lib/exec-program.ts';
 export {

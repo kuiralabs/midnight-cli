@@ -13,7 +13,7 @@ export { subscribeGraphqlWs } from './lib/graphql-ws-subscription.ts';
 export { queryIndexer } from './lib/indexer-graphql.ts';
 export { waitForAddressFunded } from './lib/indexer-ready.ts';
 export {
-  assertLedger9StackReachable, assertLedgerSupported, checkLedgerSupported, fetchProtocolVersion, LocalStackUnreachableError,
+  assertLedger9StackReachable, assertLedgerSupported, checkLedgerSupported, fetchGenesisProtocolVersion, fetchProtocolVersion, LocalStackUnreachableError,
   UnsupportedLedgerError, walletsBelowLedger9
 } from './lib/ledger-guard.ts';
 export { waitForFirstBlock } from './lib/node-ready.ts';

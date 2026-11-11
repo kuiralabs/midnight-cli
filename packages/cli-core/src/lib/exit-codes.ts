@@ -47,6 +47,8 @@ export const ERROR_CODES = {
   CHAIN_CLOCK_BEHIND: 'CHAIN_CLOCK_BEHIND',
   /** Long-running wallet sync exceeded its deadline. On hosted networks this is most common during the first cold sync; retrying usually progresses since the cache resumes from the last applied event. */
   SYNC_TIMEOUT: 'SYNC_TIMEOUT',
+  /** One of a wallet's three wallets hasn't synced past the chain's fork to ledger 9, so no transaction can be built yet. Recovery: run it again; mn reads the shielded and Dust history past the fork first. */
+  WALLET_BEHIND_FORK: 'WALLET_BEHIND_FORK',
   CANCELLED: 'CANCELLED',
   /** The chain is on ledger 8; this build supports ledger 9 only. Recovery: use midnight-wallet-cli 0.5.x for that network. */
   UNSUPPORTED_LEDGER: 'UNSUPPORTED_LEDGER',

@@ -101,6 +101,7 @@ Stable identifiers used in error messages and structured error objects, with the
 | `WALLET_NOT_FOUND` | 3 | Named wallet doesn't exist on disk. |
 | `NETWORK_ERROR` | 4 | Indexer/node/proof-server connection refused or DNS failure. |
 | `SYNC_TIMEOUT` | 4 | Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync. |
+| `WALLET_BEHIND_FORK` | 4 | A transaction can't be built yet: one of the wallet's three wallets (shielded, unshielded, Dust) hasn't synced past the chain's fork to ledger 9, and the wallet acts at the lowest of their versions. |
 | `INSUFFICIENT_BALANCE` | 5 | Wallet doesn't have enough NIGHT to cover the requested amount. |
 | `TX_REJECTED` | 6 | Chain rejected the submitted transaction (catch-all when no more specific code applies). |
 | `STALE_UTXO` | 6 | UTXO was already spent on-chain (substrate "error code 115"). |

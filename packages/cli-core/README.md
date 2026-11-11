@@ -32,6 +32,7 @@ Each error a package throws carries a `code`; `classifyError(err, registry)` giv
 | `INVALID_ARGS` | 2 | Missing/invalid argument. | Show the message to the user verbatim — it names the missing field. |
 | `NETWORK_ERROR` | 4 | Indexer/node/proof-server connection refused or DNS failure. | Check `midnight_localnet_status()` (start it with `midnight_localnet_up()`) or the endpoints the user configured. |
 | `SYNC_TIMEOUT` | 4 | Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync. | Retry; the cache resumes from the last applied event so progress is preserved. |
+| `WALLET_BEHIND_FORK` | 4 | A transaction can't be built yet: one of the wallet's three wallets (shielded, unshielded, Dust) hasn't synced past the chain's fork to ledger 9, and the wallet acts at the lowest of their versions. | Retry; mn reads the shielded and Dust history past the fork first, and the next run starts those wallets there. Nothing was sent. |
 | `INSUFFICIENT_BALANCE` | 5 | Wallet doesn't have enough NIGHT to cover the requested amount. | Show the user. On localnet: `midnight_airdrop({ amount: "..." })`. On hosted networks: tell user to fund the address. |
 | `TX_REJECTED` | 6 | Chain rejected the submitted transaction (catch-all when no more specific code applies). | Read the message; usually a state mismatch resolved by re-sync + retry. |
 | `STALE_UTXO` | 6 | UTXO was already spent on-chain (substrate "error code 115"). | Re-sync (the next call will refresh state) and retry. |

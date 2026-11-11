@@ -53,7 +53,7 @@ export class CodeReachError extends Error {
 
 // What the engine contract's typed errors report: toEngineError's and
 // withEngineCode's codes, read from an SDK or node failure's shape and words.
-const ENGINE_FAILURE_CODES = ['NETWORK_ERROR', 'SYNC_TIMEOUT', 'STALE_CACHE', 'INSUFFICIENT_BALANCE', 'DUST_REQUIRED', 'TX_REJECTED', 'STALE_UTXO', 'INVALID_DUST_PROOF', 'PROOF_TIMEOUT', 'PROOF_FAILURE'];
+const ENGINE_FAILURE_CODES = ['NETWORK_ERROR', 'SYNC_TIMEOUT', 'STALE_CACHE', 'INSUFFICIENT_BALANCE', 'DUST_REQUIRED', 'TX_REJECTED', 'STALE_UTXO', 'INVALID_DUST_PROOF', 'PROOF_TIMEOUT', 'PROOF_FAILURE', 'WALLET_BEHIND_FORK'];
 
 /**
  * Classes whose code is not a literal in the code, and the codes their

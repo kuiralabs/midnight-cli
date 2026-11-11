@@ -631,6 +631,16 @@ export declare class UsageError extends Error {
     readonly code: string;
     constructor(message: string);
 }
+export declare class WalletBehindForkError extends EngineError {
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
+}
+export declare function walletsBehindForkMessage(behind: readonly {
+    wallet: WalletPart;
+    protocolVersion: bigint;
+}[], forkVersion: bigint): string;
+export type WalletPart = 'shielded' | 'unshielded' | 'dust';
 export declare const execProgram: ExecRunner;
 export interface ExecRun {
     readonly signal: AbortSignal;
@@ -670,6 +680,7 @@ export declare const ERROR_CODES: {
     readonly DUST_GENERATING: "DUST_GENERATING";
     readonly CHAIN_CLOCK_BEHIND: "CHAIN_CLOCK_BEHIND";
     readonly SYNC_TIMEOUT: "SYNC_TIMEOUT";
+    readonly WALLET_BEHIND_FORK: "WALLET_BEHIND_FORK";
     readonly CANCELLED: "CANCELLED";
     readonly UNSUPPORTED_LEDGER: "UNSUPPORTED_LEDGER";
     readonly LOCAL_STACK_UNREACHABLE: "LOCAL_STACK_UNREACHABLE";
@@ -1228,6 +1239,13 @@ export declare const coreCodes: readonly [
         readonly order: 40;
         readonly summary: "Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync.";
         readonly recovery: "Retry; the cache resumes from the last applied event so progress is preserved.";
+    },
+    {
+        readonly code: "WALLET_BEHIND_FORK";
+        readonly exitCode: 4;
+        readonly order: 45;
+        readonly summary: "A transaction can't be built yet: one of the wallet's three wallets (shielded, unshielded, Dust) hasn't synced past the chain's fork to ledger 9, and the wallet acts at the lowest of their versions.";
+        readonly recovery: "Retry; mn reads the shielded and Dust history past the fork first, and the next run starts those wallets there. Nothing was sent.";
     },
     {
         readonly code: "CONTRACT_STATE_UNREADABLE";

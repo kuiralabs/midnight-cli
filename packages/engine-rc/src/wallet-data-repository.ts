@@ -19,7 +19,7 @@
 
 import { Buffer } from 'node:buffer';
 import { isColdStartRace, loadWalletCache, saveWalletCache, clearWalletCache, validateWalletCacheChainId, type WalletCacheData, bindCachesToIndexer, describeIndexerChange, type CachedReadOptions, type DustBalance, type EngineHost, type ReadOptions, type UnshieldedView } from '@kuiralabs/midnight-cli-core/engine';
-import { throwIfCancelled, type NetworkConfig, type NetworkName, isValidNetworkName, clearDustDirectCache, type VerboseLog, type NoticeSink } from '@kuiralabs/midnight-cli-core';
+import { throwIfCancelled, type NetworkConfig, type NetworkName, isValidNetworkName, clearDustDirectCache, type VerboseLog, type NoticeSink, LEDGER_9_FORK_VERSION, WalletBehindForkError, walletsBehindForkMessage } from '@kuiralabs/midnight-cli-core';
 
 import { type FacadeState } from '@midnightntwrk/wallet-sdk/facade';
 import {
@@ -33,12 +33,15 @@ import {
   DustSnapshotLedgerMismatchError,
 } from './facade.ts';
 import { loadDustCache, saveDustCache, dustPublicKeyHexFromSeed, validateDustCacheChainId } from './dust-direct-cache.ts';
-import { getChainGenesisHash, assertLedgerSupported, checkLedgerSupported, fetchProtocolVersion, checkBalance, type BalanceSummary, callNodeRpc, fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain';
+import { getChainGenesisHash, checkLedgerSupported, fetchGenesisProtocolVersion, fetchProtocolVersion, walletsBelowLedger9, checkBalance, type BalanceSummary, callNodeRpc, fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain';
 import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { dustKeysFromSeed, type DustLedgerState } from './dust-ledger-state.ts';
 import { isHostedNetwork, runDustSyncNative, sidecarSkipReason, sidecarUnavailableReason, wasmDustNotice } from './dust-sync-native.ts';
 import { deriveDustSeed } from './derivation.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
+import { readShieldedBalanceCached } from './shielded-direct-cache.ts';
+import { shieldedSnapshotLedger } from './shielded-snapshot.ts';
+import { ledgerOfProtocolVersion } from './fork-schedule.ts';
 export type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/engine';
 
 // ── Public types ──────────────────────────────────────────
@@ -132,6 +135,10 @@ export interface RepoDeps {
   fetchEventTip?: (indexerWS: string, stream: LedgerEventStream) => Promise<number | null>;
   /** Chain protocol-version fetcher (ledger-9-only guard). Default: indexer `block { protocolVersion }`. */
   fetchProtocolVersion?: (indexerHttpUrl: string, signal?: AbortSignal) => Promise<bigint | null>;
+  /** The protocol version of the chain's first block, where a new wallet starts. Default: indexer `block(offset: { height: 0 })`. */
+  fetchGenesisProtocolVersion?: (indexerHttpUrl: string, signal?: AbortSignal) => Promise<bigint | null>;
+  /** The direct shielded reader, read into its checkpoint under `root`. Default: `readShieldedBalanceCached`. */
+  readShielded?: typeof readShieldedBalanceCached;
 }
 
 // ── Implementation ────────────────────────────────────────
@@ -177,6 +184,8 @@ export class WalletDataRepository {
   private readonly fetchChainId: NonNullable<RepoDeps['fetchChainId']>;
   private readonly fetchEventTip: NonNullable<RepoDeps['fetchEventTip']>;
   private readonly fetchProtocolVersion: NonNullable<RepoDeps['fetchProtocolVersion']>;
+  private readonly fetchGenesisProtocolVersion: NonNullable<RepoDeps['fetchGenesisProtocolVersion']>;
+  private readonly readShielded: NonNullable<RepoDeps['readShielded']>;
 
   private readonly dustMemo = new Map<string, MemoEntry<DustView>>();
   private readonly unshieldedMemo = new Map<string, MemoEntry<UnshieldedView>>();
@@ -191,6 +200,8 @@ export class WalletDataRepository {
     this.fetchChainId = deps.fetchChainId ?? getChainGenesisHash;
     this.fetchEventTip = deps.fetchEventTip ?? fetchEventTip;
     this.fetchProtocolVersion = deps.fetchProtocolVersion ?? fetchProtocolVersion;
+    this.fetchGenesisProtocolVersion = deps.fetchGenesisProtocolVersion ?? fetchGenesisProtocolVersion;
+    this.readShielded = deps.readShielded ?? readShieldedBalanceCached;
   }
 
   /**
@@ -245,6 +256,35 @@ export class WalletDataRepository {
     } finally {
       await stopFacade(fresh).catch(() => {});
     }
+  }
+
+  /**
+   * Reads the wallet's shielded history into the direct reader's checkpoint
+   * under `root`, when the facade would otherwise start its shielded wallet
+   * below the ledger-9 fork: on a chain that forked from ledger 8 (its first
+   * block is), unless the wallet's saved shielded state is past the fork
+   * already. buildFacade then starts the shielded wallet on that checkpoint
+   * (see shielded-snapshot.ts). Resumes from the checkpoint it left; the first
+   * read of preprod took 216 s, once.
+   */
+  async primeShielded(seed: Buffer, network: NetworkConfig, opts: { root: string; signal?: AbortSignal; onStatus?: (status: string) => void; log?: VerboseLog }): Promise<void> {
+    const networkName = networkNameOf(network);
+    const saved = loadWalletCache(deriveUnshieldedAddress(seed, networkName), networkName, opts.root);
+    if (saved && shieldedSnapshotLedger(saved.shielded) === 9) return;
+    const start = await this.fetchGenesisProtocolVersion(network.indexer, opts.signal);
+    if (start !== null && ledgerOfProtocolVersion(start) === 9) return;
+    const chainProtocolVersion = await this.fetchProtocolVersion(network.indexer, opts.signal);
+    const chainId = (await this.fetchChainId(network.node).catch(() => null)) ?? undefined;
+    opts.log?.('shielded', `The chain's first block is at protocol version ${start ?? 'unknown'}: reading the shielded history past the fork first`);
+    opts.onStatus?.('Reading shielded events…');
+    const read = await this.readShielded(seed, networkName, network.indexerWS, {
+      root: opts.root,
+      signal: opts.signal,
+      chainId,
+      chainProtocolVersion,
+      onProgress: (applied, max) => opts.onStatus?.(`Reading shielded events… ${applied} (to event ${max})`),
+    });
+    opts.log?.('shielded', `Shielded checkpoint at event ${read.lastAppliedEventId}${read.partial ? ' (partial)' : ''}`);
   }
 
   // ── Reads ─────────────────────────────────────────
@@ -431,7 +471,8 @@ export class WalletDataRepository {
       ?? (isHostedNetwork(network) ? SYNC_ATTEMPT_REMOTE_MS : SYNC_ATTEMPT_LOCAL_MS);
 
     // On a ledger-8 chain the SDK's sync retries forever; refuse up front.
-    await assertLedgerSupported(networkName, network, this.fetchProtocolVersion, opts.signal);
+    const chainProtocolVersion = await this.fetchProtocolVersion(network.indexer, opts.signal);
+    checkLedgerSupported(networkName, chainProtocolVersion);
 
     const currentChainId = await this.fetchChainId(network.node).catch(() => null);
     validateWalletCacheChainId(networkName, currentChainId, opts.root);
@@ -448,6 +489,15 @@ export class WalletDataRepository {
       } catch (err) {
         // Pre-prime is best-effort — the actual sync below will re-attempt
         // anyway. Surface the error only via onSyncWarning if anyone cares.
+        opts.onSyncWarning?.('PrePrime', (err as Error).message);
+      }
+      // The shielded wallet too, on a chain that forked from ledger 8: built
+      // from its keys it would start below the fork, and no transaction could
+      // be built until it had replayed the chain's shielded history.
+      try {
+        await this.primeShielded(seed, network, { root: opts.root, signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
+      } catch (err) {
+        throwIfCancelled(opts.signal);
         opts.onSyncWarning?.('PrePrime', (err as Error).message);
       }
     }
@@ -512,6 +562,15 @@ export class WalletDataRepository {
       }
 
       if (!bundle || !syncedState) throw new Error('Sync failed: no facade state after retries');
+
+      // A wallet below the fork on a chain past it builds nothing the facade
+      // will take (it acts at the lowest of its wallets' versions): said now,
+      // not after a Dust wait and a proof.
+      if (writeMode && chainProtocolVersion !== null && chainProtocolVersion >= LEDGER_9_FORK_VERSION) {
+        const versions = syncedState.protocolVersion;
+        const behind = walletsBelowLedger9(versions);
+        if (behind.length > 0) throw new WalletBehindForkError(walletsBehindForkMessage(behind.map((wallet) => ({ wallet, protocolVersion: versions[wallet] })), LEDGER_9_FORK_VERSION));
+      }
 
       // ── Cold-start race retry around fn ───────────────────
       // The SDK's state observable can emit a snapshot with coins populated

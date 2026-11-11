@@ -31,10 +31,23 @@ export function checkLedgerSupported(network: string, protocolVersion: bigint | 
 const PROBE_TIMEOUT_MS = 5_000;
 
 /** The chain tip's protocol version from the indexer, or null if it can't be read. A cancelled call fails with CancelledError. */
-export async function fetchProtocolVersion(indexerHttpUrl: string, signal?: AbortSignal): Promise<bigint | null> {
+export function fetchProtocolVersion(indexerHttpUrl: string, signal?: AbortSignal): Promise<bigint | null> {
+  return fetchBlockProtocolVersion(indexerHttpUrl, '{ block { protocolVersion } }', signal);
+}
+
+/**
+ * The protocol version of the chain's first block, or null if it can't be
+ * read: the ledger a new wallet replays the chain's history with, as the
+ * wallet SDK's chain-version probe asks it. Below the ledger-9 fork on a chain
+ * that forked from ledger 8. A cancelled call fails with CancelledError.
+ */
+export function fetchGenesisProtocolVersion(indexerHttpUrl: string, signal?: AbortSignal): Promise<bigint | null> {
+  return fetchBlockProtocolVersion(indexerHttpUrl, '{ block(offset: { height: 0 }) { protocolVersion } }', signal);
+}
+
+async function fetchBlockProtocolVersion(indexerHttpUrl: string, query: string, signal?: AbortSignal): Promise<bigint | null> {
   try {
-    const data = await queryIndexer<{ block?: { protocolVersion?: number } }>(
-      indexerHttpUrl, '{ block { protocolVersion } }', undefined, PROBE_TIMEOUT_MS, signal);
+    const data = await queryIndexer<{ block?: { protocolVersion?: number } }>(indexerHttpUrl, query, undefined, PROBE_TIMEOUT_MS, signal);
     const version = data.block?.protocolVersion;
     return typeof version === 'number' ? BigInt(version) : null;
   } catch (err) {
