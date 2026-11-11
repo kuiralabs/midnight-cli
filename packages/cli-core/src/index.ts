@@ -74,7 +74,7 @@ export {
 export {
   asReported, CANCELLED_MESSAGE, CancelledError, CommandFailedError, ContractStateUnreadableError, DustDoubleSpentError, DustRequiredError,
   FeeRepricedError, FeeTooLowError, InsufficientBalanceError, isUsageError, NetworkError, ProofFailureError, SyncTimeoutError,
-  throwIfCancelled, TransactionInvalidatedError, TransactionRefusedError, UsageError, WalletBehindForkError, walletsBehindForkMessage, type WalletPart
+  throwIfCancelled, TransactionInvalidatedError, TransactionRefusedError, UsageError, WalletBehindForkError, type WalletBehindFork, walletsBehindForkMessage, type WalletPart
 } from './lib/errors.ts';
 export { execProgram, type ExecRun, type ExecRunner, ProgramFailedError, ProgramTimedOutError } from './lib/exec-program.ts';
 export {
@@ -125,7 +125,7 @@ export { type ContractKeys, contractKeysFromSeed } from './lib/contract-keys.ts'
 export { sleep, untilCancelled } from './lib/sleep.ts';
 export { NoStateRootError } from './lib/state-root.ts';
 export { checkTerms, type OfferContents, type SwapLeg, type SwapTerms, TermsMismatchError } from './lib/swap-offer.ts';
-export { isTransportFailure, withTransportCode } from './lib/transport-failure.ts';
+export { carriesOwnCode, isTransportFailure, withTransportCode } from './lib/transport-failure.ts';
 export { type EndpointRole, EndpointUnreachableError, endpointUnreachable, transportReason } from './lib/endpoint-unreachable.ts';
 export { type VerboseLog } from './lib/verbose.ts';
 export { clearWalletCache } from './lib/wallet-cache.ts';

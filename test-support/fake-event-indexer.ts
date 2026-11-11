@@ -1,9 +1,11 @@
-// Minimal in-process indexer for the direct readers: speaks the
-// graphql-transport-ws handshake and replays a fixture's ledger events from the
-// subscription's start id, under the subscription field the reader asks for
-// (`zswapLedgerEvents` or `dustLedgerEvents`), and refuses a subscription to the other. Stubs the external indexer
-// boundary only — the reader under test is real. It records each subscription
-// it takes, and leaves the socket open: the reader finishes when it sees
+// Minimal in-process indexer for the direct readers and the wallet SDK's
+// syncs: speaks the graphql-transport-ws handshake and, for each subscription,
+// replays the events of the stream the query names (`zswapLedgerEvents`,
+// `dustLedgerEvents`, `unshieldedTransactions`) from the subscription's start
+// id; a subscription to a stream it doesn't serve is refused, as an indexer
+// refuses a field it lacks. Stubs the external indexer boundary only — the
+// readers and wallets under test are real. It records each subscription it
+// takes, and leaves the socket open: a reader finishes when it sees
 // id >= maxId, or goes idle.
 
 import { WebSocketServer, type WebSocket as WsSocket } from 'ws';
@@ -21,10 +23,19 @@ export interface FakeEventIndexer {
   close: () => Promise<void>;
 }
 
+/** The streams an indexer serves, and their events; an event with an `id` is sent from the subscription's start id on. */
+export type FakeStreams = Partial<Record<'zswapLedgerEvents' | 'dustLedgerEvents' | 'unshieldedTransactions', ReadonlyArray<object>>>;
+
+/** An indexer serving one ledger event stream. */
 export function startFakeEventIndexer(
   field: 'zswapLedgerEvents' | 'dustLedgerEvents',
   events: ReadonlyArray<{ id: number }>,
 ): Promise<FakeEventIndexer> {
+  return startFakeChainIndexer({ [field]: events });
+}
+
+/** An indexer serving each of `streams`. */
+export function startFakeChainIndexer(streams: FakeStreams): Promise<FakeEventIndexer> {
   const subscriptions: TakenSubscription[] = [];
   return new Promise((resolve) => {
     const wss = new WebSocketServer({ host: '127.0.0.1', port: 0, handleProtocols: () => 'graphql-transport-ws' });
@@ -37,14 +48,16 @@ export function startFakeEventIndexer(
         }
         if (msg.type === 'subscribe') {
           subscriptions.push({ query: msg.payload?.query, variables: msg.payload?.variables });
-          // A subscription to another stream than this indexer's is refused, as an indexer refuses a field it lacks.
-          if (!String(msg.payload?.query ?? '').includes(field)) {
-            socket.send(JSON.stringify({ id: msg.id, type: 'error', payload: [{ message: `This indexer serves ${field} only` }] }));
+          const query = String(msg.payload?.query ?? '');
+          const field = (Object.keys(streams) as (keyof FakeStreams)[]).find((name) => query.includes(`${name}(`));
+          if (field === undefined) {
+            socket.send(JSON.stringify({ id: msg.id, type: 'error', payload: [{ message: `This indexer serves ${Object.keys(streams).join(', ')} only` }] }));
             return;
           }
           const startId: number = msg.payload?.variables?.id ?? 0;
-          for (const e of events) {
-            if (e.id < startId) continue;
+          for (const e of streams[field]!) {
+            const id = (e as { id?: unknown }).id;
+            if (typeof id === 'number' && id < startId) continue;
             socket.send(JSON.stringify({ id: msg.id, type: 'next', payload: { data: { [field]: e } } }));
           }
         }

@@ -101,6 +101,7 @@ export const ALLOWED = {
 export const ALLOWED_STATE = {
   // Shared on purpose: none holds a call's state.
   'lib/chain-id.ts': { CHAIN_ID_MEMO: 'shared on purpose: the chain-id memo, by endpoint' },
+  'lib/ledger-guard.ts': { GENESIS_VERSIONS: "shared on purpose: a per-process cache of an immutable fact, the protocol version of each indexer's chain's first block" },
 };
 
 // Exported functions that set module state, which the setter rule allows, by

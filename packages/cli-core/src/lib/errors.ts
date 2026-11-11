@@ -321,8 +321,7 @@ export type WalletPart = 'shielded' | 'unshielded' | 'dust';
 
 const WALLET_PART_NAME: Record<WalletPart, string> = { shielded: 'shielded', unshielded: 'unshielded', dust: 'Dust' };
 
-const RUN_AGAIN =
-  'Run the command again: mn first reads the shielded and Dust history past the fork from the indexer, and starts those wallets there.';
+const RUN_AGAIN = 'Run the command again: it resumes where this one stopped.';
 
 /**
  * A wallet can't build or take a transaction because its three wallets
@@ -340,10 +339,20 @@ export class WalletBehindForkError extends EngineError {
   }
 }
 
-/** What WalletBehindForkError says when the wallets in `behind`, each at the protocol version it has reached, are below the fork at `forkVersion`. */
-export function walletsBehindForkMessage(behind: readonly { wallet: WalletPart; protocolVersion: bigint }[], forkVersion: bigint): string {
-  const which = behind.map(({ wallet, protocolVersion }) => `the ${WALLET_PART_NAME[wallet]} wallet is at protocol version ${protocolVersion}`).join(', ');
-  return `This wallet can't build a transaction yet: ${which}, below the chain's fork to ledger 9 (${forkVersion}), ` +
+/** A wallet below the fork: the protocol version it reached, and why it is still there. */
+export interface WalletBehindFork {
+  wallet: WalletPart;
+  protocolVersion: bigint;
+  reason: string;
+}
+
+/**
+ * What WalletBehindForkError says when the wallets in `behind` are still below
+ * the fork at `forkVersion` after mn waited `waitedSeconds` for them to cross.
+ */
+export function walletsBehindForkMessage(behind: readonly WalletBehindFork[], forkVersion: bigint, waitedSeconds: number): string {
+  const which = behind.map(({ wallet, protocolVersion, reason }) => `the ${WALLET_PART_NAME[wallet]} wallet is at protocol version ${protocolVersion} (${reason})`).join('; ');
+  return `This wallet can't build a transaction yet: after ${waitedSeconds} s, ${which}, below the chain's fork to ledger 9 (${forkVersion}), ` +
     `and a transaction needs all three of its wallets (shielded, unshielded, Dust) past it. ${RUN_AGAIN}`;
 }
 
@@ -351,14 +360,20 @@ export function walletsBehindForkMessage(behind: readonly { wallet: WalletPart; 
  * What WalletBehindForkError says when the SDK refused a transaction built at
  * protocol version `authoredFor`, acting at versions `accepted` (from, up to
  * but not including to), on a chain that forks to ledger 9 at `forkVersion`.
+ * Ledgers are named only when the two sit on either side of the fork.
  */
 export function transactionAcrossForkMessage(authoredFor: bigint, accepted: readonly [bigint, bigint], forkVersion: bigint): string {
-  const [, to] = accepted;
-  return to <= forkVersion
-    ? `A transaction was built on ledger 9 (protocol version ${authoredFor}), and this wallet still acts on ledger 8 (below ${to}): ` +
-      `one of its three wallets (shielded, unshielded, Dust) hasn't synced past the chain's fork to ledger 9 (${forkVersion}). ${RUN_AGAIN}`
-    : `A transaction was built on ledger 8 (protocol version ${authoredFor}), and this wallet now acts on ledger 9: ` +
+  const [from, to] = accepted;
+  if (authoredFor >= forkVersion && to <= forkVersion) {
+    return `A transaction was built on ledger 9 (protocol version ${authoredFor}), and this wallet still acts on ledger 8 (below ${to}): ` +
+      `one of its three wallets (shielded, unshielded, Dust) hasn't synced past the chain's fork to ledger 9 (${forkVersion}). ${RUN_AGAIN}`;
+  }
+  if (authoredFor < forkVersion && from >= forkVersion) {
+    return `A transaction was built on ledger 8 (protocol version ${authoredFor}), and this wallet now acts on ledger 9: ` +
       `it crossed the chain's fork (${forkVersion}) while the transaction was being made. Run the command again to build it on ledger 9.`;
+  }
+  return `A transaction was built for protocol version ${authoredFor}, and this wallet acts at protocol versions ${from} up to (but not including) ${to}: ` +
+    `the two can't be used together. Run the command again to build it at the version the wallet acts at.`;
 }
 
 /**

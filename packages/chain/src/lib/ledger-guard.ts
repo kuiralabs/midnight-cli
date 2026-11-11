@@ -39,11 +39,20 @@ export function fetchProtocolVersion(indexerHttpUrl: string, signal?: AbortSigna
  * The protocol version of the chain's first block, or null if it can't be
  * read: the ledger a new wallet replays the chain's history with, as the
  * wallet SDK's chain-version probe asks it. Below the ledger-9 fork on a chain
- * that forked from ledger 8. A cancelled call fails with CancelledError.
+ * that forked from ledger 8. Read once per indexer for the process. A
+ * cancelled call fails with CancelledError.
  */
-export function fetchGenesisProtocolVersion(indexerHttpUrl: string, signal?: AbortSignal): Promise<bigint | null> {
-  return fetchBlockProtocolVersion(indexerHttpUrl, '{ block(offset: { height: 0 }) { protocolVersion } }', signal);
+export async function fetchGenesisProtocolVersion(indexerHttpUrl: string, signal?: AbortSignal): Promise<bigint | null> {
+  const known = GENESIS_VERSIONS.get(indexerHttpUrl);
+  if (known !== undefined) return known;
+  const version = await fetchBlockProtocolVersion(indexerHttpUrl, '{ block(offset: { height: 0 }) { protocolVersion } }', signal);
+  // A chain's first block doesn't change: asked once per indexer for the process (the MCP server's included).
+  if (version !== null) GENESIS_VERSIONS.set(indexerHttpUrl, version);
+  return version;
 }
+
+/** The protocol version of each indexer's chain's first block, as read in this process. */
+const GENESIS_VERSIONS = new Map<string, bigint>();
 
 async function fetchBlockProtocolVersion(indexerHttpUrl: string, query: string, signal?: AbortSignal): Promise<bigint | null> {
   try {

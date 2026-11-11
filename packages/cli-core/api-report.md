@@ -636,10 +636,12 @@ export declare class WalletBehindForkError extends EngineError {
         cause?: unknown;
     });
 }
-export declare function walletsBehindForkMessage(behind: readonly {
+export interface WalletBehindFork {
     wallet: WalletPart;
     protocolVersion: bigint;
-}[], forkVersion: bigint): string;
+    reason: string;
+}
+export declare function walletsBehindForkMessage(behind: readonly WalletBehindFork[], forkVersion: bigint, waitedSeconds: number): string;
 export type WalletPart = 'shielded' | 'unshielded' | 'dust';
 export declare const execProgram: ExecRunner;
 export interface ExecRun {
@@ -1014,6 +1016,7 @@ export declare class TermsMismatchError extends Error {
     readonly offered: SwapTerms;
     constructor(agreed: SwapTerms, offered: SwapTerms);
 }
+export declare function carriesOwnCode(failure: unknown): boolean;
 export declare function isTransportFailure(failure: unknown): boolean;
 export declare function withTransportCode(err: unknown): unknown;
 export type EndpointRole = 'node' | 'indexer' | 'proof server';

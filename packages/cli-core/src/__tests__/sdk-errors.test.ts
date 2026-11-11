@@ -328,9 +328,15 @@ describe('a transaction built on the other side of the ledger-9 fork than the wa
     expect(err.message).toContain('build it on ledger 9');
   });
 
-  it('names the wallets behind the fork when mn sees them before building', () => {
-    const err = new WalletBehindForkError(walletsBehindForkMessage([{ wallet: 'shielded', protocolVersion: 22_000n }], 2_000_000n));
-    expect(err.code).toBe('WALLET_BEHIND_FORK');
-    expect(err.message).toContain('the shielded wallet is at protocol version 22000, below the chain\'s fork to ledger 9 (2000000)');
+  it('names a version mismatch on one side of the fork without naming ledgers', () => {
+    const err = toEngineError(refusal(2_001_100n, [2_000_000n, 2_001_000n])) as Error;
+    expect(err).toBeInstanceOf(WalletBehindForkError);
+    expect(err.message).toContain('built for protocol version 2001100');
+    expect(err.message).not.toContain('ledger 8');
+  });
+
+  it('names the wallets behind the fork, each with its version and why, and how long mn waited', () => {
+    const message = walletsBehindForkMessage([{ wallet: 'shielded', protocolVersion: 22_000n, reason: 'reading its shielded history first failed: socket closed' }], 2_000_000n, 60);
+    expect(message).toContain('after 60 s, the shielded wallet is at protocol version 22000 (reading its shielded history first failed: socket closed), below the chain\'s fork to ledger 9 (2000000)');
   });
 });

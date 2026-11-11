@@ -24,12 +24,12 @@ import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from './deri
 import { loadDustCache, dustPublicKeyHex, type DustCacheEntry } from './dust-direct-cache.ts';
 import { ledgerOfProtocolVersion, serializeDustLedgerState, type DustLedger } from './dust-ledger-state.ts';
 import { isHostedNetwork, wasmDustNotice } from './dust-sync-native.ts';
-import { assertNetworkAnswers, fetchProtocolVersion, isStreamEmpty } from '@kuiralabs/midnight-chain';
+import { assertNetworkAnswers, fetchGenesisProtocolVersion, fetchProtocolVersion, isStreamEmpty } from '@kuiralabs/midnight-chain';
 import { readOpenOffers, type NetworkName } from '@kuiralabs/midnight-cli-core';
 import type { CoinPicking } from '@kuiralabs/midnight-cli-core/engine';
 import { PickingShieldedWallet, shieldedCoinPicking, type ShieldedCoin } from './shielded-wallet.ts';
-import { loadShieldedCache, shieldedCoinPublicKeyHexFromSeed } from './shielded-direct-cache.ts';
-import { checkpointPastFork, overlayShieldedCheckpoint, shieldedSnapshotLedger } from './shielded-snapshot.ts';
+import type { PrimeReport } from './fork-crossing.ts';
+import { checkpointPastFork, overlayShieldedCheckpoint, shieldedSnapshotLedger, type ShieldedCheckpoint } from './shielded-snapshot.ts';
 import type { LedgerVersion } from './fork-schedule.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
 
@@ -60,6 +60,10 @@ export interface FacadeBundle {
   emptyStreams?: EmptyStreams;
   /** The fee settings this wallet's Dust wallet prices with: the SDK reads the margin from it at every price, so a refused fee is priced again by raising it. */
   feePricing: FeePricing;
+  /** Why the shielded wallet was not started on the direct reader's checkpoint it was given: the SDK refused the snapshot. It then syncs as the SDK starts it. */
+  shieldedCheckpointRefused?: Error;
+  /** What reading the Dust and shielded histories first left undone, set by the repository that read them: the fork check says it. */
+  primeReport?: PrimeReport;
 }
 
 /**
@@ -100,12 +104,19 @@ export function facadeConfiguration(networkId: NetworkName, networkConfig: Pick<
  * wallet where the chain's history starts, which on a chain that forked from
  * ledger 8 is ledger 8.
  *
- * The shielded wallet starts on the direct shielded reader's checkpoint under
- * `root` when that is ahead of the saved wallet, or there is none (see
+ * `shieldedCheckpoint`, the direct shielded reader's checkpoint (the caller
+ * checked it is this chain's), is what a shielded wallet that would start on
+ * ledger 8 starts on instead when it has crossed to ledger 9 (see
  * shielded-snapshot.ts): built from its keys on a chain that forked from
- * ledger 8, it would start there, and the facade, acting at the lowest of its
- * wallets' versions, would refuse every ledger-9 transaction until it had
- * replayed the chain's shielded history.
+ * ledger 8, the wallet would start there, and the facade, acting at the lowest
+ * of its wallets' versions, would refuse every ledger-9 transaction until it
+ * had replayed the chain's shielded history. A checkpoint the SDK won't
+ * restore is set aside, with why (`shieldedCheckpointRefused`).
+ *
+ * A new wallet's start is the chain's first block's protocol version, as the
+ * SDK's own probe asks it, read once per process instead of within the SDK's
+ * 5 s (whose timeout starts a wallet on ledger 8 even on a chain born on
+ * ledger 9).
  */
 export async function buildFacade(
   seedBuffer: Buffer,
@@ -115,6 +126,7 @@ export async function buildFacade(
   cache?: WalletCacheData | null,
   log?: VerboseLog,
   dustLedger?: DustLedger,
+  shieldedCheckpoint?: ShieldedCheckpoint | null,
 ): Promise<FacadeBundle> {
   const networkId = getNetworkId(networkConfig.networkId);
 
@@ -145,13 +157,15 @@ export async function buildFacade(
   // itself, with a version read before the build: the SDK gives its probe 5 s
   // and on no answer starts on ledger 8.
   const dustStart = dustLedger === undefined ? undefined : await startVersionOn(dustLedger, networkConfig.indexer);
-  const shieldedCheckpoint = loadShieldedCache(network, shieldedCoinPublicKeyHexFromSeed(seedBuffer), root);
+  const genesis = await fetchGenesisProtocolVersion(networkConfig.indexer).catch(() => null);
+  const startAtGenesis = genesis === null ? {} : { chainVersionProbe: () => Promise.resolve(ProtocolVersion.ProtocolVersion(genesis)) };
+  let shieldedCheckpointRefused: Error | undefined;
   type ShieldedConfig = Parameters<typeof PickingShieldedWallet>[0];
   // The shielded wallet the facade runs: `saved` restored, or a new one from
   // the keys; on the direct reader's checkpoint instead while that one would
   // sit on ledger 8 and the reader has crossed to ledger 9.
   const shieldedWallet = async (cfg: ShieldedConfig, saved?: string) => {
-    const Shielded = PickingShieldedWallet(cfg, coinPicking);
+    const Shielded = PickingShieldedWallet({ ...cfg, ...startAtGenesis }, coinPicking);
     let wallet: Awaited<ReturnType<typeof Shielded.startWithSeed>> | undefined;
     let walletLedger: LedgerVersion;
     if (saved !== undefined) {
@@ -160,26 +174,34 @@ export async function buildFacade(
       wallet = await Shielded.startWithSeed(seeds.shielded);
       walletLedger = ledgerOfProtocolVersion((await rx.firstValueFrom(wallet.state)).protocolVersion);
     }
-    const checkpoint = checkpointPastFork(walletLedger, shieldedCheckpoint);
+    const checkpoint = checkpointPastFork(walletLedger, shieldedCheckpoint ?? null);
     if (checkpoint === null) return wallet ?? Shielded.restore(saved!);
-    await wallet?.stop();
-    log?.('facade', `Shielded wallet starts on the direct reader's ledger-9 checkpoint (event ${checkpoint.lastAppliedEventId}), not on ledger 8`);
-    const version = await startVersionOn(9, networkConfig.indexer);
-    const onLedger9 = await PickingShieldedWallet({ ...cfg, chainVersionProbe: () => Promise.resolve(version) }, coinPicking).startWithSeed(seeds.shielded);
-    let template: string;
     try {
-      template = await onLedger9.serializeState();
-    } finally {
-      await onLedger9.stop();
+      const version = await startVersionOn(9, networkConfig.indexer);
+      const onLedger9 = await PickingShieldedWallet({ ...cfg, chainVersionProbe: () => Promise.resolve(version) }, coinPicking).startWithSeed(seeds.shielded);
+      let template: string;
+      try {
+        template = await onLedger9.serializeState();
+      } finally {
+        await onLedger9.stop();
+      }
+      const onCheckpoint = await Shielded.restore(overlayShieldedCheckpoint(template, checkpoint, seeds.shielded));
+      await wallet?.stop();
+      log?.('facade', `Shielded wallet starts on the direct reader's ledger-9 checkpoint (event ${checkpoint.lastAppliedEventId}), not on ledger 8`);
+      return onCheckpoint;
+    } catch (err) {
+      // Set aside: the wallet runs as the SDK starts it, and syncs across the fork itself.
+      shieldedCheckpointRefused = err as Error;
+      log?.('facade', `Shielded checkpoint (event ${checkpoint.lastAppliedEventId}) not restored: ${(err as Error).message}`);
+      return wallet ?? Shielded.restore(saved!);
     }
-    return Shielded.restore(overlayShieldedCheckpoint(template, checkpoint, seeds.shielded));
   };
   const initFresh = () => WalletFacade.init({
     configuration,
     submissionService: (config) => submissionOnDemand(config.relayURL),
     shielded: (cfg) => shieldedWallet(cfg),
-    unshielded: (cfg) => UnshieldedWallet(cfg).startWithPublicKey(PublicKey.fromKeyStore(keystore)),
-    dust: (cfg) => DustWallet(dustStart === undefined ? cfg : { ...cfg, chainVersionProbe: () => Promise.resolve(dustStart) }).startWithSeed(seeds.dust),
+    unshielded: (cfg) => UnshieldedWallet({ ...cfg, ...startAtGenesis }).startWithPublicKey(PublicKey.fromKeyStore(keystore)),
+    dust: (cfg) => DustWallet(dustStart === undefined ? { ...cfg, ...startAtGenesis } : { ...cfg, chainVersionProbe: () => Promise.resolve(dustStart) }).startWithSeed(seeds.dust),
   });
 
   // Bridge: if the dust-direct cache has a more recent DustLocalState than the
@@ -216,7 +238,7 @@ export async function buildFacade(
     facade = await initFresh();
   }
 
-  return { facade, keystore, seeds, coinPicking, feePricing, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS, nodeUrl: networkConfig.node };
+  return { facade, keystore, seeds, coinPicking, feePricing, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS, nodeUrl: networkConfig.node, ...(shieldedCheckpointRefused === undefined ? {} : { shieldedCheckpointRefused }) };
 }
 
 /**

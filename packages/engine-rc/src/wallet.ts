@@ -179,7 +179,9 @@ async function syncedPrepWallet(repo: WalletDataRepository, wallet: PrepWallet, 
         }
         : {}),
     });
-    return { bundle, state };
+    // Its wallets past the fork, or why not: a test wallet registers Dust and pays with this facade.
+    await repo.awaitPastFork(bundle, { onStatus: wallet.onMessage, signal: wallet.signal });
+    return { bundle, state: await rx.firstValueFrom(bundle.facade.state()) };
   } catch (err) {
     try { await stopFacade(bundle); } catch { /* best-effort */ }
     throw err;
@@ -256,6 +258,8 @@ async function openConnector(repo: WalletDataRepository, options: Parameters<Eng
       },
     });
     onMessage('Wallet synced');
+    // Every request this connector takes builds a transaction: its wallets past the fork first, or why not.
+    await repo.awaitPastFork(built, { onStatus: onMessage, signal });
 
     // Wait for dust
     onMessage('Waiting for dust...');
@@ -343,6 +347,8 @@ function serveWallet<T>(repo: WalletDataRepository, options: Parameters<EngineWa
     // serve accepts write requests from dApps — must be strictly synced.
     requireStrictSync: true,
     skipAutoSave: true,
+    // mn serve starts with its wallets still crossing the fork: they cross in the background, and its connector refuses a request until they have.
+    waitForFork: false,
     signal: options.signal,
     log: options.log,
     onStatus: options.onStatus,

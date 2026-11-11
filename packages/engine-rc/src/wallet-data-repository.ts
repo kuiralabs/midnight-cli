@@ -19,7 +19,7 @@
 
 import { Buffer } from 'node:buffer';
 import { isColdStartRace, loadWalletCache, saveWalletCache, clearWalletCache, validateWalletCacheChainId, type WalletCacheData, bindCachesToIndexer, describeIndexerChange, type CachedReadOptions, type DustBalance, type EngineHost, type ReadOptions, type UnshieldedView } from '@kuiralabs/midnight-cli-core/engine';
-import { throwIfCancelled, type NetworkConfig, type NetworkName, isValidNetworkName, clearDustDirectCache, type VerboseLog, type NoticeSink, LEDGER_9_FORK_VERSION, WalletBehindForkError, walletsBehindForkMessage } from '@kuiralabs/midnight-cli-core';
+import { throwIfCancelled, type NetworkConfig, type NetworkName, isValidNetworkName, clearDustDirectCache, type VerboseLog, type NoticeSink, clearShieldedDirectCache } from '@kuiralabs/midnight-cli-core';
 
 import { type FacadeState } from '@midnightntwrk/wallet-sdk/facade';
 import {
@@ -33,15 +33,16 @@ import {
   DustSnapshotLedgerMismatchError,
 } from './facade.ts';
 import { loadDustCache, saveDustCache, dustPublicKeyHexFromSeed, validateDustCacheChainId } from './dust-direct-cache.ts';
-import { getChainGenesisHash, checkLedgerSupported, fetchGenesisProtocolVersion, fetchProtocolVersion, walletsBelowLedger9, checkBalance, type BalanceSummary, callNodeRpc, fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain';
+import { getChainGenesisHash, checkLedgerSupported, fetchGenesisProtocolVersion, fetchProtocolVersion, checkBalance, type BalanceSummary, callNodeRpc, fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain';
 import { readDustBalanceDirect, type DustDirectResult, type DustRetention } from './dust-direct.ts';
 import { dustKeysFromSeed, type DustLedgerState } from './dust-ledger-state.ts';
 import { isHostedNetwork, runDustSyncNative, sidecarSkipReason, sidecarUnavailableReason, wasmDustNotice } from './dust-sync-native.ts';
 import { deriveDustSeed } from './derivation.ts';
 import { deriveUnshieldedAddress } from './derive-address.ts';
-import { readShieldedBalanceCached } from './shielded-direct-cache.ts';
-import { shieldedSnapshotLedger } from './shielded-snapshot.ts';
-import { ledgerOfProtocolVersion } from './fork-schedule.ts';
+import { loadShieldedCache, readShieldedBalanceCached, shieldedCoinPublicKeyHexFromSeed } from './shielded-direct-cache.ts';
+import { shieldedSnapshotLedger, type ShieldedCheckpoint } from './shielded-snapshot.ts';
+import { awaitWalletsPastFork, type PrimeReport } from './fork-crossing.ts';
+import { FORK_SCHEDULE, ledgerOfProtocolVersion } from './fork-schedule.ts';
 export type { CachedReadOptions, DustBalance, ReadOptions, UnshieldedView } from '@kuiralabs/midnight-cli-core/engine';
 
 // ── Public types ──────────────────────────────────────────
@@ -93,6 +94,20 @@ export interface FacadeOptions extends CachedReadOptions {
   onSyncWarning?: (tag: string, message: string) => void;
   /** Suppress the dust pre-prime even in write mode (used by tests / debug). */
   noPrime?: boolean;
+  /**
+   * Wait (bounded, FORK_CROSSING_WAIT_MS) after the sync for all three wallets
+   * to be past the chain's fork to ledger 9, and fail with why one isn't.
+   * Default: on, in write mode. A standalone mn serve turns it off: it starts,
+   * and its wallets cross in the background (its connector refuses a request
+   * until they have).
+   */
+  waitForFork?: boolean;
+}
+
+/** What withFacade read of the chain before its wallets: the tip's protocol version and the genesis hash, each null when unknown. */
+interface ChainFacts {
+  chainProtocolVersion: bigint | null;
+  chainId: string | null;
 }
 
 export type TipFingerprint = string;
@@ -135,10 +150,6 @@ export interface RepoDeps {
   fetchEventTip?: (indexerWS: string, stream: LedgerEventStream) => Promise<number | null>;
   /** Chain protocol-version fetcher (ledger-9-only guard). Default: indexer `block { protocolVersion }`. */
   fetchProtocolVersion?: (indexerHttpUrl: string, signal?: AbortSignal) => Promise<bigint | null>;
-  /** The protocol version of the chain's first block, where a new wallet starts. Default: indexer `block(offset: { height: 0 })`. */
-  fetchGenesisProtocolVersion?: (indexerHttpUrl: string, signal?: AbortSignal) => Promise<bigint | null>;
-  /** The direct shielded reader, read into its checkpoint under `root`. Default: `readShieldedBalanceCached`. */
-  readShielded?: typeof readShieldedBalanceCached;
 }
 
 // ── Implementation ────────────────────────────────────────
@@ -184,8 +195,6 @@ export class WalletDataRepository {
   private readonly fetchChainId: NonNullable<RepoDeps['fetchChainId']>;
   private readonly fetchEventTip: NonNullable<RepoDeps['fetchEventTip']>;
   private readonly fetchProtocolVersion: NonNullable<RepoDeps['fetchProtocolVersion']>;
-  private readonly fetchGenesisProtocolVersion: NonNullable<RepoDeps['fetchGenesisProtocolVersion']>;
-  private readonly readShielded: NonNullable<RepoDeps['readShielded']>;
 
   private readonly dustMemo = new Map<string, MemoEntry<DustView>>();
   private readonly unshieldedMemo = new Map<string, MemoEntry<UnshieldedView>>();
@@ -200,8 +209,6 @@ export class WalletDataRepository {
     this.fetchChainId = deps.fetchChainId ?? getChainGenesisHash;
     this.fetchEventTip = deps.fetchEventTip ?? fetchEventTip;
     this.fetchProtocolVersion = deps.fetchProtocolVersion ?? fetchProtocolVersion;
-    this.fetchGenesisProtocolVersion = deps.fetchGenesisProtocolVersion ?? fetchGenesisProtocolVersion;
-    this.readShielded = deps.readShielded ?? readShieldedBalanceCached;
   }
 
   /**
@@ -264,60 +271,132 @@ export class WalletDataRepository {
    * below the ledger-9 fork: on a chain that forked from ledger 8 (its first
    * block is), unless the wallet's saved shielded state is past the fork
    * already. buildFacade then starts the shielded wallet on that checkpoint
-   * (see shielded-snapshot.ts). Resumes from the checkpoint it left; the first
-   * read of preprod took 216 s, once.
+   * (see shielded-snapshot.ts). Resumes from the checkpoint it left. `known`
+   * is what the caller already read of the chain. Says whether it read (and
+   * whether the read ran out of time); a failed read throws.
    */
-  async primeShielded(seed: Buffer, network: NetworkConfig, opts: { root: string; signal?: AbortSignal; onStatus?: (status: string) => void; log?: VerboseLog }): Promise<void> {
+  async primeShielded(seed: Buffer, network: NetworkConfig, opts: { root: string; signal?: AbortSignal; onStatus?: (status: string) => void; log?: VerboseLog; known?: ChainFacts }): Promise<{ read: boolean; partial?: { lastAppliedEventId: number; maxId: number } }> {
     const networkName = networkNameOf(network);
     const saved = loadWalletCache(deriveUnshieldedAddress(seed, networkName), networkName, opts.root);
-    if (saved && shieldedSnapshotLedger(saved.shielded) === 9) return;
-    const start = await this.fetchGenesisProtocolVersion(network.indexer, opts.signal);
-    if (start !== null && ledgerOfProtocolVersion(start) === 9) return;
-    const chainProtocolVersion = await this.fetchProtocolVersion(network.indexer, opts.signal);
-    const chainId = (await this.fetchChainId(network.node).catch(() => null)) ?? undefined;
+    if (saved && shieldedSnapshotLedger(saved.shielded) === 9) return { read: false };
+    const start = await fetchGenesisProtocolVersion(network.indexer, opts.signal);
+    if (start !== null && ledgerOfProtocolVersion(start) === 9) return { read: false };
+    const { chainProtocolVersion, chainId } = opts.known ?? await this.chainFacts(network, opts.signal);
     opts.log?.('shielded', `The chain's first block is at protocol version ${start ?? 'unknown'}: reading the shielded history past the fork first`);
-    opts.onStatus?.('Reading shielded events…');
-    const read = await this.readShielded(seed, networkName, network.indexerWS, {
+    opts.onStatus?.('Reading shielded events...');
+    let maxId = -1;
+    const read = await readShieldedBalanceCached(seed, networkName, network.indexerWS, {
       root: opts.root,
       signal: opts.signal,
-      chainId,
+      chainId: chainId ?? undefined,
       chainProtocolVersion,
-      onProgress: (applied, max) => opts.onStatus?.(`Reading shielded events… ${applied} (to event ${max})`),
+      onProgress: (applied, max) => {
+        maxId = max;
+        opts.onStatus?.(`Reading shielded events... ${applied} (to event ${max})`);
+      },
     });
     opts.log?.('shielded', `Shielded checkpoint at event ${read.lastAppliedEventId}${read.partial ? ' (partial)' : ''}`);
+    return read.partial ? { read: true, partial: { lastAppliedEventId: read.lastAppliedEventId, maxId } } : { read: true };
+  }
+
+  /** The chain's tip protocol version and genesis hash, each null when it can't be read. */
+  private async chainFacts(network: NetworkConfig, signal?: AbortSignal): Promise<ChainFacts> {
+    const [chainProtocolVersion, chainId] = await Promise.all([
+      this.fetchProtocolVersion(network.indexer, signal),
+      this.fetchChainId(network.node).catch(() => null),
+    ]);
+    return { chainProtocolVersion, chainId };
+  }
+
+  /**
+   * Reads the wallet's Dust and shielded histories into their checkpoints, at
+   * once, before a facade is built to write with. Each is best-effort, and
+   * what failed or ran out of time is kept for the fork check
+   * (awaitWalletsPastFork) to say; `shieldedRead` says the shielded
+   * checkpoint was just read in full. A cancel ends it.
+   */
+  private async primeCheckpoints(seed: Buffer, network: NetworkConfig, opts: { root: string; notice: NoticeSink; signal?: AbortSignal; onStatus?: (status: string) => void; log?: VerboseLog }, known: ChainFacts): Promise<{ report: PrimeReport; shieldedRead: boolean }> {
+    const [dust, shielded] = await Promise.allSettled([
+      this.dust(seed, network, { root: opts.root, notice: opts.notice, signal: opts.signal, onStatus: opts.onStatus, log: opts.log }, known),
+      this.primeShielded(seed, network, { root: opts.root, signal: opts.signal, onStatus: opts.onStatus, log: opts.log, known }),
+    ]);
+    throwIfCancelled(opts.signal);
+    const report: PrimeReport = {};
+    if (dust.status === 'rejected') report.dust = { failure: dust.reason as Error };
+    else if (dust.value.partial) report.dust = { partial: true };
+    if (shielded.status === 'rejected') report.shielded = { failure: shielded.reason as Error };
+    else if (shielded.value.partial) report.shielded = { partial: shielded.value.partial };
+    for (const [part, failure] of [['Dust', report.dust?.failure], ['shielded', report.shielded?.failure]] as const) {
+      if (failure) opts.log?.('prime', `Reading the ${part} history first failed: ${failure.message}`);
+    }
+    // Read in full: the reader checked the checkpoint against this chain as it read.
+    return { report, shieldedRead: shielded.status === 'fulfilled' && shielded.value.read && !shielded.value.partial };
+  }
+
+  /**
+   * The direct shielded reader's checkpoint for buildFacade, when it is this
+   * chain's: written for this genesis hash (`chainId`), and not past the
+   * indexer's last zswap event (a reset chain whose hash repeats, as a
+   * localnet's does). One that isn't is deleted. `fresh`: the prime just read
+   * it, which checked both.
+   */
+  private async shieldedCheckpoint(seed: Buffer, network: NetworkConfig, root: string, chainId: string | null, fresh: boolean): Promise<ShieldedCheckpoint | null> {
+    const networkName = networkNameOf(network);
+    const pubkeyHex = shieldedCoinPublicKeyHexFromSeed(seed);
+    const checkpoint = loadShieldedCache(networkName, pubkeyHex, root, chainId ?? undefined);
+    if (checkpoint === null || fresh) return checkpoint;
+    if (isCursorBeyondTip(checkpoint.lastAppliedEventId, await this.fetchEventTip(network.indexerWS, 'zswap'))) {
+      clearShieldedDirectCache(networkName, pubkeyHex, root);
+      return null;
+    }
+    return checkpoint;
   }
 
   /**
    * A facade to write with, for a caller that syncs and stops it itself (mn
-   * serve's DApp connector for a session, a test's preparation): the Dust and
-   * shielded checkpoints read first, as withFacade reads them, then the
-   * wallet's saved state restored, or a new wallet's on the Dust checkpoint.
-   * Each read is best-effort: one that fails leaves its wallet to sync itself
-   * (on a forked chain the facade then refuses to build, WALLET_BEHIND_FORK).
+   * serve's DApp connector for a session, a test's preparation), built as
+   * withFacade builds one: the caches checked against this chain and indexer,
+   * the Dust and shielded checkpoints read first, then the wallet's saved
+   * state restored, or a new wallet's on the checkpoints. What the reads
+   * left undone is on the bundle (`primeReport`), for awaitPastFork.
    */
   async primedFacade(seed: Buffer, network: NetworkConfig, opts: { root: string; notice: NoticeSink; signal?: AbortSignal; onStatus?: (status: string) => void; log?: VerboseLog }): Promise<FacadeBundle> {
-    const { root, notice, signal, onStatus, log } = opts;
-    try {
-      await this.dust(seed, network, { root, notice, signal, onStatus, log });
-    } catch {
-      throwIfCancelled(signal); // a cancel is not a failed read
-    }
-    try {
-      await this.primeShielded(seed, network, { root, signal, onStatus, log });
-    } catch {
-      throwIfCancelled(signal);
-    }
-    const cache = await this.walletStateToRestore(seed, network, networkNameOf(network), root, notice, log);
-    return buildFacade(seed, network, root, notice, cache, log);
+    const { root, notice, log } = opts;
+    const networkName = networkNameOf(network);
+    const known = await this.chainFacts(network, opts.signal);
+    checkLedgerSupported(networkName, known.chainProtocolVersion);
+    validateWalletCacheChainId(networkName, known.chainId, root);
+    this.keepCachesOfThisIndexer(networkName, network, root, opts.onStatus);
+    const { report: primeReport, shieldedRead } = await this.primeCheckpoints(seed, network, opts, known);
+    const checkpoint = await this.shieldedCheckpoint(seed, network, root, known.chainId, shieldedRead);
+    const cache = await this.walletStateToRestore(seed, network, networkName, root, notice, log);
+    const bundle = await buildFacade(seed, network, root, notice, cache, log, undefined, checkpoint);
+    bundle.primeReport = primeReport;
+    return bundle;
+  }
+
+  /**
+   * Waits (bounded) for a synced primed facade's three wallets to be past the
+   * chain's fork to ledger 9, saying which it waits for; fails with why one
+   * isn't (forkCrossingFailure).
+   */
+  awaitPastFork(bundle: FacadeBundle, opts: { onStatus?: (status: string) => void; signal?: AbortSignal; timeoutMs?: number }): Promise<void> {
+    return awaitWalletsPastFork(bundle.facade.state(), {
+      report: { ...bundle.primeReport, ...(bundle.shieldedCheckpointRefused ? { shieldedCheckpointRefused: bundle.shieldedCheckpointRefused } : {}) },
+      onStatus: opts.onStatus,
+      signal: opts.signal,
+      timeoutMs: opts.timeoutMs,
+    });
   }
 
   // ── Reads ─────────────────────────────────────────
 
-  async dust(seed: Buffer, network: NetworkConfig, opts: CachedReadOptions): Promise<DustView> {
+  /** The wallet's Dust, read into its checkpoint; `known` is what the caller already read of the chain. */
+  async dust(seed: Buffer, network: NetworkConfig, opts: CachedReadOptions, known?: ChainFacts): Promise<DustView> {
     const networkName = networkNameOf(network);
     // The tip's version is read before any Dust event: a caught-up read on a
     // chain past the fork then ends on ledger 9 (see dust-event-fold.ts).
-    const chainProtocolVersion = await this.fetchProtocolVersion(network.indexer, opts.signal);
+    const chainProtocolVersion = known ? known.chainProtocolVersion : await this.fetchProtocolVersion(network.indexer, opts.signal);
     checkLedgerSupported(networkName, chainProtocolVersion);
     const pubkeyHex = dustPublicKeyHexFromSeed(seed);
     const memoKey = `${networkName}:${pubkeyHex}`;
@@ -331,7 +410,7 @@ export class WalletDataRepository {
     // Chain-reset guard: fetch the chain's genesis hash once, wipe any
     // stale-chain dust files, and persist the same hash on every save so the
     // guard has something to compare on the next run.
-    const currentChainId = await this.fetchChainId(network.node).catch(() => null);
+    const currentChainId = known ? known.chainId : await this.fetchChainId(network.node).catch(() => null);
     validateDustCacheChainId(networkName, currentChainId, opts.root);
     this.keepCachesOfThisIndexer(networkName, network, opts.root, opts.onStatus);
     const chainId = currentChainId ?? undefined;
@@ -495,36 +574,28 @@ export class WalletDataRepository {
       ?? (isHostedNetwork(network) ? SYNC_ATTEMPT_REMOTE_MS : SYNC_ATTEMPT_LOCAL_MS);
 
     // On a ledger-8 chain the SDK's sync retries forever; refuse up front.
-    const chainProtocolVersion = await this.fetchProtocolVersion(network.indexer, opts.signal);
-    checkLedgerSupported(networkName, chainProtocolVersion);
+    const known = await this.chainFacts(network, opts.signal);
+    checkLedgerSupported(networkName, known.chainProtocolVersion);
 
-    const currentChainId = await this.fetchChainId(network.node).catch(() => null);
+    const currentChainId = known.chainId;
     validateWalletCacheChainId(networkName, currentChainId, opts.root);
     this.keepCachesOfThisIndexer(networkName, network, opts.root, opts.onStatus);
     const chainId = currentChainId ?? undefined;
 
-    // ── Pre-prime the dust-direct cache for write-mode borrowers ──
-    // Equivalent to the legacy `primeDustCacheWithFeedback` step: warms the
-    // dust state to chain tip on disk so buildFacade's dust bridge starts
-    // near-tip. Read-only borrowers skip it.
+    // ── Read the Dust and shielded checkpoints first, for write-mode borrowers ──
+    // The Dust state to the chain tip, so buildFacade's Dust bridge starts
+    // near the tip; the shielded state on a chain that forked from ledger 8,
+    // where a shielded wallet built from its keys starts below the fork.
+    // Read-only borrowers skip both.
+    let primeReport: PrimeReport = {};
+    let shieldedRead = false;
     if (writeMode && !opts.noPrime && !opts.forceFresh) {
-      try {
-        await this.dust(seed, network, { root: opts.root, notice: opts.notice, signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
-      } catch (err) {
-        // Pre-prime is best-effort — the actual sync below will re-attempt
-        // anyway. Surface the error only via onSyncWarning if anyone cares.
-        opts.onSyncWarning?.('PrePrime', (err as Error).message);
-      }
-      // The shielded wallet too, on a chain that forked from ledger 8: built
-      // from its keys it would start below the fork, and no transaction could
-      // be built until it had replayed the chain's shielded history.
-      try {
-        await this.primeShielded(seed, network, { root: opts.root, signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
-      } catch (err) {
-        throwIfCancelled(opts.signal);
-        opts.onSyncWarning?.('PrePrime', (err as Error).message);
+      ({ report: primeReport, shieldedRead } = await this.primeCheckpoints(seed, network, opts, known));
+      for (const failure of [primeReport.dust?.failure, primeReport.shielded?.failure]) {
+        if (failure) opts.onSyncWarning?.('PrePrime', failure.message);
       }
     }
+    const shieldedCheckpoint = opts.forceFresh ? null : await this.shieldedCheckpoint(seed, network, opts.root, known.chainId, shieldedRead);
 
     let bundle: FacadeBundle | undefined;
     let syncedState: FacadeState | undefined;
@@ -542,7 +613,7 @@ export class WalletDataRepository {
         const cacheBeforeBuild = opts.forceFresh
           ? null
           : await this.walletStateToRestore(seed, network, networkName, opts.root, opts.notice, opts.log);
-        bundle = await buildFacade(seed, network, opts.root, opts.notice, cacheBeforeBuild, opts.log);
+        bundle = await buildFacade(seed, network, opts.root, opts.notice, cacheBeforeBuild, opts.log, undefined, shieldedCheckpoint);
         try {
           syncedState = await startAndSyncFacade(bundle, {
             onProgress: opts.onSyncProgress,
@@ -566,7 +637,7 @@ export class WalletDataRepository {
             // Re-prime the dust cache so the next attempt restores from a
             // current checkpoint instead of a full SDK resync.
             try {
-              await this.dust(seed, network, { root: opts.root, notice: opts.notice, signal: opts.signal, onStatus: opts.onStatus, log: opts.log });
+              await this.dust(seed, network, { root: opts.root, notice: opts.notice, signal: opts.signal, onStatus: opts.onStatus, log: opts.log }, known);
             } catch { /* best-effort */ }
             continue;
           }
@@ -588,12 +659,12 @@ export class WalletDataRepository {
       if (!bundle || !syncedState) throw new Error('Sync failed: no facade state after retries');
 
       // A wallet below the fork on a chain past it builds nothing the facade
-      // will take (it acts at the lowest of its wallets' versions): said now,
-      // not after a Dust wait and a proof.
-      if (writeMode && chainProtocolVersion !== null && chainProtocolVersion >= LEDGER_9_FORK_VERSION) {
-        const versions = syncedState.protocolVersion;
-        const behind = walletsBelowLedger9(versions);
-        if (behind.length > 0) throw new WalletBehindForkError(walletsBehindForkMessage(behind.map((wallet) => ({ wallet, protocolVersion: versions[wallet] })), LEDGER_9_FORK_VERSION));
+      // will take (it acts at the lowest of its wallets' versions). The sync
+      // can end a moment before one crosses: wait for it, bounded, and say why
+      // it didn't, rather than fail after a Dust wait and a proof.
+      if (writeMode && opts.waitForFork !== false && known.chainProtocolVersion !== null && known.chainProtocolVersion >= FORK_SCHEDULE.v9) {
+        bundle.primeReport = primeReport;
+        await this.awaitPastFork(bundle, { onStatus: opts.onStatus, signal: opts.signal });
       }
 
       // ── Cold-start race retry around fn ───────────────────
@@ -620,7 +691,7 @@ export class WalletDataRepository {
           await new Promise((r) => setTimeout(r, COLD_START_DELAY_MS));
           throwIfCancelled(opts.signal);
           const retryCache = loadWalletCache(address, networkName, opts.root);
-          bundle = await buildFacade(seed, network, opts.root, opts.notice, retryCache, opts.log);
+          bundle = await buildFacade(seed, network, opts.root, opts.notice, retryCache, opts.log, undefined, shieldedCheckpoint);
           syncedState = await startAndSyncFacade(bundle, {
             onProgress: opts.onSyncProgress,
             onSyncDetail: opts.onSyncDetail,
