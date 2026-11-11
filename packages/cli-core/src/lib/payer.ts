@@ -61,9 +61,10 @@ export interface Payer {
   /**
    * Refuses, before anything is served, unless the wallet this payer pays from
    * has NIGHT and Dust to pay with; what it holds otherwise. Each payer checks
-   * its own wallet.
+   * its own wallet. `paying` names what the payment is for ("deploying
+   * escrow", "calling withdraw on escrow"), for the refusal to say.
    */
-  assertCanPay: (target: PayingTarget, wallet: string | undefined, progress: Spinner, signal: AbortSignal | undefined) => Promise<PayingFunds>;
+  assertCanPay: (target: PayingTarget, wallet: string | undefined, progress: Spinner, signal: AbortSignal | undefined, paying?: string) => Promise<PayingFunds>;
   /** Serves the wallet; one that runs in this process keeps the SDK's warnings to the paying call's `sdkWarnings`. */
   serve: (target: PayingTarget, wallet: string | undefined, progress: Spinner, sdkWarnings: CallSdkWarnings, signal: AbortSignal | undefined) => Promise<ServedWallet>;
   /** Opens the wallet in this process as a session, keeping the SDK's warnings to the paying call's `sdkWarnings`. */

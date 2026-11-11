@@ -72,7 +72,7 @@ export default async function grantCommand(args: ParsedArgs, ctx: CallContext): 
 
   // Reading the account or a request submits nothing: a wallet with no Dust can still do it, and none is opened.
   const payer = paysAFee(request) ? payerFor(`grant ${request.subcommand}`, ctx) : undefined;
-  const funds = payer ? await payer.assertCanPay(target, walletFlag, spinnerFor('Checking wallet...'), ctx.signal) : undefined;
+  const funds = payer ? await payer.assertCanPay(target, walletFlag, spinnerFor('Checking wallet...'), ctx.signal, `grant ${request.subcommand}`) : undefined;
   const paying = payer ? await openPayingWallet(payer, target, (await accountChainFor(ctx.host.engines, target.network)).connector, walletFlag, spinnerFor('Opening the wallet...'), ctx.sdkWarnings, ctx.signal, request.subcommand === 'deposit' ? { shielded: true } : undefined) : undefined;
   try {
     await runOwned(request, { target, walletName, recordsDir, account, jsonMode, paying, funds, spinnerFor }, ctx);
