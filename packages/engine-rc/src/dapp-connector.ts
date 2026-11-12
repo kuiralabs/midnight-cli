@@ -13,6 +13,7 @@ import type { FinalizedTx } from '@midnightntwrk/wallet-sdk';
 
 import { type FacadeBundle, hasDustAvailable } from './facade.ts';
 import { refusedFeeCheck } from './fee-refusal.ts';
+import { estimateFeeAsBalanced } from './fee-as-balanced.ts';
 import { awaitDustSpendSeen, pendingDustNonces } from './dust-spend-seen.ts';
 import { inspectTxHex } from './tx-inspect.ts';
 import { readOffer, spentNullifiers } from './offer-reader.ts';
@@ -1218,8 +1219,9 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
     /**
      * The price of a transaction a dApp is about to prove (unproven, hex): the
-     * fee this wallet would commit to it when it balances it, with its own
-     * Dust spend and the margin it prices with now, against the Dust it has.
+     * fee this wallet would commit to it when it balances it, with the
+     * shielded coins and the Dust spend it adds and the margin it prices with
+     * now, against the Dust it has.
      * Nothing is booked, signed or sent, so the operator isn't asked.
      */
     [PRICE_TRANSACTION_METHOD]: async (params) => {
@@ -1231,7 +1233,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       const unproven = adopt(txHex, 'Unproven');
       const state = getState();
       const price = await priceTransaction(
-        () => facade.estimateTransactionFee(unproven, { ttl: createTtl() }),
+        () => estimateFeeAsBalanced(facade, unproven, createTtl()),
         state.dust,
         bundle.feePricing.feeBlocksMargin,
       );
