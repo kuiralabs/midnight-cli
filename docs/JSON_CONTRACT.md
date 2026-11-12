@@ -96,6 +96,7 @@ Stable identifiers used in error messages and structured error objects, with the
 | `STALE_CACHE` | 6 | Local wallet cache disagrees with chain (e.g. localnet reset, remote testnet re-indexed). |
 | `PROOF_TIMEOUT` | 6 | ZK proof generation didn't finish within the deadline. |
 | `PROOF_FAILURE` | 6 | Proof server rejected or failed to generate the ZK proof. Often a stale commitment tree or unreachable proof server. |
+| `NOT_A_PROOF_SERVER` | 4 | The proof server URL answers, but not as a proof server: its `/version` gives no version (another service on that port, a proxy that answers everything). |
 | `INVALID_DUST_PROOF` | 6 | Chain rejected the dust spend proof as malformed (substrate "Custom error 170"). Stale commitment tree. |
 | `CONTRACT_STATE_UNREADABLE` | 1 | A contract's state on chain can't be decoded by this mn's ledger: the state the chain holds is at fault, not the user's setup. The message names the contract and includes what the ledger said. |
 | `FEE_TOO_LOW` | 6 | The node refused the fee as too low even after mn priced it again with its largest margin (8 blocks of rising prices): prices are climbing faster than that, as when blocks are full one after another. |
@@ -115,7 +116,9 @@ Stable identifiers used in error messages and structured error objects, with the
 | `CONTRACT_INFO_INVALID` | 1 | A compiled contract's contract-info.json is not what the Compact compiler writes (not JSON, or its circuits or witnesses missing or malformed). |
 | `CONTRACT_STATE_BUSY` | 1 | A contract's private-state store stayed in use by another process (another mn running a call of the same contract) for the 3 minutes a call waits for it. The message names the contract and, when it is an mn, its pid and command. |
 | `CONTRACT_ASSERTION_FAILED` | 2 | A Compact `assert` in the circuit called (or in the constructor, for a deploy) failed while the contract ran on this machine, before anything was proven or sent. The message names the contract, the circuit and the assert's own text (e.g. "Still locked"). |
+| `WITNESSES_NOT_FOUND` | 1 | The contract declares witnesses and the dApp has no compiled witnesses module (dist/witnesses.js or one of the other places the message lists). |
 | `NO_ACCOUNT` | 1 | A grant command (`midnight_grant_*` tool) was called for a wallet that has no account on this network. |
+| `CONTRACT_NOT_FOUND` | 2 | No contract is deployed at the address on this network. |
 | `ACCOUNT_KEYS_UNAVAILABLE` | 1 | A proving key of the account contract couldn't be had: the installed account build's keys are not published (HTTP 404), or fetching them failed. Nothing was submitted. |
 | `WRONG_PASSPHRASE` | 2 | `MN_PASSPHRASE` is not the passphrase mn's secrets were encrypted with, or a sealed file was changed. |
 | `PASSPHRASE_REQUIRED` | 2 | A tool needed a secret (a wallet's seed, an account's owner key) and no passphrase could be had: `MN_PASSPHRASE` is unset and there is no terminal to ask at (the MCP server has none). |
@@ -215,7 +218,7 @@ With `--shielded`, `recipient` is the shielded address, `shieldedAddress` repeat
 
 ### Receipts
 
-A command that submits a transaction (transfer, airdrop, dust register, contract deploy and call, the grant and swap commands) returns its `txHash` and waits up to 60 s for the indexer to list it. `receipt` is then the transaction as `mn tx status` gives it: `kind`, `hash`, `identifiers` (regular transactions), `result` (`SUCCESS`, `PARTIAL_SUCCESS` or `FAILURE`), `segments` (a partial success), `fee` (DUST, exact) and `feeSpecks`, `blockHeight`, `blockHash` and `blockTime`. When the indexer has not listed it, `receipt` is `null` and `receiptMissing` says why; check later with `mn tx status <txHash>`.
+A command that submits a transaction (transfer, airdrop, dust register, contract deploy and call, the grant and swap commands) returns its `txHash`, the transaction's identifier (66 hex characters, the one `mn tx status` takes; since 0.6.0 for contract deploy and call too, which gave the 64-hex hash before), and waits up to 60 s for the indexer to list it. `receipt` is then the transaction as `mn tx status` gives it: `kind`, `hash`, `identifiers` (regular transactions), `result` (`SUCCESS`, `PARTIAL_SUCCESS` or `FAILURE`), `segments` (a partial success), `fee` (DUST, exact) and `feeSpecks`, `blockHeight`, `blockHash` and `blockTime`. When the indexer has not listed it, `receipt` is `null` and `receiptMissing` says why; check later with `mn tx status <txHash>`.
 
 ### `mn info --wallet <name> --json`
 
@@ -275,7 +278,7 @@ A command that submits a transaction (transfer, airdrop, dust register, contract
   "contractName": "counter",
   "address": "9b3e083bf850ca17983d34110337d384d2dc626da8223c3fb2dbd3f8a2df35a3",
   "network": "preprod",
-  "txHash": "00b1...",                 // the deploy's transaction; absent when the payer gave none
+  "txHash": "00b1...",                 // the deploy's transaction's identifier (66 hex, as every command gives it; its hash is receipt.hash); absent when the payer gave none
   "receipt": { /* see "Receipts" above */ },
   // The deploy's price, worked out after the wallet synced and before anything was proven; absent when the mn serve that paid gave none.
   "cost": {

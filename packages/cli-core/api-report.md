@@ -675,6 +675,7 @@ export declare const ERROR_CODES: {
     readonly STALE_CACHE: "STALE_CACHE";
     readonly PROOF_TIMEOUT: "PROOF_TIMEOUT";
     readonly PROOF_FAILURE: "PROOF_FAILURE";
+    readonly NOT_A_PROOF_SERVER: "NOT_A_PROOF_SERVER";
     readonly INVALID_DUST_PROOF: "INVALID_DUST_PROOF";
     readonly FEE_TOO_LOW: "FEE_TOO_LOW";
     readonly FEE_REPRICED: "FEE_REPRICED";
@@ -866,7 +867,7 @@ export declare class OfferExpiredError extends Error {
     readonly code = "OFFER_EXPIRED";
     constructor(id: string, expiresAt: Date);
 }
-export declare function closeOpenOffers(root: string, network: NetworkName, walletAddress: string, ids: readonly string[]): OpenOffer[];
+export declare function closeOpenOffers(root: string, network: NetworkName, walletAddress: string, ids: readonly string[], settlement?: Settlement): OpenOffer[];
 export declare class OfferCoinsInUseError extends Error {
     readonly code = "OFFER_COINS_IN_USE";
     readonly offerIds: string[];
@@ -877,6 +878,7 @@ export declare class OfferRecordUnreadableError extends Error {
     readonly file: string;
     constructor(file: string, detail: string);
 }
+export type OfferSettlement = 'taken' | 'cancelled';
 export interface OpenOffer {
     id: string;
     terms: SwapTerms;
@@ -885,7 +887,21 @@ export interface OpenOffer {
     expiresAt: Date;
 }
 export declare function readOpenOffers(root: string, network: NetworkName, walletAddress: string): OpenOffer[];
+export declare function readSettledOffers(root: string, network: NetworkName, walletAddress: string, now?: Date): SettledOffer[];
 export declare function recordOpenOffer(root: string, network: NetworkName, walletAddress: string, offer: OpenOffer): void;
+export declare const SETTLED_OFFER_KEEP_DAYS = 30;
+export interface SettledOffer extends OpenOffer {
+    settledBy: OfferSettlement;
+    settledAt: Date;
+    txHash?: string;
+    blockHeight?: number;
+}
+export interface Settlement {
+    settledBy: OfferSettlement;
+    txHash?: string;
+    blockHeight?: number;
+    at?: Date;
+}
 export interface ConnectOptions {
     shielded?: boolean;
 }
@@ -1027,7 +1043,15 @@ export declare class TermsMismatchError extends Error {
     constructor(agreed: SwapTerms, offered: SwapTerms);
 }
 export declare function carriesOwnCode(failure: unknown): boolean;
+export declare function isTransientNetworkFailure(failure: unknown): boolean;
 export declare function isTransportFailure(failure: unknown): boolean;
+export declare function retryingTransient<T>(attempt: () => Promise<T>, options?: TransientRetryOptions): Promise<T>;
+export declare const TRANSIENT_RETRY_DELAYS_MS: readonly number[];
+export interface TransientRetryOptions {
+    readonly signal?: AbortSignal;
+    readonly delaysMs?: readonly number[];
+    readonly onRetry?: (failure: unknown, retry: number, retries: number, delayMs: number) => void;
+}
 export declare function withTransportCode(err: unknown): unknown;
 export type EndpointRole = 'node' | 'indexer' | 'proof server';
 export declare class EndpointUnreachableError extends NetworkError {
@@ -1038,6 +1062,18 @@ export declare class EndpointUnreachableError extends NetworkError {
     });
 }
 export declare function endpointUnreachable(endpoint: EndpointRole, url: string, failure: unknown): EndpointUnreachableError;
+export declare class NotAProofServerError extends Error {
+    readonly code = "NOT_A_PROOF_SERVER";
+    readonly url: string;
+    constructor(url: string, answered: string);
+}
+export declare class ProofServerDroppedError extends NetworkError {
+    readonly url: string;
+    readonly circuit: string | undefined;
+    constructor(url: string, reason: string, circuit: string | undefined, options?: {
+        cause?: unknown;
+    });
+}
 export declare function transportReason(failure: unknown): string;
 export type VerboseLog = (phase: string, message: string) => void;
 export declare function clearWalletCache(address: string | undefined, network: string | undefined, root: string): void;
@@ -1112,6 +1148,13 @@ export declare const coreCodes: readonly [
         readonly order: 30;
         readonly summary: "Indexer/node/proof-server connection refused or DNS failure.";
         readonly recovery: "Check `midnight_localnet_status()` (start it with `midnight_localnet_up()`) or the endpoints the user configured.";
+    },
+    {
+        readonly code: "NOT_A_PROOF_SERVER";
+        readonly exitCode: 4;
+        readonly order: 105;
+        readonly summary: "The proof server URL answers, but not as a proof server: its `/version` gives no version (another service on that port, a proxy that answers everything).";
+        readonly recovery: "Ask the user to point `proof-server` at a running proof server (`midnight_config_set`), or start one; nothing was built or sent.";
     },
     {
         readonly code: "AMBIGUOUS_LOCAL_STACKS";
@@ -1720,6 +1763,7 @@ export interface TransferParams {
     onSyncDetail?: (walletsStillSyncing: string) => void;
     onDust?: (status: string) => void;
     onProving?: () => void;
+    onProvingTick?: (elapsedMs: number) => void;
     onSubmitting?: () => void;
     onSubmittingTick?: (elapsedMs: number) => void;
     onSyncWarning?: (tag: string, message: string) => void;
@@ -1751,7 +1795,13 @@ export declare class ProofTimeoutError extends EngineError {
         cause?: unknown;
     });
 }
-export declare function proveWithin<T>(work: Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T>;
+export declare function proofTimeoutMessage(timeoutMs: number, proofServer: string | undefined): string;
+export declare const PROVE_TICK_MS = 5000;
+export declare function proveWithin<T>(work: Promise<T>, timeoutMs: number, signal?: AbortSignal, options?: ProveWaitOptions): Promise<T>;
+export interface ProveWaitOptions {
+    readonly proofServer?: string;
+    readonly onTick?: (elapsedMs: number) => void;
+}
 export declare const SUBMIT_WAIT_MS = 180000;
 export declare function submitWithin<T>(work: Promise<T>, options?: SubmitWaitOptions): Promise<T>;
 export interface SubmitWaitOptions {

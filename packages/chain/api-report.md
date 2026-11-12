@@ -72,7 +72,7 @@ export declare function spendsOf(indexer: {
     fromBlock?: number;
     signal?: AbortSignal;
 }): Promise<CoinSpend[]>;
-export declare function explainProofFailure(err: unknown, proofServerUrl: string, signal?: AbortSignal): Promise<unknown>;
+export declare function explainProofFailure(err: unknown, proofServerUrl: string, signal?: AbortSignal, circuit?: string): Promise<unknown>;
 export declare function waitForProofServerReady(proofServerUrl: string, opts?: WaitForProofServerOptions): Promise<void>;
 export type Receipt = {
     readonly listed: true;

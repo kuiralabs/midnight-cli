@@ -180,7 +180,8 @@ export interface CallResult {
 }
 export declare class ContractScriptError extends Error {
     readonly code: string | undefined;
-    constructor({ message, code }: ScriptFailure);
+    readonly proving: ProvingFailure | undefined;
+    constructor({ message, code, proving }: ScriptFailure);
 }
 export interface DeployOptions extends RunnerOptions {
     privateStateKey?: string;
@@ -237,6 +238,10 @@ export interface ContractChecked {
     readonly kind: 'contract-checked';
     readonly network: NetworkName;
 }
+export declare class ContractNotFoundError extends Error {
+    readonly code = "CONTRACT_NOT_FOUND";
+    constructor(address: string, network: NetworkName);
+}
 export type ContractState = ParsedContractState | RawContractState;
 export interface ParsedContractState {
     readonly kind: 'parsed';
@@ -275,6 +280,13 @@ export declare function buildMissingWitnessError(opts: {
     witnessNames: string[];
 }): string;
 export declare function findWitnessFile(projectRoot: string): string | null;
+export declare class WitnessesNotFoundError extends Error {
+    readonly code = "WITNESSES_NOT_FOUND";
+    constructor(projectRoot: string, witnessNames: string[]);
+}
+export declare class ContractArgumentError extends UsageError {
+    constructor(message: string, options?: ErrorOptions);
+}
 ```
 
 ## `@kuiralabs/midnight-contract/commands`
@@ -308,6 +320,20 @@ export declare const contractCodes: readonly [
         readonly order: 207;
         readonly summary: "A contract's private-state store stayed in use by another process (another mn running a call of the same contract) for the 3 minutes a call waits for it. The message names the contract and, when it is an mn, its pid and command.";
         readonly recovery: "Let the other mn finish, or stop it if it is stuck. A call reads the store before it submits and writes it after, so read the contract state (`midnight_contract_state`) to see whether the call landed before retrying it.";
+    },
+    {
+        readonly code: "WITNESSES_NOT_FOUND";
+        readonly exitCode: 1;
+        readonly order: 209;
+        readonly summary: "The contract declares witnesses and the dApp has no compiled witnesses module (dist/witnesses.js or one of the other places the message lists).";
+        readonly recovery: "Ask the user to build the witnesses (e.g. `npm run build`) so a witnesses.js exists, then retry; nothing was sent.";
+    },
+    {
+        readonly code: "CONTRACT_NOT_FOUND";
+        readonly exitCode: 2;
+        readonly order: 211;
+        readonly summary: "No contract is deployed at the address on this network.";
+        readonly recovery: "Check the address and the network (a contract deployed on another network, or on a local chain that was reset, is not there).";
     },
     {
         readonly code: "CONTRACT_ASSERTION_FAILED";
