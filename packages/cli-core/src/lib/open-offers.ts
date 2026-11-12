@@ -1,5 +1,6 @@
 // The offers a wallet has made and not yet seen taken or cancelled, kept in
-// mn's state. An offer's coins are committed to it until then: a later spend
+// mn's state, and beside them the ones it saw settled (taken, or cancelled),
+// for a while, so a later command about one still answers what became of it. An offer's coins are committed to it until then: a later spend
 // of any of them would cancel the offer, so a wallet's spends are checked
 // against this record (assertSpendsNoOfferCoin) and refused unless the caller
 // says to cancel. Expiry is not an end: the chain lets an expired offer be
@@ -18,6 +19,36 @@ export interface OpenOffer {
   madeAt: Date;
   expiresAt: Date;
 }
+
+/** How an offer stopped being open: its coins spent by another transaction (a taker's, or a cancel from another copy of the wallet), or cancelled by this mn. */
+export type OfferSettlement = 'taken' | 'cancelled';
+
+/** An offer the wallet saw settled: when, how, and the transaction that spent its coins when known. */
+export interface SettledOffer extends OpenOffer {
+  settledBy: OfferSettlement;
+  settledAt: Date;
+  txHash?: string;
+  blockHeight?: number;
+}
+
+/** How an offer being closed settled. */
+export interface Settlement {
+  settledBy: OfferSettlement;
+  txHash?: string;
+  blockHeight?: number;
+  /** When it was seen settled; the time of the call when not given. */
+  at?: Date;
+}
+
+/**
+ * How long a settled offer is kept: long enough for its maker to come back
+ * days later (a cancel, a list) and be told it was taken and by which
+ * transaction, short enough that the record of a wallet that trades often
+ * stays small (it is read before every spend). Past it the offer is
+ * forgotten; its spend is still on chain (midnight tx status).
+ */
+export const SETTLED_OFFER_KEEP_DAYS = 30;
+const SETTLED_OFFER_KEEP_MS = SETTLED_OFFER_KEEP_DAYS * 24 * 60 * 60 * 1000;
 
 /** A spend would use coins an open offer of this wallet's holds, cancelling it. */
 export class OfferCoinsInUseError extends Error {
@@ -50,6 +81,8 @@ export class OfferRecordUnreadableError extends Error {
 
 interface StoredLeg { token: string; amount: string }
 interface StoredOffer { id: string; terms: { give: StoredLeg; want: StoredLeg }; nullifiers: string[]; madeAt: string; expiresAt: string }
+// Settled offers are kept under their own key: an mn that predates it reads only `offers`, and never takes a settled one for open.
+interface StoredSettled extends StoredOffer { settledBy: OfferSettlement; settledAt: string; txHash?: string; blockHeight?: number }
 
 /** The file under the state root `root` holding a wallet's open offers on a network; the wallet by its unshielded address there. */
 export function openOffersFile(root: string, network: NetworkName, walletAddress: string): string {
@@ -86,8 +119,23 @@ function readStoredOffer(o: unknown, at: number): OpenOffer {
   };
 }
 
-/** The wallet's open offers on the network. Throws OfferRecordUnreadableError when mn's record of them can't be read. */
-export function readOpenOffers(root: string, network: NetworkName, walletAddress: string): OpenOffer[] {
+/** The settled offer `o` as stored, read; throws a message saying what about it is not as mn writes it. */
+function readStoredSettled(o: unknown, at: number): SettledOffer {
+  const offer = readStoredOffer(o, at);
+  const { settledBy, settledAt, txHash, blockHeight } = o as Partial<Record<keyof StoredSettled, unknown>>;
+  const wrong = (what: string): never => { throw new Error(`settled offer ${at + 1} ${what}`); };
+  if (settledBy !== 'taken' && settledBy !== 'cancelled') return wrong('says neither taken nor cancelled');
+  const when = new Date(typeof settledAt === 'string' ? settledAt : Number.NaN);
+  if (Number.isNaN(when.getTime())) return wrong('has no settledAt date');
+  if (txHash !== undefined && typeof txHash !== 'string') return wrong('has a txHash that is not text');
+  if (blockHeight !== undefined && typeof blockHeight !== 'number') return wrong('has a blockHeight that is not a number');
+  return { ...offer, settledBy, settledAt: when, ...(txHash === undefined ? {} : { txHash }), ...(blockHeight === undefined ? {} : { blockHeight }) };
+}
+
+interface OfferRecord { open: OpenOffer[]; settled: SettledOffer[] }
+
+/** The wallet's record on the network: its open offers, and the settled ones kept. Throws OfferRecordUnreadableError when it can't be read. */
+function readRecord(root: string, network: NetworkName, walletAddress: string): OfferRecord {
   const path = openOffersFile(root, network, walletAddress);
   let stored: unknown;
   try {
@@ -95,41 +143,81 @@ export function readOpenOffers(root: string, network: NetworkName, walletAddress
   } catch (err) {
     throw new OfferRecordUnreadableError(path, `it is not JSON (${(err as Error).message})`);
   }
-  if (stored === undefined) return [];
-  const offers = (stored as { offers?: unknown } | null)?.offers;
+  if (stored === undefined) return { open: [], settled: [] };
+  const { offers, settled } = (stored as { offers?: unknown; settled?: unknown } | null) ?? {};
   if (typeof stored !== 'object' || stored === null || !Array.isArray(offers)) {
     throw new OfferRecordUnreadableError(path, 'it holds no list of offers');
   }
+  if (settled !== undefined && !Array.isArray(settled)) throw new OfferRecordUnreadableError(path, 'its settled offers are not a list');
   try {
-    return offers.map(readStoredOffer);
+    return { open: offers.map(readStoredOffer), settled: (settled ?? []).map(readStoredSettled) };
   } catch (err) {
     throw new OfferRecordUnreadableError(path, (err as Error).message);
   }
 }
 
-function writeOpenOffers(root: string, network: NetworkName, walletAddress: string, offers: OpenOffer[]): void {
+/** The wallet's open offers on the network. Throws OfferRecordUnreadableError when mn's record of them can't be read. */
+export function readOpenOffers(root: string, network: NetworkName, walletAddress: string): OpenOffer[] {
+  return readRecord(root, network, walletAddress).open;
+}
+
+/** The offers the wallet saw settled on the network within SETTLED_OFFER_KEEP_DAYS of `now`, oldest first. */
+export function readSettledOffers(root: string, network: NetworkName, walletAddress: string, now: Date = new Date()): SettledOffer[] {
+  return keptAt(readRecord(root, network, walletAddress).settled, now);
+}
+
+function keptAt(settled: readonly SettledOffer[], now: Date): SettledOffer[] {
+  return settled.filter((o) => now.getTime() - o.settledAt.getTime() <= SETTLED_OFFER_KEEP_MS);
+}
+
+const storedOffer = (o: OpenOffer): StoredOffer => ({
+  id: o.id,
+  terms: { give: stored(o.terms.give), want: stored(o.terms.want) },
+  nullifiers: o.nullifiers,
+  madeAt: o.madeAt.toISOString(),
+  expiresAt: o.expiresAt.toISOString(),
+});
+
+function writeRecord(root: string, network: NetworkName, walletAddress: string, record: OfferRecord): void {
   writeJsonDurably(openOffersFile(root, network, walletAddress), {
-    offers: offers.map((o) => ({
-      id: o.id,
-      terms: { give: stored(o.terms.give), want: stored(o.terms.want) },
-      nullifiers: o.nullifiers,
-      madeAt: o.madeAt.toISOString(),
-      expiresAt: o.expiresAt.toISOString(),
+    offers: record.open.map(storedOffer),
+    settled: record.settled.map((o): StoredSettled => ({
+      ...storedOffer(o),
+      settledBy: o.settledBy,
+      settledAt: o.settledAt.toISOString(),
+      ...(o.txHash === undefined ? {} : { txHash: o.txHash }),
+      ...(o.blockHeight === undefined ? {} : { blockHeight: o.blockHeight }),
     })),
   });
 }
 
 /** Records an offer the wallet made. */
 export function recordOpenOffer(root: string, network: NetworkName, walletAddress: string, offer: OpenOffer): void {
-  const offers = readOpenOffers(root, network, walletAddress).filter((o) => o.id !== offer.id);
-  writeOpenOffers(root, network, walletAddress, [...offers, offer]);
+  const record = readRecord(root, network, walletAddress);
+  writeRecord(root, network, walletAddress, { open: [...record.open.filter((o) => o.id !== offer.id), offer], settled: record.settled });
 }
 
-/** Closes the wallet's offers with these ids (taken or cancelled); the ones it had. */
-export function closeOpenOffers(root: string, network: NetworkName, walletAddress: string, ids: readonly string[]): OpenOffer[] {
-  const offers = readOpenOffers(root, network, walletAddress);
-  const closing = offers.filter((o) => ids.includes(o.id));
-  if (closing.length > 0) writeOpenOffers(root, network, walletAddress, offers.filter((o) => !ids.includes(o.id)));
+/**
+ * Closes the wallet's offers with these ids (taken or cancelled); the ones it
+ * had. With `settlement`, they are kept as settled that way (see
+ * SETTLED_OFFER_KEEP_DAYS), and settled ones past their time are forgotten.
+ */
+export function closeOpenOffers(root: string, network: NetworkName, walletAddress: string, ids: readonly string[], settlement?: Settlement): OpenOffer[] {
+  const record = readRecord(root, network, walletAddress);
+  const closing = record.open.filter((o) => ids.includes(o.id));
+  if (closing.length === 0) return closing;
+  const at = settlement?.at ?? new Date();
+  const settled = settlement === undefined ? [] : closing.map((o): SettledOffer => ({
+    ...o,
+    settledBy: settlement.settledBy,
+    settledAt: at,
+    ...(settlement.txHash === undefined ? {} : { txHash: settlement.txHash }),
+    ...(settlement.blockHeight === undefined ? {} : { blockHeight: settlement.blockHeight }),
+  }));
+  writeRecord(root, network, walletAddress, {
+    open: record.open.filter((o) => !ids.includes(o.id)),
+    settled: [...keptAt(record.settled, at).filter((o) => !ids.includes(o.id)), ...settled],
+  });
   return closing;
 }
 

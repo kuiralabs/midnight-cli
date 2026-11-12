@@ -5,7 +5,7 @@
 // what the file says, that the terms are the agreed ones, that the maker's
 // expiry hasn't passed, and that none of its coins is spent.
 
-import { sdkSetOf, sleep, SyncTimeoutError, type SwapLeg, type Engine, type HostEngines, type NetworkConfig, type NetworkName, type WalletSession, UsageError, InsufficientBalanceError, checkTerms, type OfferContents, type SwapTerms, assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope, type OfferEnvelope, closeOpenOffers, readOpenOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
+import { sdkSetOf, sleep, SyncTimeoutError, type SwapLeg, type Engine, type HostEngines, type NetworkConfig, type NetworkName, type WalletSession, UsageError, InsufficientBalanceError, checkTerms, type OfferContents, type SwapTerms, assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope, type OfferEnvelope, closeOpenOffers, readOpenOffers, readSettledOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
 import { spendsOf, type CoinSpend } from '@kuiralabs/midnight-chain';
 
 /** An offer made: its file's text and what it is. */
@@ -100,8 +100,12 @@ export const SPENT_COIN_WAIT_MS = 15_000;
 /** How often the indexer is asked meanwhile, in milliseconds. */
 const SPENT_COIN_POLL_MS = 1_000;
 
-/** The codes a node's refusal of a transaction is reported with (the engine's, from the node's words). */
-const NODE_REFUSAL_CODES: ReadonlySet<string> = new Set(['TX_REJECTED', 'STALE_UTXO']);
+/**
+ * The codes a node's refusal of a transaction is reported with (the engine's,
+ * from the node's words), TX_INVALIDATED among them: the node took it into its
+ * pool, then dropped it when another transaction spending the same coin landed.
+ */
+const NODE_REFUSAL_CODES: ReadonlySet<string> = new Set(['TX_REJECTED', 'STALE_UTXO', 'TX_INVALIDATED']);
 
 /**
  * Whether the node refused the transaction, in the error or any of its
@@ -109,7 +113,7 @@ const NODE_REFUSAL_CODES: ReadonlySet<string> = new Set(['TX_REJECTED', 'STALE_U
  * shielded coin spent already (ledger 9's Zswap NullifierAlreadyPresent,
  * "Custom error: 239"). A transaction that lost a race for a coin is refused
  * either at once with those words, or, once in the node's pool, as "invalid"
- * when the other one lands.
+ * (TX_INVALIDATED) when the other one lands.
  */
 export function refusedByNode(err: unknown): boolean {
   const seen = new Set<unknown>();
@@ -176,26 +180,33 @@ export async function takeOffer(session: WalletSession, offer: ReadOffer, agreed
   }
 }
 
-/** An open offer of the wallet's, and whether it has been taken since. */
+/** An open offer of the wallet's, and whether it has been taken since, with the transaction that took it. */
 export interface ListedOffer {
   offer: OpenOffer;
   expired: boolean;
   taken: boolean;
+  /** With `taken`: the transaction that spent its coins, and its block. */
+  takenIn?: { txHash: string; blockHeight: number };
 }
 
 /**
  * The wallet's open offers on the network, each asked of the indexer: the
- * ones taken since are closed in mn's record (under the state root `root`)
- * and listed as taken.
+ * ones taken since are closed in mn's record (under the state root `root`),
+ * kept there as taken with the transaction that took them (a later cancel
+ * answers OFFER_TAKEN), and listed as taken.
  */
 export async function listOffers(root: string, network: NetworkName, networkConfig: NetworkConfig, walletAddress: string, now: Date = new Date(), signal?: AbortSignal): Promise<ListedOffer[]> {
   const listed: ListedOffer[] = [];
   for (const offer of readOpenOffers(root, network, walletAddress)) {
-    const spends = await spendsOf(networkConfig, offer.nullifiers, { signal });
-    listed.push({ offer, expired: now.getTime() >= offer.expiresAt.getTime(), taken: spends.length > 0 });
+    const spend = (await spendsOf(networkConfig, offer.nullifiers, { signal }))[0];
+    const expired = now.getTime() >= offer.expiresAt.getTime();
+    if (spend === undefined) {
+      listed.push({ offer, expired, taken: false });
+      continue;
+    }
+    closeOpenOffers(root, network, walletAddress, [offer.id], { settledBy: 'taken', txHash: spend.transactionHash, blockHeight: spend.blockHeight, at: now });
+    listed.push({ offer, expired, taken: true, takenIn: { txHash: spend.transactionHash, blockHeight: spend.blockHeight } });
   }
-  const taken = listed.filter((l) => l.taken).map((l) => l.offer.id);
-  if (taken.length > 0) closeOpenOffers(root, network, walletAddress, taken);
   return listed;
 }
 
@@ -210,18 +221,37 @@ export class NoSuchOfferError extends UsageError {
 /** The shortest prefix of an offer's id that names it. */
 export const OFFER_ID_MIN_PREFIX = 8;
 
+/** The wallet's offer was cancelled already by this mn: nothing is left to cancel. */
+export class OfferAlreadyCancelledError extends UsageError {
+  constructor(id: string, txHash: string | undefined, settledAt: Date) {
+    super(`The offer ${id.slice(0, 16)}… was cancelled already, ${txHash === undefined ? '' : `in transaction ${txHash}, `}on ${settledAt.toISOString()}: nothing is left to cancel.${txHash === undefined ? '' : ` midnight tx status ${txHash} shows the cancel.`}`);
+    this.name = 'OfferAlreadyCancelledError';
+    Object.setPrototypeOf(this, OfferAlreadyCancelledError.prototype);
+  }
+}
+
 /**
  * The wallet's open offer on `network` that `id` names (the whole id, or a
  * prefix of OFFER_ID_MIN_PREFIX hex characters at least), from mn's record
  * under the state root `root` alone: no wallet opens. Refuses an id that is
  * not hex or too short, and one that names no open offer, or more than one.
+ * One the record keeps as settled is refused for what became of it: taken
+ * (OfferTakenError, with the transaction that took it), or cancelled already.
  */
-export function findOpenOffer(root: string, network: NetworkName, walletAddress: string, id: string): OpenOffer {
+export function findOpenOffer(root: string, network: NetworkName, walletAddress: string, id: string, now: Date = new Date()): OpenOffer {
   if (!/^[0-9a-fA-F]+$/.test(id) || id.length > 64) throw new UsageError(`An offer's id is hex, 64 characters at most (midnight swap list shows them), not "${id.length > 64 ? id.slice(0, 64) + '…' : id}"`);
   if (id.length < OFFER_ID_MIN_PREFIX) throw new UsageError(`Give at least ${OFFER_ID_MIN_PREFIX} characters of the offer's id, not ${id.length}: midnight swap list shows them`);
   const wanted = id.toLowerCase();
   const matches = readOpenOffers(root, network, walletAddress).filter((o) => o.id.startsWith(wanted));
-  if (matches.length === 0) throw new NoSuchOfferError(id);
+  if (matches.length === 0) {
+    const settled = readSettledOffers(root, network, walletAddress, now).filter((o) => o.id.startsWith(wanted));
+    const only = settled.length === 1 ? settled[0]! : undefined;
+    if (only?.settledBy === 'cancelled') throw new OfferAlreadyCancelledError(only.id, only.txHash, only.settledAt);
+    if (only !== undefined && only.txHash !== undefined && only.blockHeight !== undefined) {
+      throw new OfferTakenError(only.id, { transactionHash: only.txHash, blockHeight: only.blockHeight }, { note: "Nothing was cancelled or sent; mn's record keeps the offer as taken." });
+    }
+    throw new NoSuchOfferError(id);
+  }
   if (matches.length > 1) throw new UsageError(`${id} names ${matches.length} open offers: give more of the id`);
   return matches[0]!;
 }
@@ -251,7 +281,8 @@ export interface CancelOutcome {
 export async function cancelOffer(session: WalletSession, root: string, networkConfig: NetworkConfig, walletAddress: string, id: string, signal?: AbortSignal): Promise<CancelOutcome> {
   const offer = findOpenOffer(root, session.network, walletAddress, id);
   const takenWith = (spends: CoinSpend[]): CancelOutcome => {
-    closeOpenOffers(root, session.network, walletAddress, [offer.id]);
+    const spend = spends[0]!;
+    closeOpenOffers(root, session.network, walletAddress, [offer.id], { settledBy: 'taken', txHash: spend.transactionHash, blockHeight: spend.blockHeight });
     return { txHash: undefined, cancelled: [], alreadyTaken: [{ offer, spends }] };
   };
   const spends = await spendsOf(networkConfig, offer.nullifiers, { signal });
@@ -266,6 +297,6 @@ export async function cancelOffer(session: WalletSession, root: string, networkC
     if (spentFirst.length > 0) return takenWith(spentFirst);
     throw err;
   }
-  closeOpenOffers(root, session.network, walletAddress, [offer.id]);
+  closeOpenOffers(root, session.network, walletAddress, [offer.id], { settledBy: 'cancelled', txHash });
   return { txHash, cancelled: [offer], alreadyTaken: [] };
 }

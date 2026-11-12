@@ -102,7 +102,7 @@ export {
   assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope,
   type OfferEnvelope, OfferExpiredError
 } from './lib/offer-envelope.ts';
-export { closeOpenOffers, OfferCoinsInUseError, OfferRecordUnreadableError, type OpenOffer, readOpenOffers, recordOpenOffer } from './lib/open-offers.ts';
+export { closeOpenOffers, OfferCoinsInUseError, OfferRecordUnreadableError, type OfferSettlement, type OpenOffer, readOpenOffers, readSettledOffers, recordOpenOffer, SETTLED_OFFER_KEEP_DAYS, type SettledOffer, type Settlement } from './lib/open-offers.ts';
 export {
   type ConnectOptions, NoPayerError, type Payer, payerFor, type PayingTarget, resolvePayingTarget,
   type ServedWallet
@@ -125,8 +125,8 @@ export { type ContractKeys, contractKeysFromSeed } from './lib/contract-keys.ts'
 export { sleep, untilCancelled } from './lib/sleep.ts';
 export { NoStateRootError } from './lib/state-root.ts';
 export { checkTerms, type OfferContents, type SwapLeg, type SwapTerms, TermsMismatchError } from './lib/swap-offer.ts';
-export { carriesOwnCode, isTransportFailure, withTransportCode } from './lib/transport-failure.ts';
-export { type EndpointRole, EndpointUnreachableError, endpointUnreachable, transportReason } from './lib/endpoint-unreachable.ts';
+export { carriesOwnCode, isTransientNetworkFailure, isTransportFailure, retryingTransient, TRANSIENT_RETRY_DELAYS_MS, type TransientRetryOptions, withTransportCode } from './lib/transport-failure.ts';
+export { type EndpointRole, EndpointUnreachableError, endpointUnreachable, NotAProofServerError, ProofServerDroppedError, transportReason } from './lib/endpoint-unreachable.ts';
 export { type VerboseLog } from './lib/verbose.ts';
 export { clearWalletCache } from './lib/wallet-cache.ts';
 export { openWalletSession, type OpenWalletSessionOptions, sessionOver, type SessionSubmitBounds, type WalletSession } from './lib/wallet-session.ts';

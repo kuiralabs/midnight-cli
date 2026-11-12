@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { closeOpenOffers, OfferCoinsInUseError, OfferRecordUnreadableError, openOffersFile, readOpenOffers, recordOpenOffer, type OpenOffer } from '../lib/open-offers.ts';
+import { closeOpenOffers, OfferCoinsInUseError, OfferRecordUnreadableError, openOffersFile, readOpenOffers, readSettledOffers, recordOpenOffer, SETTLED_OFFER_KEEP_DAYS, type OpenOffer } from '../lib/open-offers.ts';
+import { readFileSync } from 'node:fs';
 import { classifyError, ERROR_CODES, EXIT_GENERAL_ERROR, EXIT_INVALID_ARGS } from '../lib/exit-codes.ts';
 import { assertSpendsNoOfferCoin } from '../lib/open-offers.ts';
 import { CORE_CODES } from '../../../../test-support/core-codes.ts';
@@ -90,3 +91,44 @@ describe('an open-offers record mn cannot read', () => {
     expect(readOpenOffers(root, 'undeployed', WALLET)).toEqual([]);
   });
 });
+
+// Regression: `swap list` dropped a taken offer from the record once it had
+// shown it, so a later `swap cancel` answered "no open offer" (INVALID_ARGS)
+// instead of OFFER_TAKEN with the transaction that took it.
+describe('settled offers', () => {
+  const SETTLED_AT = new Date('2026-11-04T10:00:00.000Z');
+
+  it('are kept apart from the open ones, with how they settled and in which transaction', () => {
+    recordOpenOffer(root, 'undeployed', WALLET, offer('a1', ['n1']));
+    recordOpenOffer(root, 'undeployed', WALLET, offer('a2', ['n2']));
+    closeOpenOffers(root, 'undeployed', WALLET, ['a1'], { settledBy: 'taken', txHash: 'cd'.repeat(32), blockHeight: 800, at: SETTLED_AT });
+    expect(readOpenOffers(root, 'undeployed', WALLET).map((o) => o.id)).toEqual(['a2']);
+    expect(readSettledOffers(root, 'undeployed', WALLET, SETTLED_AT)).toEqual([{ ...offer('a1', ['n1']), settledBy: 'taken', settledAt: SETTLED_AT, txHash: 'cd'.repeat(32), blockHeight: 800 }]);
+    // A new offer recorded later keeps them.
+    recordOpenOffer(root, 'undeployed', WALLET, offer('a3', ['n3']));
+    expect(readSettledOffers(root, 'undeployed', WALLET, SETTLED_AT).map((o) => o.id)).toEqual(['a1']);
+  });
+
+  it('stay out of the list of offers an older mn reads, so it never takes one for open', () => {
+    recordOpenOffer(root, 'undeployed', WALLET, offer('a1', ['n1']));
+    closeOpenOffers(root, 'undeployed', WALLET, ['a1'], { settledBy: 'cancelled', txHash: 'ef'.repeat(32), at: SETTLED_AT });
+    const stored = JSON.parse(readFileSync(openOffersFile(root, 'undeployed', WALLET), 'utf-8'));
+    expect(stored.offers).toEqual([]);
+    expect(stored.settled).toHaveLength(1);
+  });
+
+  it('read a record an older mn wrote, with none settled, as it was', () => {
+    mkdirSync(join(root, 'swap-offers', 'undeployed'), { recursive: true });
+    writeFileSync(openOffersFile(root, 'undeployed', WALLET), JSON.stringify({ offers: [] }));
+    expect(readSettledOffers(root, 'undeployed', WALLET)).toEqual([]);
+  });
+
+  it(`are forgotten ${SETTLED_OFFER_KEEP_DAYS} days after they settled`, () => {
+    recordOpenOffer(root, 'undeployed', WALLET, offer('a1', ['n1']));
+    closeOpenOffers(root, 'undeployed', WALLET, ['a1'], { settledBy: 'taken', txHash: 'cd'.repeat(32), blockHeight: 800, at: SETTLED_AT });
+    const day = 24 * 60 * 60 * 1000;
+    expect(readSettledOffers(root, 'undeployed', WALLET, new Date(SETTLED_AT.getTime() + (SETTLED_OFFER_KEEP_DAYS - 1) * day))).toHaveLength(1);
+    expect(readSettledOffers(root, 'undeployed', WALLET, new Date(SETTLED_AT.getTime() + (SETTLED_OFFER_KEEP_DAYS + 1) * day))).toEqual([]);
+  });
+});
+

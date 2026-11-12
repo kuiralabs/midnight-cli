@@ -244,6 +244,7 @@ describe('midnight_swap_make', () => {
 
   it('names where the offer file is written: out as an absolute path, else offer-<id>.json in the server\'s folder', async () => {
     const out = path.join(home, 'offers', 'mine.json');
+    fs.mkdirSync(path.dirname(out), { recursive: true });
     const named = await call('midnight_swap_make', { ...terms, out });
     expect(named.error, String(named.message)).toBeUndefined();
     expect(named.description).toBe(`Offer 10 of token ${'aa'.repeat(32)} for 7 of token ${'bb'.repeat(32)} from wallet alice on undeployed, splitting a coin first (a fee in Dust) when none is worth exactly the amount given; that coin stays committed until the offer is taken. The offer file is written to ${out}${VIA}`);
@@ -251,6 +252,15 @@ describe('midnight_swap_make', () => {
     expect(relative.description).toContain(`The offer file is written to ${path.join(REPO, 'mine.json')}${VIA}`);
     const unnamed = await call('midnight_swap_make', terms);
     expect(unnamed.description).toContain(`The offer file is written to ${path.join(REPO, 'offer-<id>.json')}${VIA}`);
+  });
+
+  // Regression: an out in a folder that doesn't exist was found only after the offer was submitted (UNKNOWN ENOENT, an open offer with no file).
+  it('refuses an out in a folder that does not exist before any token is given', async () => {
+    const out = path.join(home, 'no-such-folder', 'mine.json');
+    const refused = await call('midnight_swap_make', { ...terms, out });
+    expect(refused).toMatchObject({ error: true, code: 'INVALID_ARGS' });
+    expect(String(refused.message)).toContain('does not exist');
+    expect(refused.token).toBeUndefined();
   });
 
   it('refuses an out that exists before any token is given', async () => {

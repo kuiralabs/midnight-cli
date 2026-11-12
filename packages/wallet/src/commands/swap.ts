@@ -4,7 +4,7 @@
 // The maker's and the taker's wallets each run in this process, through the
 // payer's wallet session: no server, no port. inspect and list open no wallet.
 
-import { existsSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { type ParsedArgs, hasFlag, getFlag, UsageError, networkChoiceFromArgs, payerFor, type CallContext, type SwapLeg, type SwapTerms } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, dim, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { showPaidStep } from '../lib/wallet/paid-call.ts';
@@ -32,8 +32,8 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
 
   switch (args.subcommand) {
     case 'make': {
+      // Refuses an offer file that can't be written (it exists, or its folder doesn't or can't be written) before anything is built.
       const { terms, expiresAt, out } = makeTermsOf(args, now);
-      if (out !== undefined && existsSync(out)) throw new UsageError(`${out} already exists; an offer file is never written over another`);
       const made = await makeSwapOffer(ctx.host, {
         ...paid,
         payer: payerFor('swap make', ctx),
@@ -118,7 +118,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
       const outcome = await cancelSwapOffer(ctx.host, { ...paid, payer: payerFor('swap cancel', ctx), id, onProgress: (event) => showPaidStep(progress, event) });
       // Taken first: nothing to cancel. A failure, as an offer that isn't open is.
       if (outcome.takenIn !== undefined) {
-        throw new OfferTakenError(outcome.id, { transactionHash: outcome.takenIn.txHash, blockHeight: outcome.takenIn.blockHeight }, { note: "Nothing was cancelled or sent; mn's record of the offer is closed." });
+        throw new OfferTakenError(outcome.id, { transactionHash: outcome.takenIn.txHash, blockHeight: outcome.takenIn.blockHeight }, { note: "Nothing was cancelled or sent; mn's record keeps the offer as taken." });
       }
       const { txHash, receipt } = outcome;
       if (jsonMode) {
@@ -138,14 +138,14 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
         ctx.output.result({
           subcommand: 'list',
           network,
-          offers: offers.map(({ offer, expired, taken }) => ({ id: offer.id, terms: termsJson(offer.terms), madeAt: offer.madeAt.toISOString(), expiresAt: offer.expiresAt.toISOString(), expired, taken })),
+          offers: offers.map(({ offer, expired, taken, takenIn }) => ({ id: offer.id, terms: termsJson(offer.terms), madeAt: offer.madeAt.toISOString(), expiresAt: offer.expiresAt.toISOString(), expired, taken, ...(takenIn === undefined ? {} : { takenIn }) })),
         });
         return;
       }
       ctx.output.stderr('\n' + header('Swap offers') + '\n\n');
       if (offers.length === 0) ctx.output.stderr(dim('  No open offers.') + '\n\n');
-      for (const { offer, expired, taken } of offers) {
-        const status = taken ? 'taken' : expired ? 'expired (still takeable on chain until cancelled)' : 'open';
+      for (const { offer, expired, taken, takenIn } of offers) {
+        const status = taken ? `taken${takenIn === undefined ? '' : ` in ${takenIn.txHash}`}` : expired ? 'expired (still takeable on chain until cancelled)' : 'open';
         ctx.output.stderr(keyValue(offer.id.slice(0, 16) + '…', `${legText(offer.terms.give)} for ${legText(offer.terms.want)}, ${status}`) + '\n');
       }
       ctx.output.stderr('\n');

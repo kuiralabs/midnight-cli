@@ -88,3 +88,25 @@ describe('take', () => {
     await expect(take(join(dir, 'missing.json'))).rejects.toThrow("Can't read the offer file");
   });
 });
+
+// Regression: `swap make --out <unwritable path>` built and submitted the offer, then failed UNKNOWN ENOENT writing the file, leaving an open offer with no file.
+describe('make --out', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mn-swap-out-'));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  const make = (out: string) => () => makeTermsOf(parseArgs(['swap', 'make', ...TERMS, '--out', out]), NOW);
+
+  it('takes a new file in a folder that exists', () => {
+    expect(make(join(dir, 'offer.json'))().out).toBe(join(dir, 'offer.json'));
+  });
+
+  it.each([
+    ['in a folder that does not exist', () => join(dir, 'no-such-folder', 'offer.json'), 'does not exist'],
+    ['that is a folder', () => dir, 'is a folder'],
+    ['that exists', () => { const f = join(dir, 'taken.json'); writeFileSync(f, '{}'); return f; }, 'already exists'],
+  ])('refuses a file %s as INVALID_ARGS, before anything is built', (_case, out, reason) => {
+    const path = out();
+    expect(make(path)).toThrow(UsageError);
+    expect(make(path)).toThrow(reason);
+  });
+});
+

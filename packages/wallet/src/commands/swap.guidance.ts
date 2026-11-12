@@ -36,17 +36,21 @@ named by their raw type (64 hex) and amounts are in the smallest unit.
   midnight swap cancel <id> [--json]
     → { id, cancelled, txHash, network }
   midnight swap list [--json]
-    → { offers: [{ id, terms, madeAt, expiresAt, expired, taken }], network }
+    → { offers: [{ id, terms, madeAt, expiresAt, expired, taken, takenIn? }], network }
 
 take states the terms as the maker states them (what the maker gives and
 wants). Before the taker's wallet builds anything, take refuses an offer
 whose terms differ (TERMS_MISMATCH), one past its expiry (OFFER_EXPIRED),
 one already taken (OFFER_TAKEN), and a file that is not an offer or says
 other than its transaction (NOT_AN_OFFER). A take that loses the race (the
-offer taken or cancelled by someone else first, refused by the node) is
-OFFER_TAKEN too, naming the transaction that spent its coins; so is a
-cancel of an offer taken first, which sends nothing and closes mn's record
-of it. An offer's coins stay committed until it is
+offer taken or cancelled by someone else first, refused or dropped by the
+node) is OFFER_TAKEN too, naming the transaction that spent its coins; so is
+a cancel of an offer taken first, which sends nothing. mn keeps an offer it
+saw taken or cancelled for 30 days, so a later cancel of it still answers
+OFFER_TAKEN with the taking transaction (or INVALID_ARGS naming the cancel
+for one cancelled already). make refuses an --out file it could not write
+(it exists, or its folder doesn't or can't be written) before anything is
+built. An offer's coins stay committed until it is
 taken. make spends one coin worth exactly what it gives: when the wallet
 holds none outside its open offers, it first splits one (a transfer to
 itself, a fee in Dust; split gives its txHash and receipt). The wallet's

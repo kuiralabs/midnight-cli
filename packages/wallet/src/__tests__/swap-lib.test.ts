@@ -16,7 +16,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { WebSocketServer } from 'ws';
-import { asReported, createHost, type Host, saveCliConfig, type ConnectOptions, type Payer, type PayingTarget, encodeOfferEnvelope, readOpenOffers, recordOpenOffer, type OpenOffer, type WalletSession } from '@kuiralabs/midnight-cli-core';
+import { asReported, TransactionInvalidatedError, readSettledOffers, SETTLED_OFFER_KEEP_DAYS, createHost, type Host, saveCliConfig, type ConnectOptions, type Payer, type PayingTarget, encodeOfferEnvelope, readOpenOffers, recordOpenOffer, type OpenOffer, type WalletSession } from '@kuiralabs/midnight-cli-core';
 import { rcEngine, rcKeys } from '../../../../test-support/rc-engine.ts';
 import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
 import { makeSwapOffer } from '../lib/swap/make.ts';
@@ -25,6 +25,7 @@ import { takeSwapOffer } from '../lib/swap/take.ts';
 import { cancelSwapOffer } from '../lib/swap/cancel.ts';
 import { listSwapOffers } from '../lib/swap/list.ts';
 import { refusedByNode, spendsAfterRefusal } from '../lib/swap/offers.ts';
+import { swapGuidance } from '../commands/swap.guidance.ts';
 import { saveWalletConfig } from '../../../../test-support/plain-wallet.ts';
 import { OFFER_GIVE, OFFER_WANT, SWAP_OFFER_HEX } from '../../../../test-support/fixtures/swap-offer.ts';
 
@@ -358,9 +359,24 @@ describe('listSwapOffers', () => {
 
     const listed = await listSwapOffers(host, { ...on(), now: NOW, onProgress: (event) => said.push(event) });
 
-    expect(listed).toEqual({ network: 'undeployed', offers: [{ offer: live, expired: false, taken: false }, { offer: taken, expired: false, taken: true }] });
+    expect(listed).toEqual({ network: 'undeployed', offers: [{ offer: live, expired: false, taken: false }, { offer: taken, expired: false, taken: true, takenIn: { txHash: SPENT_IN, blockHeight: 800 } }] });
     expect(said).toEqual([{ kind: 'start', message: 'Asking the indexer about each open offer...' }, { kind: 'done', message: '2 offers' }]);
     expect(readOpenOffers(root, 'undeployed', ADDRESS).map((o) => o.id)).toEqual([live.id]);
+  });
+
+  // Regression: list dropped the taken offer from mn's record, so a later cancel said INVALID_ARGS "no open offer".
+  it('keeps an offer it found taken in mn\'s record, so a later cancel answers OFFER_TAKEN with the taking transaction, before the wallet opens', async () => {
+    alice();
+    const taken = openOffer('a2'.repeat(32), 'b2'.repeat(32));
+    recordOpenOffer(root, 'undeployed', ADDRESS, taken);
+    indexer = await startOfferIndexer(['b2'.repeat(32)]);
+    await listSwapOffers(host, { ...on(), now: NOW });
+    expect(readSettledOffers(root, 'undeployed', ADDRESS, NOW).map((o) => [o.id, o.settledBy, o.txHash])).toEqual([[taken.id, 'taken', SPENT_IN]]);
+
+    const { payer, asked } = programPayer();
+    const err = await cancelSwapOffer(host, { ...on(), id: taken.id.slice(0, 8), payer }).catch((e: Error) => e);
+    expect(err).toMatchObject({ code: 'OFFER_TAKEN', spentIn: { transactionHash: SPENT_IN, blockHeight: 800 } });
+    expect(asked).toEqual([]);
   });
 
   it('lists none for a wallet with no open offers, asking no indexer', async () => {
@@ -457,6 +473,34 @@ describe('losing a race for an offer', () => {
       .rejects.toMatchObject({ code: 'OFFER_TAKEN', spentIn: { transactionHash: SPENT_IN, blockHeight: 800 } });
   });
 
+  // Regression: two takes at once; the loser, dropped from the node's pool once the winner landed, failed TX_INVALIDATED (exit 6) with a message about the same wallet's transactions.
+  it('a take dropped from the pool as invalid (TX_INVALIDATED) once another taker landed fails with OFFER_TAKEN', async () => {
+    const spent: string[] = [];
+    indexer = await startOfferIndexer(spent);
+    const err = await takeSwapOffer(host, { ...on(), offer: offerText(), agreed: TERMS, now: NOW, payer: racingPayer(spent, () => new TransactionInvalidatedError(0)), receiptWaitMs: 0 }).catch((e: Error) => e);
+    expect(err).toMatchObject({ code: 'OFFER_TAKEN', spentIn: { transactionHash: SPENT_IN, blockHeight: 800 } });
+    expect(asReported(err as Error)).toBe(err);
+  });
+
+  it('a cancel of an offer this wallet cancelled already says so, naming the cancel, before the wallet opens', async () => {
+    alice();
+    recordOpenOffer(root, 'undeployed', ADDRESS, { ...openOffer(OFFER.id, OFFER.nullifiers[0]!), terms: OFFER.terms });
+    indexer = await startOfferIndexer([]);
+    const spent: string[] = [];
+    const cancelOnce: WalletSession['submit'] = async () => 'ef'.repeat(32);
+    const unused = async (): Promise<never> => { throw new Error('not used'); };
+    const session = { network: 'undeployed', cancelOffers: async () => 'cancel-tx', submit: cancelOnce, close: async () => {}, addresses: unused, balanceTransaction: unused, swap: unused, makeOffer: unused, balances: unused, takeOffer: unused, holdsFreeCoin: unused, splitCoin: unused, sign: unused, readTransaction: unused } as WalletSession;
+    const first = await cancelSwapOffer(host, { ...on(), id: OFFER.id.slice(0, 8), payer: { assertCanPay: unused, serve: unused, connect: async () => session }, receiptWaitMs: 0 });
+    expect(first).toMatchObject({ cancelled: true, txHash: 'ef'.repeat(32) });
+    void spent;
+
+    const { payer, asked } = programPayer();
+    const err = await cancelSwapOffer(host, { ...on(), id: OFFER.id.slice(0, 8), payer }).catch((e: Error) => e);
+    expect(err).toMatchObject({ code: 'INVALID_ARGS' });
+    expect((err as Error).message).toContain(`was cancelled already, in transaction ${'ef'.repeat(32)}`);
+    expect(asked).toEqual([]);
+  });
+
   it('reads a node\'s refusal in the error or any of its causes, and nothing else', () => {
     expect(refusedByNode(refusal())).toBe(true);
     expect(refusedByNode(new Error('wrapped', { cause: refusal() }))).toBe(true);
@@ -495,3 +539,11 @@ describe('taking with less than the offer wants', () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe('the swap guidance', () => {
+  it('says how long mn keeps an offer it saw taken or cancelled, as mn keeps it', () => {
+    const text = (swapGuidance.pieces ?? []).map((piece) => piece.body).join('\n');
+    expect(text).toContain(`saw taken or cancelled for ${SETTLED_OFFER_KEEP_DAYS} days`);
+  });
+});
+

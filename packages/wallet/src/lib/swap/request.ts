@@ -1,7 +1,8 @@
 // What a `swap` command asks for, read from its arguments and checked before
 // any wallet opens: the terms, the expiry, the offer file, the network.
 
-import { readFileSync } from 'node:fs';
+import { accessSync, constants, readFileSync, statSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { type ParsedArgs, getFlag, UsageError, type PayingTarget, resolvePayingTarget, type Host, checkTerms, type SwapLeg, type SwapTerms, assertOfferUnexpired } from '@kuiralabs/midnight-cli-core';
 import { readOfferFile, type ReadOffer } from './offers.ts';
 
@@ -46,10 +47,36 @@ function expiryOf(args: ParsedArgs, now: Date): Date {
   return new Date(now.getTime() + Number(lifetime) * 1000);
 }
 
-/** The terms, the expiry from `now` and the offer file `swap make` names, without its network. */
+/**
+ * Refuses an offer file `swap make` could not write, before anything is built:
+ * the offer is submitted before its file is written, so a file that can't be
+ * written would leave an open offer, its coins held, and no file to hand on.
+ * `out` undefined is offer-<id>.json in the working folder.
+ */
+export function assertOfferFileWritable(out: string | undefined): void {
+  const folder = out === undefined ? process.cwd() : dirname(resolve(out));
+  if (out !== undefined) {
+    const existing = statSync(out, { throwIfNoEntry: false });
+    if (existing?.isDirectory()) throw new UsageError(`--out ${out} is a folder: name the offer file to write, such as ${resolve(out, 'offer.json')}`);
+    if (existing !== undefined) throw new UsageError(`${out} already exists; an offer file is never written over another`);
+  }
+  const where = statSync(folder, { throwIfNoEntry: false });
+  if (where === undefined) throw new UsageError(`The folder ${folder} for the offer file does not exist: create it, or give --out a path in a folder that does`);
+  if (!where.isDirectory()) throw new UsageError(`${folder} is not a folder: give --out a path in a folder`);
+  try {
+    accessSync(folder, constants.W_OK);
+  } catch {
+    throw new UsageError(`The offer file can't be written in ${folder} (no permission to write there): give --out a path in a folder you can write to`);
+  }
+}
+
+/** The terms, the expiry from `now` and the offer file `swap make` names, without its network; an offer file that can't be written is refused (assertOfferFileWritable). */
 export function makeTermsOf(args: ParsedArgs, now: Date): MakeTerms {
   const expiresAt = expiryOf(args, now);
-  return { terms: termsOf(args), expiresAt, out: getFlag(args, 'out') };
+  const terms = termsOf(args);
+  const out = getFlag(args, 'out');
+  assertOfferFileWritable(out);
+  return { terms, expiresAt, out };
 }
 
 /** A make, checked as far as it can be without a wallet: the expiry, the network and the terms. */
@@ -57,9 +84,8 @@ export function prepareMake(args: ParsedArgs, root: string, host: Host, now: Dat
   const expiresAt = expiryOf(args, now);
   return {
     target: resolvePayingTarget(args, 'swap', 'make', root, host),
-    terms: termsOf(args),
+    ...makeTermsOf(args, now),
     expiresAt,
-    out: getFlag(args, 'out'),
   };
 }
 

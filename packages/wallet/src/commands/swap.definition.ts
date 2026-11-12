@@ -155,7 +155,7 @@ export const swapDefinition: CommandDefinition = {
       receiptMissing: 'Why receipt is null; check later with midnight tx status <txHash>',
       cancelled: 'True: the cancel was submitted (cancel). An offer taken first fails with OFFER_TAKEN instead',
       split: 'The split made first when no free coin was worth exactly the amount given: txHash, and receipt or receiptMissing as above; absent when none was needed (make)',
-      offers: 'The wallet\'s open offers, each with whether it is expired or taken (list)',
+      offers: 'The wallet\'s open offers, each with whether it is expired or taken, and takenIn (txHash, blockHeight) for one taken (list)',
     },
   },
   intro: { brief: 'Private swaps through offer files', order: 12.5 },
@@ -236,7 +236,7 @@ export const swapDefinition: CommandDefinition = {
       },
       {
         name: 'midnight_swap_cancel',
-        description: 'Cancel an open swap offer of the wallet\'s by spending its coins back to it (returns pending token). Costs a fee in Dust; an offer taken already is only closed.',
+        description: 'Cancel an open swap offer of the wallet\'s by spending its coins back to it (returns pending token). Costs a fee in Dust; an offer taken already fails with OFFER_TAKEN, naming the taking transaction, and sends nothing.',
         annotations: { destructiveHint: true, openWorldHint: true },
         params: [
           { name: 'id', schema: { type: 'string', description: 'The offer\'s id, or 8 characters of it at least' } },
