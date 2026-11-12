@@ -19,7 +19,7 @@
 
 import { Buffer } from 'node:buffer';
 import { isColdStartRace, loadWalletCache, saveWalletCache, clearWalletCache, validateWalletCacheChainId, type WalletCacheData, bindCachesToIndexer, describeIndexerChange, type CachedReadOptions, type DustBalance, type EngineHost, type ReadOptions, type UnshieldedView } from '@kuiralabs/midnight-cli-core/engine';
-import { throwIfCancelled, type NetworkConfig, type NetworkName, isValidNetworkName, clearDustDirectCache, type VerboseLog, type NoticeSink, clearShieldedDirectCache } from '@kuiralabs/midnight-cli-core';
+import { throwIfCancelled, type NetworkConfig, type NetworkName, isValidNetworkName, clearDustDirectCache, type VerboseLog, type NoticeSink, clearShieldedDirectCache, isTransientNetworkFailure, NetworkError, redactProjectId, sleep, SyncTimeoutError, TRANSIENT_RETRY_DELAYS_MS } from '@kuiralabs/midnight-cli-core';
 
 import { type FacadeState } from '@midnightntwrk/wallet-sdk/facade';
 import {
@@ -31,6 +31,7 @@ import {
   type SyncMode,
   overlayDustDirectSnapshot,
   DustSnapshotLedgerMismatchError,
+  savedDustOffset,
 } from './facade.ts';
 import { loadDustCache, saveDustCache, dustPublicKeyHexFromSeed, validateDustCacheChainId } from './dust-direct-cache.ts';
 import { getChainGenesisHash, checkLedgerSupported, fetchGenesisProtocolVersion, fetchProtocolVersion, isDustTimelineEmpty, checkBalance, type BalanceSummary, callNodeRpc, fetchEventTip, isCursorBeyondTip, type LedgerEventStream } from '@kuiralabs/midnight-chain';
@@ -151,6 +152,8 @@ export interface RepoDeps {
   fetchEventTip?: (indexerWS: string, stream: LedgerEventStream) => Promise<number | null>;
   /** Chain protocol-version fetcher (ledger-9-only guard). Default: indexer `block { protocolVersion }`. */
   fetchProtocolVersion?: (indexerHttpUrl: string, signal?: AbortSignal) => Promise<bigint | null>;
+  /** The waits before each retry of a Dust read whose connection failed. Default: TRANSIENT_RETRY_DELAYS_MS. */
+  transientRetryDelaysMs?: readonly number[];
 }
 
 // ── Implementation ────────────────────────────────────────
@@ -177,6 +180,14 @@ const DUST_SYNC_BUDGET_MS = 60 * 60_000;
 /** Windows in a row that apply no event before the loop gives up: the sync is stuck, not slow. */
 const DUST_STALLED_WINDOWS = 3;
 
+/**
+ * The most Dust events a write on a hosted network leaves for the wallet SDK
+ * to read in-process (WASM) after mn's own read stopped short. It reads about
+ * 15-20k events in a 120 s sync window, so a gap this size is one window; the
+ * chain's whole history (1.86M events on preprod) is hours it never finishes.
+ */
+const HOSTED_WASM_DUST_CATCH_UP_EVENTS = 10_000;
+
 /** Default per-sync-attempt deadline (local). */
 const SYNC_ATTEMPT_LOCAL_MS = 30_000;
 /** Default per-sync-attempt deadline (remote — preprod/preview Day 0). */
@@ -196,6 +207,7 @@ export class WalletDataRepository {
   private readonly fetchChainId: NonNullable<RepoDeps['fetchChainId']>;
   private readonly fetchEventTip: NonNullable<RepoDeps['fetchEventTip']>;
   private readonly fetchProtocolVersion: NonNullable<RepoDeps['fetchProtocolVersion']>;
+  private readonly retryDelaysMs: readonly number[];
 
   private readonly dustMemo = new Map<string, MemoEntry<DustView>>();
   private readonly unshieldedMemo = new Map<string, MemoEntry<UnshieldedView>>();
@@ -210,6 +222,7 @@ export class WalletDataRepository {
     this.fetchChainId = deps.fetchChainId ?? getChainGenesisHash;
     this.fetchEventTip = deps.fetchEventTip ?? fetchEventTip;
     this.fetchProtocolVersion = deps.fetchProtocolVersion ?? fetchProtocolVersion;
+    this.retryDelaysMs = deps.transientRetryDelaysMs ?? TRANSIENT_RETRY_DELAYS_MS;
   }
 
   /**
@@ -390,6 +403,31 @@ export class WalletDataRepository {
     });
   }
 
+  /**
+   * Refuses, on a hosted network, to leave the wallet SDK a Dust history mn's
+   * own read didn't finish: the SDK reads it in-process (WASM), a few 10k
+   * events per sync window against millions, and a write would sit through
+   * its sync windows and fail with SYNC_TIMEOUT. A gap of a few thousand
+   * events is left to it. The read's checkpoint is kept, so the error says
+   * to run the command again: it resumes there. `stopped` is how mn's read ended.
+   */
+  private async refuseWasmDustHistory(seed: Buffer, network: NetworkConfig, networkName: NetworkName, root: string, stopped: NonNullable<PrimeReport['dust']>): Promise<void> {
+    const checkpoint = loadDustCache(networkName, dustPublicKeyHexFromSeed(seed), root)?.lastAppliedEventId ?? -1;
+    const reached = Math.max(checkpoint, savedDustOffset(loadWalletCache(deriveUnshieldedAddress(seed, networkName), networkName, root)));
+    const tip = await this.fetchEventTip(network.indexerWS, 'dust');
+    if (tip !== null && tip - reached <= HOSTED_WASM_DUST_CATCH_UP_EVENTS) return;
+    const where = tip === null ? `at event ${reached}` : `at event ${reached} of ${tip}`;
+    const resume = `Run the command again: it resumes from event ${reached + 1}, where this read stopped. mn doesn't leave a hosted network's Dust history to the in-process (WASM) reader, which can't finish it.`;
+    const failure = stopped.failure;
+    if (failure === undefined) {
+      throw new SyncTimeoutError(`Reading the wallet's Dust history ran out of time ${where}. ${resume}`);
+    }
+    if (isTransientNetworkFailure(failure) || tip === null) {
+      throw new NetworkError(`Reading the wallet's Dust history from the indexer at ${redactProjectId(network.indexerWS)} stopped ${where}: ${failure.message}\n${resume}`, { cause: failure });
+    }
+    throw failure;
+  }
+
   // ── Reads ─────────────────────────────────────────
 
   /** The wallet's Dust, read into its checkpoint; `known` is what the caller already read of the chain. */
@@ -461,6 +499,9 @@ export class WalletDataRepository {
     // Bounded by time and by progress, so a broken indexer doesn't loop forever.
     const startedAt = this.now();
     let stalledWindows = 0;
+    // Windows in a row that failed to connect: retried after a wait (an
+    // indexer that blinked), from the checkpoint the last one saved.
+    let failedWindows = 0;
     for (let attempt = 0; ; attempt++) {
       throwIfCancelled(opts.signal);
       const startFromId = cached ? cached.lastAppliedEventId + 1 : 0;
@@ -470,29 +511,41 @@ export class WalletDataRepository {
           : (cached ? `Resuming dust from event ${startFromId}…` : 'Reading dust events…'),
       );
 
-      result = await this.fetchDust(seed, network, {
-        root: opts.root,
-        startFromId,
-        initialState: cached?.state,
-        initialRetention: cached?.retention,
-        chainProtocolVersion,
-        signal: opts.signal,
-        log: opts.log,
-        onProgress: (applied, max) => {
-          const target = Math.max(1, max + 1 - startFromId);
-          opts.onStatus?.(`Reading dust events… ${applied}/${target}`);
-          // Also forward the raw counts, as ReadOptions.onProgress documents.
-          // Callers that render their own progress (e.g. `dust export`'s spinner)
-          // have no other signal — without this they show a frozen spinner for
-          // the whole cold sync.
-          opts.onProgress?.(applied, max);
-        },
-        // Persist after each chunk so a Ctrl+C / process kill / SIGTERM
-        // doesn't lose 100k events of work.
-        onCheckpoint: (state, lastAppliedEventId, retention) => {
-          try { saveDustCache(networkName, pubkeyHex, state, lastAppliedEventId, opts.root, chainId, retention); } catch { /* best-effort */ }
-        },
-      });
+      try {
+        result = await this.fetchDust(seed, network, {
+          root: opts.root,
+          startFromId,
+          initialState: cached?.state,
+          initialRetention: cached?.retention,
+          chainProtocolVersion,
+          signal: opts.signal,
+          log: opts.log,
+          onProgress: (applied, max) => {
+            const target = Math.max(1, max + 1 - startFromId);
+            opts.onStatus?.(`Reading dust events… ${applied}/${target}`);
+            // Also forward the raw counts, as ReadOptions.onProgress documents.
+            // Callers that render their own progress (e.g. `dust export`'s spinner)
+            // have no other signal — without this they show a frozen spinner for
+            // the whole cold sync.
+            opts.onProgress?.(applied, max);
+          },
+          // Persist after each chunk so a Ctrl+C / process kill / SIGTERM
+          // doesn't lose 100k events of work.
+          onCheckpoint: (state, lastAppliedEventId, retention) => {
+            try { saveDustCache(networkName, pubkeyHex, state, lastAppliedEventId, opts.root, chainId, retention); } catch { /* best-effort */ }
+          },
+        });
+      } catch (failure) {
+        throwIfCancelled(opts.signal);
+        if (failedWindows >= this.retryDelaysMs.length || !isTransientNetworkFailure(failure)) throw failure;
+        const delayMs = this.retryDelaysMs[failedWindows++]!;
+        opts.log?.('dust', `Reading Dust events failed (${(failure as Error).message}); retrying in ${delayMs / 1000} s (${failedWindows} of ${this.retryDelaysMs.length})`);
+        opts.onStatus?.(`Reading dust events: the indexer connection failed, retrying in ${delayMs / 1000} s…`);
+        await sleep(delayMs, opts.signal);
+        cached = loadDustCache(networkName, pubkeyHex, opts.root) ?? cached;
+        continue;
+      }
+      failedWindows = 0;
 
       // Final save (covers the last sub-chunk that didn't trip onCheckpoint).
       // A run that applied no events keeps the prior checkpoint's id rather than
@@ -619,6 +672,9 @@ export class WalletDataRepository {
       ({ report: primeReport, shieldedRead } = await this.primeCheckpoints(seed, network, opts, known));
       for (const failure of [primeReport.dust?.failure, primeReport.shielded?.failure]) {
         if (failure) opts.onSyncWarning?.('PrePrime', failure.message);
+      }
+      if (isHostedNetwork(network) && primeReport.dust !== undefined) {
+        await this.refuseWasmDustHistory(seed, network, networkName, opts.root, primeReport.dust);
       }
     }
     const shieldedCheckpoint = opts.forceFresh ? null : await this.shieldedCheckpoint(seed, network, opts.root, known.chainId, shieldedRead);
@@ -896,6 +952,10 @@ function nativeOrWasmDustFetcher(host: EngineHost): NonNullable<RepoDeps['fetchD
       try {
         return await runDustSyncNative(seed, network, { ...opts, settings });
       } catch (err) {
+        // On a hosted network the in-process reader can't finish what the
+        // sidecar didn't: the failure is reported (the read resumes from its
+        // checkpoint), never left to a WASM read that runs on for hours.
+        if (isHostedNetwork(network)) throw sidecarFailure(err as Error);
         why = `the dust-sync sidecar failed: ${(err as Error).message}`;
       }
     }
@@ -907,6 +967,15 @@ function nativeOrWasmDustFetcher(host: EngineHost): NonNullable<RepoDeps['fetchD
 
 
 // ── Helpers ───────────────────────────────────────────────
+
+/** The sidecar's words for an indexer it couldn't read from (after its own retries). */
+const SIDECAR_CONNECTION_FAILURE = /params query|ws connect|ws request|subscription error|status code \d{3}|connection|timed out|dns|network/i;
+
+/** A failed sidecar run as mn reports it: a NETWORK_ERROR when it couldn't read from the indexer, else as it is. */
+export function sidecarFailure(err: Error): Error {
+  if (!SIDECAR_CONNECTION_FAILURE.test(err.message)) return err;
+  return new NetworkError(`The dust-sync sidecar couldn't read the Dust history from the indexer: ${err.message}`, { cause: err });
+}
 
 function networkNameOf(network: NetworkConfig): NetworkName {
   const lower = network.networkId.toLowerCase();

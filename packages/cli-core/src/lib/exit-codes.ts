@@ -30,6 +30,8 @@ export const ERROR_CODES = {
   PROOF_TIMEOUT: 'PROOF_TIMEOUT',
   /** Proof server rejected or failed to generate the ZK proof for a write transaction. Often a stale commitment tree or an unreachable proof server. Recovery: ensure proof server is running, then retry; if persistent, `mn cache clear` to force a fresh sync. */
   PROOF_FAILURE: 'PROOF_FAILURE',
+  /** The proof server URL answers, but not as a proof server (its `/version` gives no version). Recovery: point proof-server at a running proof server. */
+  NOT_A_PROOF_SERVER: 'NOT_A_PROOF_SERVER',
   /** Chain rejected the dust spend proof as malformed (substrate "Custom error 170" / `InvalidDustSpendProof`). Almost always a stale commitment tree. Recovery: `mn cache clear --wallet <name>` then retry. */
   INVALID_DUST_PROOF: 'INVALID_DUST_PROOF',
   /** The node refused the fee as too low even with mn's largest margin. Recovery: wait a minute and retry. */

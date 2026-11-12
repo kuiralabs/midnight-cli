@@ -13,17 +13,19 @@ export function saySyncPercent(steps: ProgressSteps, label: string, applied: num
 }
 
 /** The engine's proving and submitting hooks, said as steps: the submit's wait shows its elapsed time. */
-export function submitSteps(steps: ProgressSteps): { onProving(): void; onSubmitting(): void; onSubmittingTick(elapsedMs: number): void } {
+export function submitSteps(steps: ProgressSteps): { onProving(): void; onProvingTick(elapsedMs: number): void; onSubmitting(): void; onSubmittingTick(elapsedMs: number): void } {
   return {
     onProving: () => steps.update('Generating ZK proof (this may take a few minutes)...'),
+    onProvingTick: (elapsedMs) => steps.update(`Generating ZK proof... ${elapsedText(elapsedMs)} elapsed (this may take a few minutes)`),
     onSubmitting: () => steps.update('Submitting and waiting for finalization (typically 12 to 30s)...'),
-    onSubmittingTick: (elapsedMs) => {
-      const s = Math.floor(elapsedMs / 1000);
-      const mm = Math.floor(s / 60).toString().padStart(2, '0');
-      const ss = (s % 60).toString().padStart(2, '0');
-      steps.update(`Submitting and waiting for finalization... ${mm}:${ss} elapsed (typically 12 to 30s)`);
-    },
+    onSubmittingTick: (elapsedMs) => steps.update(`Submitting and waiting for finalization... ${elapsedText(elapsedMs)} elapsed (typically 12 to 30s)`),
   };
+}
+
+/** Elapsed time as "mm:ss". */
+function elapsedText(elapsedMs: number): string {
+  const s = Math.floor(elapsedMs / 1000);
+  return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 }
 
 /**

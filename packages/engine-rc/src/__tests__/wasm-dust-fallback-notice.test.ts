@@ -1,7 +1,8 @@
 // A hosted network's Dust is read through the native sidecar. When the read
 // falls back to the in-process WASM reader, the host's notices say so, and
-// why: the sidecar is turned off, or it failed (with its error). On the
-// localnet the fallback stays in the verbose lines.
+// why: the sidecar is turned off. A sidecar that failed is not followed by a
+// WASM read there (it can't finish a hosted network's history): its failure
+// is reported. On the localnet the fallback stays in the verbose lines.
 //
 // The sidecar is an external process (a shell script stands in for it) and the
 // indexer an external service (a WebSocket replaying real mainnet Dust events
@@ -63,12 +64,28 @@ async function noticesOfDustRead(networkId: string, settings: Partial<Settings>)
   return notices;
 }
 
+/** Reads the wallet's Dust on `networkId` with `settings`, as noticesOfDustRead, for a read that fails: its failure, with no retry wait. */
+async function failedDustRead(networkId: string, settings: Partial<Settings>): Promise<{ failure: unknown; notices: string[] }> {
+  const notices: string[] = [];
+  const host = testHost({ settings: () => ({ ...settingsFromEnvironment(process.env), ...settings }), notice: (line) => notices.push(line) });
+  const repo = new WalletDataRepository(host, {
+    fetchProtocolVersion: async () => 2_001_100n, fetchTip: async () => 'tip', fetchChainId: async () => null, fetchEventTip: async () => lastId, transientRetryDelaysMs: [],
+  });
+  const failure = await repo.dust(SEED, network(networkId), { root: join(dir, 'root'), notice: () => {} }).then(() => undefined, (err: unknown) => err);
+  return { failure, notices };
+}
+
 describe('the WASM Dust fallback on a hosted network', () => {
-  it('is said when the sidecar fails, with its error', async () => {
-    const notices = await noticesOfDustRead('Preview', { isNativeDustOff: false, dustSyncBin: failingSidecar('indexer refused the subscription') });
-    expect(notices).toHaveLength(1);
-    expect(notices[0]).toContain('Dust on preview is read in-process (WASM)');
-    expect(notices[0]).toContain('the dust-sync sidecar failed: dust-sync exited 1: indexer refused the subscription');
+  it('is not taken when the sidecar fails: its failure is reported, and the read resumes from its checkpoint next time', async () => {
+    const { failure, notices } = await failedDustRead('Preview', { isNativeDustOff: false, dustSyncBin: failingSidecar('indexer refused the subscription') });
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe('dust-sync exited 1: indexer refused the subscription');
+    expect(notices).toEqual([]);
+  });
+
+  it('reports a sidecar that could not read from the indexer as NETWORK_ERROR', async () => {
+    const { failure } = await failedDustRead('PreProd', { isNativeDustOff: false, dustSyncBin: failingSidecar('dust-sync: params query: http://127.0.0.1:47777/api/v0?project_id=***: status code 502') });
+    expect(failure).toMatchObject({ code: 'NETWORK_ERROR', message: expect.stringContaining("The dust-sync sidecar couldn't read the Dust history from the indexer: dust-sync exited 1: dust-sync: params query:") });
   });
 
   it('is said when the sidecar is turned off, naming the setting', async () => {

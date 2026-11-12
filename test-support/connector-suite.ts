@@ -2326,7 +2326,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
           const call = connector.handlers.balanceUnsealedTransaction({ tx: AGENT_TX }, ctx());
           // A ProofTimeoutError, which mn reports as PROOF_TIMEOUT and the wire carries as its mn code.
-          const outcome = expect(call).rejects.toMatchObject({ message: 'ZK proof generation timed out', code: 'PROOF_TIMEOUT' });
+          const outcome = expect(call).rejects.toMatchObject({ message: expect.stringMatching(/^The proof server at \S+ did not finish the proof within \d+ s, so mn stopped waiting; nothing was sent\./), code: 'PROOF_TIMEOUT' });
           await vi.advanceTimersByTimeAsync(PROOF_TIMEOUT_MS + 1);
           await outcome;
           expect(revertFn).toHaveBeenCalledWith(recipe);

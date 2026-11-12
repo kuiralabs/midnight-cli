@@ -3,7 +3,8 @@
 // boundary (sdk-errors.ts), a contract script's process, and grant's account
 // package. Classification itself reads only an error's code.
 
-import { NetworkError } from './errors.ts';
+import { NetworkError, throwIfCancelled } from './errors.ts';
+import { sleep } from './sleep.ts';
 
 /**
  * Whether the failure is a connection that could not be made: a transport's
@@ -52,4 +53,50 @@ export function carriesOwnCode(failure: unknown): boolean {
 export function withTransportCode(err: unknown): unknown {
   if (!(err instanceof Error) || carriesOwnCode(err) || !isTransportFailure(err)) return err;
   return new NetworkError(err.message, { cause: err });
+}
+
+/**
+ * Whether the failure is a connection that failed and may answer moments
+ * later: a NETWORK_ERROR (a WebSocket dropped mid-stream, an upgrade answered
+ * 502), or a transport failure that carries no code of its own. An endpoint's
+ * own refusal (a Blockfrost project id refused, a host shut down) carries its
+ * own code and is not.
+ */
+export function isTransientNetworkFailure(failure: unknown): boolean {
+  const code = failure !== null && typeof failure === 'object' ? (failure as { code?: unknown }).code : undefined;
+  if (code === 'NETWORK_ERROR') return true;
+  return !carriesOwnCode(failure) && isTransportFailure(failure);
+}
+
+/** The waits before each retry of a read whose connection failed: about 15 s in all, enough for an indexer that blinked. */
+export const TRANSIENT_RETRY_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000];
+
+export interface TransientRetryOptions {
+  /** Cancels the waits: CancelledError. */
+  readonly signal?: AbortSignal;
+  /** The waits before each retry; TRANSIENT_RETRY_DELAYS_MS when not given. */
+  readonly delaysMs?: readonly number[];
+  /** Told before each retry: the failure, which retry this is (from 1), of how many, and the wait before it. */
+  readonly onRetry?: (failure: unknown, retry: number, retries: number, delayMs: number) => void;
+}
+
+/**
+ * What `attempt` gives, run again after a wait each time it fails with a
+ * transient network failure (isTransientNetworkFailure), as many times as
+ * there are waits; any other failure, or the last one, is thrown. For reads
+ * that resume from their own checkpoint, so a retry repeats no work.
+ */
+export async function retryingTransient<T>(attempt: () => Promise<T>, options: TransientRetryOptions = {}): Promise<T> {
+  const delays = options.delaysMs ?? TRANSIENT_RETRY_DELAYS_MS;
+  for (let retry = 0; ; retry++) {
+    try {
+      return await attempt();
+    } catch (failure) {
+      throwIfCancelled(options.signal);
+      if (retry >= delays.length || !isTransientNetworkFailure(failure)) throw failure;
+      const delayMs = delays[retry]!;
+      options.onRetry?.(failure, retry + 1, delays.length, delayMs);
+      await sleep(delayMs, options.signal);
+    }
+  }
 }

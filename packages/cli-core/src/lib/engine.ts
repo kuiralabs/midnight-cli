@@ -265,6 +265,8 @@ export interface TransferParams {
   onSyncDetail?: (walletsStillSyncing: string) => void;
   onDust?: (status: string) => void;
   onProving?: () => void;
+  /** Fires every few seconds while the proof server proves, with the time since the proof started. */
+  onProvingTick?: (elapsedMs: number) => void;
   onSubmitting?: () => void;
   /** Fires every second while waiting for chain finalization. `elapsedMs`
    * is the time since the submit started. Use to drive an elapsed-time

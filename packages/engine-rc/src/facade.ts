@@ -1,5 +1,5 @@
 import { getNetworkId, type WalletCacheData, type FeePricing, newFeePricing, SYNC_TIMEOUT_MS, PRE_SEND_SYNC_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/engine';
-import { type NoticeSink, type NetworkConfig, type VerboseLog, CancelledError, SyncTimeoutError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { type NoticeSink, type NetworkConfig, type VerboseLog, CancelledError, EndpointUnreachableError, NetworkError, SyncTimeoutError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
 import {
   UnshieldedWallet,
   createKeystore,
@@ -24,7 +24,8 @@ import { deriveShieldedSeed, deriveUnshieldedSeed, deriveDustSeed } from './deri
 import { loadDustCache, dustPublicKeyHex, type DustCacheEntry } from './dust-direct-cache.ts';
 import { ledgerOfProtocolVersion, serializeDustLedgerState, type DustLedger } from './dust-ledger-state.ts';
 import { isHostedNetwork, wasmDustNotice } from './dust-sync-native.ts';
-import { assertNetworkAnswers, fetchGenesisProtocolVersion, fetchProtocolVersion, isStreamEmpty } from '@kuiralabs/midnight-chain';
+import { assertEndpointsReachable, assertNetworkAnswers, fetchGenesisProtocolVersion, fetchProtocolVersion, isStreamEmpty } from '@kuiralabs/midnight-chain';
+import { SYNC_STALL_MS, SyncStallWatch, syncPointOf } from './sync-stall.ts';
 import { readOpenOffers, type NetworkName } from '@kuiralabs/midnight-cli-core';
 import type { CoinPicking } from '@kuiralabs/midnight-cli-core/engine';
 import { PickingShieldedWallet, shieldedCoinPicking, type ShieldedCoin } from './shielded-wallet.ts';
@@ -54,6 +55,8 @@ export interface FacadeBundle {
   indexerHttpUrl?: string;
   /** The node the facade submits to: a submit's wait asks whether it still answers. */
   nodeUrl?: string;
+  /** The proof server the facade proves with: a proof that takes too long names it. */
+  proofServerUrl?: string;
   /** The network's indexer (WebSocket), asked which event streams are empty when a sync starts. */
   indexerWsUrl?: string;
   /** The streams the chain has no events in, as read when the sync started. */
@@ -238,7 +241,7 @@ export async function buildFacade(
     facade = await initFresh();
   }
 
-  return { facade, keystore, seeds, coinPicking, feePricing, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS, nodeUrl: networkConfig.node, ...(shieldedCheckpointRefused === undefined ? {} : { shieldedCheckpointRefused }) };
+  return { facade, keystore, seeds, coinPicking, feePricing, restoredFromCache, indexerHttpUrl: networkConfig.indexer, indexerWsUrl: networkConfig.indexerWS, nodeUrl: networkConfig.node, proofServerUrl: networkConfig.proofServer, ...(shieldedCheckpointRefused === undefined ? {} : { shieldedCheckpointRefused }) };
 }
 
 /**
@@ -359,6 +362,17 @@ export function overlayDustDirectSnapshot(
   snapshot.state = Buffer.from(serializeDustLedgerState(direct.state)).toString('hex');
   snapshot.offset = direct.lastAppliedEventId.toString();
   return JSON.stringify(snapshot);
+}
+
+/** The Dust event a saved wallet's Dust snapshot was synced to, or -1 when it holds none (or can't be read). */
+export function savedDustOffset(cache: Pick<WalletCacheData, 'dust'> | null): number {
+  if (cache === null) return -1;
+  try {
+    const { offset } = JSON.parse(cache.dust) as FacadeDustSnapshot;
+    return offset === undefined ? -1 : Number(offset);
+  } catch {
+    return -1;
+  }
 }
 
 function maybeBridgeDustCache(
@@ -509,6 +523,36 @@ export interface SyncOptions {
   log?: VerboseLog;
   /** Cancels the wait: the sync fails with CancelledError. The caller stops the facade. */
   signal?: AbortSignal;
+  /** How long the sync may make no progress with no wallet connected before the indexer is asked whether it serves; SYNC_STALL_MS when not given. */
+  stallMs?: number;
+  /** Asks the indexer whether it serves, throwing why not; the reachability check of the bundle's indexer when not given. */
+  probeIndexer?: () => Promise<void>;
+}
+
+/** How often a sync looks at whether it has stalled. */
+const STALL_CHECK_EVERY_MS = 5_000;
+
+/**
+ * What a sync stalled against an indexer that doesn't serve fails with: the
+ * indexer's own error when it can't be used as configured (a Blockfrost
+ * refusal), else a NETWORK_ERROR naming it and what it answered.
+ */
+function stalledSyncError(failure: unknown, stalledMs: number): Error {
+  if (!(failure instanceof EndpointUnreachableError)) return failure instanceof Error ? failure : new NetworkError(String(failure));
+  return new NetworkError(`The wallet sync made no progress for ${Math.round(stalledMs / 1000)} s with no connection to the indexer, and stopped. ${failure.message}\nRun the command again once the indexer serves: the sync resumes where it stopped.`, { cause: failure });
+}
+
+/** Where each wallet a timed-out sync waited on stood, in words: "Dust at event 49036 of 1865550". */
+function syncStandingOf(state: FacadeState | null, syncMode: SyncMode, empty: EmptyStreams): string {
+  if (state === null) return 'no wallet heard from the indexer';
+  const standing: string[] = [];
+  try {
+    const unshielded = state.unshielded.progress;
+    if (!unshielded.isStrictlyComplete()) standing.push(`unshielded at transaction ${unshielded.appliedId} of ${unshielded.highestTransactionId}`);
+    if (syncMode !== 'no-dust' && isDustSyncPending(state, empty)) standing.push(`Dust at event ${state.dust.progress.appliedIndex} of ${state.dust.progress.highestRelevantWalletIndex}`);
+    if (syncMode !== 'lite' && !state.shielded.progress.isStrictlyComplete()) standing.push(`shielded at event ${state.shielded.progress.appliedIndex} of ${state.shielded.progress.highestRelevantWalletIndex}`);
+  } catch { /* best-effort */ }
+  return standing.length === 0 ? 'every wallet nearly caught up' : standing.join(', ');
 }
 
 export async function startAndSyncFacade(
@@ -516,6 +560,9 @@ export async function startAndSyncFacade(
   options: SyncOptions = {},
 ): Promise<FacadeState> {
   const { onProgress, onSyncDetail, timeoutMs, syncMode = 'full', requireStrictSync = false, log, signal } = options;
+  const stallMs = options.stallMs ?? SYNC_STALL_MS;
+  const indexerUrl = bundle.indexerHttpUrl;
+  const probeIndexer = options.probeIndexer ?? (indexerUrl === undefined ? undefined : () => assertEndpointsReachable({ indexer: indexerUrl }, { signal }));
   const { facade } = bundle;
 
   throwIfCancelled(signal);
@@ -549,11 +596,12 @@ export async function startAndSyncFacade(
       if (resolved) return;
       resolved = true;
       clearTimeout(timeout);
+      clearInterval(stallCheck);
       log?.('sync', `Sync cancelled after ${emissionCount} emissions`);
       rejectSync(new CancelledError());
     };
-    const resolve = (state: FacadeState): void => { signal?.removeEventListener('abort', onAbort); resolveSync(state); };
-    const reject = (err: unknown): void => { signal?.removeEventListener('abort', onAbort); rejectSync(err); };
+    const resolve = (state: FacadeState): void => { signal?.removeEventListener('abort', onAbort); clearInterval(stallCheck); resolveSync(state); };
+    const reject = (err: unknown): void => { signal?.removeEventListener('abort', onAbort); clearInterval(stallCheck); rejectSync(err); };
     let lastPendingKey = '';
 
     let lastState: FacadeState | null = null;
@@ -573,15 +621,44 @@ export async function startAndSyncFacade(
             }
           } catch { /* best-effort */ }
         }
-        reject(new SyncTimeoutError('Wallet sync timed out'));
+        reject(new SyncTimeoutError(
+          `Wallet sync timed out after ${Math.round(effectiveTimeout / 1000)} s (${syncStandingOf(lastState, syncMode, emptyStreams)}). `
+          + 'Run the command again: the sync resumes from where this one stopped.',
+        ));
       }
     }, effectiveTimeout);
+
+    // A sync that has stopped moving with no wallet connected: ask the indexer
+    // whether it serves at all, and stop with what it answered when it
+    // doesn't, rather than wait out the deadline. One that answers is waited for.
+    const watch = new SyncStallWatch(Date.now());
+    let probing = false;
+    const stallCheck = setInterval(() => {
+      if (resolved || probing || probeIndexer === undefined) return;
+      const stalled = watch.stalledFor(Date.now());
+      if (stalled < stallMs) return;
+      probing = true;
+      log?.('sync', `No progress and no connection for ${Math.round(stalled / 1000)} s: asking the indexer whether it serves`);
+      probeIndexer().then(
+        () => { probing = false; watch.restart(Date.now()); },
+        (failure: unknown) => {
+          probing = false;
+          if (resolved) return;
+          if (signal?.aborted === true) return;
+          resolved = true;
+          clearTimeout(timeout);
+          log?.('sync', `The indexer doesn't serve: ${(failure as Error).message}`);
+          reject(stalledSyncError(failure, stalled));
+        },
+      );
+    }, Math.min(STALL_CHECK_EVERY_MS, Math.max(1, Math.floor(stallMs / 3))));
 
     bundle.keepAlive = facade.state().subscribe({
       next: (state) => {
         if (resolved) return;
         emissionCount++;
         lastState = state;
+        try { watch.observe(syncPointOf(state, syncMode), Date.now()); } catch { /* best-effort */ }
 
         // Stale-cache detection: if we restored from cache and our cached
         // appliedIndex exceeds the chain's currently-reported highest, the

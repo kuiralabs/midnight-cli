@@ -68,7 +68,10 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
 
         progress.update('Generating ZK proof (this may take a few minutes)...');
         // Cancelled while proving, the call stops at once: nothing was sent.
-        const finalized = await proveWithin(bundle.facade.finalizeRecipe(signed), PROOF_TIMEOUT_MS, signal);
+        const finalized = await proveWithin(bundle.facade.finalizeRecipe(signed), PROOF_TIMEOUT_MS, signal, {
+          proofServer: bundle.proofServerUrl,
+          onTick: (elapsedMs) => progress.update(`Generating ZK proof... ${Math.floor(elapsedMs / 1000)} s (this may take a few minutes)`),
+        });
         throwIfCancelled(signal);
 
         // Spending an open swap offer's coins would cancel it: refused.

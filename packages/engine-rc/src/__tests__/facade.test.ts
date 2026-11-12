@@ -268,6 +268,58 @@ describe('startAndSyncFacade: a wallet that has heard nothing yet', () => {
   }, 60_000);
 });
 
+describe('startAndSyncFacade: an indexer that does not serve', () => {
+  // The SDK retries an indexer it can't use for as long as it is let: against
+  // a gateway answering 502 a write sat through three 120 s sync windows, all
+  // at applied=0 connected=false, then failed with a bare SYNC_TIMEOUT. A
+  // local HTTP server stands in for the indexer's gateway.
+  let closers: Array<() => Promise<void>> = [];
+  afterEach(async () => { for (const close of closers) await close(); closers = []; });
+
+  async function gatewayAnswering(status: number): Promise<string> {
+    const { createServer } = await import('node:http');
+    const server = createServer((_req, res) => { res.writeHead(status); res.end(status === 200 ? '{"data":{"__typename":"Query"}}' : 'cut'); });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    closers.push(() => new Promise((resolve) => server.close(() => resolve())));
+    const addr = server.address();
+    return `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}/api/v0`;
+  }
+
+  /** A wallet that never hears from its indexer: every wallet at 0/0, none connected. */
+  async function syncAgainst(indexerHttpUrl: string, options: { timeoutMs: number; stallMs: number }) {
+    const rx = await import('rxjs');
+    const { startAndSyncFacade } = await import('../facade.ts');
+    const silent = state({ shielded: indexed(0n, 0n, false), dust: indexed(0n, 0n, false), unshielded: txs(0n, 0n, false) });
+    const bundle: any = {
+      facade: { start: async () => {}, state: () => rx.concat(rx.of(silent), rx.NEVER) },
+      seeds: {}, keystore: {}, restoredFromCache: true, indexerHttpUrl,
+    };
+    try {
+      return await startAndSyncFacade(bundle, { ...options, syncMode: 'lite' });
+    } finally {
+      bundle.keepAlive?.unsubscribe();
+    }
+  }
+
+  it('stops with NETWORK_ERROR naming the indexer and what it answered, long before the deadline', async () => {
+    const url = await gatewayAnswering(502);
+    const started = Date.now();
+    await expect(syncAgainst(url, { timeoutMs: 60_000, stallMs: 300 })).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+      message: expect.stringMatching(new RegExp(`^The wallet sync made no progress for \\d+ s with no connection to the indexer, and stopped\\. Cannot reach the indexer at ${url.replace(/[.]/g, '\\.')}: it answered HTTP 502 Bad Gateway`)),
+    });
+    expect(Date.now() - started).toBeLessThan(10_000);
+  }, 30_000);
+
+  it('keeps waiting while the indexer answers, and times out saying where each wallet stood and that a re-run resumes', async () => {
+    const url = await gatewayAnswering(200);
+    await expect(syncAgainst(url, { timeoutMs: 1_500, stallMs: 300 })).rejects.toMatchObject({
+      code: 'SYNC_TIMEOUT',
+      message: 'Wallet sync timed out after 2 s (unshielded at transaction 0 of 0, Dust at event 0 of 0). Run the command again: the sync resumes from where this one stopped.',
+    });
+  }, 30_000);
+});
+
 describe('waitForDustAvailable', () => {
   it('stops waiting with CancelledError when the call is cancelled, long before its timeout', async () => {
     const rx = await import('rxjs');

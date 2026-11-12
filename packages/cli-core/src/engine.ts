@@ -29,7 +29,7 @@ export {
   type TransferRecipient, type TransferResult, type UnshieldedView
 } from './lib/engine.ts';
 export { EngineError, ProofTimeoutError } from './lib/errors.ts';
-export { proveWithin, SUBMIT_WAIT_MS, submitWithin, type SubmitWaitOptions } from './lib/submit-wait.ts';
+export { proofTimeoutMessage, PROVE_TICK_MS, proveWithin, type ProveWaitOptions, SUBMIT_WAIT_MS, submitWithin, type SubmitWaitOptions } from './lib/submit-wait.ts';
 export { DEFAULT_FEE_LIMITS, feeLimitRefusal, type FeeLimits, pendingLimitRefusal } from './lib/fee-limits.ts';
 export {
   DUST_DOUBLE_SPEND_RETRIES, DUST_FEE_MARGIN_STEPS, type FeePricing, type FeeRefusalCheck, type FeeRefusalStep, isDroppedFromPool, isDustDoubleSpendRefusal, isFeeShortRefusal, newFeePricing, nextFeeMargin,

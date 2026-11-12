@@ -80,3 +80,49 @@ export class EndpointUnreachableError extends NetworkError {
 export function endpointUnreachable(endpoint: EndpointRole, url: string, failure: unknown): EndpointUnreachableError {
   return new EndpointUnreachableError(endpoint, url, transportReason(failure), { cause: failure });
 }
+
+/**
+ * The proof server URL answers, but not as a proof server: its `/version`
+ * doesn't give a version (another service on that port, a proxy that answers
+ * everything). Refused before anything is built, rather than failing at the
+ * proof.
+ */
+export class NotAProofServerError extends Error {
+  readonly code = 'NOT_A_PROOF_SERVER';
+  readonly url: string;
+
+  constructor(url: string, answered: string) {
+    super(
+      `The proof server URL ${url} answers, but not as a proof server: GET ${url.replace(/\/+$/, '')}/version ${answered}.\n`
+      + `Check that the URL is the proof server's (--proof-server, or: midnight config set proof-server <url>).\n${PROOF_SERVER_HINT}`,
+    );
+    this.url = url;
+    this.name = 'NotAProofServerError';
+    Object.setPrototypeOf(this, NotAProofServerError.prototype);
+  }
+}
+
+/**
+ * The proof server took a proof request and the connection dropped before it
+ * answered, and it answers again now: it stopped mid-proof and came back, which
+ * a proof server does when it runs out of memory on a large circuit (an account
+ * contract's k256 circuits have prover keys of about 235 MB each). NETWORK_ERROR:
+ * nothing was proven or sent, and the same command can run again.
+ */
+export class ProofServerDroppedError extends NetworkError {
+  readonly url: string;
+  readonly circuit: string | undefined;
+
+  constructor(url: string, reason: string, circuit: string | undefined, options?: { cause?: unknown }) {
+    super(
+      `The proof server at ${url} dropped the connection while proving ${circuit === undefined ? 'the transaction' : `circuit '${circuit}'`} (${reason}), and answers again now: `
+      + 'it most likely stopped mid-proof and restarted, which a proof server does when it runs out of memory on a large circuit. Nothing was sent.\n'
+      + 'Check its logs and its memory limit (docker logs / docker stats on its container), then run the command again.',
+      options,
+    );
+    this.url = url;
+    this.circuit = circuit;
+    this.name = 'ProofServerDroppedError';
+    Object.setPrototypeOf(this, ProofServerDroppedError.prototype);
+  }
+}

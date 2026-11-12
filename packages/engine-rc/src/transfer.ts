@@ -99,7 +99,7 @@ async function submitDustRegistration(
   try {
     // Cancelled before or while proving, nothing is sent.
     throwIfCancelled(signal);
-    finalized = await proveWithin(bundle.facade.finalizeRecipe(recipe), PROOF_TIMEOUT_MS, signal);
+    finalized = await proveWithin(bundle.facade.finalizeRecipe(recipe), PROOF_TIMEOUT_MS, signal, { proofServer: bundle.proofServerUrl });
     throwIfCancelled(signal);
   } catch (err) {
     // Registering books the NIGHT UTXOs; release them so a retry can book them again.
@@ -306,6 +306,8 @@ export async function buildAndSubmitTransfer(
   /** The wallet's Dust lock across mn processes, held from balancing to submit; and where its notice goes. */
   dustLock?: WalletDustLock,
   notice?: (line: string) => void,
+  /** Told every few seconds how long the proof has taken. */
+  onProvingTick?: (elapsedMs: number) => void,
 ): Promise<string> {
   const startTime = Date.now();
   let doubleSpends = 0;
@@ -354,7 +356,7 @@ export async function buildAndSubmitTransfer(
       log?.('transfer', 'Generating ZK proof...');
       onProving?.();
       // Cancelled while proving, the call stops at once: nothing was sent.
-      finalizedTx = await proveWithin(bundle.facade.finalizeRecipe(signedRecipe), PROOF_TIMEOUT_MS, signal);
+      finalizedTx = await proveWithin(bundle.facade.finalizeRecipe(signedRecipe), PROOF_TIMEOUT_MS, signal, { proofServer: bundle.proofServerUrl, onTick: onProvingTick });
       throwIfCancelled(signal);
 
       paidWith = pendingDustNonces(await rx.firstValueFrom(bundle.facade.state()));
@@ -483,6 +485,7 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
     onSyncDetail,
     onDust,
     onProving,
+    onProvingTick,
     onSubmitting,
     onSubmittingTick,
     onSyncWarning,
@@ -561,6 +564,7 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
             registration,
             walletDustLock(walletDustLockFile(root, getNetworkId(networkConfig.networkId), deriveUnshieldedAddress(seedBuffer, getNetworkId(networkConfig.networkId) as NetworkName))),
             notice,
+            onProvingTick,
           );
           return { txHash, amountMicroNight: total };
         } finally {

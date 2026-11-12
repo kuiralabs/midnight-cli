@@ -1,11 +1,11 @@
 // How long a call waits for a proof and a submit, and what a cut-short one says.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer } from 'ws';
 import { CancelledError, NetworkError, ProofTimeoutError, SyncTimeoutError } from '../lib/errors.ts';
 import { closedPort } from '../../../../test-support/closed-port.ts';
-import { proveWithin, submitWithin } from '../lib/submit-wait.ts';
+import { PROVE_TICK_MS, proveWithin, submitWithin } from '../lib/submit-wait.ts';
 
 const never = <T>(): Promise<T> => new Promise<T>(() => {});
 const TX = '00'.repeat(33);
@@ -57,5 +57,29 @@ describe('proveWithin', () => {
   it('times out with PROOF_TIMEOUT, and stops at once with CANCELLED when cancelled', async () => {
     await expect(proveWithin(never(), 50)).rejects.toBeInstanceOf(ProofTimeoutError);
     await expect(proveWithin(never(), 60_000, AbortSignal.abort())).rejects.toBeInstanceOf(CancelledError);
+  });
+
+  it('names the proof server, what to check and that nothing was sent when it times out', async () => {
+    await expect(proveWithin(never(), 50, undefined, { proofServer: 'http://127.0.0.1:6300' })).rejects.toMatchObject({
+      code: 'PROOF_TIMEOUT',
+      message: 'The proof server at http://127.0.0.1:6300 did not finish the proof within 0 s, so mn stopped waiting; nothing was sent.\n'
+        + 'Check that it is running and not starved of CPU or memory (its logs, docker stats on its container), then run the command again.',
+    });
+  });
+
+  it('says how long it has been proving while it waits, and stops saying it once the proof is done', async () => {
+    vi.useFakeTimers();
+    try {
+      const ticks: number[] = [];
+      let finish!: (value: string) => void;
+      const proving = proveWithin(new Promise<string>((resolve) => { finish = resolve; }), 60_000, undefined, { onTick: (elapsedMs) => ticks.push(elapsedMs) });
+      await vi.advanceTimersByTimeAsync(PROVE_TICK_MS * 3);
+      finish('proven');
+      await expect(proving).resolves.toBe('proven');
+      await vi.advanceTimersByTimeAsync(PROVE_TICK_MS * 3);
+      expect(ticks).toEqual([PROVE_TICK_MS, PROVE_TICK_MS * 2, PROVE_TICK_MS * 3]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

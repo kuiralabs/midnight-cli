@@ -33,9 +33,32 @@ function waitBounded<T>(work: Promise<T>, timeoutMs: number, signal: AbortSignal
   });
 }
 
-/** The proof `work` makes, within `timeoutMs` (ProofTimeoutError after); CancelledError at once when `signal` aborts: nothing was sent. */
-export function proveWithin<T>(work: Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {
-  return waitBounded(work, timeoutMs, signal, () => new ProofTimeoutError(), () => new CancelledError());
+/** How often a proof's wait says how long it has been proving. */
+export const PROVE_TICK_MS = 5_000;
+
+export interface ProveWaitOptions {
+  /** The proof server proving it: named when the proof takes too long. */
+  readonly proofServer?: string;
+  /** Told every PROVE_TICK_MS how long the proof has taken, so a long proof shows it is alive. */
+  readonly onTick?: (elapsedMs: number) => void;
+}
+
+/** What a proof that took longer than `timeoutMs` says: the proof server, what to check, and that nothing was sent. */
+export function proofTimeoutMessage(timeoutMs: number, proofServer: string | undefined): string {
+  const at = proofServer === undefined ? 'The proof server' : `The proof server at ${proofServer}`;
+  return `${at} did not finish the proof within ${Math.round(timeoutMs / 1000)} s, so mn stopped waiting; nothing was sent.\n`
+    + 'Check that it is running and not starved of CPU or memory (its logs, docker stats on its container), then run the command again.';
+}
+
+/** The proof `work` makes, within `timeoutMs` (ProofTimeoutError after, naming the proof server); CancelledError at once when `signal` aborts: nothing was sent. */
+export function proveWithin<T>(work: Promise<T>, timeoutMs: number, signal?: AbortSignal, options: ProveWaitOptions = {}): Promise<T> {
+  const { onTick } = options;
+  const ticking = onTick === undefined ? undefined : (): (() => void) => {
+    const started = Date.now();
+    const timer = setInterval(() => onTick(Date.now() - started), PROVE_TICK_MS);
+    return () => clearInterval(timer);
+  };
+  return waitBounded(work, timeoutMs, signal, () => new ProofTimeoutError(proofTimeoutMessage(timeoutMs, options.proofServer)), () => new CancelledError(), ticking);
 }
 
 /** Whether the node at `url` accepts a WebSocket connection within `timeoutMs`. */

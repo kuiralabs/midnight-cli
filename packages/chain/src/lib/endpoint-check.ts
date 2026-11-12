@@ -10,7 +10,7 @@
 
 import WebSocket from 'ws';
 import { checkLedgerSupported, fetchProtocolVersion } from './ledger-guard.ts';
-import { assertEndpointUsable, endpointRefusal, endpointRefusalFromWsError, endpointUnreachable, isBlockfrostUrl, throwIfCancelled, CancelledError, type EndpointRole, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
+import { assertEndpointUsable, endpointRefusal, endpointRefusalFromWsError, endpointUnreachable, isBlockfrostUrl, throwIfCancelled, CancelledError, NotAProofServerError, type EndpointRole, type NetworkConfig } from '@kuiralabs/midnight-cli-core';
 
 const PROBE_TIMEOUT_MS = 10_000;
 
@@ -86,19 +86,23 @@ export function endpointsOf(network: Pick<NetworkConfig, 'indexer' | 'node' | 'p
 /**
  * Throws, within a few seconds, when an endpoint the command needs doesn't
  * answer: an EndpointUnreachableError (NETWORK_ERROR) naming it, its URL and
- * why, for the first of them in the order indexer, node, proof server. Any
- * answer counts (an HTTP status, a WebSocket upgrade); what the endpoint says
- * is for the command to read. An endpoint that can't be used as configured
- * (shut down, Blockfrost without a project id) or refuses the upgrade throws
- * that endpoint's own error.
+ * why, for the first of them in the order indexer, node, proof server. The
+ * node counts as answering when it takes a WebSocket upgrade. The indexer
+ * when it answers a query with a status below 500: a 502 is a gateway with no
+ * indexer behind it, and a sync against it waits out its deadline. The proof
+ * server when its `/version` gives a version; one that answers something else
+ * isn't a proof server (NotAProofServerError, NOT_A_PROOF_SERVER). An
+ * endpoint that can't be used as configured (shut down, Blockfrost without a
+ * project id or refusing it) or refuses the upgrade throws that endpoint's
+ * own error.
  */
 export async function assertEndpointsReachable(needed: NeededEndpoints, options: ReachabilityOptions = {}): Promise<void> {
   const timeoutMs = options.timeoutMs ?? REACHABILITY_TIMEOUT_MS;
   const request = options.request ?? fetch;
   const probes: Array<[EndpointRole, string, Promise<ProbeOutcome>]> = [];
-  if (needed.indexer !== undefined) probes.push(['indexer', needed.indexer, probeHttp(request, needed.indexer, 'POST', timeoutMs, options.signal)]);
+  if (needed.indexer !== undefined) probes.push(['indexer', needed.indexer, probeHttp(request, needed.indexer, 'POST', timeoutMs, options.signal, indexerAnswer)]);
   if (needed.node !== undefined) probes.push(['node', needed.node, probeWebSocket(needed.node, timeoutMs, options.signal)]);
-  if (needed.proofServer !== undefined) probes.push(['proof server', needed.proofServer, probeHttp(request, needed.proofServer, 'GET', timeoutMs, options.signal)]);
+  if (needed.proofServer !== undefined) probes.push(['proof server', needed.proofServer, probeHttp(request, versionUrlOf(needed.proofServer), 'GET', timeoutMs, options.signal, proofServerAnswer(needed.proofServer))]);
   const outcomes = await Promise.all(probes.map(([, , probe]) => probe));
   throwIfCancelled(options.signal);
   for (let i = 0; i < probes.length; i++) {
@@ -110,8 +114,53 @@ export async function assertEndpointsReachable(needed: NeededEndpoints, options:
   }
 }
 
-/** Undefined when the URL answers an HTTP request with any status; else why it didn't. */
-async function probeHttp(request: typeof fetch, url: string, method: 'GET' | 'POST', timeoutMs: number, signal: AbortSignal | undefined): Promise<ProbeOutcome> {
+/** What an answer of an HTTP endpoint makes it: as good as answering (undefined), its own error, or a reason it can't serve. */
+type AnswerCheck = (url: string, response: Response) => Promise<ProbeOutcome>;
+
+/** A status in words: "HTTP 502 Bad Gateway". */
+function statusText(response: Response): string {
+  return `HTTP ${response.status}${response.statusText === '' ? '' : ` ${response.statusText}`}`;
+}
+
+/**
+ * The indexer answers when its status is below 500 (what a 4xx says is for the
+ * command's own query to read). A Blockfrost refusal is that error; a 5xx is a
+ * gateway or server with no indexer serving behind it.
+ */
+const indexerAnswer: AnswerCheck = async (url, response) => {
+  await response.body?.cancel().catch(() => {});
+  const refusal = endpointRefusal(url, response.status);
+  if (refusal !== undefined) return { refused: refusal };
+  return response.status >= 500 ? { unreachable: new Error(`it answered ${statusText(response)}, so no indexer is serving there`) } : undefined;
+};
+
+/** A proof server's `/version` body: "9.0.0". */
+const VERSION_BODY = /^\d+\.\d+\.\d+\S*$/;
+
+/** The longest `/version` body quoted back. */
+const QUOTED_BODY_CHARS = 60;
+
+/** The proof server's `/version` URL. */
+function versionUrlOf(proofServerUrl: string): string {
+  return `${proofServerUrl.replace(/\/+$/, '')}/version`;
+}
+
+/** The proof server answers when its `/version` gives a version; a 5xx is a server that can't serve; anything else isn't a proof server. */
+function proofServerAnswer(proofServerUrl: string): AnswerCheck {
+  return async (_url, response) => {
+    if (response.status >= 500) {
+      await response.body?.cancel().catch(() => {});
+      return { unreachable: new Error(`it answered ${statusText(response)}`) };
+    }
+    const body = (await response.text().catch(() => '')).trim();
+    if (response.ok && VERSION_BODY.test(body)) return undefined;
+    const quoted = body === '' ? 'nothing' : JSON.stringify(body.length > QUOTED_BODY_CHARS ? `${body.slice(0, QUOTED_BODY_CHARS)}…` : body);
+    return { refused: new NotAProofServerError(proofServerUrl, `answered ${statusText(response)} with ${quoted}, not a version`) };
+  };
+}
+
+/** Undefined when the URL answers an HTTP request as `check` wants it to; else why it didn't. */
+async function probeHttp(request: typeof fetch, url: string, method: 'GET' | 'POST', timeoutMs: number, signal: AbortSignal | undefined, check: AnswerCheck): Promise<ProbeOutcome> {
   try {
     assertEndpointUsable(url);
   } catch (err) {
@@ -124,9 +173,7 @@ async function probeHttp(request: typeof fetch, url: string, method: 'GET' | 'PO
       ...(method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: '{ __typename }' }) } : {}),
       signal: signal === undefined ? timeout : AbortSignal.any([timeout, signal]),
     });
-    // The body is not read: let the connection go.
-    await response.body?.cancel().catch(() => {});
-    return undefined;
+    return await check(url, response);
   } catch (err) {
     return signal?.aborted === true ? { refused: new CancelledError() } : { unreachable: err };
   }

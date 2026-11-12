@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createServer } from 'node:http';
 import { createServer as createNetServer, type AddressInfo, type Socket } from 'node:net';
 import { WebSocketServer } from 'ws';
-import { BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, CancelledError, EndpointShutDownError, EndpointUnreachableError, blockfrostEndpoints } from '@kuiralabs/midnight-cli-core';
+import { BlockfrostProjectIdRejectedError, BlockfrostProjectIdRequiredError, CancelledError, EndpointShutDownError, EndpointUnreachableError, NotAProofServerError, blockfrostEndpoints } from '@kuiralabs/midnight-cli-core';
 import { assertEndpointsReachable, assertNetworkAnswers, endpointsOf } from '../lib/endpoint-check.ts';
 import { closedPort } from '../../../../test-support/closed-port.ts';
 
@@ -63,9 +63,12 @@ describe('assertNetworkAnswers', () => {
 });
 
 describe('assertEndpointsReachable', () => {
-  /** An HTTP server that answers every request with 200, and a WebSocket server on the same port. */
+  /** An HTTP server that answers as an indexer and a proof server (its /version as the 9.0.0 one does), and a WebSocket server on the same port. */
   async function answeringServer(): Promise<{ port: number; close: () => Promise<void> }> {
-    const server = createServer((_req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":{"__typename":"Query"}}'); });
+    const server = createServer((req, res) => {
+      if (req.url === '/version') { res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }); res.end('9.0.0'); return; }
+      res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"data":{"__typename":"Query"}}');
+    });
     const wss = new WebSocketServer({ server });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const { port } = server.address() as AddressInfo;
@@ -144,6 +147,64 @@ describe('assertEndpointsReachable', () => {
       await expect(failure).rejects.toBeInstanceOf(CancelledError);
     } finally {
       await silent.close();
+    }
+  });
+
+  /** An HTTP server that answers every request with `status` and `body`. */
+  async function serverAnswering(status: number, body: string): Promise<{ port: number; close: () => Promise<void> }> {
+    const server = createServer((_req, res) => { res.writeHead(status); res.end(body); });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    return { port, close: () => new Promise((resolve) => server.close(() => resolve())) };
+  }
+
+  it('names an indexer that answers 502 (a gateway with no indexer behind it) as NETWORK_ERROR, with what it answered', async () => {
+    const gateway = await serverAnswering(502, 'cut');
+    try {
+      const failure = assertEndpointsReachable({ indexer: `http://127.0.0.1:${gateway.port}/api/v0` });
+      await expect(failure).rejects.toBeInstanceOf(EndpointUnreachableError);
+      await expect(failure).rejects.toMatchObject({
+        code: 'NETWORK_ERROR',
+        endpoint: 'indexer',
+        message: expect.stringContaining(`Cannot reach the indexer at http://127.0.0.1:${gateway.port}/api/v0: it answered HTTP 502 Bad Gateway, so no indexer is serving there.`),
+      });
+    } finally {
+      await gateway.close();
+    }
+  });
+
+  it('takes an indexer that answers a query with a 4xx as answering: what it says is for the command to read', async () => {
+    const indexer = await serverAnswering(400, '{"errors":[]}');
+    try {
+      await expect(assertEndpointsReachable({ indexer: `http://127.0.0.1:${indexer.port}/api/v4/graphql` })).resolves.toBeUndefined();
+    } finally {
+      await indexer.close();
+    }
+  });
+
+  it('refuses a proof server URL that answers 200 to everything, as NOT_A_PROOF_SERVER, before anything is built', async () => {
+    const fake = await serverAnswering(200, '{"status":"ok"}');
+    const url = `http://127.0.0.1:${fake.port}`;
+    try {
+      const failure = assertEndpointsReachable({ proofServer: url });
+      await expect(failure).rejects.toBeInstanceOf(NotAProofServerError);
+      await expect(failure).rejects.toMatchObject({
+        code: 'NOT_A_PROOF_SERVER',
+        message: expect.stringContaining(`The proof server URL ${url} answers, but not as a proof server: GET ${url}/version answered HTTP 200 OK with "{\\"status\\":\\"ok\\"}", not a version.`),
+      });
+    } finally {
+      await fake.close();
+    }
+  });
+
+  it('names a proof server whose /version answers 503 as NETWORK_ERROR', async () => {
+    const down = await serverAnswering(503, '');
+    try {
+      await expect(assertEndpointsReachable({ proofServer: `http://127.0.0.1:${down.port}/` })).rejects.toMatchObject({
+        code: 'NETWORK_ERROR', endpoint: 'proof server', message: expect.stringContaining('it answered HTTP 503 Service Unavailable.'),
+      });
+    } finally {
+      await down.close();
     }
   });
 

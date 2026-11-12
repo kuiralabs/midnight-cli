@@ -10,7 +10,7 @@
 // sensitivity as the wallet file (mode 0o600).
 
 import { bindCachesToIndexer, getShieldedCachePath, type ShieldedBalanceResult, type ShieldedCachedOptions } from '@kuiralabs/midnight-cli-core/engine';
-import { DIR_MODE, FILE_MODE, clearShieldedDirectCache } from '@kuiralabs/midnight-cli-core';
+import { DIR_MODE, FILE_MODE, clearShieldedDirectCache, retryingTransient } from '@kuiralabs/midnight-cli-core';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, readdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -155,6 +155,13 @@ export async function readShieldedBalanceCached(
 
   // State resumed from another indexer's event ids would replay the wrong events.
   bindCachesToIndexer(network, indexerWS, options.root);
+  // A connection that fails (an indexer that blinked) is retried after a
+  // wait, from the checkpoint the failed read saved.
+  return retryingTransient(() => readFromCheckpoint(keys, pubkeyHex, network, indexerWS, options), { signal: options.signal });
+}
+
+/** One read of the shielded history, from the checkpoint on disk to the tip. */
+async function readFromCheckpoint(keys: ReturnType<typeof shieldedKeysFromSeed>, pubkeyHex: string, network: string, indexerWS: string, options: ShieldedCachedOptions): Promise<ShieldedBalanceResult> {
   let cached = options.forceFresh ? null : loadShieldedCache(network, pubkeyHex, options.root, options.chainId);
   // A cursor past the chain's latest event: the chain was reset under the cache.
   if (cached && isCursorBeyondTip(cached.lastAppliedEventId, await fetchEventTip(indexerWS, 'zswap'))) {
