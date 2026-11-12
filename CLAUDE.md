@@ -17,7 +17,7 @@ A standalone git-style CLI wallet for the Midnight blockchain.
 - One task per subagent for focused execution
 
 ### 3. Self-Improvement Loop
-- After ANY correction from the user: update `tasks/lessons.md` with the pattern
+- After ANY correction from the user: record the pattern in your lessons notes
 - Write rules for yourself that prevent the same mistake
 - Ruthlessly iterate on these lessons until mistake rate drops
 - Review lessons at session start for relevant project
@@ -42,12 +42,12 @@ A standalone git-style CLI wallet for the Midnight blockchain.
 
 ## Task Management
 
-1. **Plan First**: Write plan to `tasks/todo.md` with checkable items
+1. **Plan First**: Write the plan down with checkable items
 2. **Verify Plan**: Check in before starting implementation
 3. **Track Progress**: Mark items complete as you go
 4. **Explain Changes**: High-level summary at each step
-5. **Document Results**: Add review section to `tasks/todo.md`
-6. **Capture Lessons**: Update `tasks/lessons.md` after corrections
+5. **Document Results**: Add a review section to the plan
+6. **Capture Lessons**: Update your lessons notes after corrections
 
 ## Engineering Standards
 
@@ -107,8 +107,8 @@ A standalone git-style CLI wallet for the Midnight blockchain.
 
 ### Technical Context
 
-- Midnight libraries: `/Users/norman/Development/midnight/midnight-libraries`
-- Compact language: `/Users/norman/Development/midnight/midnight-libraries/compact`
-- Wallet SDK: `/Users/norman/Development/midnight/midnight-libraries/midnight-wallet`
-- Dapp connector: `/Users/norman/Development/midnight/midnight-libraries/midnight-dapp-connector-api`
+- Midnight libraries: your local checkout of the Midnight libraries
+- Compact language: `compact/` in the Midnight libraries checkout
+- Wallet SDK: `midnight-wallet/` in the Midnight libraries checkout
+- Dapp connector: `midnight-dapp-connector-api/` in the Midnight libraries checkout
 
