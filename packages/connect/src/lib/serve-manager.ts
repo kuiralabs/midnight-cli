@@ -321,8 +321,15 @@ export async function openConnector(options: ServeManagerOptions): Promise<Opene
     connector: opened.connector,
     contractKeys,
     async stop() {
-      stopListening();
-      await opened.stop();
+      // Listening until the wallet has stopped: stopping it closes the SDK's
+      // node client, whose polkadot-js API can log a failed request then
+      // (`RPC-CORE: chain(): ... WebSocket is not connected`), which the
+      // guard drops only while a call listens.
+      try {
+        await opened.stop();
+      } finally {
+        stopListening();
+      }
     },
   };
 }
