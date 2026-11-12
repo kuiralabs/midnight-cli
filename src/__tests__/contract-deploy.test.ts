@@ -1,6 +1,7 @@
 // Deploying a contract checks first that the paying wallet can pay: a wallet
 // that isn't there stops the deploy before anything is served. The home and
-// the compiled contract are temporary; nothing reaches a chain.
+// the compiled contract are temporary, and the chain is a stand-in
+// (stand-in-chain.ts) that a deploy prices against.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
@@ -11,15 +12,19 @@ import { servePayerAt } from '@kuiralabs/midnight-connect';
 import { createSdkWarningRouter, CancelledError, createHost, type Host } from '@kuiralabs/midnight-cli-core';
 import { stateRootIn } from '../../test-support/state-root-in.ts';
 import { loadInstalledEngine } from '../lib/installed-engines.ts';
+import { startStandInChain, type StandInChain } from '../../test-support/stand-in-chain.ts';
 
-const ENDPOINTS = { network: 'undeployed' as const, node: 'ws://localhost:29944', indexerWS: 'ws://localhost:28088/api/v4/graphql/ws', proofServer: 'http://localhost:26300' };
+let chain: StandInChain;
+let ENDPOINTS: { network: 'undeployed'; node: string; indexerWS: string; proofServer: string };
 // The host the tests' calls run in: its state root under the test's home, the engines the CLI ships, nobody to ask, notices dropped.
 let host: Host;
 
 let home: string;
 let originalHome: string | undefined;
 
-beforeEach(() => {
+beforeEach(async () => {
+  chain = await startStandInChain();
+  ENDPOINTS = { network: 'undeployed', node: chain.node, indexerWS: chain.indexerWS, proofServer: chain.proofServer };
   originalHome = process.env.HOME;
   home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'mn-contract-deploy-')));
   process.env.HOME = home;
@@ -33,9 +38,10 @@ beforeEach(() => {
   }));
 });
 
-afterEach(() => {
+afterEach(async () => {
   process.env.HOME = originalHome;
   fs.rmSync(home, { recursive: true, force: true });
+  await chain.close();
 });
 
 describe('deployContract', () => {

@@ -3,8 +3,9 @@
 // ships), plain values in, typed results and codes out, no argv and no call
 // context. The payer is the program's own (the injection the Payer interface
 // exists for); the indexer a contract's raw state is read from is a stand-in
-// HTTP endpoint (local-indexer.ts). A deploy or call that reaches a chain
-// needs one: the scratch chain's live runs cover them.
+// HTTP endpoint (local-indexer.ts), and a deploy or call prices against a
+// stand-in chain (stand-in-chain.ts). Proving and submitting need a real chain:
+// the scratch chain's live runs cover them.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
@@ -18,9 +19,11 @@ import { callContract } from '../lib/contract/call.ts';
 import { readContractState } from '../lib/contract/state.ts';
 import { startLocalIndexer, type LocalIndexer } from '../../../../test-support/local-indexer.ts';
 import { closedPort } from '../../../../test-support/closed-port.ts';
+import { startStandInChain, type StandInChain } from '../../../../test-support/stand-in-chain.ts';
 
 const ADDRESS = 'cb5230e1ac98e07520d3b330016743a05fec38dd8fe894ae5b9ac3f71cac5190';
-const ENDPOINTS = { network: 'undeployed' as const, node: 'ws://127.0.0.1:29944', indexerWS: 'ws://127.0.0.1:28088/api/v4/graphql/ws', proofServer: 'http://127.0.0.1:26300' };
+let chain: StandInChain;
+let ENDPOINTS: { network: 'undeployed'; node: string; indexerWS: string; proofServer: string };
 
 let home: string;
 let dapp: string;
@@ -37,14 +40,19 @@ function compiledContract(runtimeVersion: string): void {
   }));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  chain = await startStandInChain();
+  ENDPOINTS = { network: 'undeployed', node: chain.node, indexerWS: chain.indexerWS, proofServer: chain.proofServer };
   home = fs.realpathSync(fs.mkdtempSync(path.join(tmpdir(), 'mn-contract-lib-')));
   dapp = path.join(home, 'dapp');
   host = createHost({ paths: { stateRoot: path.join(home, '.midnight'), home }, engineLoader: loadInstalledEngine });
   compiledContract('0.21.0');
 });
 
-afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
+afterEach(async () => {
+  fs.rmSync(home, { recursive: true, force: true });
+  await chain.close();
+});
 
 /** A program's payer that records what it is asked: its wallet has `night` NIGHT, and serving fails as `serveFails` says. */
 function programPayer(night: bigint, serveFails = 'served by the program') {

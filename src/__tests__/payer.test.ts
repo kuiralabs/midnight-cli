@@ -19,6 +19,7 @@ import { stateRootIn } from '../../test-support/state-root-in.ts';
 import { rcKeys } from '../../test-support/rc-engine.ts';
 import { saveWalletConfig } from '../../test-support/plain-wallet.ts';
 import { loadInstalledEngine } from '../../test-support/test-host.ts';
+import { startStandInChain, type StandInChain } from '../../test-support/stand-in-chain.ts';
 
 // The handlers, as the shell loads them.
 const { default: contractCommand } = await contractDefinition.load();
@@ -121,7 +122,13 @@ describe('a command called without a payer', () => {
 describe('the serve payer', () => {
   // A running `mn serve`: a real JSON-RPC WebSocket server answering the
   // probes the reuse check makes, for the requested chain.
+  // The chain it serves is a stand-in (stand-in-chain.ts): a serve is started
+  // only once the chain's endpoints answer.
   // A wallet of the test's own, active, that the running serve pays from.
+  let chain: StandInChain;
+  beforeEach(async () => { chain = await startStandInChain(); });
+  afterEach(() => chain.close());
+  const chainFlags = () => ['--node', chain.node, '--indexer-ws', chain.indexerWS, '--proof-server', chain.proofServer];
   const SEED = Buffer.alloc(32, 3);
   function activeWallet(): string {
     const dir = path.join(home, '.midnight', 'wallets');
@@ -140,7 +147,7 @@ describe('the serve payer', () => {
       const req = JSON.parse(data.toString());
       const result = req.method === 'connect' ? { networkId: 'undeployed' }
         : req.method === 'getConnectionStatus' ? { status: 'connected', networkId: 'undeployed' }
-        : req.method === 'getConfiguration' ? { substrateNodeUri: 'ws://localhost:29944', indexerWsUri: 'ws://localhost:28088/api/v4/graphql/ws' }
+        : req.method === 'getConfiguration' ? { substrateNodeUri: chain.node, indexerWsUri: chain.indexerWS }
         : req.method === 'getUnshieldedAddress' && unshieldedAddress !== undefined ? { unshieldedAddress }
         : null;
       ws.send(JSON.stringify({ jsonrpc: '2.0', id: req.id, result }));
@@ -153,7 +160,7 @@ describe('the serve payer', () => {
     const serve = await runningServe(activeWallet());
     const said: string[] = [];
     try {
-      const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy', stateRootIn(home), host);
+      const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...chainFlags()]), 'contract', 'deploy', stateRootIn(home), host);
       const served = await servePayerAt(serve.port).serve(target, undefined, silentSpinner((message) => said.push(message)), createSdkWarningRouter().openCall().warnings, undefined);
       expect(served.port).toBe(serve.port);
       expect(served.contractKeys).toEqual(contractKeysFromSeed(SEED));
@@ -169,7 +176,7 @@ describe('the serve payer', () => {
     const serve = await runningServe();
     const said: string[] = [];
     try {
-      const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy', stateRootIn(home), host);
+      const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...chainFlags()]), 'contract', 'deploy', stateRootIn(home), host);
       const controller = new AbortController();
       controller.abort();
       await expect(servePayerAt(serve.port).serve(target, undefined, silentSpinner((message) => said.push(message)), createSdkWarningRouter().openCall().warnings, controller.signal)).rejects.toBeInstanceOf(CancelledError);
@@ -180,7 +187,7 @@ describe('the serve payer', () => {
   });
 
   it('checks no wallet for a call already cancelled', async () => {
-    const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...ENDPOINTS]), 'contract', 'deploy', stateRootIn(home), host);
+    const target = resolvePayingTarget(parseArgs(['contract', 'deploy', ...chainFlags()]), 'contract', 'deploy', stateRootIn(home), host);
     const controller = new AbortController();
     controller.abort();
     // Not cancelled, this would fail on the missing wallet file.
