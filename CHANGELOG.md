@@ -4,7 +4,19 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-11-11
+## [0.6.0] - 2026-11-12
+
+### Highlights
+
+- **Ledger 9 on every network.** Mainnet, preprod, preview and a local stack (`mn localnet up`), one seed with an address on each, on the final SDK set (wallet SDK 2.0.0, ledger-v9 1.0.0, midnight-js 5.0.0, compact-runtime 0.21.0).
+- **Fast cold Dust sync.** The native Dust reader is back on ledger 9: a registered wallet's first Dust read on preprod (1.75M events) took 93 s on a laptop, and 10 s after that.
+- **Contracts from the command line.** `mn contract deploy` and `call` say what they cost before anything is proven (`--dry-run` stops there), a shielded coin argument is just `{"@coin": {"amount": "3", "token": "NIGHT"}}`, and fees cost less (no fixed overhead, 3 blocks of margin instead of 5).
+- **A dev loop.** `mn dev` compiles on save against a local network and deploys with one key; `mn test` generates and runs end-to-end suites for a dApp.
+- **Payments.** `mn transfer` pays several recipients in one transaction, and `mn tx status` gives a transaction's receipt: block, time, fee and result.
+- **Private swaps.** Shielded tokens swap through offer files: `mn swap make`, `take`, `cancel` (experimental).
+- **Built for agents.** An MCP server, `--json` on every command with typed error codes, progress on stderr for every step that takes minutes, `mn serve --approve-fees` as a fee wallet with `--max-fee` and `--max-pending` limits, and `mn grant` spending allowances (experimental).
+- **Packages for your program.** The same engine as `@kuiralabs/midnight-*` libraries: wallet, chain, contract, connect, dev and grant.
+- **Security.** A circuit's private arguments no longer leak, contract secrets stay off the command line, mn serve refuses web pages unless told otherwise, and the files mn writes are its owner's alone (0600/0700).
 
 > **Ledger 9 only, and stable.** Mainnet, preprod and preview all run ledger 9 (protocol 2001100), so 0.5.x no longer works on any network: install 0.6.0 with `npm install -g midnight-wallet-cli` (npm 11 or older). Recompile your contracts with Compact 0.36 (language 0.28): mn runs compact-runtime 0.21.0 and refuses artefacts built for another runtime. An account `mn grant` deployed on an earlier 0.6.0 release candidate (account-chain 0.3.0-rc.3) has the older account contract: deploy a new one. On preview, preprod and mainnet run a local proof server: `docker run -p 6300:6300 midnightntwrk/proof-server:9.0.0 midnight-proof-server -v`.
 

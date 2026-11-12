@@ -8,7 +8,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript)](https://www.typescriptlang.org/)
 
 
-A standalone CLI wallet for the Midnight blockchain. Manage wallets, check balances, transfer NIGHT tokens, and manage a local network — all from the terminal.
+A standalone CLI wallet and dev tool for the Midnight blockchain. Manage wallets, check balances and pay one or many recipients, deploy and call Compact contracts (priced before anything is proven), swap shielded tokens, run a local ledger-9 network with a compile-on-save dev loop (`mn dev`) and end-to-end dApp tests (`mn test`), all from the terminal, on a local network, preview, preprod and mainnet. The same engine ships as libraries (`@kuiralabs/midnight-*`) for your own programs.
 
 Built for two audiences: **beginners** starting their first Midnight project (a local chain + funded wallets + contract deploy in minutes), and **AI agents** (Cursor, Claude Code, any MCP client) using the same primitives via a built-in MCP server.
 
@@ -189,7 +189,7 @@ To use a proof server elsewhere, pass `--proof-server <url>` or save it with `mi
 
 ## Native dust acceleration
 
-The first dust sync for a wallet on a hosted network replays the chain's full dust event history, the slow part of a cold start. A native (Rust) reader does this faster than the WASM one, installed as a per-platform `optionalDependency` (`@kuiralabs/dust-sync-<os>-<arch>`, built on the ledger-9 crates). On mainnet (1.6M Dust events through Blockfrost) a cold read takes about 11 minutes with it and about 18 without; most of the 11 minutes is streaming the events, since the ledger-8 history before the fork is read but not folded (the fork's migration starts ledger 9 from an empty Dust state).
+The first dust sync for a wallet on a hosted network replays the chain's full dust event history, the slow part of a cold start. A native (Rust) reader does this faster than the WASM one, installed as a per-platform `optionalDependency` (`@kuiralabs/dust-sync-<os>-<arch>`, built on the ledger-9 crates). Measured on a laptop on 2026-11-12 through Blockfrost, a cold read with it took 86 s on mainnet (2.06M Dust events) and 86 s on preprod (1.75M), and a warm one about 10 s; the WASM reader was about 3.4 times slower on a segment of mainnet's ledger-9 events. The ledger-8 history before the fork is read but not folded (the fork's migration starts ledger 9 from an empty Dust state), so most of a cold read is streaming the events.
 
 mn runs the native reader only when it reports ledger 9 (`dust-sync --ledger`) and the chain tip is past the fork; otherwise, or if it fails, the WASM reader does the sync. Set `MN_DISABLE_NATIVE_DUST=1` to always use WASM, or `MN_DUST_SYNC_BIN` to run a binary of your own.
 
