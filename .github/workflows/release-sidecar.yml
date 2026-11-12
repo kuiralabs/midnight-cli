@@ -40,11 +40,11 @@ jobs:
       matrix:
         include:
           # `native`: the runner can run what it builds (tests and the ledger check run there).
-          - { os: macos-14,         target: aarch64-apple-darwin,      pkg: darwin-arm64, ext: '',     native: true }
+          - { os: macos-15,         target: aarch64-apple-darwin,      pkg: darwin-arm64, ext: '',     native: true }
           # darwin-x64 cross-compiled on the Apple-Silicon runner (macOS ships the
           # x86_64 SDK). Avoids the scarce/deprecated macos-13 Intel runner, which
-          # queues indefinitely; macos-14 has plentiful capacity.
-          - { os: macos-14,         target: x86_64-apple-darwin,       pkg: darwin-x64,   ext: '',     native: false }
+          # queues indefinitely; macos-15 has plentiful capacity.
+          - { os: macos-15,         target: x86_64-apple-darwin,       pkg: darwin-x64,   ext: '',     native: false }
           - { os: ubuntu-latest,    target: x86_64-unknown-linux-gnu,  pkg: linux-x64,    ext: '',     native: true }
           - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, pkg: linux-arm64,  ext: '',     native: true }
           - { os: windows-latest,   target: x86_64-pc-windows-msvc,    pkg: win32-x64,    ext: '.exe', native: true }
