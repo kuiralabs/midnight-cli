@@ -220,17 +220,111 @@ fn read_seed_stdin() -> [u8; 32] {
     seed
 }
 
-/// Current on-chain ledger params (block-level, so ParamChange is honoured).
-fn fetch_params(http: &str) -> LedgerParameters {
-    let resp: serde_json::Value = ureq::post(http)
+/// How many times a transient indexer failure is retried before the sidecar
+/// gives up: waits of 0.5, 1, 2, 4 and 8 s, so a blip of up to about 15 s is
+/// ridden out.
+const RETRIES: u32 = 5;
+
+/// How long a reconnected stream has to send its first event before the
+/// reconnect counts as another failure.
+const RECONNECT_FIRST_EVENT_SECS: u64 = 15;
+
+/// An indexer status worth asking again: it is overloaded, restarting or
+/// behind a gateway that lost it (429, 5xx). Any other 4xx is the request's fault.
+fn is_transient_status(code: u16) -> bool {
+    code == 429 || code >= 500
+}
+
+/// The wait before retry `retry` (1-based): 0.5 s, doubling.
+fn backoff(retry: u32) -> Duration {
+    Duration::from_millis(500u64 << retry.saturating_sub(1).min(10))
+}
+
+/// Whether to try again after `failures` failures in a row.
+fn should_retry(failures: u32) -> bool {
+    failures <= RETRIES
+}
+
+/// Why a request failed: worth retrying, or not.
+#[derive(Debug, PartialEq, Eq)]
+enum Failure {
+    Transient(String),
+    Fatal(String),
+}
+
+/// A failed indexer request, by whether asking again can help: a transient
+/// status, or a connection that failed or broke (refused, reset, DNS), is.
+fn classify_ureq(e: ureq::Error) -> Failure {
+    let text = e.to_string();
+    match e {
+        ureq::Error::Status(code, _) if is_transient_status(code) => Failure::Transient(text),
+        ureq::Error::Status(..) => Failure::Fatal(text),
+        ureq::Error::Transport(t) => match t.kind() {
+            ureq::ErrorKind::Dns | ureq::ErrorKind::ConnectionFailed | ureq::ErrorKind::Io | ureq::ErrorKind::ProxyConnect => Failure::Transient(text),
+            _ => Failure::Fatal(text),
+        },
+    }
+}
+
+/// Sleeps `wait` in short slices; false as soon as `stopped` says so (ctrl-c,
+/// the run's deadline), true when the whole wait passed.
+fn wait_unless_stopped(wait: Duration, stopped: &dyn Fn() -> bool) -> bool {
+    let until = Instant::now() + wait;
+    loop {
+        if stopped() { return false; }
+        let now = Instant::now();
+        if now >= until { return true; }
+        std::thread::sleep((until - now).min(Duration::from_millis(100)));
+    }
+}
+
+/// Runs `op` until it succeeds, fails for good, or its transient failures run
+/// past RETRIES (or `wait` is stopped): the error then says how many attempts
+/// were made. A fatal failure's message is returned as it is. Each retry is
+/// announced on stderr.
+fn with_retries<T>(what: &str, wait: &dyn Fn(Duration) -> bool, mut op: impl FnMut() -> Result<T, Failure>) -> Result<T, String> {
+    let mut failures = 0;
+    loop {
+        match op() {
+            Ok(v) => return Ok(v),
+            Err(Failure::Fatal(e)) => return Err(e),
+            Err(Failure::Transient(e)) => {
+                failures += 1;
+                if !should_retry(failures) {
+                    return Err(format!("{what}: {e}; gave up after {failures} attempts"));
+                }
+                let pause = backoff(failures);
+                eprintln!("dust-sync: {}", redact_project_id(&format!("{what}: {e}; retrying in {} s (retry {failures} of {RETRIES})", pause.as_secs_f32())));
+                if !wait(pause) {
+                    return Err(format!("{what}: {e}; stopped after {failures} attempts"));
+                }
+            }
+        }
+    }
+}
+
+/// The indexer's answer to the params query, as JSON.
+fn query_params(http: &str) -> Result<serde_json::Value, Failure> {
+    let resp = ureq::post(http)
         .send_json(serde_json::json!({ "query": "{ block { ledgerParameters } }" }))
-        .unwrap_or_else(|e| die(&format!("params query: {e}")))
-        .into_json()
-        .unwrap_or_else(|e| die(&format!("params json: {e}")));
-    let hexp = resp["data"]["block"]["ledgerParameters"].as_str()
-        .unwrap_or_else(|| die("block has no ledgerParameters"));
-    let bytes = hex::decode(hexp).unwrap_or_else(|e| die(&format!("params hex: {e}")));
-    tagged_deserialize(&bytes[..]).unwrap_or_else(|e| die(&format!("deserialize params: {e}")))
+        .map_err(|e| match classify_ureq(e) {
+            Failure::Fatal(t) => Failure::Fatal(format!("params query: {t}")),
+            transient => transient,
+        })?;
+    // A body that isn't JSON is the indexer's fault; one cut off mid-read is the connection's.
+    resp.into_json().map_err(|e| match e.kind() {
+        std::io::ErrorKind::InvalidData => Failure::Fatal(format!("params json: {e}")),
+        _ => Failure::Transient(e.to_string()),
+    })
+}
+
+/// Current on-chain ledger params (block-level, so ParamChange is honoured).
+/// A transient failure of the query is retried with backoff.
+fn fetch_params(http: &str, wait: &dyn Fn(Duration) -> bool) -> Result<LedgerParameters, String> {
+    let resp = with_retries("params query", wait, || query_params(http))?;
+    let hexp = resp["data"]["block"]["ledgerParameters"].as_str().ok_or("block has no ledgerParameters")?;
+    let bytes = hex::decode(hexp).map_err(|e| format!("params hex: {e}"))?;
+    tagged_deserialize(&bytes[..]).map_err(|e| format!("deserialize params: {e}"))
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -280,7 +374,11 @@ fn caught_up_on_initial_silence(is_resume: bool, saw_event: bool) -> bool {
 }
 
 /// Background WS reader: graphql-transport-ws handshake, forwards dust events.
-fn spawn_reader(ws_url: String, start_id: i64, tx: mpsc::Sender<WsMsg>) {
+/// Each connection gets its own channel: once the run drops a connection's
+/// receiver, that reader's next send fails and it stops, so a dropped
+/// connection never feeds events into the one that replaced it.
+fn spawn_reader(ws_url: String, start_id: i64) -> mpsc::Receiver<WsMsg> {
+    let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         // The indexer requires the graphql-transport-ws subprotocol; without the
         // header it rejects the upgrade with 400 (the TS client sets it too).
@@ -321,6 +419,7 @@ fn spawn_reader(ws_url: String, start_id: i64, tx: mpsc::Sender<WsMsg>) {
             }
         }
     });
+    rx
 }
 
 fn now_ts() -> Timestamp {
@@ -391,7 +490,13 @@ fn main() {
     let my_pk = DustPublicKey::from(sk.clone());
     seed.zeroize(); // raw seed no longer needed — don't leave it in memory
 
-    let params = fetch_params(&http);
+    let interrupted = Arc::new(AtomicBool::new(false));
+    { let f = interrupted.clone(); let _ = ctrlc::set_handler(move || f.store(true, Ordering::SeqCst)); }
+    let deadline = Instant::now() + Duration::from_secs(args.timeout_secs);
+    let stopped = || interrupted.load(Ordering::SeqCst) || Instant::now() >= deadline;
+    let wait = |pause: Duration| wait_unless_stopped(pause, &stopped);
+
+    let params = fetch_params(&http, &wait).unwrap_or_else(|e| die(&e));
 
     // Resume from a prior checkpoint, or start fresh. `is_resume` records whether
     // we actually loaded cached state — it mirrors the WASM reader's `initialState`
@@ -413,19 +518,18 @@ fn main() {
             None => (DustLocalState::new(params.dust), -1, BTreeSet::new(), 0, 0),
         };
 
-    let interrupted = Arc::new(AtomicBool::new(false));
-    { let f = interrupted.clone(); let _ = ctrlc::set_handler(move || f.store(true, Ordering::SeqCst)); }
-
     let start_id = last_id + 1;
-    let (tx, rx) = mpsc::channel();
-    spawn_reader(args.indexer_ws.clone(), start_id, tx);
+    let mut rx = spawn_reader(args.indexer_ws.clone(), start_id);
+    // Stream failures in a row with no event between them, and whether the
+    // current connection is a reconnect still waiting for its first event.
+    let mut stream_failures: u32 = 0;
+    let mut reconnected = false;
 
     let mut batch: Vec<Event<Db>> = Vec::with_capacity(CHUNK);
     #[allow(unused_assignments)] // -1 is a "no events seen" sentinel; overwritten on the first event
     let mut max_id: i64 = -1;
     let mut saw_event = false;
     let mut next_mark: u64 = events_applied + CHECKPOINT_EVERY;
-    let deadline = Instant::now() + Duration::from_secs(args.timeout_secs);
     let mut partial = false;
 
     let flush = |state: &mut DustLocalState<Db>, batch: &mut Vec<Event<Db>>| {
@@ -441,10 +545,17 @@ fn main() {
         // shorter initial-silence window so a resume-at-tip (zero new events)
         // returns as fast as the WASM reader instead of idling for `idle_secs`.
         // Once events have arrived (or on a fresh sync) fall back to `idle_secs`.
-        let recv_secs = if caught_up_on_initial_silence(is_resume, saw_event) { args.initial_silence_secs } else { args.idle_secs };
+        let recv_secs = if caught_up_on_initial_silence(is_resume, saw_event) { args.initial_silence_secs }
+            else if reconnected { args.idle_secs.max(RECONNECT_FIRST_EVENT_SECS) }
+            else { args.idle_secs };
+        // A connection that failed, or a reconnect that stayed silent while the
+        // run is behind the tip: try again from the next event, with backoff.
+        let mut stream_failed = false;
         match rx.recv_timeout(Duration::from_secs(recv_secs)) {
             Ok(WsMsg::Event { id, raw, max_id: mid, protocol_version }) => {
                 saw_event = true;
+                stream_failures = 0;
+                reconnected = false;
                 let (action, next) = next_phase(phase, protocol_version, args.ledger9_from)
                     .unwrap_or_else(|e| die(&format!("event {id}: {e}")));
                 // Before the fork nothing is folded, so the first ledger-9 event
@@ -483,15 +594,30 @@ fn main() {
             //  - fresh sync, still no event → keep waiting; a cold subscription can
             //    be slow to its first event, and there's no cached tip to trust.
             Err(RecvTimeoutError::Timeout) => {
-                if saw_event { partial = true; break; }
+                if saw_event && reconnected { stream_failed = true; }
+                else if saw_event { partial = true; break; }
                 if caught_up_on_initial_silence(is_resume, saw_event) { partial = false; break; }
             }
             // Server ended the subscription cleanly: done only if we reached the tip.
             Ok(WsMsg::Complete) => { partial = complete_is_partial(last_id, max_id); break; }
-            // A connect/subscription/socket failure (or the reader thread dying) is
-            // never a clean finish — mark partial so the CLI resumes next run rather
-            // than caching an incomplete sync as complete.
-            Ok(WsMsg::Failed) | Err(RecvTimeoutError::Disconnected) => { partial = true; break; }
+            // A connect/subscription/socket failure (or the reader thread dying)
+            // is never a clean finish: reconnect, and once the retries are spent
+            // mark partial so the CLI resumes next run rather than caching an
+            // incomplete sync as complete.
+            Ok(WsMsg::Failed) | Err(RecvTimeoutError::Disconnected) => { stream_failed = true; }
+        }
+        if stream_failed {
+            stream_failures += 1;
+            if !should_retry(stream_failures) {
+                eprintln!("dust-sync: the indexer stream failed {stream_failures} times in a row; stopping at event {last_id}");
+                partial = true;
+                break;
+            }
+            let pause = backoff(stream_failures);
+            eprintln!("dust-sync: the indexer stream failed; reconnecting from event {} in {} s (retry {stream_failures} of {RETRIES})", last_id + 1, pause.as_secs_f32());
+            if !wait(pause) { partial = true; break; }
+            rx = spawn_reader(args.indexer_ws.clone(), last_id + 1);
+            reconnected = true;
         }
     }
 
@@ -703,6 +829,104 @@ mod tests {
         let json = r#"{"ledger":9,"dust_state":"00","last_applied_event_id":1,"owned_generation_indices":[],"generation_frontier":0,"balance":"0","available_coins":0,"events_applied":1,"partial":true}"#;
         let cp: Checkpoint = serde_json::from_str(json).unwrap();
         assert_eq!(resumed_phase(Some(cp.before_fork)), Phase::Ledger9);
+    }
+
+    #[test]
+    fn a_gateway_error_or_rate_limit_is_transient_and_other_4xx_are_not() {
+        for code in [429, 500, 502, 503, 504] { assert!(is_transient_status(code), "{code}"); }
+        for code in [400, 401, 403, 404, 405] { assert!(!is_transient_status(code), "{code}"); }
+    }
+
+    #[test]
+    fn backoff_doubles_from_half_a_second_over_about_15_s() {
+        let waits: Vec<Duration> = (1..=RETRIES).map(backoff).collect();
+        assert_eq!(waits, [500, 1000, 2000, 4000, 8000].map(Duration::from_millis));
+        assert_eq!(waits.iter().sum::<Duration>(), Duration::from_millis(15_500));
+    }
+
+    #[test]
+    fn a_failure_is_retried_until_the_retries_are_spent() {
+        assert!((1..=RETRIES).all(should_retry));
+        assert!(!should_retry(RETRIES + 1));
+    }
+
+    #[test]
+    fn a_502_is_transient_a_404_fatal_and_a_refused_connection_transient() {
+        let status = |code| ureq::Error::Status(code, ureq::Response::new(code, "x", "").unwrap());
+        assert!(matches!(classify_ureq(status(502)), Failure::Transient(_)));
+        assert!(matches!(classify_ureq(status(429)), Failure::Transient(_)));
+        assert!(matches!(classify_ureq(status(404)), Failure::Fatal(_)));
+        // A port nobody listens on: connection refused.
+        let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+        let refused = ureq::get(&format!("http://{closed}/")).call().unwrap_err();
+        assert!(matches!(classify_ureq(refused), Failure::Transient(_)));
+        let bad_url = ureq::get("not a url").call().unwrap_err();
+        assert!(matches!(classify_ureq(bad_url), Failure::Fatal(_)));
+    }
+
+    #[test]
+    fn retries_stop_at_the_limit_and_say_how_many_attempts_were_made() {
+        let mut attempts = 0;
+        let err = with_retries::<()>("params query", &|_| true, || { attempts += 1; Err(Failure::Transient("status code 502".into())) }).unwrap_err();
+        assert_eq!(attempts, RETRIES + 1);
+        assert_eq!(err, format!("params query: status code 502; gave up after {} attempts", RETRIES + 1));
+    }
+
+    #[test]
+    fn a_fatal_failure_is_not_retried() {
+        let mut attempts = 0;
+        let err = with_retries::<()>("params query", &|_| true, || { attempts += 1; Err(Failure::Fatal("params query: status code 405".into())) }).unwrap_err();
+        assert_eq!(attempts, 1);
+        assert_eq!(err, "params query: status code 405");
+    }
+
+    #[test]
+    fn a_stopped_wait_ends_the_retries() {
+        let mut attempts = 0;
+        let err = with_retries::<()>("params query", &|_| false, || { attempts += 1; Err(Failure::Transient("reset".into())) }).unwrap_err();
+        assert_eq!(attempts, 1);
+        assert!(err.contains("stopped after 1 attempts"), "{err}");
+        assert!(!wait_unless_stopped(Duration::from_secs(60), &|| true));
+        assert!(wait_unless_stopped(Duration::from_millis(1), &|| false));
+    }
+
+    /// An HTTP server on a local port that answers each connection with the
+    /// next of `answers` (status, body), then closes it.
+    fn http_stub(answers: Vec<(u16, String)>) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/api/v0?project_id=secret123", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for (status, body) in answers {
+                let (mut conn, _) = listener.accept().unwrap();
+                // Read the request through its JSON body, which ends `"}`.
+                let mut buf = Vec::new();
+                let mut byte = [0u8; 1];
+                while !buf.ends_with(b"\"}") && conn.read(&mut byte).unwrap_or(0) == 1 { buf.push(byte[0]); }
+                let _ = write!(conn, "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len());
+            }
+        });
+        url
+    }
+
+    // A 2 s indexer blip answered the params query with a 502 and the sidecar
+    // exited 2 at once; it now asks again and reads the params.
+    #[test]
+    fn the_params_query_rides_out_a_502() {
+        let mut buf = Vec::new();
+        tagged_serialize(&midnight_ledger::structure::INITIAL_PARAMETERS, &mut buf).unwrap();
+        let ok = format!(r#"{{"data":{{"block":{{"ledgerParameters":"{}"}}}}}}"#, hex::encode(&buf));
+        let url = http_stub(vec![(502, "cut".into()), (503, "".into()), (200, ok)]);
+        let params = fetch_params(&url, &|_| true).expect("params after two retries");
+        assert_eq!(params.dust, midnight_ledger::structure::INITIAL_PARAMETERS.dust);
+    }
+
+    #[test]
+    fn the_params_query_still_fails_at_once_on_a_404() {
+        let url = http_stub(vec![(404, "".into())]);
+        let err = fetch_params(&url, &|_| true).unwrap_err();
+        assert!(err.starts_with("params query: "), "{err}");
+        assert!(err.contains("404") && !err.contains("gave up"), "{err}");
     }
 
     // Regression: with rustls linked on both ring and aws-lc-rs, a TLS client
