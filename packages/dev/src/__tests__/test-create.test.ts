@@ -326,6 +326,8 @@ describe('writeScaffold', () => {
     // The `s` flag lets `.` match the newline between the two phrases.
     expect(() => writeScaffold(basicScaffold(), { dappDir: dir }))
       .toThrow(/already exists.*Pick a different suite name \(--suite/s);
+    // A choice the user makes again (another --suite, or --force): INVALID_ARGS, exit 2, not UNKNOWN.
+    expect(() => writeScaffold(basicScaffold(), { dappDir: dir })).toThrow(expect.objectContaining({ code: 'INVALID_ARGS', name: 'TestSuiteExistsError' }));
   });
 
   it('overwrites suite dir when --force is set', () => {

@@ -81,3 +81,14 @@ export function buildMissingWitnessError(opts: {
   }
   return lines.join('\n');
 }
+
+/** A contract declares witnesses and the dApp has no compiled witnesses module: refused before any wallet or network. */
+export class WitnessesNotFoundError extends Error {
+  readonly code = 'WITNESSES_NOT_FOUND';
+
+  constructor(projectRoot: string, witnessNames: string[]) {
+    super(buildMissingWitnessError({ projectRoot, witnessNames }));
+    this.name = 'WitnessesNotFoundError';
+    Object.setPrototypeOf(this, WitnessesNotFoundError.prototype);
+  }
+}

@@ -5,7 +5,8 @@
 import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, withCallSdkWarnings, type PayingTarget } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { networkChoiceOf, stepSpinner, type PaidCallOptions } from '@kuiralabs/midnight-wallet';
-import { receiptOf, type Receipt } from '@kuiralabs/midnight-chain';
+import type { Receipt } from '@kuiralabs/midnight-chain';
+import { reportedTransaction } from './script-transaction.ts';
 import { type ServedRunLabels, withServedWallet } from './served-wallet.ts';
 import { assertContractRunsOn, type ContractChecked } from './runtime-check.ts';
 import { type ContractCost, type ContractPriced, costRecorder, maxPriceAdjustmentOn, type PricedContract } from './cost.ts';
@@ -26,7 +27,7 @@ export interface CalledCircuit {
   readonly address: string;
   /** What the call script reports of the transaction (the SDK's status, e.g. "SucceedEntirely"). */
   readonly status: string;
-  /** The hash of the call's transaction (undefined when the script did not report one). */
+  /** The call's transaction's identifier (66 hex characters), as every command that submits gives it and `mn tx status` takes it; its hash is the receipt's. Undefined when the script reported none. */
   readonly txHash?: string;
   /** The transaction once the indexer lists it, or why it is missing; absent with no txHash. */
   readonly receipt?: Receipt;
@@ -49,7 +50,7 @@ export async function callContract(host: Host, options: CallContractOptions): Pr
   return withCallScript(host, options, { running: `Calling ${circuit}...`, done: `${circuit} called`, failed: 'Call failed', paying: callPayment(options.request) }, async (call, target, cost) => {
     const { runCall } = await import('./runner.ts');
     const result = await runCall(call);
-    const receipt = result.txHash === undefined ? undefined : await receiptOf(target.networkConfig.indexer, result.txHash, options.signal);
+    const transaction = await reportedTransaction(result, target.networkConfig.indexer, options.signal);
     const priced = cost();
     return {
       network: target.network,
@@ -57,7 +58,7 @@ export async function callContract(host: Host, options: CallContractOptions): Pr
       circuit,
       address,
       status: result.status,
-      ...(result.txHash === undefined ? {} : { txHash: result.txHash, receipt }),
+      ...transaction,
       ...(priced === undefined ? {} : { cost: priced }),
       ...(result.heldCoins === undefined || result.heldCoins.length === 0 ? {} : { heldCoins: result.heldCoins }),
     };

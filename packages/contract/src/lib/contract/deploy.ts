@@ -5,7 +5,8 @@
 import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, withCallSdkWarnings, type PayingTarget } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { networkChoiceOf, stepSpinner, type PaidCallOptions } from '@kuiralabs/midnight-wallet';
-import { receiptOf, type Receipt } from '@kuiralabs/midnight-chain';
+import type { Receipt } from '@kuiralabs/midnight-chain';
+import { reportedTransaction } from './script-transaction.ts';
 import { type ServedRunLabels, withServedWallet } from './served-wallet.ts';
 import { assertContractRunsOn, type ContractChecked } from './runtime-check.ts';
 import { type ContractCost, type ContractPriced, costRecorder, maxPriceAdjustmentOn, type PricedContract } from './cost.ts';
@@ -23,7 +24,7 @@ export interface DeployedContract {
   readonly contractName: string;
   /** The contract's address on the network, 64 hex characters. */
   readonly address: string;
-  /** The hash of the deploy's transaction (undefined when the script did not report one). */
+  /** The deploy's transaction's identifier (66 hex characters), as every command that submits gives it and `mn tx status` takes it; its hash is the receipt's. Undefined when the script reported none. */
   readonly txHash?: string;
   /** The transaction once the indexer lists it, or why it is missing; absent with no txHash. */
   readonly receipt?: Receipt;
@@ -43,13 +44,13 @@ export async function deployContract(host: Host, options: DeployContractOptions)
   return withDeployScript(host, options, { running: 'Deploying contract...', done: 'Contract deployed', failed: 'Deploy failed', paying: `deploying ${options.request.info.name}` }, async (deploy, target, cost) => {
     const { runDeploy } = await import('./runner.ts');
     const result = await runDeploy(deploy);
-    const receipt = result.txHash === undefined ? undefined : await receiptOf(target.networkConfig.indexer, result.txHash, options.signal);
+    const transaction = await reportedTransaction(result, target.networkConfig.indexer, options.signal);
     const priced = cost();
     return {
       network: target.network,
       contractName: options.request.info.name,
       address: result.contractAddress,
-      ...(result.txHash === undefined ? {} : { txHash: result.txHash, receipt }),
+      ...transaction,
       ...(priced === undefined ? {} : { cost: priced }),
     };
   });

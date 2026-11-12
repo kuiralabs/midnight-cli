@@ -9,6 +9,8 @@ import { assertEndpointsReachable, endpointsOf } from '@kuiralabs/midnight-chain
 import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
 import { approveAllBrowserWarning, serveHeaderLines } from '../lib/serve-header.ts';
 import { parseAllowedOrigins } from '../lib/allowed-origins.ts';
+import { isPortInUse } from '../lib/serve-manager.ts';
+import { ServeNotReusableError } from '../lib/serve-on-port.ts';
 
 export default async function serveCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   rejectNoCacheForWrites(args);
@@ -38,6 +40,10 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
   // --approve-fees, so --no-auto-approve-reads (which made balancing prompt
   // before that was the default) has nothing left to do.
   const autoApproveReads = true;
+
+  // A port another process holds is refused before the wallet loads and syncs:
+  // the bind comes after the sync, minutes later on a hosted network.
+  if (await isPortInUse(port)) throw new ServeNotReusableError(port, portInUseReason(port));
   const noAutoApproveReadsGiven = hasFlag(args, 'no-auto-approve-reads');
   const jsonMode = hasFlag(args, 'json');
 
@@ -225,12 +231,9 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
     try {
       await server.ready;
     } catch (err) {
-      const code = (err as { code?: string }).code;
-      throw new Error(
-        code === 'EADDRINUSE'
-          ? `Port ${port} is already in use (another mn serve?). Stop it or pass --port <n>.`
-          : `Could not listen on port ${port}: ${(err as Error).message}`,
-      );
+      // Taken while the wallet synced.
+      if ((err as { code?: string }).code === 'EADDRINUSE') throw new ServeNotReusableError(port, portInUseReason(port));
+      throw new Error(`Could not listen on port ${port}: ${(err as Error).message}`);
     }
 
     ctx.output.stderr('\n' + divider() + '\n');
@@ -300,4 +303,9 @@ function pad2(n: number): string {
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/** Why a standalone serve can't use `port`: it is taken, and serve listens on the one port it is given. */
+function portInUseReason(port: number): string {
+  return `Port ${port} is already in use (another mn serve?), and mn serve listens on the port it is given (pass --port <n> for another).`;
 }

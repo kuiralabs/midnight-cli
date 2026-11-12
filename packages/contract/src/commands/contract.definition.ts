@@ -205,7 +205,7 @@ export const contractDefinition: CommandDefinition = {
       contractName: 'Contract name (deploy, call)',
       address: 'Contract address (deploy, call, state)',
       network: 'Network (deploy, call, state)',
-      txHash: 'Hash of the deploy\'s or call\'s transaction (deploy, call)',
+      txHash: 'Identifier of the deploy\'s or call\'s transaction, 66 hex characters, as `midnight tx status` takes it; its hash is receipt.hash (deploy, call)',
       receipt: 'The transaction once the indexer lists it: block, time, fee, result; null with receiptMissing saying why (deploy, call)',
       circuit: 'Circuit called (call)',
       status: 'What the call reported (call)',
@@ -225,7 +225,7 @@ export const contractDefinition: CommandDefinition = {
   intro: { brief: 'Inspect, deploy, call contracts', order: 10 },
   needsWalletSdk: true,
   shell: { payer: true },
-  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', RUNS_CONTRACTS, 'NO_PAYER'] },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', RUNS_CONTRACTS, 'WITNESSES_NOT_FOUND', 'CONTRACT_NOT_FOUND', 'NO_PAYER'] },
   load: () => import('./contract.ts'),
   mcp: {
     tools: [

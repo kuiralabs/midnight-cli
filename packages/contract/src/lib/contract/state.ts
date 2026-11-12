@@ -9,6 +9,17 @@ import { assertEndpointsReachable, endpointsOf } from '@kuiralabs/midnight-chain
 import { findContractInfo } from './inspect.ts';
 import { validateContractAddress } from './validate.ts';
 
+/** No contract is deployed at the address on the network. */
+export class ContractNotFoundError extends Error {
+  readonly code = 'CONTRACT_NOT_FOUND';
+
+  constructor(address: string, network: NetworkName) {
+    super(`No contract found at address ${address} on ${network}: check the address and the network (a local chain that was reset holds none of its earlier contracts).`);
+    this.name = 'ContractNotFoundError';
+    Object.setPrototypeOf(this, ContractNotFoundError.prototype);
+  }
+}
+
 /** The address is one and the network is known: the state is read next. */
 export interface StateReading {
   readonly kind: 'state-reading';
@@ -98,6 +109,6 @@ export async function readContractState(host: Host, options: ReadContractStateOp
 
   // The engine's query takes no signal: the call stops waiting for it when cancelled.
   const raw = await untilCancelled((await host.engines.for(network)).contracts.rawState(networkConfig, address), signal);
-  if (!raw) throw new Error(`No contract found at address ${address} on ${network}`);
+  if (!raw) throw new ContractNotFoundError(address, network);
   return { kind: 'raw', network, address, raw };
 }

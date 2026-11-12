@@ -131,7 +131,7 @@ Compile with Compact 0.36 (language 0.28): mn bundles compact-runtime
 
   # Deploy contract (from dApp root directory)
   midnight contract deploy --json
-  # → {"subcommand":"deploy","contractName":"bboard","address":"6cc5...","network":"undeployed","txHash":"e432...","receipt":{...},"cost":{...}}
+  # → {"subcommand":"deploy","contractName":"bboard","address":"6cc5...","network":"undeployed","txHash":"00e4...","receipt":{...},"cost":{...}}
 
   # What a deploy costs, without deploying
   midnight contract deploy --dry-run --json

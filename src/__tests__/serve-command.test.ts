@@ -34,3 +34,20 @@ describe('serve --max-fee / --max-pending', () => {
     expect(err.message).toMatch(message);
   });
 });
+
+describe('serve on a port another process holds', () => {
+  it('refuses with SERVE_PORT_IN_USE, naming the port and how to find its process, before any wallet loads or syncs', async () => {
+    const { createServer } = await import('node:net');
+    const taken = createServer();
+    await new Promise<void>((resolve) => taken.listen(0, '127.0.0.1', resolve));
+    const port = (taken.address() as { port: number }).port;
+    try {
+      const err = await cliCall(serveCommand, parseArgs(['serve', '--port', String(port), '--wallet', '/nonexistent/wallet.json'])).catch((e: unknown) => e);
+      expect(err).toMatchObject({ code: 'SERVE_PORT_IN_USE', message: expect.stringContaining(`Port ${port} is already in use`) });
+      expect((err as Error).message).toContain(`${port}`);
+      expect((err as Error).message).toMatch(/--port/);
+    } finally {
+      await new Promise<void>((resolve) => taken.close(() => resolve()));
+    }
+  });
+});

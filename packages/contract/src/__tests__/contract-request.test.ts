@@ -83,6 +83,25 @@ describe('resolveContractDeployRequest', () => {
     writeFileSync(join(dir, 'dist', 'witnesses.js'), 'export const witnesses = {};\n');
     expect(deploy().info.name).toBe('owned');
   });
+
+  it('refuses the missing witnesses.js with its own code, on a deploy and on a call, before any wallet', () => {
+    rmSync(join(dir, 'managed'), { recursive: true });
+    compiledContract('owned', [{ name: 'secret_key' }]);
+    expect(() => deploy()).toThrow(expect.objectContaining({ code: 'WITNESSES_NOT_FOUND', name: 'WitnessesNotFoundError' }));
+    expect(() => call('--address', ADDRESS, '--circuit', 'increment')).toThrow(expect.objectContaining({ code: 'WITNESSES_NOT_FOUND' }));
+  });
+
+  it('refuses a count of constructor arguments the constructor doesn\'t take, naming its parameters, as a call\'s count is', () => {
+    // The compiler's declaration of the contract names the constructor's parameters after the context.
+    mkdirSync(join(dir, 'managed', 'counter', 'contract'), { recursive: true });
+    writeFileSync(join(dir, 'managed', 'counter', 'contract', 'index.d.ts'),
+      'export declare class Contract<PS = any, W extends Witnesses<PS> = Witnesses<PS>> {\n'
+      + '  initialState(context: __compactRuntime.ConstructorContext<PS>, start_0: bigint, owner_0: { bytes: Uint8Array }): Promise<__compactRuntime.ConstructorResult<PS>>;\n}\n');
+    expect(() => deploy()).toThrow(UsageError);
+    expect(() => deploy()).toThrow("counter's constructor takes 2 arguments (start, owner); 0 were given.");
+    expect(() => deploy('--args', '[7]')).toThrow("counter's constructor takes 2 arguments (start, owner); 1 was given.");
+    expect(deploy('--args', '[7, {"bytes": [1]}]').constructorArgs).toHaveLength(2);
+  });
 });
 
 describe('the plain builders', () => {

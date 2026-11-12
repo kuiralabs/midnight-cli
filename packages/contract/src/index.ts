@@ -30,7 +30,8 @@ export {
 } from './lib/contract/runner.ts';
 export { type ContractChecked } from './lib/contract/runtime-check.ts';
 export {
-  type ContractState, type ParsedContractState, type RawContractState, readContractState, type ReadContractStateOptions,
+  ContractNotFoundError, type ContractState, type ParsedContractState, type RawContractState, readContractState, type ReadContractStateOptions,
   type StateFallback, type StateReading
 } from './lib/contract/state.ts';
-export { buildMissingWitnessError, findWitnessFile } from './lib/contract/witness-discovery.ts';
+export { buildMissingWitnessError, findWitnessFile, WitnessesNotFoundError } from './lib/contract/witness-discovery.ts';
+export { ContractArgumentError } from './lib/contract/argument-error.ts';

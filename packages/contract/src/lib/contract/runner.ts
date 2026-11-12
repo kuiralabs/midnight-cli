@@ -25,6 +25,9 @@ import { HELD_COINS_KEY, heldCoinArgumentsOf, type HeldCoin } from './held-coins
 import { redactArgumentValues } from './redact-arguments.ts';
 import { callPrivateStateOptions } from './call-private-state.ts';
 import { CONTRACT_ASSERTION_FAILED, failedAssertionOf, namingFailedAssertion } from './assertion.ts';
+import { invalidArgumentOf, namingInvalidArgument } from './argument-error.ts';
+import { constructorParametersOf } from './constructor-parameters.ts';
+import { namingProofServer, PROVING_FAILURE_FN, provingFailureFromWire, type ProvingFailure } from './proving-failure.ts';
 
 // The generated deploy/call script imports SDK packages by bare specifier
 // (`@midnight-ntwrk/midnight-js-contracts`, `ws`, etc.); without help, Node
@@ -181,7 +184,8 @@ export async function runState(options: StateOptions): Promise<StateResult> {
 async function executeDeployScript(options: DeployOptions, extraEnv: Record<string, string>): Promise<{ stdout: string; staging: string }> {
   // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
   throwIfCancelled(options.signal);
-  await assertContractRunsOn(findContractInfo(options.managedDir).info, options.network, options.root, options.engines);
+  const info = findContractInfo(options.managedDir).info;
+  await assertContractRunsOn(info, options.network, options.root, options.engines);
   const engine = await options.engines.load(sdkSetOf(options.network, options.root));
   const scripts = { ...engine.contracts.scripts, set: engine.set };
   const script = scripts.deploy(options, SCRIPT_PARTS);
@@ -195,7 +199,7 @@ async function executeDeployScript(options: DeployOptions, extraEnv: Record<stri
     return { stdout, staging };
   } catch (err) {
     keepFailedDeployState(staging, notice);
-    throw namingFailedAssertion(err, options.contractName, undefined);
+    throw namingInvalidArgument(namingFailedAssertion(await namingProofServer(err, options.networkConfig.proofServer, options.signal), options.contractName, undefined), info, undefined, constructorParametersOf(info.managedDir) ?? []);
   }
 }
 
@@ -277,7 +281,7 @@ async function executeCallScript(options: CallOptions, extraEnv: Record<string, 
   try {
     return await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, onPriced: options.onPriced, env, signal: options.signal, args: { dir: contractArgsDir(options.root), values: options.args ?? [] } });
   } catch (err) {
-    throw namingFailedAssertion(namingUnreadableState(err, options.contractAddress), options.contractName, options.circuit);
+    throw namingInvalidArgument(namingFailedAssertion(namingUnreadableState(await namingProofServer(err, options.networkConfig.proofServer, options.signal), options.contractAddress), options.contractName, options.circuit), info, options.circuit, []);
   } finally {
     release();
   }
@@ -421,6 +425,9 @@ const CALL_PRIVATE_STATE_FN = `\nconst callPrivateStateOptions = (${callPrivateS
 // failedAssertionOf serialized for the generated script, the same way: an
 // assert the circuit or constructor failed is reported with its own text.
 const FAILED_ASSERTION_FN = `\nconst failedAssertionOf = (${failedAssertionOf.toString()});\n`;
+// invalidArgumentOf serialized for the generated script, the same way: an
+// argument the contract refused is reported as INVALID_ARGS, counted as given.
+const INVALID_ARGUMENT_FN = `\nconst invalidArgumentOf = (${invalidArgumentOf.toString()});\n`;
 
 /** The code a script reports a contract state the ledger can't decode with: the runner names the contract (ContractStateUnreadableError). */
 const CONTRACT_STATE_UNREADABLE = 'CONTRACT_STATE_UNREADABLE';
@@ -444,7 +451,7 @@ const CONTRACT_STATE_UNREADABLE = 'CONTRACT_STATE_UNREADABLE';
  * compact runtime quotes in its type error (an argument's) is left out
  * (redactArgumentValues).
  */
-export const SCRIPT_PRELUDE = `${TRANSPORT_FAILURE_FN}${STATE_DECODE_FAILURE_FN}${REDACT_ARGUMENTS_FN}${FAILED_ASSERTION_FN}
+export const SCRIPT_PRELUDE = `${TRANSPORT_FAILURE_FN}${STATE_DECODE_FAILURE_FN}${REDACT_ARGUMENTS_FN}${FAILED_ASSERTION_FN}${INVALID_ARGUMENT_FN}${PROVING_FAILURE_FN}
 const SERVE_BACKED_PROVIDER_METHODS = ['balanceTx', 'submitTx'];
 const fail = (e) => {
   const refusal = globalThis.mnServeRefusal;
@@ -453,9 +460,12 @@ const fail = (e) => {
   if (unreadable !== undefined) e = Object.assign(new Error(unreadable), { code: '${CONTRACT_STATE_UNREADABLE}' });
   const assertion = failedAssertionOf(e);
   if (assertion !== undefined) e = Object.assign(new Error(assertion), { code: '${CONTRACT_ASSERTION_FAILED}' });
+  const refusedArgument = invalidArgumentOf(e);
+  if (refusedArgument !== undefined) e = Object.assign(new Error(refusedArgument), { code: 'INVALID_ARGS' });
   const carried = typeof e?.code === 'string' && !isTransportFailure({ code: e.code }) ? e.code : undefined;
   const code = carried ?? (isTransportFailure(e) ? 'NETWORK_ERROR' : undefined);
-  const failure = { message: redactArgumentValues(String(e?.message ?? e)), ...(code === undefined ? {} : { code }) };
+  const proving = provingFailureOf(e);
+  const failure = { message: redactArgumentValues(String(e?.message ?? e)), ...(code === undefined ? {} : { code }), ...(proving === undefined ? {} : { proving }) };
   process.stderr.write('\\n${SCRIPT_ERROR_MARKER} ' + JSON.stringify(failure) + '\\n');
   process.exit(1);
 };
@@ -463,10 +473,11 @@ process.on('uncaughtException', fail);
 process.on('unhandledRejection', fail);
 `;
 
-/** What a generated script reported failing with: its message, and the code the failure carried. */
+/** What a generated script reported failing with: its message, the code the failure carried, and for a failed proof what midnight-js said of it. */
 export interface ScriptFailure {
   message: string;
   code?: string;
+  proving?: ProvingFailure;
 }
 
 /** The failure a generated script reported (a script of an older mn reported its message alone), or its whole stderr when it reported none. */
@@ -476,8 +487,9 @@ export function scriptFailureOf(stderr: string, exitCode: number | null): Script
     let reported: unknown;
     try { reported = JSON.parse(marked[1]!); } catch { return { message: marked[1]! }; }
     if (typeof reported === 'string') return { message: reported };
-    const { message, code } = (reported ?? {}) as { message?: unknown; code?: unknown };
-    return { message: typeof message === 'string' ? message : marked[1]!, ...(typeof code === 'string' ? { code } : {}) };
+    const { message, code, proving } = (reported ?? {}) as { message?: unknown; code?: unknown; proving?: unknown };
+    const proved = provingFailureFromWire(proving);
+    return { message: typeof message === 'string' ? message : marked[1]!, ...(typeof code === 'string' ? { code } : {}), ...(proved === undefined ? {} : { proving: proved }) };
   }
   return { message: stderr.trim() || `Script exited with code ${exitCode}` };
 }
@@ -503,10 +515,13 @@ export function scriptFailureMessage(stderr: string, exitCode: number | null): s
 /** A generated script failed: its message, and the code its failure carried across the process (undefined when it carried none). */
 export class ContractScriptError extends Error {
   readonly code: string | undefined;
+  /** For a failed proof: the circuit midnight-js named, and what its proof provider said (already redacted by midnight-js). */
+  readonly proving: ProvingFailure | undefined;
 
-  constructor({ message, code }: ScriptFailure) {
+  constructor({ message, code, proving }: ScriptFailure) {
     super(message);
     this.code = code;
+    this.proving = proving;
     this.name = 'ContractScriptError';
     Object.setPrototypeOf(this, ContractScriptError.prototype);
   }

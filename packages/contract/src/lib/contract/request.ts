@@ -7,7 +7,8 @@
 import { resolve } from 'node:path';
 import { type ParsedArgs, getFlag, requireFlag, UsageError } from '@kuiralabs/midnight-cli-core';
 import { findContractInfo, type ContractInfo } from './inspect.ts';
-import { findWitnessFile, buildMissingWitnessError } from './witness-discovery.ts';
+import { findWitnessFile, WitnessesNotFoundError } from './witness-discovery.ts';
+import { constructorParametersOf } from './constructor-parameters.ts';
 import { validateCallRequest, validateContractAddress } from './validate.ts';
 import { LEGACY_SECRET_KEY } from './private-state-secret.ts';
 import { type ArgsSource, readGivenArgs, type StdinReader } from './args-input.ts';
@@ -62,12 +63,17 @@ export function contractDeployRequest(location: ContractLocation & { args?: unkn
   const { dappDir } = location;
   const { info } = findContractInfo(location.managedDir ?? dappDir, location.name);
 
-  // A contract that declares witnesses needs its compiled witnesses.js: without
-  // it the SDK fails mid-deploy, after a long wait, with "first (witnesses)
-  // argument does not contain a function-valued field named X".
-  const declaredWitnesses = info.witnesses.map((w) => w.name);
-  if (declaredWitnesses.length > 0 && !findWitnessFile(dappDir)) {
-    throw new Error(buildMissingWitnessError({ projectRoot: dappDir, witnessNames: declaredWitnesses }));
+  assertWitnessesFound(info, dappDir);
+
+  // As a call's count is checked against its circuit's arguments: the runtime's
+  // own count includes midnight-js's context, and comes only after the wallet syncs.
+  const given = location.args ?? [];
+  const parameters = constructorParametersOf(info.managedDir);
+  if (parameters !== undefined && given.length !== parameters.length) {
+    const takes = parameters.length;
+    throw new UsageError(
+      `${info.name}'s constructor takes ${takes} argument${takes === 1 ? '' : 's'}${takes > 0 ? ` (${parameters.join(', ')})` : ''}; ${given.length} ${given.length === 1 ? 'was' : 'were'} given.`,
+    );
   }
 
   // For a contract whose constructor derives its owner from a witness
@@ -79,7 +85,7 @@ export function contractDeployRequest(location: ContractLocation & { args?: unkn
   assertSecretKey(privateStateSecretKey, false);
 
   // A constructor's argument types aren't in contract-info.json: a fresh-coin shorthand is refused there.
-  const { args: constructorArgs } = expandCoinShorthands(location.args ?? [], undefined);
+  const { args: constructorArgs } = expandCoinShorthands(given, undefined);
   return { dappDir, info, constructorArgs, privateStateSecretKey };
 }
 
@@ -95,6 +101,7 @@ export function contractCallRequest(location: ContractLocation & { address: stri
   validateContractAddress(address);
   validateCallRequest(info, circuit, given);
   assertSecretKey(location.secretKey, true);
+  assertWitnessesFound(info, dappDir);
   const called = info.circuits.find((c) => c.name === circuit)!;
   const { args: callArgs, freshCoins } = expandCoinShorthands(given, called.arguments);
   const privateArguments = called.arguments.length === 0 ? [] : privateArgumentsOf(info.managedDir, called);
@@ -103,6 +110,16 @@ export function contractCallRequest(location: ContractLocation & { address: stri
     ...(privateArguments === undefined ? {} : { privateArguments }),
     ...(location.secretKey === undefined ? {} : { privateStateSecretKey: location.secretKey }),
   };
+}
+
+/**
+ * A contract that declares witnesses needs its compiled witnesses.js: without
+ * it the SDK fails mid-run, after the wallet synced, with "first (witnesses)
+ * argument does not contain a function-valued field named X".
+ */
+function assertWitnessesFound(info: ContractInfo, dappDir: string): void {
+  const declared = info.witnesses.map((w) => w.name);
+  if (declared.length > 0 && !findWitnessFile(dappDir)) throw new WitnessesNotFoundError(dappDir, declared);
 }
 
 /** Refuses a --secret-key that is not 32 bytes of hex (or, where `legacyAllowed`, `legacy`). */

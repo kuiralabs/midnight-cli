@@ -173,7 +173,7 @@ describe('readContractState', () => {
     const empty = path.join(home, 'empty');
     fs.mkdirSync(empty);
     await expect(readContractState(host, { ...at(), dappDir: empty, address: ADDRESS, onProgress: (event) => said.push(event) }))
-      .rejects.toThrow(`No contract found at address ${ADDRESS} on undeployed`);
+      .rejects.toMatchObject({ code: 'CONTRACT_NOT_FOUND', message: expect.stringContaining(`No contract found at address ${ADDRESS} on undeployed`) });
     expect(said).toEqual([
       { kind: 'state-reading', network: 'undeployed' },
       { kind: 'start', message: 'Querying contract state...' },

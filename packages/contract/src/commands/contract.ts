@@ -238,7 +238,7 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
   } else {
     ctx.output.stderr('\n');
     ctx.output.stderr(keyValue('Address', deployed.address) + '\n');
-    if (deployed.txHash !== undefined) ctx.output.stderr(keyValue('Tx hash', deployed.txHash) + '\n');
+    if (deployed.txHash !== undefined) ctx.output.stderr(keyValue('Transaction', deployed.txHash) + '\n');
     ctx.output.stderr('\n' + green('  ✓ Deploy successful') + '\n');
     writeNextStepsHint(ctx.output, deployed.address, info.circuits, deployed.network);
     // Pipeable address on stdout for shell composition (e.g. `addr=$(mn contract deploy)`).
@@ -324,7 +324,7 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
       ...(called.heldCoins === undefined ? {} : { heldCoins: called.heldCoins }),
     });
   } else {
-    if (called.txHash !== undefined) ctx.output.stderr('\n' + keyValue('Tx hash', called.txHash) + '\n');
+    if (called.txHash !== undefined) ctx.output.stderr('\n' + keyValue('Transaction', called.txHash) + '\n');
     for (const line of coinLines(request.freshCoins, called.heldCoins)) ctx.output.stderr(line + '\n');
     ctx.output.stderr('\n' + green('  ✓ Circuit call successful') + '\n\n');
   }

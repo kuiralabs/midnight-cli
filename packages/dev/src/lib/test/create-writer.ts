@@ -5,6 +5,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { UsageError } from '@kuiralabs/midnight-cli-core';
 
 import type { ScaffoldOutput } from './create.ts';
 import type { DappTestConfig } from './types.ts';
@@ -21,6 +22,15 @@ export interface WriteResult {
   written: string[];
   /** dapp.test.json paths we left as-is because the existing file was compatible. */
   preserved: string[];
+}
+
+/** A suite of that name is there already, and --force wasn't given: refused before anything is written, as INVALID_ARGS (pick another --suite, or --force). */
+export class TestSuiteExistsError extends UsageError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TestSuiteExistsError';
+    Object.setPrototypeOf(this, TestSuiteExistsError.prototype);
+  }
 }
 
 /**
@@ -72,7 +82,7 @@ export function writeScaffold(scaffold: ScaffoldOutput, options: WriteOptions): 
   if (!force) {
     const existingSuiteFiles = suiteTargets.filter((t) => existsSync(t.path)).map((t) => t.path);
     if (existingSuiteFiles.length > 0) {
-      throw new Error(
+      throw new TestSuiteExistsError(
         `Suite "${scaffold.suiteName}" already exists at ${suiteDir}.\n` +
         `Pick a different suite name (--suite <name>) or pass --force to overwrite.\n` +
         `Existing files:\n` +

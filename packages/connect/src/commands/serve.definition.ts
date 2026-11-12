@@ -143,6 +143,6 @@ export const serveDefinition: CommandDefinition = {
   intro: { brief: 'DApp Connector server', order: 16 },
   needsWalletSdk: true,
   shell: {},
-  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND'] },
+  errors: { codes: [RESOLVES_NETWORK, OPENS_WALLET, LOADS_ENGINE, ENGINE_SYNC, PAYS, READS_OFFERS, READS_CHAIN, 'CHAIN_CLOCK_BEHIND', 'SERVE_PORT_IN_USE'] },
   load: () => import('./serve.ts'),
 };
