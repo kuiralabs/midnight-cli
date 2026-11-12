@@ -46,6 +46,20 @@ export interface GrantLimits {
   expiresIn?: string;
 }
 
+/**
+ * The limits given fit together as the account contract's issue rules want
+ * them: no payment above the grant's cap, and a whole payment from one coin.
+ * A limit not given is mn's default, checked where the terms are made.
+ */
+function assertLimitsFit({ cap, perCall, maxCoin }: GrantLimits): void {
+  if (cap !== undefined && perCall !== undefined && BigInt(perCall) > BigInt(cap)) {
+    throw new UsageError(`--per-call (${perCall}) is above --cap (${cap}): one payment can be no more than the grant pays in all`);
+  }
+  if (perCall !== undefined && maxCoin !== undefined && BigInt(maxCoin) < BigInt(perCall)) {
+    throw new UsageError(`--max-coin (${maxCoin}) is below --per-call (${perCall}): the agent could not pay a whole payment from one coin`);
+  }
+}
+
 const LIMIT_FLAGS = [['cap', 'cap'], ['per-call', 'perCall'], ['max-coin', 'maxCoin'], ['expires-in', 'expiresIn']] as const;
 
 export const GRANT_USAGE =
@@ -140,8 +154,10 @@ export function resolveGrantRequest(args: ParsedArgs): GrantRequest {
         if (value === undefined) continue;
         if (!/^\d+$/.test(value)) throw new UsageError(`--${flag} must be a whole number; got "${value}"`);
         if (flag === 'expires-in' && BigInt(value) === 0n) throw new UsageError('--expires-in must be at least 1 second');
+        if (flag !== 'expires-in' && BigInt(value) === 0n) throw new UsageError(`--${flag} must be at least 1: a grant with a ${flag === 'per-call' ? 'per-call cap' : flag} of 0 could never pay`);
         limits[field] = value;
       }
+      assertLimitsFit(limits);
       return { subcommand, link, limits, confirmed: hasFlag(args, 'yes') };
     }
     case 'device': {

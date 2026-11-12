@@ -9,7 +9,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { type GrantRequest, grantRequestFromLink, sealedResponseLink } from '@kuiralabs/midnight-account';
-import type { OwnerView, Session } from '@kuiralabs/midnight-account-chain/owner';
+import type { OwnerView, Roster, Session } from '@kuiralabs/midnight-account-chain/owner';
 import { UsageError } from '@kuiralabs/midnight-cli-core';
 import type { AccountChain } from './account-chain.ts';
 import type { GrantLimits as RequestedLimits } from './request.ts';
@@ -87,10 +87,26 @@ export function grantsOf(view: OwnerView, now: Date, chain: AccountChain): Owner
       `${row.grantId} slot ${row.slot ?? '?'}: ${row.active ? (row.expired ? 'expired' : 'live') : 'revoked'} (${row.roster}), `
       + `${row.nonce} spend(s), per-call ${row.perCallCap}, cap ${row.cap}${row.read ? ', read' : ''}${row.exhausted ? ', spent to its cap' : ''}`,
   );
+  const halfIssued = rows.filter((row) => row.roster === 'issuing' && row.active).length;
+  if (halfIssued > 0) lines.push(`${halfIssued} grant(s) are half issued (issuing): live on chain, their view not yet sealed to the agent. ${HALF_ISSUED_FINISH}`);
   if (exhausted.size > 0) {
     lines.push(`${exhausted.size} live grant(s) are spent to their cap: they can never pay again, yet every rotation re-seals to them.`);
   }
   return { result: { grants: rows }, lines };
+}
+
+/** How a half-issued grant is finished. */
+const HALF_ISSUED_FINISH = 'Run the same `midnight grant issue <request link> --yes` again: it finishes the grant (seals its view to the agent) without issuing it twice.';
+
+/**
+ * What a failed issue says when it left a grant half issued: the roster holds
+ * a grant still `issuing` (its issue step may have landed, its seal to the
+ * agent didn't). Undefined when it holds none.
+ */
+export function halfIssuedNote(roster: Roster): string | undefined {
+  const issuing = roster.entries.filter((entry) => entry.status === 'issuing');
+  if (issuing.length === 0) return undefined;
+  return `The grant may be half issued: ${issuing.map((entry) => entry.grantId).join(', ')} is still "issuing" in this account's roster (midnight grant list shows it, live once its issue step landed). ${HALF_ISSUED_FINISH}`;
 }
 
 /** A grant request read from its link; a link that isn't one is a usage error. */
@@ -122,9 +138,30 @@ function callerTerm(caller: Uint8Array | undefined): string {
   return `via contract ${hexOf(caller)} only: the agent spends only when that contract calls the account, and that call is public on chain`;
 }
 
+/** A limit as the person set it, or mn's default for it: "300000 (mn's default)". */
+function limitText(value: bigint, given: string | undefined): string {
+  return given === undefined ? `${value} (mn's default)` : String(value);
+}
+
+/**
+ * Refuses limits that together can't make a grant, mn's defaults counted for
+ * those not given (a lone --cap below the default per-call): the account
+ * package would refuse them only after the wallet is open.
+ */
+function assertLimitsUsable(limits: ReturnType<typeof limitsOf>, requested: RequestedLimits): void {
+  if (limits.perCallCap > limits.cap) {
+    throw new UsageError(`--per-call ${limitText(limits.perCallCap, requested.perCall)} is above --cap ${limitText(limits.cap, requested.cap)}: one payment can be no more than the grant pays in all. Set --per-call to at most the cap.`);
+  }
+  if (limits.maxCoinValue < limits.perCallCap) {
+    throw new UsageError(`--max-coin ${limitText(limits.maxCoinValue, requested.maxCoin)} is below --per-call ${limitText(limits.perCallCap, requested.perCall)}: the agent could not pay a whole payment from one coin. Set --max-coin to at least the per-call cap.`);
+  }
+}
+
 /** What an issue would grant, before anything is signed: the terms a person confirms. */
 export function issueTerms(request: GrantRequest, requested: RequestedLimits, now: Date, chain: AccountChain) {
-  const terms = chain.owner.termsFor(request, limitsOf(requested, chain), now);
+  const limits = limitsOf(requested, chain);
+  assertLimitsUsable(limits, requested);
+  const terms = chain.owner.termsFor(request, limits, now);
   const asked = {
     account: request.account,
     clientId: request.clientId,

@@ -16,7 +16,8 @@ import { accountChainFor } from '../lib/grant/account-chain.ts';
 import { type GrantAccount, openGrantAccount, ownerDeviceOf } from '../lib/grant/account.ts';
 import { accountKeysFailureOf } from '../lib/grant/account-keys.ts';
 import { deployShortOfDustNote } from '../lib/grant/deploy-cost.ts';
-import { type OwnerCommandOutput, grantRequestOf, grantsOf, issue, issuePreview, revoke, revokeAll, statusOf } from '../lib/grant/owner-commands.ts';
+import { type OwnerCommandOutput, grantRequestOf, grantsOf, halfIssuedNote, issue, issuePreview, revoke, revokeAll, statusOf } from '../lib/grant/owner-commands.ts';
+import { explainProofFailure } from '@kuiralabs/midnight-chain';
 import { prepareGrant } from '../lib/grant/prepare.ts';
 import { type GrantRequest, paysAFee } from '../lib/grant/request.ts';
 import { type PayingWallet, openPayingWallet } from '../lib/grant/fee-wallet.ts';
@@ -206,7 +207,8 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
           // NIGHT is the package's default color; another token's color is its raw type's 32 bytes.
           return token === undefined ? depositShielded(connection, value) : depositShielded(connection, value, new Uint8Array(Buffer.from(token, 'hex')));
         });
-        const outcome = { address: account.address, value: request.value, ...(token === undefined ? {} : { token }), txHash: result.public.txHash, blockHeight: Number(result.public.blockHeight) };
+        // txHash is the transaction's identifier, as every other command gives it and `midnight tx status` takes it.
+        const outcome = { address: account.address, value: request.value, ...(token === undefined ? {} : { token }), txHash: result.public.txId, blockHeight: Number(result.public.blockHeight) };
         spinner.stop('Deposited');
         if (jsonMode) {
           ctx.output.result({ ...common, amount: request.amount, ...outcome });
@@ -321,7 +323,14 @@ async function runOwned(request: GrantRequest, { target, walletName, recordsDir,
     // A proving key of the account contract it couldn't fetch: named, with the build's.
     const keys = accountKeysFailureOf(err, owned.chain, artefacts);
     if (keys !== undefined) throw keys;
+    // A proof the account package's calls asked of the proof server: one it couldn't reach or that died mid-proof (out of memory
+    // on a k256 circuit) is a network error naming it and the circuit; one it refused, a proof failure naming it.
+    const explained = await explainProofFailure(err, target.networkConfig.proofServer, ctx.signal);
     // The account package reaches the indexer and the proof server itself, past the engine: a connection it couldn't make is a network error.
-    throw withTransportCode(err);
+    const reported = withTransportCode(explained);
+    // An issue that stopped after its grant went on chain, before its view was sealed to the agent: said, with how to finish it.
+    const note = request.subcommand === 'issue' && request.confirmed ? halfIssuedNote(owned.store.readRoster()) : undefined;
+    if (note !== undefined && reported instanceof Error) reported.message = `${reported.message}\n\n${note}`;
+    throw reported;
   }
 }

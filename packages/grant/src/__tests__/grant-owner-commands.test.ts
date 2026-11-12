@@ -7,7 +7,7 @@ import { freshGrantee, grantRequestFor, grantRequestLink } from '@kuiralabs/midn
 import { UsageError, createHost } from '@kuiralabs/midnight-cli-core';
 import { createRcEngine } from '@kuiralabs/midnight-engine-rc';
 import { accountChainOf } from '../lib/grant/account-chain.ts';
-import { DEFAULT_GRANT_LIMITS, grantRequestOf, issuePreview } from '../lib/grant/owner-commands.ts';
+import { DEFAULT_GRANT_LIMITS, grantRequestOf, halfIssuedNote, issuePreview } from '../lib/grant/owner-commands.ts';
 
 // The account package as the rc engine installs it.
 const chain = await accountChainOf(createRcEngine(createHost()));
@@ -59,8 +59,9 @@ describe('what an issue would grant', () => {
   });
 
   it('takes the limits given', () => {
-    const { result } = issuePreview(grantRequestOf(linkFor(0)), { cap: '900', perCall: '100', maxCoin: '50', expiresIn: '60' }, NOW, chain);
-    expect(result.request).toMatchObject({ payee: 'any shielded coin key', perCallCap: '100', cap: '900', maxCoinValue: '50', expires: '2026-10-18T12:01:00.000Z' });
+    // A coin of up to 150 pays a whole payment of up to 100 (the account refuses a grant whose coins can't).
+    const { result } = issuePreview(grantRequestOf(linkFor(0)), { cap: '900', perCall: '100', maxCoin: '150', expiresIn: '60' }, NOW, chain);
+    expect(result.request).toMatchObject({ payee: 'any shielded coin key', perCallCap: '100', cap: '900', maxCoinValue: '150', expires: '2026-10-18T12:01:00.000Z' });
   });
 
   it('names the calling contract a request pins, in full, and what the pin means', () => {
@@ -68,5 +69,30 @@ describe('what an issue would grant', () => {
     const caller = `via contract ${'c4'.repeat(32)} only: the agent spends only when that contract calls the account, and that call is public on chain`;
     expect(result.request).toMatchObject({ caller });
     expect(lines).toContain(`  caller: ${caller}`);
+  });
+});
+
+describe('limits that together make no grant', () => {
+  it("refuses a lone --cap below mn's default per-call cap before anything is signed, as INVALID_ARGS", () => {
+    expect(() => issuePreview(grantRequestOf(linkFor(2)), { cap: '1000' }, NOW, chain)).toThrow(UsageError);
+    expect(() => issuePreview(grantRequestOf(linkFor(2)), { cap: '1000' }, NOW, chain)).toThrow(`--per-call ${DEFAULT_GRANT_LIMITS.perCallCap} (mn's default) is above --cap 1000`);
+  });
+
+  it("refuses a lone --max-coin below mn's default per-call cap", () => {
+    expect(() => issuePreview(grantRequestOf(linkFor(2)), { maxCoin: '10' }, NOW, chain)).toThrow(`--max-coin 10 is below --per-call ${DEFAULT_GRANT_LIMITS.perCallCap} (mn's default)`);
+  });
+});
+
+describe('an issue that stopped part way', () => {
+  const GRANT = 'ab'.repeat(32);
+
+  it('says the grant may be half issued, naming it, and that running the same issue again finishes it without issuing twice', () => {
+    const note = halfIssuedNote({ entries: [{ grantId: 'cd'.repeat(32), status: 'issued' }, { grantId: GRANT, status: 'issuing', slot: 3 }] });
+    expect(note).toBe(`The grant may be half issued: ${GRANT} is still "issuing" in this account's roster (midnight grant list shows it, live once its issue step landed). `
+      + 'Run the same `midnight grant issue <request link> --yes` again: it finishes the grant (seals its view to the agent) without issuing it twice.');
+  });
+
+  it('says nothing when no grant is still issuing', () => {
+    expect(halfIssuedNote({ entries: [{ grantId: GRANT, status: 'issued' }] })).toBeUndefined();
   });
 });

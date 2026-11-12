@@ -23,6 +23,8 @@ const { default: grantCommand } = await grantDefinition.load();
 const ACCOUNT = '5e'.repeat(32);
 const TOKEN = '02005c8a9e3d6e3a2b0e1c4f7d9a8b6c5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b';
 const TX_HASH = 'c4'.repeat(32);
+// The transaction's identifier, which mn gives as txHash (as every other command does); TX_HASH is its 64-hex hash.
+const TX_ID = '00' + 'd5'.repeat(32);
 const ENDPOINTS = ['--network', 'undeployed', '--node', 'ws://localhost:29944', '--indexer-ws', 'ws://localhost:28088/api/v4/graphql/ws', '--proof-server', 'http://localhost:26300'];
 
 /** One call of the account package's depositShielded: every argument after the connection, as given. */
@@ -63,7 +65,7 @@ function hostRecordingDeposits(): Host {
             connectOver: async () => { connections += 1; return {}; },
             depositShielded: async (_connection: unknown, ...rest: unknown[]) => {
               deposits.push(rest);
-              return { coin: {}, result: { public: { txHash: TX_HASH, blockHeight: 42n } } };
+              return { coin: {}, result: { public: { txHash: TX_HASH, txId: TX_ID, blockHeight: 42n } } };
             },
           },
         }),
@@ -119,7 +121,7 @@ describe('grant deposit --token', () => {
     await deposit(payerHolding({ [NATIVE_TOKEN_TYPE]: 0n, [TOKEN]: value }), value.toString(), '--token', TOKEN.toUpperCase());
 
     expect(deposits).toEqual([[value, new Uint8Array(Buffer.from(TOKEN, 'hex'))]]);
-    expect(resultLine()).toMatchObject({ subcommand: 'deposit', address: ACCOUNT, amount: value.toString(), value: value.toString(), token: TOKEN, txHash: TX_HASH, blockHeight: 42 });
+    expect(resultLine()).toMatchObject({ subcommand: 'deposit', address: ACCOUNT, amount: value.toString(), value: value.toString(), token: TOKEN, txHash: TX_ID, blockHeight: 42 });
   });
 
   it('refuses before anything is built when the wallet holds less of the token, naming it and both amounts', async () => {
@@ -144,7 +146,7 @@ describe('grant deposit of NIGHT, without --token', () => {
 
     expect(deposits).toEqual([[2_000_000n]]);
     const result = resultLine();
-    expect(result).toMatchObject({ subcommand: 'deposit', address: ACCOUNT, amount: '2', value: '2000000', txHash: TX_HASH, blockHeight: 42 });
+    expect(result).toMatchObject({ subcommand: 'deposit', address: ACCOUNT, amount: '2', value: '2000000', txHash: TX_ID, blockHeight: 42 });
     expect(result).not.toHaveProperty('token');
   });
 

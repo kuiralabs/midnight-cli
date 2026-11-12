@@ -70,6 +70,12 @@ describe('resolveGrantRequest', () => {
     [['issue', LINK, '--cap', '1.5'], '--cap must be a whole number; got "1.5"'],
     [['issue', LINK, '--per-call', '-5'], '--per-call must be a whole number; got "-5"'],
     [['issue', LINK, '--expires-in', '0'], '--expires-in must be at least 1 second'],
+    // A grant that can never pay: the account contract refuses it, and mn refuses it first, before any wallet.
+    [['issue', LINK, '--cap', '0'], '--cap must be at least 1: a grant with a cap of 0 could never pay'],
+    [['issue', LINK, '--per-call', '0'], '--per-call must be at least 1: a grant with a per-call cap of 0 could never pay'],
+    [['issue', LINK, '--max-coin', '0'], '--max-coin must be at least 1: a grant with a max-coin of 0 could never pay'],
+    [['issue', LINK, '--cap', '5', '--per-call', '6'], '--per-call (6) is above --cap (5): one payment can be no more than the grant pays in all'],
+    [['issue', LINK, '--per-call', '6', '--max-coin', '5'], '--max-coin (5) is below --per-call (6): the agent could not pay a whole payment from one coin'],
     [['deposit'], 'Missing the amount of NIGHT to deposit.'],
     [['deposit', '2', '3'], 'midnight grant deposit takes one amount of NIGHT; unexpected: 3'],
     [['deposit', '0'], 'Invalid amount: "0" — must be greater than 0'],
