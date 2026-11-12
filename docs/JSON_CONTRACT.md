@@ -265,6 +265,11 @@ A command that submits a transaction (transfer, airdrop, dust register, contract
   "subcommand": "register",
   "network": "undeployed",
   "dustBalance": "0.000000",   // DUST once registered, as status gives it
+  "dustNeeds": {               // what the Dust is ready for, and when
+    "generatedPerSecond": "0.000123",                  // DUST its registered NIGHT generates a second
+    "transfer": { "dust": "0.650000", "waitSeconds": 180 },        // waitSeconds: 0 has it now; null not within a day
+    "counterDeploy": { "dust": "1.240000", "waitSeconds": 600 }    // a guide: contract deploy --dry-run prices yours
+  },
   "txHash": "00ab...",         // only when a registration was submitted; absent when the wallet had Dust already
   "receipt": { /* see Receipts */ }
 }
