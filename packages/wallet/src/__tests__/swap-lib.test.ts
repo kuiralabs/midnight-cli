@@ -34,9 +34,16 @@ const SEED = 'c4'.repeat(32);
 const ADDRESS = rcKeys.unshieldedAddresses(Buffer.from(SEED, 'hex')).undeployed;
 const TERMS = { give: { token: OFFER_GIVE, amount: 10n }, want: { token: OFFER_WANT, amount: 7n } };
 const OFFER = rcEngine.ledger.readOffer(SWAP_OFFER_HEX);
+/** The hash of the transaction that spent the offer's coin, as the indexer lists the spend. */
 const SPENT_IN = 'cd'.repeat(32);
+/** The bytes the stand-in indexer serves as that transaction: a real sealed one, the offer's own. */
+const SPENT_BYTES = SWAP_OFFER_HEX;
+/** Its identifier, the txHash mn reports for a take or a cancel. */
+const SPENT_ID = rcEngine.ledger.transactionIdentifier(SPENT_BYTES);
+/** The transaction that spent the coin, as mn names it. */
+const TAKEN_IN = { txHash: SPENT_ID, hash: SPENT_IN, blockHeight: 800 };
 
-/** The stand-in indexer: the chain's tip over HTTP, and the spends of the coins it is told are spent over WebSocket, on one port. */
+/** The stand-in indexer: the chain's tip and the spending transaction's bytes over HTTP (none when `serveBytes` is false), and the spends of the coins it is told are spent over WebSocket, on one port. */
 interface OfferIndexer {
   readonly url: string;
   /** The nullifier prefixes each spend check asked about. */
@@ -44,12 +51,18 @@ interface OfferIndexer {
   close(): Promise<void>;
 }
 
-async function startOfferIndexer(spent: readonly string[]): Promise<OfferIndexer> {
+async function startOfferIndexer(spent: readonly string[], serveBytes = true): Promise<OfferIndexer> {
   const asked: string[][] = [];
   const server: Server = createServer((req, res) => {
-    req.resume();
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
     req.on('end', () => {
       res.setHeader('content-type', 'application/json');
+      const { query, variables } = JSON.parse(body) as { query: string; variables?: { hash?: string } };
+      if (query.includes('raw')) {
+        res.end(JSON.stringify({ data: { transactions: serveBytes && variables?.hash === SPENT_IN ? [{ raw: SPENT_BYTES }] : [] } }));
+        return;
+      }
       res.end(JSON.stringify({ data: { block: { height: 812 } } }));
     });
   });
@@ -141,7 +154,7 @@ describe('inspectSwapOffer', () => {
     indexer = await startOfferIndexer([OFFER.nullifiers[0]!]);
     const said: unknown[] = [];
     const standing = await inspectSwapOffer(host, { ...on(), offer: offerText(NOW), now: NOW, onProgress: (event) => said.push(event) });
-    expect(standing).toMatchObject({ live: false, expired: true, spends: [{ nullifier: OFFER.nullifiers[0], transactionHash: SPENT_IN, blockHeight: 800 }] });
+    expect(standing).toMatchObject({ live: false, expired: true, spends: [{ nullifier: OFFER.nullifiers[0], transactionHash: SPENT_IN, blockHeight: 800 }], takenIn: TAKEN_IN });
     expect(said.at(-1)).toEqual({ kind: 'done', message: 'Taken' });
   });
 
@@ -359,7 +372,7 @@ describe('listSwapOffers', () => {
 
     const listed = await listSwapOffers(host, { ...on(), now: NOW, onProgress: (event) => said.push(event) });
 
-    expect(listed).toEqual({ network: 'undeployed', offers: [{ offer: live, expired: false, taken: false }, { offer: taken, expired: false, taken: true, takenIn: { txHash: SPENT_IN, blockHeight: 800 } }] });
+    expect(listed).toEqual({ network: 'undeployed', offers: [{ offer: live, expired: false, taken: false }, { offer: taken, expired: false, taken: true, takenIn: TAKEN_IN }] });
     expect(said).toEqual([{ kind: 'start', message: 'Asking the indexer about each open offer...' }, { kind: 'done', message: '2 offers' }]);
     expect(readOpenOffers(root, 'undeployed', ADDRESS).map((o) => o.id)).toEqual([live.id]);
   });
@@ -371,11 +384,56 @@ describe('listSwapOffers', () => {
     recordOpenOffer(root, 'undeployed', ADDRESS, taken);
     indexer = await startOfferIndexer(['b2'.repeat(32)]);
     await listSwapOffers(host, { ...on(), now: NOW });
-    expect(readSettledOffers(root, 'undeployed', ADDRESS, NOW).map((o) => [o.id, o.settledBy, o.txHash])).toEqual([[taken.id, 'taken', SPENT_IN]]);
+    expect(readSettledOffers(root, 'undeployed', ADDRESS, NOW).map((o) => [o.id, o.settledBy, o.txHash, o.hash])).toEqual([[taken.id, 'taken', SPENT_ID, SPENT_IN]]);
 
     const { payer, asked } = programPayer();
     const err = await cancelSwapOffer(host, { ...on(), id: taken.id.slice(0, 8), payer }).catch((e: Error) => e);
-    expect(err).toMatchObject({ code: 'OFFER_TAKEN', spentIn: { transactionHash: SPENT_IN, blockHeight: 800 } });
+    expect(err).toMatchObject({ code: 'OFFER_TAKEN', spentIn: TAKEN_IN });
+    expect(asked).toEqual([]);
+  });
+
+  // Regression: list, cancel and OFFER_TAKEN named the taking transaction by its 64-hex hash, where take printed its 66-hex identifier as its txHash.
+  it('names the taking transaction by the identifier its take printed (66 hex characters), with its hash beside it', async () => {
+    alice();
+    const taken = openOffer('a2'.repeat(32), 'b2'.repeat(32));
+    recordOpenOffer(root, 'undeployed', ADDRESS, taken);
+    indexer = await startOfferIndexer(['b2'.repeat(32)]);
+    const { offers } = await listSwapOffers(host, { ...on(), now: NOW });
+    expect(offers[0]!.takenIn).toEqual({ txHash: SPENT_ID, hash: SPENT_IN, blockHeight: 800 });
+    expect(SPENT_ID).toMatch(/^[0-9a-f]{66}$/);
+    const err = await cancelSwapOffer(host, { ...on(), id: taken.id.slice(0, 8), payer: programPayer().payer }).catch((e: Error) => e);
+    expect((err as Error).message).toContain(`spent in transaction ${SPENT_ID} (block 800)`);
+    expect((err as Error).message).not.toContain(SPENT_IN);
+  });
+
+  it('names it by its hash, labelled so, when the indexer can\'t give the transaction', async () => {
+    alice();
+    const taken = openOffer('a2'.repeat(32), 'b2'.repeat(32));
+    recordOpenOffer(root, 'undeployed', ADDRESS, taken);
+    indexer = await startOfferIndexer(['b2'.repeat(32)], false);
+    const { offers } = await listSwapOffers(host, { ...on(), now: NOW });
+    expect(offers[0]!.takenIn).toEqual({ hash: SPENT_IN, blockHeight: 800 });
+    const err = await cancelSwapOffer(host, { ...on(), id: taken.id.slice(0, 8), payer: programPayer().payer }).catch((e: Error) => e);
+    expect(err).toMatchObject({ code: 'OFFER_TAKEN', spentIn: { hash: SPENT_IN, blockHeight: 800 } });
+    expect((err as Error).message).toContain(`spent in the transaction with hash ${SPENT_IN} (block 800)`);
+  });
+
+  // A record an mn before 0.6.0's release wrote kept the taking transaction's hash as its txHash.
+  it('reads a record that kept the hash as txHash, and names the transaction by its identifier when the indexer gives it', async () => {
+    alice();
+    const taken = openOffer('a2'.repeat(32), 'b2'.repeat(32));
+    recordOpenOffer(root, 'undeployed', ADDRESS, taken);
+    const file = path.join(root, 'swap-offers', 'undeployed', `${ADDRESS}.json`);
+    const record = JSON.parse(fs.readFileSync(file, 'utf8'));
+    fs.writeFileSync(file, JSON.stringify({ offers: [], settled: [{ ...record.offers[0], settledBy: 'taken', settledAt: NOW.toISOString(), txHash: SPENT_IN, blockHeight: 800 }] }));
+    expect(readSettledOffers(root, 'undeployed', ADDRESS, NOW).map((o) => [o.txHash, o.hash])).toEqual([[undefined, SPENT_IN]]);
+
+    indexer = await startOfferIndexer([]);
+    const { payer, asked } = programPayer();
+    const err = await cancelSwapOffer(host, { ...on(), id: taken.id.slice(0, 8), payer }).catch((e: Error) => e);
+    expect(err).toMatchObject({ code: 'OFFER_TAKEN', spentIn: TAKEN_IN });
+    expect((err as Error).message).toContain(`spent in transaction ${SPENT_ID} (block 800)`);
+    expect((err as Error).message).toContain("mn's record keeps the offer as taken.");
     expect(asked).toEqual([]);
   });
 
@@ -427,8 +485,8 @@ describe('losing a race for an offer', () => {
     const spent: string[] = [];
     indexer = await startOfferIndexer(spent);
     const err = await takeSwapOffer(host, { ...on(), offer: offerText(), agreed: TERMS, now: NOW, payer: racingPayer(spent), receiptWaitMs: 0 }).catch((e: Error) => e);
-    expect(err).toMatchObject({ code: 'OFFER_TAKEN', name: 'OfferTakenError', spentIn: { transactionHash: SPENT_IN, blockHeight: 800 } });
-    expect((err as Error).message).toContain(`spent in transaction ${SPENT_IN} (block 800). It was taken, or its maker cancelled it, first.`);
+    expect(err).toMatchObject({ code: 'OFFER_TAKEN', name: 'OfferTakenError', spentIn: TAKEN_IN });
+    expect((err as Error).message).toContain(`spent in transaction ${SPENT_ID} (block 800). It was taken, or its maker cancelled it, first.`);
     expect((err as Error).message).toContain('The node refused this swap for it.');
     // Reported as itself: a node's refusal among its causes would be reported in its place.
     expect(asReported(err as Error)).toBe(err);
@@ -449,7 +507,7 @@ describe('losing a race for an offer', () => {
     const spent: string[] = [];
     indexer = await startOfferIndexer(spent);
     const outcome = await cancelSwapOffer(host, { ...on(), id: OFFER.id.slice(0, 8), payer: racingPayer(spent), receiptWaitMs: 0 });
-    expect(outcome).toEqual({ network: 'undeployed', id: OFFER.id, cancelled: false, reason: 'taken', takenIn: { txHash: SPENT_IN, blockHeight: 800 } });
+    expect(outcome).toEqual({ network: 'undeployed', id: OFFER.id, cancelled: false, reason: 'taken', takenIn: TAKEN_IN });
     expect(readOpenOffers(root, 'undeployed', ADDRESS)).toEqual([]);
   });
 
@@ -459,7 +517,7 @@ describe('losing a race for an offer', () => {
     const spent = [OFFER.nullifiers[0]!];
     indexer = await startOfferIndexer(spent);
     const outcome = await cancelSwapOffer(host, { ...on(), id: OFFER.id.slice(0, 8), payer: racingPayer([]), receiptWaitMs: 0 });
-    expect(outcome).toEqual({ network: 'undeployed', id: OFFER.id, cancelled: false, reason: 'taken', takenIn: { txHash: SPENT_IN, blockHeight: 800 } });
+    expect(outcome).toEqual({ network: 'undeployed', id: OFFER.id, cancelled: false, reason: 'taken', takenIn: TAKEN_IN });
     expect(readOpenOffers(root, 'undeployed', ADDRESS)).toEqual([]);
   });
 
@@ -470,7 +528,7 @@ describe('losing a race for an offer', () => {
     const spent: string[] = [];
     indexer = await startOfferIndexer(spent);
     await expect(takeSwapOffer(host, { ...on(), offer: offerText(), agreed: TERMS, now: NOW, payer: racingPayer(spent, invalidInPool), receiptWaitMs: 0 }))
-      .rejects.toMatchObject({ code: 'OFFER_TAKEN', spentIn: { transactionHash: SPENT_IN, blockHeight: 800 } });
+      .rejects.toMatchObject({ code: 'OFFER_TAKEN', spentIn: TAKEN_IN });
   });
 
   // Regression: two takes at once; the loser, dropped from the node's pool once the winner landed, failed TX_INVALIDATED (exit 6) with a message about the same wallet's transactions.
@@ -478,7 +536,7 @@ describe('losing a race for an offer', () => {
     const spent: string[] = [];
     indexer = await startOfferIndexer(spent);
     const err = await takeSwapOffer(host, { ...on(), offer: offerText(), agreed: TERMS, now: NOW, payer: racingPayer(spent, () => new TransactionInvalidatedError(0)), receiptWaitMs: 0 }).catch((e: Error) => e);
-    expect(err).toMatchObject({ code: 'OFFER_TAKEN', spentIn: { transactionHash: SPENT_IN, blockHeight: 800 } });
+    expect(err).toMatchObject({ code: 'OFFER_TAKEN', spentIn: TAKEN_IN });
     expect(asReported(err as Error)).toBe(err);
   });
 

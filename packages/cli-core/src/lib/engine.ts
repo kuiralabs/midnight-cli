@@ -68,6 +68,8 @@ export interface EngineLedger {
   readOffer(txHex: string): OfferContents;
   /** The nullifiers of the shielded coins a transaction (hex, sealed or not) spends. Throws when the bytes aren't a ledger-9 transaction. */
   spentNullifiers(txHex: string): string[];
+  /** The identifier the wallet SDK's submit returns for a sealed transaction (its last), which mn reports as the `txHash` of a transfer, a swap's take and a cancel; from its bytes (hex). Throws when the bytes aren't a sealed ledger-9 transaction. */
+  transactionIdentifier(txHex: string): string;
 }
 
 /** A contract's ledger state read without its compiled contract: cells as their field-aligned bytes in hex, maps by size. */

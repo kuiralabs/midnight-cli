@@ -66,3 +66,18 @@ export async function spendsOf(
   if (!finished) throw new LivenessUnknownError(`the indexer didn't finish the spend check in ${ANSWER_TIMEOUT_MS / 1000} s`);
   return spends;
 }
+
+const TRANSACTION_BYTES = `query ($hash: HexEncoded!) {
+  transactions(offset: { hash: $hash }) { raw }
+}`;
+
+/**
+ * The bytes (hex) of the transaction with this hash, as the indexer serves
+ * them: what an engine reads the transaction's identifier from, the txHash mn
+ * reports. Undefined when the indexer has no such transaction; throws when it
+ * can't answer.
+ */
+export async function transactionBytesOf(indexerHttpUrl: string, hash: string, signal?: AbortSignal): Promise<string | undefined> {
+  const { transactions } = await queryIndexer<{ transactions: Array<{ raw: string }> }>(indexerHttpUrl, TRANSACTION_BYTES, { hash }, ANSWER_TIMEOUT_MS, signal);
+  return transactions[0]?.raw;
+}

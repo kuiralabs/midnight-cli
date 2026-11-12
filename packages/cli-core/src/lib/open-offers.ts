@@ -27,14 +27,20 @@ export type OfferSettlement = 'taken' | 'cancelled';
 export interface SettledOffer extends OpenOffer {
   settledBy: OfferSettlement;
   settledAt: Date;
+  /** The transaction's identifier (66 hex characters), the txHash mn reports, when known. */
   txHash?: string;
+  /** The transaction's hash (64 hex characters), as the indexer lists a spend, when known. */
+  hash?: string;
   blockHeight?: number;
 }
 
 /** How an offer being closed settled. */
 export interface Settlement {
   settledBy: OfferSettlement;
+  /** The transaction's identifier (66 hex characters), the txHash mn reports. */
   txHash?: string;
+  /** The transaction's hash (64 hex characters). */
+  hash?: string;
   blockHeight?: number;
   /** When it was seen settled; the time of the call when not given. */
   at?: Date;
@@ -82,7 +88,7 @@ export class OfferRecordUnreadableError extends Error {
 interface StoredLeg { token: string; amount: string }
 interface StoredOffer { id: string; terms: { give: StoredLeg; want: StoredLeg }; nullifiers: string[]; madeAt: string; expiresAt: string }
 // Settled offers are kept under their own key: an mn that predates it reads only `offers`, and never takes a settled one for open.
-interface StoredSettled extends StoredOffer { settledBy: OfferSettlement; settledAt: string; txHash?: string; blockHeight?: number }
+interface StoredSettled extends StoredOffer { settledBy: OfferSettlement; settledAt: string; txHash?: string; hash?: string; blockHeight?: number }
 
 /** The file under the state root `root` holding a wallet's open offers on a network; the wallet by its unshielded address there. */
 export function openOffersFile(root: string, network: NetworkName, walletAddress: string): string {
@@ -122,14 +128,25 @@ function readStoredOffer(o: unknown, at: number): OpenOffer {
 /** The settled offer `o` as stored, read; throws a message saying what about it is not as mn writes it. */
 function readStoredSettled(o: unknown, at: number): SettledOffer {
   const offer = readStoredOffer(o, at);
-  const { settledBy, settledAt, txHash, blockHeight } = o as Partial<Record<keyof StoredSettled, unknown>>;
+  const { settledBy, settledAt, txHash, hash, blockHeight } = o as Partial<Record<keyof StoredSettled, unknown>>;
   const wrong = (what: string): never => { throw new Error(`settled offer ${at + 1} ${what}`); };
   if (settledBy !== 'taken' && settledBy !== 'cancelled') return wrong('says neither taken nor cancelled');
   const when = new Date(typeof settledAt === 'string' ? settledAt : Number.NaN);
   if (Number.isNaN(when.getTime())) return wrong('has no settledAt date');
   if (txHash !== undefined && typeof txHash !== 'string') return wrong('has a txHash that is not text');
+  if (hash !== undefined && typeof hash !== 'string') return wrong('has a hash that is not text');
   if (blockHeight !== undefined && typeof blockHeight !== 'number') return wrong('has a blockHeight that is not a number');
-  return { ...offer, settledBy, settledAt: when, ...(txHash === undefined ? {} : { txHash }), ...(blockHeight === undefined ? {} : { blockHeight }) };
+  // An mn before 0.6.0's release kept a taken offer's transaction hash (64 hex characters) as its txHash: it is the hash.
+  // A cancel's txHash is the identifier its submit returned.
+  const isHash = settledBy === 'taken' && txHash !== undefined && /^[0-9a-fA-F]{64}$/.test(txHash);
+  const identifier = isHash ? undefined : txHash;
+  const transactionHash = hash ?? (isHash ? txHash : undefined);
+  return {
+    ...offer, settledBy, settledAt: when,
+    ...(identifier === undefined ? {} : { txHash: identifier }),
+    ...(transactionHash === undefined ? {} : { hash: transactionHash }),
+    ...(blockHeight === undefined ? {} : { blockHeight }),
+  };
 }
 
 interface OfferRecord { open: OpenOffer[]; settled: SettledOffer[] }
@@ -186,6 +203,7 @@ function writeRecord(root: string, network: NetworkName, walletAddress: string, 
       settledBy: o.settledBy,
       settledAt: o.settledAt.toISOString(),
       ...(o.txHash === undefined ? {} : { txHash: o.txHash }),
+      ...(o.hash === undefined ? {} : { hash: o.hash }),
       ...(o.blockHeight === undefined ? {} : { blockHeight: o.blockHeight }),
     })),
   });
@@ -212,6 +230,7 @@ export function closeOpenOffers(root: string, network: NetworkName, walletAddres
     settledBy: settlement.settledBy,
     settledAt: at,
     ...(settlement.txHash === undefined ? {} : { txHash: settlement.txHash }),
+    ...(settlement.hash === undefined ? {} : { hash: settlement.hash }),
     ...(settlement.blockHeight === undefined ? {} : { blockHeight: settlement.blockHeight }),
   }));
   writeRecord(root, network, walletAddress, {

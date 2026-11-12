@@ -1,12 +1,12 @@
 // Cancelling a swap offer of the wallet's: its coins are spent back to the
 // wallet, so no taker can take it any more.
 
-import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, type VerboseLog } from '@kuiralabs/midnight-cli-core';
+import { type Host, sdkSetOf, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, type VerboseLog } from '@kuiralabs/midnight-cli-core';
 import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
 import type { PaidCallOptions } from '../wallet/paid-call.ts';
 import { receiptOfSubmitted } from '../wallet/submit-steps.ts';
-import { cancelOffer, findOpenOffer } from './offers.ts';
+import { cancelOffer, findOpenOffer, type SpentIn, withSpendIdentifier } from './offers.ts';
 import { offerWalletAddress, withSwapSession } from './swap-session.ts';
 
 export interface CancelSwapOfferOptions extends PaidCallOptions {
@@ -27,8 +27,8 @@ export interface CancelledSwapOffer {
   readonly cancelled: boolean;
   /** Why it was not cancelled: its coins were spent first, taken by a taker or cancelled from another copy of the wallet. Absent when it was cancelled. */
   readonly reason?: 'taken';
-  /** With `reason`: the transaction that spent its coins, and its block. */
-  readonly takenIn?: { readonly txHash: string; readonly blockHeight: number };
+  /** With `reason`: the transaction that spent its coins (its identifier as `txHash` when it could be read, its `hash`), and its block. */
+  readonly takenIn?: SpentIn;
   /** The cancel's transaction, when one was needed. */
   readonly txHash?: string;
   /** The cancel once the indexer lists it, or why it is missing; absent with no cancel, or when `receiptWaitMs` is 0. */
@@ -51,19 +51,25 @@ export async function cancelSwapOffer(host: Host, options: CancelSwapOfferOption
   const target = networkTargetOf(host, networkChoiceOf(options));
   const { network, root, networkConfig } = target;
   const address = await offerWalletAddress(host, root, options.wallet, network);
+  const engine = await host.engines.load(sdkSetOf(network, root));
   // From mn's record alone, before the wallet opens: opening it syncs, which takes minutes on a hosted network.
-  const offer = findOpenOffer(root, network, address, options.id);
+  let offer;
+  try {
+    offer = findOpenOffer(root, network, address, options.id);
+  } catch (err) {
+    // A record an earlier mn kept names the taking transaction by its hash: its identifier is read where the indexer gives it.
+    throw await withSpendIdentifier(err, engine, networkConfig, signal);
+  }
   options.log?.('swap', `cancel: offer ${offer.id} of wallet ${address}, ${offer.nullifiers.length} coin(s)`);
 
   return withCallSdkWarnings(host.sdkWarnings, options.sdkWarnings, (sdkWarnings) => withSwapSession(target, options, sdkWarnings, async (session) => {
     const steps = progressSteps(onProgress);
     steps.start('Spending the offer\'s coins back to this wallet...');
-    const outcome = await cancelOffer(session, root, networkConfig, address, options.id, signal);
+    const outcome = await cancelOffer(session, engine, root, networkConfig, address, options.id, signal);
     const taken = outcome.alreadyTaken[0];
     if (taken !== undefined) {
       steps.done('It was taken already');
-      const spend = taken.spends[0]!;
-      return { network, id: taken.offer.id, cancelled: false, reason: 'taken', takenIn: { txHash: spend.transactionHash, blockHeight: spend.blockHeight } };
+      return { network, id: taken.offer.id, cancelled: false, reason: 'taken', takenIn: taken.takenIn };
     }
     // Not taken: cancelled, by the cancel's transaction.
     const { id } = outcome.cancelled[0]!;

@@ -1,7 +1,7 @@
 // Listing a wallet's open swap offers, each asked of the indexer: the ones
 // taken since are closed in mn's record. No wallet opens.
 
-import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, type NetworkChoice, progressSteps, type ProgressEvent } from '@kuiralabs/midnight-cli-core';
+import { type Host, sdkSetOf, throwIfCancelled, type NetworkName, networkTargetOf, type NetworkChoice, progressSteps, type ProgressEvent } from '@kuiralabs/midnight-cli-core';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
 import { listOffers, type ListedOffer } from './offers.ts';
 import { offerWalletAddress } from './swap-session.ts';
@@ -33,7 +33,7 @@ export async function listSwapOffers(host: Host, options: ListSwapOffersOptions 
   const address = await offerWalletAddress(host, root, options.wallet, network);
   const steps = progressSteps(options.onProgress);
   steps.start('Asking the indexer about each open offer...');
-  const offers = await listOffers(root, network, networkConfig, address, now, signal);
+  const offers = await listOffers(root, network, networkConfig, await host.engines.load(sdkSetOf(network, root)), address, now, signal);
   steps.done(`${offers.length} offer${offers.length === 1 ? '' : 's'}`);
   return { network, offers };
 }

@@ -155,7 +155,7 @@ export const swapDefinition: CommandDefinition = {
       receiptMissing: 'Why receipt is null; check later with midnight tx status <txHash>',
       cancelled: 'True: the cancel was submitted (cancel). An offer taken first fails with OFFER_TAKEN instead',
       split: 'The split made first when no free coin was worth exactly the amount given: txHash, and receipt or receiptMissing as above; absent when none was needed (make)',
-      offers: 'The wallet\'s open offers, each with whether it is expired or taken, and takenIn (txHash, blockHeight) for one taken (list)',
+      offers: 'The wallet\'s open offers, each with whether it is expired or taken, and takenIn for one taken (list): txHash (the taking transaction\'s identifier, as take prints it; absent when the indexer could not give it), hash (its 64-hex hash) and blockHeight',
     },
   },
   intro: { brief: 'Private swaps through offer files', order: 12.5 },

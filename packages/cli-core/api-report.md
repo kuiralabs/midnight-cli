@@ -943,11 +943,13 @@ export interface SettledOffer extends OpenOffer {
     settledBy: OfferSettlement;
     settledAt: Date;
     txHash?: string;
+    hash?: string;
     blockHeight?: number;
 }
 export interface Settlement {
     settledBy: OfferSettlement;
     txHash?: string;
+    hash?: string;
     blockHeight?: number;
     at?: Date;
 }

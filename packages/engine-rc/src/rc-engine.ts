@@ -14,7 +14,7 @@ import { blockLimitsOf, maxPriceAdjustmentOf } from './ledger-parameters.ts';
 import { rawContractState } from './contract-providers.ts';
 import { assertAddress } from './addresses.ts';
 import { inspectTxHex } from './tx-inspect.ts';
-import { readOffer, spentNullifiers } from './offer-reader.ts';
+import { readOffer, spentNullifiers, transactionIdentifier } from './offer-reader.ts';
 import { createRcWallet } from './wallet.ts';
 import { WalletDataRepository, type RepoDeps } from './wallet-data-repository.ts';
 import { SCRIPT_PACKAGES, generateCallScript, generateDeployScript, generateStateScript, packageFolder } from './contract-scripts.ts';
@@ -65,6 +65,7 @@ const SHARED: Omit<Engine, 'wallet'> = {
     readTransaction: inspectTxHex,
     readOffer,
     spentNullifiers,
+    transactionIdentifier,
   },
   contracts: {
     rawState: rawContractState,

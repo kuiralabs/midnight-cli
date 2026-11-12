@@ -37,6 +37,18 @@ export function readOffer(txHex: string): OfferContents {
   };
 }
 
+/**
+ * The identifier the wallet SDK's submit returns for a sealed transaction (its
+ * last), which mn reports as the `txHash` of a transfer, a swap's take and a
+ * cancel; from its bytes (hex). Throws when the bytes aren't a sealed ledger-9
+ * transaction with one.
+ */
+export function transactionIdentifier(txHex: string): string {
+  const identifier = Transaction.deserialize('signature', 'proof', 'binding', Buffer.from(txHex, 'hex')).identifiers().at(-1);
+  if (identifier === undefined) throw new Error('The transaction has no identifier');
+  return identifier;
+}
+
 /** The nullifiers of the shielded coins a transaction (hex, sealed or not) spends, in every segment. */
 export function spentNullifiers(txHex: string): string[] {
   const bytes = Buffer.from(txHex, 'hex');

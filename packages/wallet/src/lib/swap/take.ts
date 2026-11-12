@@ -4,7 +4,7 @@
 // its half once the offer is found live, and the swap is submitted.
 
 import { existsSync } from 'node:fs';
-import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, checkTerms, type SwapTerms, assertOfferUnexpired, readOpenOffers, type VerboseLog } from '@kuiralabs/midnight-cli-core';
+import { type Host, sdkSetOf, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, checkTerms, type SwapTerms, assertOfferUnexpired, readOpenOffers, type VerboseLog } from '@kuiralabs/midnight-cli-core';
 import { type Receipt, RECEIPT_WAIT_MS } from '@kuiralabs/midnight-chain';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
 import type { PaidCallOptions } from '../wallet/paid-call.ts';
@@ -77,7 +77,7 @@ export async function takeSwapOffer(host: Host, options: TakeSwapOfferOptions): 
   return withCallSdkWarnings(host.sdkWarnings, options.sdkWarnings, (sdkWarnings) => withSwapSession(target, options, sdkWarnings, async (session) => {
     const steps = progressSteps(onProgress);
     steps.start('Checking the offer, adding this half and proving the swap...');
-    const txHash = await takeOffer(session, offer, agreed, networkConfig, now, signal);
+    const txHash = await takeOffer(session, await host.engines.load(sdkSetOf(network, target.root)), offer, agreed, networkConfig, now, signal);
     const receipt = await receiptOfSubmitted(networkConfig.indexer, txHash, steps, signal, receiptWaitMs, 'Swap submitted');
     return { network, id, txHash, ...(receipt === undefined ? {} : { receipt }) };
   }));

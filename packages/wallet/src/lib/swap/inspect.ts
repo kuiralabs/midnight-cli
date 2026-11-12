@@ -1,10 +1,10 @@
 // Inspecting a swap offer: what its file says, checked against its own bytes,
 // and whether it is still live, asked of the indexer. No wallet opens.
 
-import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, type NetworkChoice, progressSteps, type ProgressEvent, type SwapTerms } from '@kuiralabs/midnight-cli-core';
+import { type Host, sdkSetOf, throwIfCancelled, type NetworkName, networkTargetOf, type NetworkChoice, progressSteps, type ProgressEvent, type SwapTerms } from '@kuiralabs/midnight-cli-core';
 import type { CoinSpend } from '@kuiralabs/midnight-chain';
 import { networkChoiceOf } from '../wallet/wallet-call.ts';
-import { readOfferFile, standingOf } from './offers.ts';
+import { readOfferFile, type SpentIn, spentInOf, standingOf } from './offers.ts';
 
 export interface InspectSwapOfferOptions extends NetworkChoice {
   /** The offer file's text. */
@@ -30,6 +30,8 @@ export interface SwapOfferStanding {
   readonly live: boolean;
   /** The spends of its coins (it was taken, or its maker cancelled it); empty while it is live. */
   readonly spends: readonly CoinSpend[];
+  /** When it is not live: the transaction that spent its first coin (its identifier as `txHash` when it could be read, its `hash`), and its block. */
+  readonly takenIn?: SpentIn;
 }
 
 /**
@@ -48,5 +50,6 @@ export async function inspectSwapOffer(host: Host, options: InspectSwapOfferOpti
   const { expired, spends } = await standingOf(offer, networkConfig, now, signal);
   steps.done(spends.length === 0 ? 'Live' : 'Taken');
   const { envelope } = offer;
-  return { network, id: envelope.id, terms: envelope.terms, expiresAt: envelope.expiresAt, expired, live: spends.length === 0, spends };
+  const takenIn = spends.length === 0 ? undefined : await spentInOf(spends[0]!, await host.engines.load(sdkSetOf(network, root)), networkConfig, signal);
+  return { network, id: envelope.id, terms: envelope.terms, expiresAt: envelope.expiresAt, expired, live: spends.length === 0, spends, ...(takenIn === undefined ? {} : { takenIn }) };
 }

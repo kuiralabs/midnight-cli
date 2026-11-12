@@ -18,7 +18,7 @@ export {
 } from './lib/ledger-guard.ts';
 export { waitForFirstBlock } from './lib/node-ready.ts';
 export { callNodeRpc } from './lib/node-rpc.ts';
-export { type CoinSpend, spendsOf } from './lib/offer-liveness.ts';
+export { type CoinSpend, spendsOf, transactionBytesOf } from './lib/offer-liveness.ts';
 export { explainProofFailure } from './lib/proof-failure.ts';
 export { waitForProofServerReady } from './lib/proof-server-ready.ts';
 export { type Receipt, RECEIPT_WAIT_MS, receiptJson, receiptOf } from './lib/tx-receipt.ts';

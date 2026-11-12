@@ -12,7 +12,7 @@ import { makeSwapOffer } from '../lib/swap/make.ts';
 import { inspectSwapOffer } from '../lib/swap/inspect.ts';
 import { takeSwapOffer } from '../lib/swap/take.ts';
 import { cancelSwapOffer } from '../lib/swap/cancel.ts';
-import { OfferTakenError } from '../lib/swap/offers.ts';
+import { OfferTakenError, spentInText } from '../lib/swap/offers.ts';
 import { listSwapOffers } from '../lib/swap/list.ts';
 import { makeTermsOf, readOfferText, termsOf } from '../lib/swap/request.ts';
 import { receiptJson } from '@kuiralabs/midnight-chain';
@@ -84,7 +84,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
       ctx.output.stderr(keyValue('Maker gives', legText(standing.terms.give)) + '\n');
       ctx.output.stderr(keyValue('Maker wants', legText(standing.terms.want)) + '\n');
       ctx.output.stderr(keyValue('Expires', `${standing.expiresAt.toISOString()}${standing.expired ? ' (expired)' : ''}`) + '\n');
-      ctx.output.stderr(keyValue('Live', standing.live ? 'yes' : `no: taken in ${standing.spends[0]!.transactionHash}`) + '\n\n');
+      ctx.output.stderr(keyValue('Live', standing.takenIn === undefined ? 'yes' : `no: taken in ${spentInText(standing.takenIn)}`) + '\n\n');
       return;
     }
 
@@ -122,7 +122,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
       const outcome = await cancelSwapOffer(ctx.host, { ...paid, payer: payerFor('swap cancel', ctx), id, onProgress: (event) => showPaidStep(progress, event) });
       // Taken first: nothing to cancel. A failure, as an offer that isn't open is.
       if (outcome.takenIn !== undefined) {
-        throw new OfferTakenError(outcome.id, { transactionHash: outcome.takenIn.txHash, blockHeight: outcome.takenIn.blockHeight }, { note: "Nothing was cancelled or sent; mn's record keeps the offer as taken." });
+        throw new OfferTakenError(outcome.id, outcome.takenIn, { note: "Nothing was cancelled or sent; mn's record keeps the offer as taken." });
       }
       const { txHash, receipt } = outcome;
       if (jsonMode) {
@@ -149,7 +149,7 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
       ctx.output.stderr('\n' + header('Swap offers') + '\n\n');
       if (offers.length === 0) ctx.output.stderr(dim('  No open offers.') + '\n\n');
       for (const { offer, expired, taken, takenIn } of offers) {
-        const status = taken ? `taken${takenIn === undefined ? '' : ` in ${takenIn.txHash}`}` : expired ? 'expired (still takeable on chain until cancelled)' : 'open';
+        const status = taken ? `taken${takenIn === undefined ? '' : ` in ${spentInText(takenIn)}`}` : expired ? 'expired (still takeable on chain until cancelled)' : 'open';
         ctx.output.stderr(keyValue(offer.id.slice(0, 16) + '…', `${legText(offer.terms.give)} for ${legText(offer.terms.want)}, ${status}`) + '\n');
       }
       ctx.output.stderr('\n');

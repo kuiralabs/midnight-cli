@@ -45,10 +45,7 @@ export interface CancelledSwapOffer {
     readonly id: string;
     readonly cancelled: boolean;
     readonly reason?: 'taken';
-    readonly takenIn?: {
-        readonly txHash: string;
-        readonly blockHeight: number;
-    };
+    readonly takenIn?: SpentIn;
     readonly txHash?: string;
     readonly receipt?: Receipt;
 }
@@ -67,6 +64,7 @@ export interface SwapOfferStanding {
     readonly expired: boolean;
     readonly live: boolean;
     readonly spends: readonly CoinSpend[];
+    readonly takenIn?: SpentIn;
 }
 export interface ListSwapOffersOptions extends NetworkChoice {
     wallet?: string;
@@ -103,13 +101,13 @@ export interface SwapNetworkChosen {
     readonly kind: 'swap-network';
     readonly network: NetworkName;
 }
-export declare function cancelOffer(session: WalletSession, root: string, networkConfig: NetworkConfig, walletAddress: string, id: string, signal?: AbortSignal): Promise<CancelOutcome>;
+export declare function cancelOffer(session: WalletSession, engine: Engine, root: string, networkConfig: NetworkConfig, walletAddress: string, id: string, signal?: AbortSignal): Promise<CancelOutcome>;
 export interface CancelOutcome {
     txHash: string | undefined;
     cancelled: OpenOffer[];
     alreadyTaken: Array<{
         offer: OpenOffer;
-        spends: CoinSpend[];
+        takenIn: SpentIn;
     }>;
 }
 export interface MadeOffer {
@@ -125,7 +123,7 @@ export interface ReadOffer {
     contents: OfferContents;
 }
 export declare function readOfferFile(root: string, text: string, network: NetworkName, engines: HostEngines): Promise<ReadOffer>;
-export declare function takeOffer(session: WalletSession, offer: ReadOffer, agreed: SwapTerms, networkConfig: NetworkConfig, now?: Date, signal?: AbortSignal): Promise<string>;
+export declare function takeOffer(session: WalletSession, engine: Engine, offer: ReadOffer, agreed: SwapTerms, networkConfig: NetworkConfig, now?: Date, signal?: AbortSignal): Promise<string>;
 export interface SwapOfferChecked {
     readonly kind: 'offer-checked';
     readonly network: NetworkName;

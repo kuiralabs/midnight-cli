@@ -72,6 +72,7 @@ export declare function spendsOf(indexer: {
     fromBlock?: number;
     signal?: AbortSignal;
 }): Promise<CoinSpend[]>;
+export declare function transactionBytesOf(indexerHttpUrl: string, hash: string, signal?: AbortSignal): Promise<string | undefined>;
 export declare function explainProofFailure(err: unknown, proofServerUrl: string, signal?: AbortSignal, circuit?: string): Promise<unknown>;
 export declare function waitForProofServerReady(proofServerUrl: string, opts?: WaitForProofServerOptions): Promise<void>;
 export type Receipt = {

@@ -5,8 +5,8 @@
 // what the file says, that the terms are the agreed ones, that the maker's
 // expiry hasn't passed, and that none of its coins is spent.
 
-import { sdkSetOf, sleep, SyncTimeoutError, type SwapLeg, type Engine, type HostEngines, type NetworkConfig, type NetworkName, type WalletSession, UsageError, InsufficientBalanceError, checkTerms, type OfferContents, type SwapTerms, assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope, type OfferEnvelope, closeOpenOffers, readOpenOffers, readSettledOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
-import { spendsOf, type CoinSpend } from '@kuiralabs/midnight-chain';
+import { sdkSetOf, sleep, throwIfCancelled, SyncTimeoutError, type SwapLeg, type Engine, type HostEngines, type NetworkConfig, type NetworkName, type WalletSession, UsageError, InsufficientBalanceError, checkTerms, type OfferContents, type SwapTerms, assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope, type OfferEnvelope, closeOpenOffers, readOpenOffers, readSettledOffers, recordOpenOffer, type OpenOffer } from '@kuiralabs/midnight-cli-core';
+import { spendsOf, transactionBytesOf, type CoinSpend } from '@kuiralabs/midnight-chain';
 
 /** An offer made: its file's text and what it is. */
 export interface MadeOffer {
@@ -79,20 +79,70 @@ export async function standingOf(offer: ReadOffer, networkConfig: NetworkConfig,
   return { expired: now.getTime() >= offer.envelope.expiresAt.getTime(), spends };
 }
 
+/**
+ * The transaction that spent an offer's coins: its identifier, the txHash mn
+ * reports for a take or a cancel (and `midnight tx status` takes), when it
+ * could be read; its hash (64 hex characters) as the indexer lists the spend;
+ * and its block.
+ */
+export interface SpentIn {
+  readonly txHash?: string;
+  readonly hash: string;
+  readonly blockHeight: number;
+}
+
+/** The transaction in words: by its identifier when known, else labelled as its hash. */
+export function spentInText(spentIn: SpentIn): string {
+  return spentIn.txHash === undefined ? `the transaction with hash ${spentIn.hash}` : `transaction ${spentIn.txHash}`;
+}
+
+/**
+ * The transaction that spent a coin, with its identifier read by `engine` from
+ * the transaction's bytes, which the indexer serves. When the indexer can't
+ * give them, it is named by its hash alone.
+ */
+export async function spentInOf(spend: Pick<CoinSpend, 'transactionHash' | 'blockHeight'>, engine: Engine, networkConfig: Pick<NetworkConfig, 'indexer'>, signal?: AbortSignal): Promise<SpentIn> {
+  const known = { hash: spend.transactionHash, blockHeight: spend.blockHeight };
+  try {
+    const bytes = await transactionBytesOf(networkConfig.indexer, spend.transactionHash, signal);
+    return bytes === undefined ? known : { txHash: engine.ledger.transactionIdentifier(bytes), ...known };
+  } catch {
+    throwIfCancelled(signal);
+    return known;
+  }
+}
+
 /** The offer's coins are spent: it was taken, or its maker cancelled it, first. */
 export class OfferTakenError extends Error {
   readonly code = 'OFFER_TAKEN';
+  /** The offer's id. */
+  readonly offerId: string;
   /** The transaction that spent the offer's coins (took or cancelled it), and its block. */
-  readonly spentIn: { readonly transactionHash: string; readonly blockHeight: number };
-  constructor(id: string, spentIn: { readonly transactionHash: string; readonly blockHeight: number }, options: { note?: string } = {}) {
+  readonly spentIn: SpentIn;
+  /** What the message adds after saying so. */
+  readonly note: string | undefined;
+  constructor(id: string, spentIn: SpentIn, options: { note?: string } = {}) {
     super(
-      `The offer ${id.slice(0, 16)}… is no longer live: its coins were spent in transaction ${spentIn.transactionHash} (block ${spentIn.blockHeight}). `
+      `The offer ${id.slice(0, 16)}… is no longer live: its coins were spent in ${spentInText(spentIn)} (block ${spentIn.blockHeight}). `
       + `It was taken, or its maker cancelled it, first.${options.note === undefined ? '' : ` ${options.note}`}`,
     );
     this.name = 'OfferTakenError';
-    this.spentIn = { transactionHash: spentIn.transactionHash, blockHeight: spentIn.blockHeight };
+    this.offerId = id;
+    this.spentIn = { ...(spentIn.txHash === undefined ? {} : { txHash: spentIn.txHash }), hash: spentIn.hash, blockHeight: spentIn.blockHeight };
+    this.note = options.note;
     Object.setPrototypeOf(this, OfferTakenError.prototype);
   }
+}
+
+/**
+ * An OfferTakenError from mn's record that names its transaction by hash
+ * alone (a record an earlier mn kept), with the transaction's identifier
+ * read now where the indexer gives it; any other error as it is.
+ */
+export async function withSpendIdentifier(err: unknown, engine: Engine, networkConfig: Pick<NetworkConfig, 'indexer'>, signal?: AbortSignal): Promise<unknown> {
+  if (!(err instanceof OfferTakenError) || err.spentIn.txHash !== undefined) return err;
+  const spentIn = await spentInOf({ transactionHash: err.spentIn.hash, blockHeight: err.spentIn.blockHeight }, engine, networkConfig, signal);
+  return spentIn.txHash === undefined ? err : new OfferTakenError(err.offerId, spentIn, { note: err.note });
 }
 
 /** How long to wait for the indexer to list the spend of an offer's coin once the node refused a transaction spending it, in milliseconds. */
@@ -160,11 +210,11 @@ export function shortOf(leg: SwapLeg, held: bigint, role: string): InsufficientB
  * naming the token and both amounts). Submits the swap and returns its hash. An offer taken or cancelled first, found before the swap
  * is built or when the node refuses it, is refused with OfferTakenError.
  */
-export async function takeOffer(session: WalletSession, offer: ReadOffer, agreed: SwapTerms, networkConfig: NetworkConfig, now: Date = new Date(), signal?: AbortSignal): Promise<string> {
+export async function takeOffer(session: WalletSession, engine: Engine, offer: ReadOffer, agreed: SwapTerms, networkConfig: NetworkConfig, now: Date = new Date(), signal?: AbortSignal): Promise<string> {
   checkTerms(offer.contents.terms, agreed);
   assertOfferUnexpired(offer.envelope, now);
   const { spends } = await standingOf(offer, networkConfig, now, signal);
-  if (spends.length > 0) throw new OfferTakenError(offer.envelope.id, spends[0]!);
+  if (spends.length > 0) throw new OfferTakenError(offer.envelope.id, await spentInOf(spends[0]!, engine, networkConfig, signal));
   const { want } = offer.contents.terms;
   const held = await shieldedHeld(session, want.token);
   if (held < want.amount) throw shortOf(want, held, 'the offer wants');
@@ -175,7 +225,7 @@ export async function takeOffer(session: WalletSession, offer: ReadOffer, agreed
     // Another taker, or the maker's cancel, reached the node first.
     const spentFirst = await spendsAfterRefusal(err, networkConfig, offer.contents.nullifiers, signal);
     // Not as its cause: mn reports a node's refusal found among an error's causes in place of the error.
-    if (spentFirst.length > 0) throw new OfferTakenError(offer.envelope.id, spentFirst[0]!, { note: 'The node refused this swap for it.' });
+    if (spentFirst.length > 0) throw new OfferTakenError(offer.envelope.id, await spentInOf(spentFirst[0]!, engine, networkConfig, signal), { note: 'The node refused this swap for it.' });
     throw err;
   }
 }
@@ -186,7 +236,7 @@ export interface ListedOffer {
   expired: boolean;
   taken: boolean;
   /** With `taken`: the transaction that spent its coins, and its block. */
-  takenIn?: { txHash: string; blockHeight: number };
+  takenIn?: SpentIn;
 }
 
 /**
@@ -195,7 +245,7 @@ export interface ListedOffer {
  * kept there as taken with the transaction that took them (a later cancel
  * answers OFFER_TAKEN), and listed as taken.
  */
-export async function listOffers(root: string, network: NetworkName, networkConfig: NetworkConfig, walletAddress: string, now: Date = new Date(), signal?: AbortSignal): Promise<ListedOffer[]> {
+export async function listOffers(root: string, network: NetworkName, networkConfig: NetworkConfig, engine: Engine, walletAddress: string, now: Date = new Date(), signal?: AbortSignal): Promise<ListedOffer[]> {
   const listed: ListedOffer[] = [];
   for (const offer of readOpenOffers(root, network, walletAddress)) {
     const spend = (await spendsOf(networkConfig, offer.nullifiers, { signal }))[0];
@@ -204,8 +254,9 @@ export async function listOffers(root: string, network: NetworkName, networkConf
       listed.push({ offer, expired, taken: false });
       continue;
     }
-    closeOpenOffers(root, network, walletAddress, [offer.id], { settledBy: 'taken', txHash: spend.transactionHash, blockHeight: spend.blockHeight, at: now });
-    listed.push({ offer, expired, taken: true, takenIn: { txHash: spend.transactionHash, blockHeight: spend.blockHeight } });
+    const takenIn = await spentInOf(spend, engine, networkConfig, signal);
+    closeOpenOffers(root, network, walletAddress, [offer.id], { settledBy: 'taken', ...takenIn, at: now });
+    listed.push({ offer, expired, taken: true, takenIn });
   }
   return listed;
 }
@@ -247,8 +298,8 @@ export function findOpenOffer(root: string, network: NetworkName, walletAddress:
     const settled = readSettledOffers(root, network, walletAddress, now).filter((o) => o.id.startsWith(wanted));
     const only = settled.length === 1 ? settled[0]! : undefined;
     if (only?.settledBy === 'cancelled') throw new OfferAlreadyCancelledError(only.id, only.txHash, only.settledAt);
-    if (only !== undefined && only.txHash !== undefined && only.blockHeight !== undefined) {
-      throw new OfferTakenError(only.id, { transactionHash: only.txHash, blockHeight: only.blockHeight }, { note: "Nothing was cancelled or sent; mn's record keeps the offer as taken." });
+    if (only !== undefined && only.hash !== undefined && only.blockHeight !== undefined) {
+      throw new OfferTakenError(only.id, { ...(only.txHash === undefined ? {} : { txHash: only.txHash }), hash: only.hash, blockHeight: only.blockHeight }, { note: "Nothing was cancelled or sent; mn's record keeps the offer as taken." });
     }
     throw new NoSuchOfferError(id);
   }
@@ -269,7 +320,8 @@ export class OwnOfferError extends UsageError {
 export interface CancelOutcome {
   txHash: string | undefined;
   cancelled: OpenOffer[];
-  alreadyTaken: Array<{ offer: OpenOffer; spends: CoinSpend[] }>;
+  /** Offers found taken already, with the transaction that spent their coins. */
+  alreadyTaken: Array<{ offer: OpenOffer; takenIn: SpentIn }>;
 }
 
 /**
@@ -278,12 +330,12 @@ export interface CancelOutcome {
  * mn's record under the state root `root`. An offer found taken already is
  * only closed.
  */
-export async function cancelOffer(session: WalletSession, root: string, networkConfig: NetworkConfig, walletAddress: string, id: string, signal?: AbortSignal): Promise<CancelOutcome> {
+export async function cancelOffer(session: WalletSession, engine: Engine, root: string, networkConfig: NetworkConfig, walletAddress: string, id: string, signal?: AbortSignal): Promise<CancelOutcome> {
   const offer = findOpenOffer(root, session.network, walletAddress, id);
-  const takenWith = (spends: CoinSpend[]): CancelOutcome => {
-    const spend = spends[0]!;
-    closeOpenOffers(root, session.network, walletAddress, [offer.id], { settledBy: 'taken', txHash: spend.transactionHash, blockHeight: spend.blockHeight });
-    return { txHash: undefined, cancelled: [], alreadyTaken: [{ offer, spends }] };
+  const takenWith = async (spends: CoinSpend[]): Promise<CancelOutcome> => {
+    const takenIn = await spentInOf(spends[0]!, engine, networkConfig, signal);
+    closeOpenOffers(root, session.network, walletAddress, [offer.id], { settledBy: 'taken', ...takenIn });
+    return { txHash: undefined, cancelled: [], alreadyTaken: [{ offer, takenIn }] };
   };
   const spends = await spendsOf(networkConfig, offer.nullifiers, { signal });
   if (spends.length > 0) return takenWith(spends);

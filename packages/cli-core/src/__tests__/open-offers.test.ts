@@ -101,12 +101,25 @@ describe('settled offers', () => {
   it('are kept apart from the open ones, with how they settled and in which transaction', () => {
     recordOpenOffer(root, 'undeployed', WALLET, offer('a1', ['n1']));
     recordOpenOffer(root, 'undeployed', WALLET, offer('a2', ['n2']));
-    closeOpenOffers(root, 'undeployed', WALLET, ['a1'], { settledBy: 'taken', txHash: 'cd'.repeat(32), blockHeight: 800, at: SETTLED_AT });
+    closeOpenOffers(root, 'undeployed', WALLET, ['a1'], { settledBy: 'taken', txHash: '00' + 'ab'.repeat(32), hash: 'cd'.repeat(32), blockHeight: 800, at: SETTLED_AT });
     expect(readOpenOffers(root, 'undeployed', WALLET).map((o) => o.id)).toEqual(['a2']);
-    expect(readSettledOffers(root, 'undeployed', WALLET, SETTLED_AT)).toEqual([{ ...offer('a1', ['n1']), settledBy: 'taken', settledAt: SETTLED_AT, txHash: 'cd'.repeat(32), blockHeight: 800 }]);
+    expect(readSettledOffers(root, 'undeployed', WALLET, SETTLED_AT)).toEqual([{ ...offer('a1', ['n1']), settledBy: 'taken', settledAt: SETTLED_AT, txHash: '00' + 'ab'.repeat(32), hash: 'cd'.repeat(32), blockHeight: 800 }]);
     // A new offer recorded later keeps them.
     recordOpenOffer(root, 'undeployed', WALLET, offer('a3', ['n3']));
     expect(readSettledOffers(root, 'undeployed', WALLET, SETTLED_AT).map((o) => o.id)).toEqual(['a1']);
+  });
+
+  // An mn before 0.6.0's release kept the taking transaction's hash as a taken offer's txHash, where txHash is the identifier.
+  it('read a taken one an earlier mn kept with the hash as its txHash as the hash; a cancel\'s txHash stays the identifier', () => {
+    recordOpenOffer(root, 'undeployed', WALLET, offer('a1', ['n1']));
+    recordOpenOffer(root, 'undeployed', WALLET, offer('a2', ['n2']));
+    const stored = JSON.parse(readFileSync(openOffersFile(root, 'undeployed', WALLET), 'utf-8'));
+    const [a1, a2] = stored.offers;
+    writeFileSync(openOffersFile(root, 'undeployed', WALLET), JSON.stringify({ offers: [], settled: [
+      { ...a1, settledBy: 'taken', settledAt: SETTLED_AT.toISOString(), txHash: 'cd'.repeat(32), blockHeight: 800 },
+      { ...a2, settledBy: 'cancelled', settledAt: SETTLED_AT.toISOString(), txHash: '00' + 'ef'.repeat(32) },
+    ] }));
+    expect(readSettledOffers(root, 'undeployed', WALLET, SETTLED_AT).map((o) => [o.id, o.txHash, o.hash])).toEqual([['a1', undefined, 'cd'.repeat(32)], ['a2', '00' + 'ef'.repeat(32), undefined]]);
   });
 
   it('stay out of the list of offers an older mn reads, so it never takes one for open', () => {
