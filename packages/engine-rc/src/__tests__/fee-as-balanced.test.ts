@@ -61,7 +61,18 @@ describe('a call that gives a contract a shielded coin, priced as the wallet bal
   it('prices a transaction that owes no shielded coin alone, booking nothing', async () => {
     const shielded = shieldedWallet();
     const plain = unproven(COIN_CALL_SHIELDED_BALANCING_HEX);
-    expect(await estimateFeeAsBalanced({ shielded, dust }, plain, TTL)).toBe(await dust.estimateFee([plain]));
+    // The Dust estimate isn't the same on every draw (the same transaction prices one of two amounts), so what it was asked and what it answered are recorded, not asked again.
+    const asked: Array<{ transactions: readonly Tx[]; fee: bigint }> = [];
+    const recording: typeof dust = { estimateFee: async (transactions, ttl) => {
+      const fee = await dust.estimateFee(transactions, ttl);
+      asked.push({ transactions, fee });
+      return fee;
+    } };
+    const fee = await estimateFeeAsBalanced({ shielded, dust: recording }, plain, TTL);
+    expect(asked).toHaveLength(1);
+    expect(asked[0].transactions).toEqual([plain]);
+    expect(asked[0].transactions[0]).toBe(plain);
+    expect(fee).toBe(asked[0].fee);
     expect(shielded.released).toEqual([]);
   });
 
