@@ -69,7 +69,7 @@ proofs. The CLI provides full shielded support:
   address is one of your wallets, it maps to that wallet's full sync;
   otherwise it errors and points you to --wallet <name> --shielded.
 
-  On preview and preprod the shielded balance is not read by
+  On mainnet, preview and preprod the shielded balance is not read by
   default: the first read takes a while. A wallet can still hold shielded
   tokens there (contracts mint them, others send them). midnight balance
   --force-shielded reads it, and midnight transfer --shielded needs

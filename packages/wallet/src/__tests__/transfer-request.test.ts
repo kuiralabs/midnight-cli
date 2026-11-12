@@ -112,6 +112,14 @@ describe('resolveTransferRequest', () => {
     await expect(request('mn_shield-addr_preprod1garbage', '1', '--wallet', 'sender', '--shielded', '--network', 'preprod'))
       .rejects.toThrow(/Shielded is not read on preprod by default/);
   });
+
+  // Regression: mainnet synced the shielded wallet by default, so a shielded transfer there needed no --force-shielded.
+  it('refuses a shielded transfer on mainnet without --force-shielded, and takes it with the flag', async () => {
+    await expect(request(RECIPIENT_SHIELDED.mainnet, '1', '--wallet', 'sender', '--shielded', '--network', 'mainnet'))
+      .rejects.toThrow('Shielded is not read on mainnet by default (its first read takes a while), though a wallet can hold shielded tokens there. Pass --force-shielded to read it.');
+    const r = await request(RECIPIENT_SHIELDED.mainnet, '1', '--wallet', 'sender', '--shielded', '--force-shielded', '--network', 'mainnet');
+    expect(r).toMatchObject({ recipients: [{ input: RECIPIENT_SHIELDED.mainnet, address: RECIPIENT_SHIELDED.mainnet, amount: 1_000_000n }], shielded: true, networkName: 'mainnet' });
+  });
 });
 
 // The error-code parity table's row for a transfer's arguments (src/__tests__/error-code-parity.test.ts

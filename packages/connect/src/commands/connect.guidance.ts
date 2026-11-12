@@ -35,7 +35,7 @@ can connect to it — no browser extension needed.
     send no Origin and always connect. A refused page gets HTTP 403, and
     serve prints the origin it refused. --approve-all with an allowed
     origin prints a warning: any script on that page can spend and sign
-  - Shielded wallet on preview and preprod: serve is ready
+  - Shielded wallet on mainnet, preview and preprod: serve is ready
     without waiting for the shielded sync, which goes on behind it, so
     shielded balances it reports may be incomplete until it catches up.
     --force-shielded waits for the full shielded sync first; a dApp that

@@ -36,8 +36,8 @@ export const serveDefinition: CommandDefinition = {
       name: 'force-shielded',
       takesValue: false,
       help: [
-        '--force-shielded              On preview and preprod: wait for the shielded',
-        '                              sync before serving. Without it serve is ready once',
+        '--force-shielded              On mainnet, preview and preprod: wait for the',
+        '                              shielded sync before serving. Without it serve is ready once',
         '                              unshielded and Dust are synced, and shielded keeps',
         '                              syncing behind it, so shielded balances it reports may',
         '                              be incomplete until that sync catches up',

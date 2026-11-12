@@ -130,6 +130,8 @@ Every flag applies to the whole transaction (`--shielded` pays every recipient s
 
 Wallets are network-agnostic — one seed derives addresses for all four networks. Use `--network <name>` on any command, or persist a test network with `midnight config set network preview` (mainnet is never persisted).
 
+On mainnet, preview and preprod mn doesn't read the shielded balance by default, since a wallet's first shielded read takes minutes there: `midnight balance --force-shielded` reads it, and `midnight transfer --shielded` needs `--force-shielded`. A wallet can still hold shielded tokens on those networks.
+
 ### Mainnet
 
 mn reaches mainnet only when a command names it: `--network mainnet` on the command line, or the network parameter of an MCP tool. `midnight config set network mainnet` is refused, a saved config never resolves to mainnet, and a mainnet address (`mn_addr1…`) given to `midnight balance` without `--network mainnet` is refused instead of being read on mainnet.

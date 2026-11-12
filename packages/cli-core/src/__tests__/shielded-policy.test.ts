@@ -23,6 +23,15 @@ describe('shielded-policy', () => {
     expect(shieldedSyncEnabled('preprod', true)).toBe(true);
   });
 
+  // Regression: mainnet did a full shielded sync by default, a cold read of 109 s through Blockfrost.
+  it('disables shielded sync on mainnet by default, and --force-shielded re-enables it', () => {
+    expect(networkHasShielded('mainnet')).toBe(false);
+    expect(shieldedSyncEnabled('mainnet', false)).toBe(false);
+    expect(shieldedSyncEnabled('mainnet')).toBe(false);
+    expect(shieldedSyncEnabled('mainnet', true)).toBe(true);
+    expect(shieldedDisabledReason('mainnet')).toBe('Shielded is not read on mainnet by default (its first read takes a while), though a wallet can hold shielded tokens there. Pass --force-shielded to read it.');
+  });
+
   it('names the network and the override in the reason', () => {
     const reason = shieldedDisabledReason('preprod');
     expect(reason).toContain('preprod');

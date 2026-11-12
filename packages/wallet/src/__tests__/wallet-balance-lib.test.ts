@@ -134,6 +134,17 @@ describe('readWalletBalance', () => {
     ]);
   });
 
+  // Regression: mainnet read the shielded balance by default, a cold read of 109 s through Blockfrost.
+  it('skips the shielded read on mainnet by default', async () => {
+    const said: Said[] = [];
+    const seed = Buffer.from(SEED_A, 'hex');
+    const address = rcKeys.unshieldedAddress(seed, 'mainnet');
+    const result = await readWalletBalance(programHost('a'), { seed }, { ...endpoints(), network: 'mainnet', forceFresh: true, onProgress: (event) => said.push(event) });
+
+    expect(result).toEqual({ network: 'mainnet', address, unshielded: { night: 3_500_000n, utxoCount: 2 }, shielded: null });
+    expect(said).not.toContainEqual({ kind: 'start', message: 'Syncing shielded...' });
+  });
+
   it('unlocks a sealed wallet by name through the host\'s passphrase, and says the shielded address its file saved', async () => {
     const host = programHost('a');
     const root = host.paths().stateRoot;

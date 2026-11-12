@@ -38,7 +38,7 @@ export interface TransferNightOptions extends WalletCallOptions<WalletOpened> {
   recipients?: readonly NightPayment[];
   /** Send from the wallet's shielded NIGHT to a shielded address. */
   shielded?: boolean;
-  /** Allow a shielded transfer where the network has no shielded faucet (preview, preprod). */
+  /** Allow a shielded transfer where the network has no shielded faucet (mainnet, preview, preprod). */
   forceShielded?: boolean;
   /** How long to wait for the indexer to list the transaction, in milliseconds: RECEIPT_WAIT_MS when not given; 0 does not wait. */
   receiptWaitMs?: number;
