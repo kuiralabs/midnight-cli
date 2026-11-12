@@ -94,6 +94,7 @@ export const dustDefinition: CommandDefinition = {
       nightBalance: 'NIGHT balance (raw bigint string; status only when registered)',
       dustAvailable: 'Whether dust tokens are available (status only when registered)',
       txHash: 'The registration transaction\'s identifier (register only, if submitted; midnight tx status takes it)',
+      dustNeeds: 'What the Dust is ready for once registered (register only): `transfer` and `counterDeploy`, each `{dust, waitSeconds}` (what it takes in DUST, and the seconds until the wallet has it: 0 now, null not within a day; a counter contract\'s deploy is a guide, `contract deploy --dry-run` prices one), and `generatedPerSecond` (DUST a second)',
       receipt: 'The transaction once the indexer lists it: blockHeight, blockHash, blockTime, fee (DUST, exact), feeSpecks, result; null when it has not within 60 s (register, if submitted)',
       receiptMissing: 'Why receipt is null; check later with midnight tx status <txHash>',
       dustPublicKey: 'Dust public key hex the snapshot belongs to (export only)',

@@ -1,5 +1,5 @@
 import { getNetworkId, type WalletCacheData, type FeePricing, newFeePricing, SYNC_TIMEOUT_MS, PRE_SEND_SYNC_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/engine';
-import { type NoticeSink, type NetworkConfig, type VerboseLog, CancelledError, SyncTimeoutError, throwIfCancelled } from '@kuiralabs/midnight-cli-core';
+import { type NoticeSink, type NetworkConfig, type VerboseLog, CancelledError, SyncTimeoutError, throwIfCancelled, type WaitSink, sayWhileRunning, secondsText } from '@kuiralabs/midnight-cli-core';
 import {
   UnshieldedWallet,
   createKeystore,
@@ -509,11 +509,33 @@ export interface SyncOptions {
   log?: VerboseLog;
   /** Cancels the wait: the sync fails with CancelledError. The caller stops the facade. */
   signal?: AbortSignal;
+  /** Where a sync of more than WAIT_LINE_EVERY_MS says where it is (the host's `waiting`, shown in every mode). */
+  waiting?: WaitSink;
 }
 
+/** Starts the facade and waits for its wallets to sync; a sync of minutes says how far it is on `waiting`. */
 export async function startAndSyncFacade(
   bundle: FacadeBundle,
   options: SyncOptions = {},
+): Promise<FacadeState> {
+  const { waiting } = options;
+  if (waiting === undefined) return syncFacade(bundle, options);
+  let percent: number | undefined;
+  const onProgress = (applied: number, highest: number): void => {
+    if (highest > 0) percent = Math.min(Math.round((applied / highest) * 100), 100);
+    options.onProgress?.(applied, highest);
+  };
+  return sayWhileRunning(
+    syncFacade(bundle, { ...options, onProgress }),
+    (elapsedMs) => `Syncing wallet: ${percent === undefined ? '' : `${percent}%, `}${secondsText(elapsedMs)} so far...`,
+    waiting,
+    { done: (_, elapsedMs) => `Wallet synced in ${secondsText(elapsedMs)}` },
+  );
+}
+
+async function syncFacade(
+  bundle: FacadeBundle,
+  options: SyncOptions,
 ): Promise<FacadeState> {
   const { onProgress, onSyncDetail, timeoutMs, syncMode = 'full', requireStrictSync = false, log, signal } = options;
   const { facade } = bundle;

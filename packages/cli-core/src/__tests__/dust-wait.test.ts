@@ -3,7 +3,8 @@
 // NIGHT generates it (1000 NIGHT: ~0.0083 DUST/s on a ledger-9 localnet).
 
 import { describe, it, expect, vi } from 'vitest';
-import { dustShortError, msUntilDust } from '../lib/dust-wait.ts';
+import { dustReadiness, dustShortError, msUntilDust } from '../lib/dust-wait.ts';
+import { COUNTER_DEPLOY_DUST, MIN_DUST_FOR_TRANSFER } from '../lib/constants.ts';
 import { DUST_SHORT_WAIT_MS, DUST_WAIT_REPORT_MS, awaitDustForFee, payWhenDustCovers, planDustWait, sleep, waitForDustGrowth } from '../lib/dust-wait.ts';
 import { withDustShortfall } from '../lib/sdk-errors.ts';
 
@@ -42,6 +43,24 @@ describe('awaitDustForFee', () => {
       await waiting;
       expect(done).toBe(true);
       expect(statuses).toEqual(['Waiting about 29 seconds for Dust to cover the fee (0.660000 of 0.900000 DUST)...']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Regression: a transfer's wait for Dust said nothing off a terminal or under --json.
+  it('says the wait on `say` as it goes, in every mode: the opening, then the time waited every 15 s', async () => {
+    vi.useFakeTimers({ now: NOW });
+    try {
+      const said: Array<[string, boolean]> = [];
+      // 0.66 of 0.9 DUST at 0.0083 DUST/s: 29 s.
+      const waiting = awaitDustForFee(JUST_REGISTERED, NEEDED, undefined, undefined, (line, opening) => said.push([line, opening]));
+      await vi.advanceTimersByTimeAsync(29_000);
+      await waiting;
+      expect(said).toEqual([
+        ['Dust: 0.66 of the 0.90 DUST this fee takes; waiting about 29 seconds (29 s) for its registered NIGHT to generate the rest...', true],
+        ['Dust: waited 15 s of 29 s, 0.78 of 0.90 DUST', false],
+      ]);
     } finally {
       vi.useRealTimers();
     }
@@ -161,6 +180,25 @@ describe('a Dust shortage that says what the wallet is short by', () => {
       vi.useRealTimers();
     });
 
+    it('says each wait on `say` as it goes', async () => {
+      vi.useFakeTimers({ now: NOW });
+      try {
+        const said: Array<[string, boolean]> = [];
+        const pay = vi.fn().mockRejectedValueOnce(shortage(NEEDED, 100_000_000_000_000n)).mockResolvedValue('recipe');
+        const paid = payWhenDustCovers(pay, AFTER_PAYING, { maxWaitMs: DUST_SHORT_WAIT_MS, say: (line, opening) => said.push([line, opening]) });
+        await vi.advanceTimersByTimeAsync(100_000);
+        await expect(paid).resolves.toBe('recipe');
+        expect(said[0]![1]).toBe(true);
+        expect(said[0]![0]).toMatch(/^Dust: 0\.10 of the 0\.90 DUST this fee takes; waiting about 2 minutes/);
+        expect(said.slice(1).map(([line, opening]) => [line.replace(/, [0-9.]+ of 0\.90 DUST$/, ''), opening])).toEqual([
+          ['Dust: waited 15 s of 99 s', false], ['Dust: waited 30 s of 99 s', false], ['Dust: waited 45 s of 99 s', false],
+          ['Dust: waited 60 s of 99 s', false], ['Dust: waited 75 s of 99 s', false], ['Dust: waited 90 s of 99 s', false],
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('refuses with the time when the wait is longer than allowed, without waiting', async () => {
       const pay = vi.fn().mockRejectedValue(shortage(2n * DUST, 100_000_000_000_000n));
       const err = await payWhenDustCovers(pay, AFTER_PAYING, { maxWaitMs: DUST_SHORT_WAIT_MS }).catch((e: Error) => e) as Error;
@@ -231,5 +269,22 @@ describe('waitForDustGrowth', () => {
     const waiting = waitForDustGrowth({ have: 0n, needed: DUST, waitMs: 60_000 }, growing(0n, 0n), () => {}, { signal: controller.signal });
     controller.abort();
     await expect(waiting).rejects.toMatchObject({ code: 'CANCELLED' });
+  });
+});
+
+describe('dustReadiness', () => {
+  // Regression: register said "Dust tokens available: 0.197 DUST" and a transfer
+  // 15 s later was refused for 0.65; it now says what each takes and when.
+  it('says what a transfer and a counter\'s deploy take, and when the wallet has each, from its rate now', () => {
+    // 0.197 DUST, +0.0083 DUST/s.
+    const readiness = dustReadiness(growing(197_000_000_000_000n, 8_300_000_000_000n), NOW);
+    expect(readiness.have).toBe(197_000_000_000_000n);
+    expect(readiness.perSecond).toBe(8_300_000_000_000n);
+    expect(readiness.transfer).toEqual({ needs: MIN_DUST_FOR_TRANSFER, waitMs: 55_000 });
+    expect(readiness.counterDeploy).toEqual({ needs: COUNTER_DEPLOY_DUST, waitMs: 126_000 });
+  });
+
+  it('is 0 for what the wallet has already, and null for what its NIGHT won\'t generate within a day', () => {
+    expect(dustReadiness(growing(DUST, 0n), NOW)).toEqual({ have: DUST, perSecond: 0n, transfer: { needs: MIN_DUST_FOR_TRANSFER, waitMs: 0 }, counterDeploy: { needs: COUNTER_DEPLOY_DUST, waitMs: null } });
   });
 });

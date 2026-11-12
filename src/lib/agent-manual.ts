@@ -116,8 +116,11 @@ STRUCTURED JSON OUTPUT
 Every command supports --json. When passed:
   - stdout receives a single line of JSON
   - stderr stays quiet (no spinners, headings or notices), except for
-    the plain progress lines of a long wait, such as a deploy waiting for
-    its wallet's Dust ("Dust: waited 45 s of 104 s, 0.76 of 1.23 DUST")
+    the plain progress lines of a long step, every 15 s once it has run
+    15 s: a wait for Dust ("Dust: waited 45 s of 104 s, 0.76 of 1.23
+    DUST"), a wallet sync, a read of the chain's Dust or shielded events
+    ("Reading shielded events: at event 8504 of 17009 (50%), 540 read"),
+    or a proof ("Proving the transaction: 30 s so far...")
   - Errors: {"error":true,"code":"...","message":"...","exitCode":N}
   - "warnings": the notices the command would print on stderr without
     --json (a hosted Dust read done in WASM, a store moved, ...), one

@@ -40,8 +40,8 @@ const SUBSCRIPTION_QUERY = `
 export type ShieldedDirectResult = ShieldedFoldResult;
 
 export interface ShieldedDirectOptions {
-  /** Called with (eventsApplied, maxIdSeen) whenever a new event arrives. */
-  onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
+  /** Called with (eventsApplied, maxIdSeen, lastIdSeen, startFromId) whenever a new event arrives. */
+  onProgress?: (eventsApplied: number, maxIdSeen: number, lastIdSeen: number, startFromId: number) => void;
   /**
    * Called after every chunk of events is applied, with the current state + last
    * applied event id. Lets the caller persist a checkpoint so a Ctrl+C / timeout
@@ -119,7 +119,7 @@ export function readShieldedBalanceDirect(
       const evt = (data as { zswapLedgerEvents?: RawZswapEvent } | undefined)?.zswapLedgerEvents;
       if (!evt) return false;
       fold.push(evt);
-      onProgress?.(fold.eventsSeen, fold.maxIdSeen);
+      onProgress?.(fold.eventsSeen, fold.maxIdSeen, fold.lastIdSeen, startFromId);
       // Caught up when we've received the final event in the current stream.
       return fold.caughtUp;
     },

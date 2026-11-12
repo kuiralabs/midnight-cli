@@ -3,7 +3,7 @@
 // NIGHT and tokens, read with its secret keys, where the network has a
 // shielded faucet (or when asked).
 
-import { type Host, type EngineKeys, addressPrefix, looksLikeShieldedAddress, throwIfCancelled, UsageError, detectNetworkFromAddress, isNamedOnlyNetwork, NetworkNotNamedError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core';
+import { type Host, type EngineKeys, addressPrefix, looksLikeShieldedAddress, throwIfCancelled, UsageError, detectNetworkFromAddress, isNamedOnlyNetwork, NetworkNotNamedError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, shieldedSyncEnabled, type EventReadProgress, eventsReadDoneLine, eventsReadLine, sayWhileRunning } from '@kuiralabs/midnight-cli-core';
 import { assertEndpointsReachable, checkLedgerSupported, endpointsOf, fetchProtocolVersion, getChainGenesisHash } from '@kuiralabs/midnight-chain';
 import { saveShieldedAddress } from '../wallet-config.ts';
 import { seedOf, type WalletSource } from '../seed-resolver.ts';
@@ -179,13 +179,25 @@ export async function readWalletBalance(host: Host, source: WalletSource, option
       checkLedgerSupported(network, chainProtocolVersion);
       // Null when the node can't say (the cache check is then skipped); a cancelled call stops here.
       const chainId = (await getChainGenesisHash(networkConfig.node, signal)) ?? undefined;
-      const shieldedResult = await engine.readers.shieldedBalance(wallet.seed, network, networkConfig.indexerWS, {
+      // How far the read is, by the event id it reached: the indexer numbers
+      // every kind of ledger event in one sequence, so the count of shielded
+      // events read is no fraction of the last id. A cold read of minutes says
+      // where it is on the host's `waiting`, in every mode.
+      let progress: EventReadProgress = { read: 0, maxId: -1, firstId: 0 };
+      const shieldedResult = await sayWhileRunning(engine.readers.shieldedBalance(wallet.seed, network, networkConfig.indexerWS, {
         root,
         forceFresh,
         chainId,
         chainProtocolVersion,
         signal,
-        onProgress: (applied, highest) => steps.update(formatSyncStatus(eta.sample({ applied, highest, t: Date.now() }), 'Syncing shielded')),
+        onProgress: (applied, maxId, lastId, firstId) => {
+          progress = { read: applied, maxId, lastId, firstId };
+          const position = eta.sample({ applied: lastId - firstId + 1, highest: maxId - firstId + 1, t: Date.now() });
+          // The rate would be of event ids, not of events read: left out.
+          steps.update(formatSyncStatus({ ...position, ratePerSec: null }, 'Reading shielded events'));
+        },
+      }), () => eventsReadLine('shielded', progress), host.waiting, {
+        done: (result, elapsedMs) => eventsReadDoneLine('shielded', result, progress, elapsedMs),
       });
       steps.done('Shielded ready');
       return {

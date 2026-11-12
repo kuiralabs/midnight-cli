@@ -44,7 +44,7 @@ export {
   type RpcHandlerContext
 } from './lib/connector-api.ts';
 export {
-  BALANCE_CHECK_TIMEOUT_MS, DASHBOARD_BASE_URL, DEFAULT_CONFIG_FILENAME, DEFAULT_SERVE_PORT, DEFAULT_WALLET_FILENAME,
+  BALANCE_CHECK_TIMEOUT_MS, COUNTER_DEPLOY_DUST, DASHBOARD_BASE_URL, DEFAULT_CONFIG_FILENAME, DEFAULT_SERVE_PORT, DEFAULT_WALLET_FILENAME,
   DEFAULT_WALLET_NAME, DIR_MODE, FILE_MODE, GENESIS_SEED, isValidWalletName, LOCAL_WALLET_FUNDING_NIGHT, LOCALNET_DIR_NAME,
   MAX_WALLET_NAME_LENGTH, MIDNIGHT_DIR, MN_RPC_METHOD_PREFIX, NATIVE_TOKEN_TYPE, PRICE_TRANSACTION_METHOD, PROOF_SERVER_DOCKER_RUN, PROOF_SERVER_IMAGE, SYNC_HEAP_MIN_GAIN_MB, SYNC_HEAP_RAM_FRACTION, SYNC_HEAP_TARGET_MB,
   WALLETS_DIR_NAME
@@ -53,7 +53,7 @@ export { FileExistsError, readJsonIfPresent, writeJsonDurably } from './lib/dura
 export { assertValidWalletName, InvalidWalletNameError } from './lib/wallet-name.ts';
 export { ensureOwnerOnlyDir, narrowToOwnerOnly } from './lib/owner-only.ts';
 export { formatWait } from './lib/duration.ts';
-export { dustShortError, OWN_COMMAND_DUST_WAIT_MS } from './lib/dust-wait.ts';
+export { type DustBalanceSource, type DustNeed, type DustReadiness, dustReadiness, dustShortError, OWN_COMMAND_DUST_WAIT_MS } from './lib/dust-wait.ts';
 export { type TransactionPrice, type TransactionPriceWire, transactionPriceFromWire } from './lib/transaction-price.ts';
 export {
   type BalanceSummary, type DAppConnector, type DAppConnectorCallbacks, type DustExportResult,
@@ -98,6 +98,7 @@ export {
 } from './lib/network.ts';
 export { type NetworkChoice, networkChoiceFromArgs, networkTargetOf } from './lib/network-target.ts';
 export { type NoticeSink, type WaitSink } from './lib/notices.ts';
+export { type EventReadProgress, eventsReadDoneLine, eventsReadLine, provingLine, sayWhileRunning, secondsText, type StepLines, stepLines, WAIT_LINE_EVERY_MS } from './lib/wait-lines.ts';
 export {
   assertEnvelopeMatches, assertOfferUnexpired, decodeOfferEnvelope, encodeOfferEnvelope,
   type OfferEnvelope, OfferExpiredError

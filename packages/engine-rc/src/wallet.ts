@@ -5,7 +5,7 @@
 
 import { deriveUnshieldedAddress } from './derive-address.ts';
 import { assertSpendsNoOfferCoin, type DAppConnector, type EngineWallet, type OpenedConnector, type PrepWallet, type ServedWalletSession, type ShieldedTransferParams, reportingEngineErrors, getNetworkId, bindCachesToIndexer, describeIndexerChange, saveWalletCache, DUST_SHORT_WAIT_MS, payWhenDustCovers, proveWithin, submitWithin, PROOF_TIMEOUT_MS, DUST_DOUBLE_SPEND_RETRIES, isDroppedFromPool, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin } from '@kuiralabs/midnight-cli-core/engine';
-import { readOpenOffers, InsufficientBalanceError, throwIfCancelled, walletDustLock, walletDustLockFile, DustDoubleSpentError, RERUN_DOUBLE_SPENT_STATUS, RERUN_INVALIDATED_STATUS, TransactionInvalidatedError } from '@kuiralabs/midnight-cli-core';
+import { readOpenOffers, InsufficientBalanceError, throwIfCancelled, walletDustLock, walletDustLockFile, DustDoubleSpentError, RERUN_DOUBLE_SPENT_STATUS, RERUN_INVALIDATED_STATUS, TransactionInvalidatedError, provingLine, sayWhileRunning } from '@kuiralabs/midnight-cli-core';
 import { trackElapsed } from '@kuiralabs/midnight-cli-core/ui';
 import { spentNullifiers } from './offer-reader.ts';
 import * as ledger from '@midnightntwrk/ledger-v9';
@@ -46,7 +46,7 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
       }
 
       progress.update('Checking dust...');
-      await ensureDust(bundle, (status: string) => progress.update(status), undefined, signal, { networkId: networkConfig.networkId, retry: 'the transfer' });
+      await ensureDust(bundle, (status: string) => progress.update(status), undefined, signal, { networkId: networkConfig.networkId, retry: 'the transfer' }, repo.waiting);
 
       throwIfCancelled(signal);
 
@@ -60,7 +60,7 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
           { ttl: new Date(Date.now() + HOUR_MS) },
         );
         const recipe = params.waitForDustToCover
-          ? await payWhenDustCovers(build, state.dust, { maxWaitMs: DUST_SHORT_WAIT_MS, onStatus: (status) => progress.update(status), signal })
+          ? await payWhenDustCovers(build, state.dust, { maxWaitMs: DUST_SHORT_WAIT_MS, onStatus: (status) => progress.update(status), signal, say: repo.waiting })
           : await build();
 
         progress.update('Signing...');
@@ -68,7 +68,7 @@ async function shieldedTransfer(repo: WalletDataRepository, params: ShieldedTran
 
         progress.update('Generating ZK proof (this may take a few minutes)...');
         // Cancelled while proving, the call stops at once: nothing was sent.
-        const finalized = await proveWithin(bundle.facade.finalizeRecipe(signed), PROOF_TIMEOUT_MS, signal);
+        const finalized = await sayWhileRunning(proveWithin(bundle.facade.finalizeRecipe(signed), PROOF_TIMEOUT_MS, signal), provingLine, repo.waiting);
         throwIfCancelled(signal);
 
         // Spending an open swap offer's coins would cancel it: refused.
@@ -165,6 +165,7 @@ async function syncedPrepWallet(repo: WalletDataRepository, wallet: PrepWallet, 
   try {
     beforeSync?.();
     const state = await startAndSyncFacade(bundle, {
+      waiting: repo.waiting,
       syncMode: 'lite',
       signal: wallet.signal,
       ...(reportSync
@@ -206,7 +207,7 @@ async function prepDust(repo: WalletDataRepository, wallet: PrepWallet, waitMs: 
   try {
     // Register dust (auto-registers UTXOs if needed, no-op if already available)
     wallet.onMessage('Ensuring dust...');
-    const result = await ensureDust(bundle, (status) => wallet.onMessage(`Dust: ${status}`));
+    const result = await ensureDust(bundle, (status) => wallet.onMessage(`Dust: ${status}`), undefined, undefined, undefined, repo.waiting);
     if (result.alreadyAvailable) {
       wallet.onMessage('Dust already available');
       try { await saveWalletCache(wallet.address, wallet.network, bundle.facade, wallet.root); } catch { /* best-effort */ }
@@ -248,6 +249,7 @@ async function openConnector(repo: WalletDataRepository, options: Parameters<Eng
 
     onMessage('Syncing wallet...');
     await startAndSyncFacade(built, {
+      waiting: repo.waiting,
       syncMode,
       signal,
       onProgress: (applied, highest) => {

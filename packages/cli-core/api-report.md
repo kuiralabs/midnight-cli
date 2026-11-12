@@ -286,6 +286,7 @@ export interface RpcHandlerContext {
     metadata: Record<string, unknown>;
 }
 export declare const BALANCE_CHECK_TIMEOUT_MS = 60000;
+export declare const COUNTER_DEPLOY_DUST = 1240000000000000n;
 export declare const DASHBOARD_BASE_URL = "https://midnight-comp-tracker.vercel.app";
 export declare const DEFAULT_CONFIG_FILENAME = "config.json";
 export declare const DEFAULT_SERVE_PORT = 9932;
@@ -322,6 +323,20 @@ export declare class InvalidWalletNameError extends UsageError {
 export declare function ensureOwnerOnlyDir(dir: string): void;
 export declare function narrowToOwnerOnly(file: string): void;
 export declare function formatWait(ms: number): string;
+export interface DustBalanceSource {
+    balance(at: Date): bigint;
+}
+export interface DustNeed {
+    readonly needs: bigint;
+    readonly waitMs: number | null;
+}
+export interface DustReadiness {
+    readonly have: bigint;
+    readonly perSecond: bigint;
+    readonly transfer: DustNeed;
+    readonly counterDeploy: DustNeed;
+}
+export declare function dustReadiness(dust: DustBalanceSource, now?: Date): DustReadiness;
 export declare function dustShortError(have: bigint, needed: bigint, waitMs: number | null): DustRequiredError;
 export declare const OWN_COMMAND_DUST_WAIT_MS: number;
 export interface TransactionPrice {
@@ -440,6 +455,7 @@ export interface ScriptParts {
     readonly privateStateBusyWaitMs: number;
     readonly noticeMarker: string;
     readonly pricedMarker: string;
+    readonly provingMarker: string;
     readonly dryRunEnv: string;
     readonly witnessCandidates: readonly string[];
     readonly indexerUrlEnv: string;
@@ -851,6 +867,32 @@ export declare function networkChoiceFromArgs(args: ParsedArgs): NetworkChoice;
 export declare function networkTargetOf(host: Host, choice?: NetworkChoice): PayingTarget;
 export type NoticeSink = (line: string) => void;
 export type WaitSink = (line: string, opening: boolean) => void;
+export interface EventReadProgress {
+    readonly read: number;
+    readonly lastId?: number;
+    readonly maxId: number;
+    readonly firstId: number;
+}
+export declare function eventsReadDoneLine(kind: string, result: {
+    readonly partial: boolean;
+    readonly lastAppliedEventId: number;
+}, progress: EventReadProgress, elapsedMs?: number): string;
+export declare function eventsReadLine(kind: string, { read, lastId, maxId, firstId }: EventReadProgress): string;
+export declare const provingLine: (elapsedMs: number) => string;
+export declare function sayWhileRunning<T>(work: Promise<T>, line: (elapsedMs: number) => string, say: WaitSink, options?: {
+    everyMs?: number;
+    done?: (result: T, elapsedMs: number) => string;
+}): Promise<T>;
+export declare const secondsText: (ms: number) => string;
+export interface StepLines {
+    progress(line: string): void;
+    done(line: string): void;
+}
+export declare function stepLines(say: WaitSink, options?: {
+    everyMs?: number;
+    now?: () => number;
+}): StepLines;
+export declare const WAIT_LINE_EVERY_MS = 15000;
 export declare function assertEnvelopeMatches(envelope: OfferEnvelope, read: OfferContents): void;
 export declare function assertOfferUnexpired(envelope: OfferEnvelope, now: Date): void;
 export declare function decodeOfferEnvelope(text: string): OfferEnvelope;
@@ -1439,7 +1481,7 @@ export interface DustCoinGeneration {
     readonly dtime: Date | undefined;
 }
 export declare function dustGenerationCap(coins: readonly DustCoinGeneration[]): bigint;
-export declare function awaitDustForFee(dust: DustBalanceSource, needed: bigint, onStatus?: (status: string) => void, signal?: AbortSignal): Promise<void>;
+export declare function awaitDustForFee(dust: DustBalanceSource, needed: bigint, onStatus?: (status: string) => void, signal?: AbortSignal, say?: WaitSink): Promise<void>;
 export declare const DUST_SHORT_WAIT_MS: number;
 export declare const DUST_WAIT_REPORT_MS = 15000;
 export declare function dustWaitOpening(have: bigint, needed: bigint, waitMs: number): string;
@@ -1453,6 +1495,7 @@ export declare function payWhenDustCovers<T>(pay: () => Promise<T>, dust: DustBa
     maxWaitMs: number;
     onStatus?: (status: string) => void;
     signal?: AbortSignal;
+    say?: WaitSink;
 }): Promise<T>;
 export declare function planDustWait(err: unknown, dust: DustBalanceSource, now: Date): DustWaitPlan | undefined;
 export declare function sleep(ms: number, signal?: AbortSignal): Promise<void>;
@@ -1541,6 +1584,7 @@ export interface DustRegistration {
     alreadyAvailable: boolean;
     txHash?: string;
     dustBalance: bigint;
+    dustOverTime: DustBalanceSource;
 }
 export interface Engine {
     readonly set: SdkSet;
@@ -1552,7 +1596,7 @@ export interface Engine {
     account(): Promise<EngineAccountPackage>;
 }
 export type EngineAccountPackage = Readonly<Record<AccountEntryPoint, unknown>>;
-export type EngineHost = Pick<Host, 'settings' | 'notice'>;
+export type EngineHost = Pick<Host, 'settings' | 'notice' | 'waiting'>;
 export interface EngineWallet {
     unshieldedBalance(address: string, networkConfig: NetworkConfig, options?: ReadOptions): Promise<UnshieldedView>;
     dustBalance(seed: Buffer, networkConfig: NetworkConfig, options: CachedReadOptions): Promise<DustBalance>;
@@ -1565,7 +1609,7 @@ export interface EngineWallet {
         notice: NoticeSink;
         signal?: AbortSignal;
         log?: VerboseLog;
-        onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
+        onProgress?: (eventsApplied: number, maxIdSeen: number, lastIdSeen?: number, firstId?: number) => void;
     }): Promise<DustExportResult>;
     prepNightBalance(wallet: PrepWallet): Promise<bigint>;
     prepDust(wallet: PrepWallet, waitMs: number): Promise<{
@@ -1634,7 +1678,7 @@ export interface ReadOptions {
     forceFresh?: boolean;
     signal?: AbortSignal;
     onStatus?: (s: string) => void;
-    onProgress?: (current: number, highest: number) => void;
+    onProgress?: (current: number, highest: number, lastId?: number, firstId?: number) => void;
     log?: VerboseLog;
 }
 export interface ScriptParts {
@@ -1652,6 +1696,7 @@ export interface ScriptParts {
     readonly privateStateBusyWaitMs: number;
     readonly noticeMarker: string;
     readonly pricedMarker: string;
+    readonly provingMarker: string;
     readonly dryRunEnv: string;
     readonly witnessCandidates: readonly string[];
     readonly indexerUrlEnv: string;
@@ -1680,7 +1725,7 @@ export interface ShieldedBalanceResult {
     partial: boolean;
 }
 export interface ShieldedCachedOptions {
-    onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
+    onProgress?: (eventsApplied: number, maxIdSeen: number, lastIdSeen: number, firstId: number) => void;
     signal?: AbortSignal;
     timeoutMs?: number;
     forceFresh?: boolean;

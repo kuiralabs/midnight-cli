@@ -10,6 +10,7 @@ import type { WalletOpened } from '../lib/wallet/wallet-call.ts';
 
 import { receiptJson } from '@kuiralabs/midnight-chain';
 import { receiptText } from '../ui/receipt.ts';
+import { dustNeedsJson, dustNeedsText } from '../ui/dust-needs.ts';
 
 export default async function dustCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const subcommand = args.subcommand;
@@ -201,9 +202,9 @@ function printStatus(status: DustStatus, jsonMode: boolean, minimal: boolean, ct
 }
 
 function printRegistration(result: DustRegistrationResult, jsonMode: boolean, ctx: CallContext): void {
-  const { dust, txHash, receipt } = result;
+  const { dust, txHash, receipt, readiness } = result;
   if (jsonMode) {
-    const json: Record<string, unknown> = { subcommand: 'register', dustBalance: toDust(dust) };
+    const json: Record<string, unknown> = { subcommand: 'register', dustBalance: toDust(dust), dustNeeds: dustNeedsJson(readiness) };
     if (txHash) json.txHash = txHash;
     if (receipt) Object.assign(json, receiptJson(receipt));
     ctx.output.result(json);
@@ -216,5 +217,7 @@ function printRegistration(result: DustRegistrationResult, jsonMode: boolean, ct
       ? `Dust tokens already available: ${formatDust(dust)}`
       : `Dust tokens available: ${formatDust(dust)}`,
   ) + '\n');
+  for (const line of dustNeedsText(readiness)) ctx.output.stderr(dim(`  ${line}`) + '\n');
   ctx.output.stderr((receipt && txHash ? receiptText(receipt, txHash) : '') + '\n');
 }
+

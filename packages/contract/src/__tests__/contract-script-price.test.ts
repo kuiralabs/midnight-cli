@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { TransactionPrice } from '@kuiralabs/midnight-cli-core';
-import { SCRIPT_PRELUDE, SCRIPT_PRICED_MARKER, executeScript, scriptPriceOf } from '../lib/contract/runner.ts';
+import { SCRIPT_PRELUDE, SCRIPT_PRICED_MARKER, SCRIPT_PROVING_MARKER, executeScript, scriptPriceOf } from '../lib/contract/runner.ts';
 import { SCRIPT_NOTICE_MARKER } from '../lib/contract/private-state-lock.ts';
 
 const NO_PACKAGES = { packages: [], packageFolder: () => null, set: 'rc' };
@@ -39,6 +39,22 @@ describe('scriptPriceOf', () => {
 });
 
 describe('a script\'s price, as it runs', () => {
+  it('gives each proving line\'s time to onProving, and keeps the lines out of the progress', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'mn-price-'));
+    const script = SCRIPT_PRELUDE + `
+process.stderr.write('\\n${SCRIPT_PROVING_MARKER} 15000\\n');
+process.stderr.write('\\n${SCRIPT_PROVING_MARKER} 30000\\n');
+process.stderr.write('\\n${SCRIPT_PROVING_MARKER} not-a-time\\n');
+process.stderr.write('Proven\\n');
+console.log('{}');
+`;
+    const proving: number[] = [];
+    const messages: string[] = [];
+    await executeScript({ dir, script, overlaySdk: false, packages: NO_PACKAGES, onProving: (ms) => proving.push(ms), onMessage: (m) => messages.push(m) });
+    expect(proving).toEqual([15_000, 30_000]);
+    expect(messages.join('\n')).not.toContain(SCRIPT_PROVING_MARKER);
+  });
+
   it('reads a notice cut across two reads whole, and keeps it out of the progress lines', async () => {
     dir = mkdtempSync(join(tmpdir(), 'mn-price-'));
     const line = `${SCRIPT_NOTICE_MARKER} ${JSON.stringify('The private-state store is in use: waiting.')}`;

@@ -19,7 +19,7 @@
 
 import { Buffer } from 'node:buffer';
 import { isColdStartRace, loadWalletCache, saveWalletCache, clearWalletCache, validateWalletCacheChainId, type WalletCacheData, bindCachesToIndexer, describeIndexerChange, type CachedReadOptions, type DustBalance, type EngineHost, type ReadOptions, type UnshieldedView } from '@kuiralabs/midnight-cli-core/engine';
-import { throwIfCancelled, type NetworkConfig, type NetworkName, isValidNetworkName, clearDustDirectCache, type VerboseLog, type NoticeSink, clearShieldedDirectCache } from '@kuiralabs/midnight-cli-core';
+import { throwIfCancelled, type NetworkConfig, type NetworkName, isValidNetworkName, clearDustDirectCache, type VerboseLog, type NoticeSink, clearShieldedDirectCache, type WaitSink, eventsReadLine, eventsReadDoneLine, type EventReadProgress, sayWhileRunning, secondsText } from '@kuiralabs/midnight-cli-core';
 
 import { type FacadeState } from '@midnightntwrk/wallet-sdk/facade';
 import {
@@ -136,7 +136,8 @@ export interface RepoDeps {
       /** The chain tip's protocol version, read before the sync; null when unknown. */
       chainProtocolVersion: bigint | null;
       signal?: AbortSignal;
-      onProgress?: (applied: number, max: number) => void;
+      /** The events read, the indexer's last id, and, from a reader that knows them, the id of the last read and the id the read began at. */
+      onProgress?: (applied: number, max: number, lastId?: number, firstId?: number) => void;
       /** Repo passes a callback to persist incremental progress during long syncs. */
       onCheckpoint?: (state: DustLedgerState, lastAppliedEventId: number, retention: DustRetention) => void;
       /** The state root of the caches; the native sidecar keeps its checkpoint beside them. */
@@ -197,12 +198,16 @@ export class WalletDataRepository {
   private readonly fetchEventTip: NonNullable<RepoDeps['fetchEventTip']>;
   private readonly fetchProtocolVersion: NonNullable<RepoDeps['fetchProtocolVersion']>;
 
+  /** Where the lines of the long steps go (a sync, a read of the chain's events): the host's `waiting`, shown in every mode. */
+  readonly waiting: WaitSink;
+
   private readonly dustMemo = new Map<string, MemoEntry<DustView>>();
   private readonly unshieldedMemo = new Map<string, MemoEntry<UnshieldedView>>();
   private readonly tipMemo = new Map<string, { tip: TipFingerprint; fetchedAt: number }>();
 
   /** A repository for an engine: its host's settings choose how Dust is read, and its notices go to the host. */
   constructor(host: EngineHost, deps: RepoDeps = {}) {
+    this.waiting = host.waiting;
     this.now = deps.now ?? Date.now;
     this.fetchTip = deps.fetchTip ?? defaultTipFetcher;
     this.fetchUnshielded = deps.fetchUnshielded ?? defaultUnshieldedFetcher;
@@ -286,16 +291,19 @@ export class WalletDataRepository {
     opts.log?.('shielded', `The chain's first block is at protocol version ${start ?? 'unknown'}: reading the shielded history past the fork first`);
     opts.onStatus?.('Reading shielded events...');
     let maxId = -1;
-    const read = await readShieldedBalanceCached(seed, networkName, network.indexerWS, {
+    let progress: EventReadProgress = { read: 0, maxId: -1, firstId: 0 };
+    const read = await sayWhileRunning(readShieldedBalanceCached(seed, networkName, network.indexerWS, {
       root: opts.root,
       signal: opts.signal,
       chainId: chainId ?? undefined,
       chainProtocolVersion,
-      onProgress: (applied, max) => {
+      onProgress: (applied, max, lastId, firstId) => {
         maxId = max;
-        opts.onStatus?.(`Reading shielded events... ${applied} (to event ${max})`);
+        progress = { read: applied, maxId: max, lastId, firstId };
+        opts.onStatus?.(eventsReadLine('shielded', progress));
       },
-    });
+    }), () => eventsReadLine('shielded', progress), this.waiting, { done: (result, elapsedMs) => eventsReadDoneLine('shielded', result, progress, elapsedMs) });
+    opts.onStatus?.(eventsReadDoneLine('shielded', read, progress));
     opts.log?.('shielded', `Shielded checkpoint at event ${read.lastAppliedEventId}${read.partial ? ' (partial)' : ''}`);
     return read.partial ? { read: true, partial: { lastAppliedEventId: read.lastAppliedEventId, maxId } } : { read: true };
   }
@@ -459,63 +467,73 @@ export class WalletDataRepository {
     // `onCheckpoint` saves intermediate state to disk, so the next window
     // resumes from where the last one stopped and never re-processes events.
     // Bounded by time and by progress, so a broken indexer doesn't loop forever.
-    const startedAt = this.now();
-    let stalledWindows = 0;
-    for (let attempt = 0; ; attempt++) {
-      throwIfCancelled(opts.signal);
-      const startFromId = cached ? cached.lastAppliedEventId + 1 : 0;
-      opts.onStatus?.(
-        attempt > 0
-          ? `Resuming dust from event ${startFromId} (continuation ${attempt + 1})…`
-          : (cached ? `Resuming dust from event ${startFromId}…` : 'Reading dust events…'),
-      );
+    // A read of minutes says where it is on the host's `waiting` (every mode), from where it began.
+    let progress: EventReadProgress = { read: 0, maxId: -1, firstId: cached ? cached.lastAppliedEventId + 1 : 0 };
+    result = await sayWhileRunning((async (): Promise<DustDirectResult | null> => {
+      let read: DustDirectResult | null = null;
+      const startedAt = this.now();
+      let stalledWindows = 0;
+      for (let attempt = 0; ; attempt++) {
+        throwIfCancelled(opts.signal);
+        const startFromId = cached ? cached.lastAppliedEventId + 1 : 0;
+        opts.onStatus?.(
+          attempt > 0
+            ? `Resuming dust from event ${startFromId} (continuation ${attempt + 1})…`
+            : (cached ? `Resuming dust from event ${startFromId}…` : 'Reading dust events…'),
+        );
 
-      result = await this.fetchDust(seed, network, {
-        root: opts.root,
-        startFromId,
-        initialState: cached?.state,
-        initialRetention: cached?.retention,
-        chainProtocolVersion,
-        signal: opts.signal,
-        log: opts.log,
-        onProgress: (applied, max) => {
-          const target = Math.max(1, max + 1 - startFromId);
-          opts.onStatus?.(`Reading dust events… ${applied}/${target}`);
-          // Also forward the raw counts, as ReadOptions.onProgress documents.
-          // Callers that render their own progress (e.g. `dust export`'s spinner)
-          // have no other signal — without this they show a frozen spinner for
-          // the whole cold sync.
-          opts.onProgress?.(applied, max);
-        },
-        // Persist after each chunk so a Ctrl+C / process kill / SIGTERM
-        // doesn't lose 100k events of work.
-        onCheckpoint: (state, lastAppliedEventId, retention) => {
-          try { saveDustCache(networkName, pubkeyHex, state, lastAppliedEventId, opts.root, chainId, retention); } catch { /* best-effort */ }
-        },
-      });
+        read = await this.fetchDust(seed, network, {
+          root: opts.root,
+          startFromId,
+          initialState: cached?.state,
+          initialRetention: cached?.retention,
+          chainProtocolVersion,
+          signal: opts.signal,
+          log: opts.log,
+          onProgress: (applied, max, lastId, firstId) => {
+            // The position by event id when the reader knows it (the WASM reader);
+            // the native reader reports its count and the indexer's last id.
+            progress = { read: totalEventsApplied + applied, maxId: max, lastId, firstId: progress.firstId };
+            opts.onStatus?.(eventsReadLine('Dust', progress));
+            // Also forward the raw counts, as ReadOptions.onProgress documents.
+            // Callers that render their own progress (e.g. `dust export`'s spinner)
+            // have no other signal — without this they show a frozen spinner for
+            // the whole cold sync.
+            opts.onProgress?.(applied, max, lastId, firstId);
+          },
+          // Persist after each chunk so a Ctrl+C / process kill / SIGTERM
+          // doesn't lose 100k events of work.
+          onCheckpoint: (state, lastAppliedEventId, retention) => {
+            try { saveDustCache(networkName, pubkeyHex, state, lastAppliedEventId, opts.root, chainId, retention); } catch { /* best-effort */ }
+          },
+        });
 
-      // Final save (covers the last sub-chunk that didn't trip onCheckpoint).
-      // A run that applied no events keeps the prior checkpoint's id rather than
-      // regressing to -1 — the state is still valid as far as that id.
-      lastAppliedEventId = result.lastAppliedEventId >= 0
-        ? result.lastAppliedEventId
-        : (cached?.lastAppliedEventId ?? -1);
-      // A window that applied nothing over no cache is kept only when it is
-      // complete (an empty Dust timeline). A cut-short one holds no position:
-      // on a forked chain its state is the tip's ledger 9 while the timeline
-      // starts with ledger-8 events, which the next window would refuse.
-      if (result.lastAppliedEventId >= 0 || (!cached && !result.partial)) {
-        try { saveDustCache(networkName, pubkeyHex, result.state, lastAppliedEventId, opts.root, chainId, result.retention); } catch { /* best-effort */ }
+        // Final save (covers the last sub-chunk that didn't trip onCheckpoint).
+        // A run that applied no events keeps the prior checkpoint's id rather than
+        // regressing to -1 — the state is still valid as far as that id.
+        lastAppliedEventId = read.lastAppliedEventId >= 0
+          ? read.lastAppliedEventId
+          : (cached?.lastAppliedEventId ?? -1);
+        // A window that applied nothing over no cache is kept only when it is
+        // complete (an empty Dust timeline). A cut-short one holds no position:
+        // on a forked chain its state is the tip's ledger 9 while the timeline
+        // starts with ledger-8 events, which the next window would refuse.
+        if (read.lastAppliedEventId >= 0 || (!cached && !read.partial)) {
+          try { saveDustCache(networkName, pubkeyHex, read.state, lastAppliedEventId, opts.root, chainId, read.retention); } catch { /* best-effort */ }
+        }
+
+        totalEventsApplied += read.eventCount;
+        if (!read.partial) break;
+        stalledWindows = read.eventCount > 0 ? 0 : stalledWindows + 1;
+        if (stalledWindows >= DUST_STALLED_WINDOWS || this.now() - startedAt >= DUST_SYNC_BUDGET_MS) break;
+
+        // Reload for the next iteration so cached.state is the latest checkpoint.
+        cached = loadDustCache(networkName, pubkeyHex, opts.root);
       }
-
-      totalEventsApplied += result.eventCount;
-      if (!result.partial) break;
-      stalledWindows = result.eventCount > 0 ? 0 : stalledWindows + 1;
-      if (stalledWindows >= DUST_STALLED_WINDOWS || this.now() - startedAt >= DUST_SYNC_BUDGET_MS) break;
-
-      // Reload for the next iteration so cached.state is the latest checkpoint.
-      cached = loadDustCache(networkName, pubkeyHex, opts.root);
-    }
+      return read;
+    })(), () => eventsReadLine('Dust', progress), this.waiting, {
+      done: (_, elapsedMs) => `Dust events read: ${totalEventsApplied} in ${secondsText(elapsedMs)}${result?.partial ? `, stopped short of the indexer's last (event ${progress.maxId}); the next run resumes there` : ''}`,
+    });
 
     if (!result) throw new Error('Dust sync exhausted retries without producing a result');
     const view: DustView = {
@@ -642,6 +660,7 @@ export class WalletDataRepository {
         bundle = await buildFacade(seed, network, opts.root, opts.notice, cacheBeforeBuild, opts.log, undefined, shieldedCheckpoint);
         try {
           syncedState = await startAndSyncFacade(bundle, {
+            waiting: this.waiting,
             onProgress: opts.onSyncProgress,
             onSyncDetail: opts.onSyncDetail,
             timeoutMs: syncTimeoutMs,
@@ -719,6 +738,7 @@ export class WalletDataRepository {
           const retryCache = loadWalletCache(address, networkName, opts.root);
           bundle = await buildFacade(seed, network, opts.root, opts.notice, retryCache, opts.log, undefined, shieldedCheckpoint);
           syncedState = await startAndSyncFacade(bundle, {
+            waiting: this.waiting,
             onProgress: opts.onSyncProgress,
             onSyncDetail: opts.onSyncDetail,
             timeoutMs: syncTimeoutMs,
@@ -907,6 +927,7 @@ function nativeOrWasmDustFetcher(host: EngineHost): NonNullable<RepoDeps['fetchD
 
 
 // ── Helpers ───────────────────────────────────────────────
+
 
 function networkNameOf(network: NetworkConfig): NetworkName {
   const lower = network.networkId.toLowerCase();

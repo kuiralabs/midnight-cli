@@ -9,7 +9,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import type { CallScript, DeployScript, ScriptParts, StateScript } from '@kuiralabs/midnight-cli-core/engine';
-import { type NetworkConfig, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
+import { type NetworkConfig, PRICE_TRANSACTION_METHOD, WAIT_LINE_EVERY_MS } from '@kuiralabs/midnight-cli-core';
 
 /**
  * Every package a generated script imports, and the compact runtime the
@@ -216,7 +216,14 @@ const pricingProofProvider = (proving) => ({
       rpcClose();
       process.exit(0);
     }
-    return proving.proveTx(tx, proveTxConfig);
+    // A proof of minutes says it is under way: mn shows these lines in every mode.
+    const provingStarted = Date.now();
+    const provingLines = setInterval(() => process.stderr.write('\\n${parts.provingMarker} ' + (Date.now() - provingStarted) + '\\n'), ${WAIT_LINE_EVERY_MS});
+    try {
+      return await proving.proveTx(tx, proveTxConfig);
+    } finally {
+      clearInterval(provingLines);
+    }
   },
 });
 `;

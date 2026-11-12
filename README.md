@@ -250,7 +250,7 @@ midnight transfer alice 10 bob 5 --json
 
 When `--json` is active:
 - stdout receives a single line of JSON (the data)
-- stderr stays quiet (no spinner, heading or notice), except for the plain lines of a long wait, such as a deploy waiting for its wallet's Dust: `Dust: waited 45 s of 104 s, 0.76 of 1.23 DUST`. Pipe through `2>/dev/null` if you need it gone
+- stderr stays quiet (no spinner, heading or notice), except for the plain lines of a long step, every 15 s once it has run 15 s: a wait for Dust (`Dust: waited 45 s of 104 s, 0.76 of 1.23 DUST`), a wallet sync, a read of the chain's Dust or shielded events (`Reading shielded events: at event 8504 of 17009 (50%), 540 read`), or a proof (`Proving the transaction: 30 s so far...`). Pipe through `2>/dev/null` if you need it gone
 - Errors produce: `{"error":true,"code":"...","message":"...","exitCode":N}`
 
 Run `midnight help --json` for a full capability manifest, or `midnight help --agent` for a comprehensive AI agent reference. [docs/JSON_CONTRACT.md](docs/JSON_CONTRACT.md) lists the shapes mn keeps stable.

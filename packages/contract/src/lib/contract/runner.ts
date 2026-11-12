@@ -61,6 +61,8 @@ export interface RunnerOptions {
   notice?: (line: string) => void;
   /** The price mn serve gave the transaction before it was proven, when it gave one. */
   onPriced?: (price: TransactionPrice) => void;
+  /** While the script proves its transaction, every WAIT_LINE_EVERY_MS: how long the proof has taken. */
+  onProving?: (elapsedMs: number) => void;
   /** Cancels the run: the script's process is stopped. */
   signal?: AbortSignal;
 }
@@ -143,6 +145,8 @@ const PRIVATE_STATE_DIR_ENV = 'MN_PRIVATE_STATE_DIR';
 const DRY_RUN_ENV = 'MN_DRY_RUN';
 /** Marks the line a deploy or call script writes with its transaction's price (JSON after it). */
 export const SCRIPT_PRICED_MARKER = '__MN_PRICED__';
+/** Marks the line a deploy or call script writes while its proof runs: the milliseconds it has taken. */
+export const SCRIPT_PROVING_MARKER = '__MN_PROVING__';
 
 /** What a deploy or call script keeps the wallet's private state with: the secret it seeds, and the store's password and account. */
 export function privateStateEnvironment({ contractKeys, privateStateSecretKey }: Pick<RunnerOptions, 'contractKeys' | 'privateStateSecretKey'>): Record<string, string> {
@@ -191,7 +195,7 @@ async function executeDeployScript(options: DeployOptions, extraEnv: Record<stri
   const staging = deployStateDir(options.root, options.network);
   const env = { ...indexerEnvironment(options.networkConfig), ...privateStateEnvironment(options), [PRIVATE_STATE_DIR_ENV]: staging, ...extraEnv };
   try {
-    const stdout = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, onPriced: options.onPriced, env, signal: options.signal, args: { dir: contractArgsDir(options.root), values: options.args ?? [] } });
+    const stdout = await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, onPriced: options.onPriced, onProving: options.onProving, env, signal: options.signal, args: { dir: contractArgsDir(options.root), values: options.args ?? [] } });
     return { stdout, staging };
   } catch (err) {
     keepFailedDeployState(staging, notice);
@@ -275,7 +279,7 @@ async function executeCallScript(options: CallOptions, extraEnv: Record<string, 
     { address: options.contractAddress, timeoutMs: PRIVATE_STATE_BUSY_WAIT_MS, notice, progress: (line) => options.onMessage?.(line), signal: options.signal },
   );
   try {
-    return await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, onPriced: options.onPriced, env, signal: options.signal, args: { dir: contractArgsDir(options.root), values: options.args ?? [] } });
+    return await executeScript({ dir: options.dappDir, script, packages: scripts, onMessage: options.onMessage, onNotice: notice, onPriced: options.onPriced, onProving: options.onProving, env, signal: options.signal, args: { dir: contractArgsDir(options.root), values: options.args ?? [] } });
   } catch (err) {
     throw namingFailedAssertion(namingUnreadableState(err, options.contractAddress), options.contractName, options.circuit);
   } finally {
@@ -536,6 +540,7 @@ export const SCRIPT_PARTS: ScriptParts = {
   privateStateBusyWaitMs: PRIVATE_STATE_BUSY_WAIT_MS,
   noticeMarker: SCRIPT_NOTICE_MARKER,
   pricedMarker: SCRIPT_PRICED_MARKER,
+  provingMarker: SCRIPT_PROVING_MARKER,
   dryRunEnv: DRY_RUN_ENV,
   privateStateSecretEnv: PRIVATE_STATE_SECRET_ENV,
   privateStatePasswordEnv: PRIVATE_STATE_PASSWORD_ENV,
@@ -728,6 +733,8 @@ export interface ScriptRun {
   onNotice?: (line: string) => void;
   /** The price the script wrote for its transaction (a line marked SCRIPT_PRICED_MARKER). */
   onPriced?: (price: TransactionPrice) => void;
+  /** How long the script's proof has taken, each time it says (a line marked SCRIPT_PROVING_MARKER). */
+  onProving?: (elapsedMs: number) => void;
   /** Set over mn's own environment; a variable given as undefined is cleared. */
   env?: Record<string, string | undefined>;
   /** The script's working directory; `dir` when not given. */
@@ -822,7 +829,7 @@ export function scriptRuntime(
 }
 
 /** Runs a generated script and returns what it wrote to stdout. Throws its marked error when it fails. */
-export async function executeScript({ dir: dappDir, script, packages, onMessage, onNotice, onPriced, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal, findRuntime = scriptRuntime, args }: ScriptRun): Promise<string> {
+export async function executeScript({ dir: dappDir, script, packages, onMessage, onNotice, onPriced, onProving, env: extraEnv, cwd, overlaySdk = true, label = 'contract', signal, findRuntime = scriptRuntime, args }: ScriptRun): Promise<string> {
   throwIfCancelled(signal);
   // ESM resolution walks up from the importing file's location to find
   // node_modules; NODE_PATH does NOT work for ESM. Three different files
@@ -902,6 +909,9 @@ export async function executeScript({ dir: dappDir, script, packages, onMessage,
           try { onNotice?.(String(JSON.parse(line.slice(SCRIPT_NOTICE_MARKER.length + 1)))); } catch { /* not a notice mn wrote: left out */ }
         } else if (line.startsWith(SCRIPT_PRICED_MARKER + ' ')) {
           try { onPriced?.(scriptPriceOf(line)!); } catch (err) { badPrice ??= err; }
+        } else if (line.startsWith(SCRIPT_PROVING_MARKER + ' ')) {
+          const elapsedMs = Number(line.slice(SCRIPT_PROVING_MARKER.length + 1));
+          if (Number.isFinite(elapsedMs) && elapsedMs >= 0) onProving?.(elapsedMs);
         } else {
           progress.push(line);
         }

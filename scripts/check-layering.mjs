@@ -77,7 +77,7 @@ const HOMES = [
   // The SDK engines: each is the only code that imports its SDK set.
   ['engine', /^engine\//],
 
-  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|verbose|error-trim|command-flags|run-command|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|error-codes|wallet-cache|cache-indexer|reader-cache-files|connector-api|dust-wait|fee-limits|fee-margin|account-artifacts|contract-state-errors|process-lock|wallet-dust-lock|tx-serde|sign-data|approval|dust-balancing-plan|dust-registration-plan|shielded-policy|mainnet-refusal|wallet-session|sdk-layout|swap-offer|offer-envelope|open-offers|coin-picker|host|transport-failure|progress|network-target|wallet-name|owner-only|contract-keys|dust-cap|endpoint-unreachable|submit-wait|transaction-price)\.ts$/],
+  ['core', /^lib\/(argv|errors|engine|exit-codes|json-output|constants|cli-config|network|network-id|resolve-network|payer|blockfrost|durable-file|keystore|verbose|error-trim|command-flags|run-command|phase-tracker|sdk-errors|amount|duration|sdk-warnings|notices|prompter|settings|state-root|command-definition|call-context|sleep|exec-program|agent-guidance|error-codes|wallet-cache|cache-indexer|reader-cache-files|connector-api|dust-wait|fee-limits|fee-margin|account-artifacts|contract-state-errors|process-lock|wallet-dust-lock|tx-serde|sign-data|approval|dust-balancing-plan|dust-registration-plan|shielded-policy|mainnet-refusal|wallet-session|sdk-layout|swap-offer|offer-envelope|open-offers|coin-picker|host|transport-failure|progress|network-target|wallet-name|owner-only|contract-keys|dust-cap|endpoint-unreachable|submit-wait|transaction-price|wait-lines)\.ts$/],
   ['core', /^ui\/(colors|format|spinner|terminal-prompter)\.ts$/],
   // What a host calls on its own process: the SDK rejection guard, the sync heap advice.
   ['core', /^process\//],
@@ -90,7 +90,7 @@ const HOMES = [
   ['wallet', /^lib\/(derivation|derive-address|wallet-config|seed-resolver|passphrase|facade|wallet-data-repository|transfer|transfer-request|transfer-recipients|sync-eta|wallet-can-pay|wallet-create|airdrop|wallet-protector|chain-caches|wallet-paths|fork-schedule)\.ts$/],
   ['wallet', /^lib\/(dust-[a-z-]+|shielded-[a-z-]+)\.ts$/],
   ['wallet', /^lib\/wallet\//],
-  ['wallet', /^ui\/receipt\.ts$/],
+  ['wallet', /^ui\/(receipt|dust-needs)\.ts$/],
   // Swap is the wallet's: its offers are made, taken and cancelled by a wallet.
   ['wallet', /^commands\/swap(\.definition|\.guidance|\.package)?\.ts$/],
   ['wallet', /^lib\/swap\//],

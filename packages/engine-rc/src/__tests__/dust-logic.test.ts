@@ -471,6 +471,28 @@ describe('registerNightUtxos', () => {
     expect(revert).toHaveBeenCalledWith(recipe);
   });
 
+  // Regression: a fresh wallet's registration waited about 2 minutes for its
+  // fee's Dust with only a spinner, and nothing at all under --json.
+  it('says the wait for its fee\'s Dust and its proof on `say`: the opening at once, then a line every 15 s', async () => {
+    // The fee is generated 40 s from now.
+    const rate = 165_340_000_000n;
+    const waitForGeneratedDust = vi.fn(() => new Promise<void>((resolve) => setTimeout(resolve, 40_000)));
+    const finalizeRecipe = vi.fn(() => new Promise<any>((resolve) => setTimeout(() => resolve({ finalized: true }), 20_000)));
+    const bundle = createBundleStub({ estimateRegistration: async () => ({ fee: FEE, dustGenerationEstimations: [{ dust: { generatedNow: FEE - 40n * rate, rate, maxCap: 100_000_000_000_000_000n } }] }), waitForGeneratedDust, finalizeRecipe });
+    const lines: Array<[string, boolean]> = [];
+
+    const registering = registerNightUtxos(bundle, [NIGHT_UTXO], DUST_ADDRESS, undefined, undefined, undefined, (line, opening) => lines.push([line, opening]));
+    await vi.advanceTimersByTimeAsync(61_000);
+    await expect(registering).resolves.toBe('mock-tx-hash-001');
+
+    expect(lines).toEqual([
+      ["Dust: the registration's fee takes 0.53 DUST, which the NIGHT it registers generates in about 40 seconds (40 s); waiting...", true],
+      ["Dust: waited 15 s of 40 s for the registration's fee", false],
+      ["Dust: waited 30 s of 40 s for the registration's fee", false],
+      ['Proving the transaction: 15 s so far...', false],
+    ]);
+  });
+
   it('waits for the coins to generate the estimated fee before registering them', async () => {
     const calls: string[] = [];
     // One estimate per UTXO, as the SDK returns: the fee is generated about a second from now.

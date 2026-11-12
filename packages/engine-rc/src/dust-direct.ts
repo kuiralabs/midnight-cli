@@ -42,8 +42,8 @@ const SUBSCRIPTION_QUERY = `
 export type DustDirectResult = DustFoldResult;
 
 export interface DustDirectOptions {
-  /** Called with (eventsApplied, maxIdSeen) whenever a new event arrives. */
-  onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
+  /** Called with (eventsApplied, maxIdSeen, lastIdSeen, startFromId) whenever a new event arrives. */
+  onProgress?: (eventsApplied: number, maxIdSeen: number, lastIdSeen: number, startFromId: number) => void;
   /**
    * Called after every chunk of events is applied to the local state, with
    * the current state + last applied event id. Lets the caller persist a
@@ -141,7 +141,7 @@ export function readDustBalanceDirect(
       const evt = (data as { dustLedgerEvents?: RawDustEvent } | undefined)?.dustLedgerEvents;
       if (!evt) return false;
       fold.push(evt);
-      onProgress?.(fold.eventsSeen, fold.maxIdSeen);
+      onProgress?.(fold.eventsSeen, fold.maxIdSeen, fold.lastIdSeen, startFromId);
       // Caught up when we've received the final event in the current stream.
       return fold.caughtUp;
     },

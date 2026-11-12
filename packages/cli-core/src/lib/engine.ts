@@ -16,6 +16,7 @@ import type { FeeLimits } from './fee-limits.ts';
 import type { RpcHandler } from './connector-api.ts';
 import type { Spinner } from '../ui/spinner.ts';
 import type { Host } from './host.ts';
+import type { DustBalanceSource } from './dust-wait.ts';
 
 /** The SDK set mn runs on: the ledger-9 set (wallet SDK 2.0.0, ledger-v9 1.0.0, midnight-js 5.0.0), named `rc` from when it was built on the SDK's release candidates. */
 export type SdkSet = 'rc';
@@ -105,6 +106,8 @@ export interface ScriptParts {
   readonly noticeMarker: string;
   /** Marks the line a deploy or call script writes with the price mn serve gave its transaction before proving (JSON text after it). */
   readonly pricedMarker: string;
+  /** Marks the line a deploy or call script writes every WAIT_LINE_EVERY_MS while its proof runs (the milliseconds it has taken after it). */
+  readonly provingMarker: string;
   /** The environment variable that, set to `1`, stops a deploy or call script once its transaction is priced: nothing is proven or sent. */
   readonly dryRunEnv: string;
   /** Where the dApp's witnesses may be, relative to its folder. */
@@ -204,8 +207,8 @@ export interface ShieldedBalanceResult {
 }
 
 export interface ShieldedCachedOptions {
-  /** Called with (eventsApplied, maxIdSeen) whenever a new event arrives. */
-  onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
+  /** Called with (eventsApplied, maxIdSeen, lastIdSeen, firstId) whenever a new event arrives: the events read, the indexer's last id, the id of the last read, and the id the read began at. */
+  onProgress?: (eventsApplied: number, maxIdSeen: number, lastIdSeen: number, firstId: number) => void;
   /** Stops the read; what was applied is kept for the next. */
   signal?: AbortSignal;
   /** Soft ceiling for the whole read, after which it returns what it has (partial). */
@@ -321,6 +324,8 @@ export interface DustRegistration {
   txHash?: string;
   /** The Dust balance once synced, in its smallest unit. */
   dustBalance: bigint;
+  /** The wallet's Dust as its registered NIGHT generates it: its balance at a time (from when it synced, as long as it spends none). */
+  dustOverTime: DustBalanceSource;
 }
 
 export interface DustExportResult {
@@ -359,11 +364,15 @@ export interface ReadOptions {
   onStatus?: (s: string) => void;
   /**
    * Raw progress signal during the underlying network fetch. For dust this
-   * fires per-chunk (events applied vs max event id); for unshielded it
-   * fires per-UTXO-batch (current tx vs highest tx id). Callers that already
-   * have a spinner usually use this to render a percentage.
+   * fires per-chunk: the events read and the indexer's last event id, and,
+   * from a reader that knows them, the id of the last event read and the id
+   * the read began at (the indexer numbers the ledger's events of every kind
+   * in one sequence, so the count is no fraction of the id: eventsReadLine
+   * says it). For unshielded it fires per-UTXO-batch (current tx vs highest
+   * tx id). Callers that already have a spinner usually use this to render a
+   * percentage.
    */
-  onProgress?: (current: number, highest: number) => void;
+  onProgress?: (current: number, highest: number, lastId?: number, firstId?: number) => void;
   /** The call's verbose lines. */
   log?: VerboseLog;
 }
@@ -510,7 +519,7 @@ export interface EngineWallet {
   /** Registers a seed's NIGHT for Dust, unless it has Dust already. */
   registerDust(seed: Buffer, networkConfig: NetworkConfig, options: DustRegisterOptions): Promise<DustRegistration>;
   /** A seed's Dust as a snapshot another wallet restores from. */
-  exportDust(seed: Buffer, network: string, networkConfig: NetworkConfig, options: { root: string; notice: NoticeSink; signal?: AbortSignal; log?: VerboseLog; onProgress?: (eventsApplied: number, maxIdSeen: number) => void }): Promise<DustExportResult>;
+  exportDust(seed: Buffer, network: string, networkConfig: NetworkConfig, options: { root: string; notice: NoticeSink; signal?: AbortSignal; log?: VerboseLog; onProgress?: (eventsApplied: number, maxIdSeen: number, lastIdSeen?: number, firstId?: number) => void }): Promise<DustExportResult>;
   /** A test wallet's unshielded NIGHT after a quick sync; its state is saved when it holds some. */
   prepNightBalance(wallet: PrepWallet): Promise<bigint>;
   /** Makes sure a test wallet has Dust, registering and then waiting up to `waitMs` for it. */
@@ -552,8 +561,8 @@ export function sdkSetOf(network: NetworkName, root: string): SdkSet {
   return 'rc';
 }
 
-/** What an engine takes from the host that loads it: its settings, and where its notices go. */
-export type EngineHost = Pick<Host, 'settings' | 'notice'>;
+/** What an engine takes from the host that loads it: its settings, where its notices go, and where the lines of its long steps go (a sync, a read of the chain's events, a proof, a wait for Dust), which the host shows in every mode. */
+export type EngineHost = Pick<Host, 'settings' | 'notice' | 'waiting'>;
 
 /** Makes the engine for an SDK set, for the host that asks: the program's, which knows the engines it ships. */
 export type EngineLoader = (set: SdkSet, host: Host) => Promise<Engine>;

@@ -3,8 +3,8 @@
 
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { getNetworkId, proveWithin, submitWithin, TOKEN_MULTIPLIER, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, STALE_UTXO_ERROR_CODE, DUST_REGISTRATION_TIMEOUT_MS, DUST_REGISTRATION_RETRY_DELAY_MS, SYNC_ATTEMPT_TIMEOUT_MS, MIN_DUST_FOR_TRANSFER, isFeeShortRefusal, isDroppedFromPool, isDustDoubleSpendRefusal, DUST_DOUBLE_SPEND_RETRIES, repriceAfterFeeRefusal, repricingStatus, resetFeeMargin, isColdStartRace, isDustRelatedError, DustFeeNotGeneratedError, planRegistration, type RegistrationContext, awaitDustForFee, sleep, type EnsureDustResult, type TransferParams, type TransferResult } from '@kuiralabs/midnight-cli-core/engine';
-import { CancelledError, DustDoubleSpentError, DustRequiredError, InsufficientBalanceError, RERUN_DOUBLE_SPENT_STATUS, RERUN_INVALIDATED_STATUS, TransactionInvalidatedError, walletDustLock, walletDustLockFile, type WalletDustLock, type NetworkName, SyncTimeoutError, throwIfCancelled, type NetworkConfig, type VerboseLog, nightAmountText, NATIVE_TOKEN_TYPE, formatWait, type CallSdkWarnings } from '@kuiralabs/midnight-cli-core';
-import { toDust } from '@kuiralabs/midnight-cli-core/ui';
+import { CancelledError, DustDoubleSpentError, DustRequiredError, InsufficientBalanceError, RERUN_DOUBLE_SPENT_STATUS, RERUN_INVALIDATED_STATUS, TransactionInvalidatedError, walletDustLock, walletDustLockFile, type WalletDustLock, type NetworkName, SyncTimeoutError, throwIfCancelled, type NetworkConfig, type VerboseLog, nightAmountText, NATIVE_TOKEN_TYPE, formatWait, type CallSdkWarnings, type WaitSink, provingLine, sayWhileRunning, secondsText, stepLines } from '@kuiralabs/midnight-cli-core';
+import { roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, type DustAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import { type FacadeState, type UtxoWithMeta } from '@midnightntwrk/wallet-sdk/facade';
 import * as rx from 'rxjs';
@@ -74,6 +74,8 @@ async function submitDustRegistration(
   dustReceiverAddress: DustAddress,
   waitTimeoutMs: number,
   signal: AbortSignal | undefined,
+  /** Where the waits' lines go: the Dust for the fee (`feeLine`, by the time waited) and the proof. */
+  waiting?: { say: WaitSink; feeLine: (elapsedMs: number) => string },
 ): Promise<string> {
   // Timeout-protected: waitForSyncedState() can hang if the dust wallet's
   // shareReplay buffer cleared or the indexer is slow. Throw a retryable error
@@ -87,7 +89,8 @@ async function submitDustRegistration(
   // The registration pays its own fee from the dust these coins generate, so
   // wait until they've generated enough. Estimated per attempt: the fee drifts.
   const { fee } = await bundle.facade.estimateRegistration(nightUtxos);
-  await bundle.facade.waitForGeneratedDust(nightUtxos, fee, { timeoutMs: waitTimeoutMs });
+  const generated = bundle.facade.waitForGeneratedDust(nightUtxos, fee, { timeoutMs: waitTimeoutMs });
+  await (waiting === undefined ? generated : sayWhileRunning(generated, waiting.feeLine, waiting.say));
 
   const recipe = await bundle.facade.registerNightUtxosForDustGeneration(
     nightUtxos,
@@ -99,7 +102,8 @@ async function submitDustRegistration(
   try {
     // Cancelled before or while proving, nothing is sent.
     throwIfCancelled(signal);
-    finalized = await proveWithin(bundle.facade.finalizeRecipe(recipe), PROOF_TIMEOUT_MS, signal);
+    const proving = proveWithin(bundle.facade.finalizeRecipe(recipe), PROOF_TIMEOUT_MS, signal);
+    finalized = await (waiting === undefined ? proving : sayWhileRunning(proving, provingLine, waiting.say));
     throwIfCancelled(signal);
   } catch (err) {
     // Registering books the NIGHT UTXOs; release them so a retry can book them again.
@@ -128,6 +132,8 @@ export async function registerNightUtxos(
   signal?: AbortSignal,
   /** The network and the command, for what a registration that can't pay its fee yet says to do. */
   context?: RegistrationContext,
+  /** Where the lines of its waits go (the host's `waiting`, shown in every mode): the Dust for its fee, and the proof. */
+  say?: WaitSink,
 ): Promise<string> {
   const startTime = Date.now();
   const deadline = startTime + DUST_REGISTRATION_TIMEOUT_MS;
@@ -149,7 +155,17 @@ export async function registerNightUtxos(
   const waitNote = plan.waitMs > 0 ? `, fee covered in ${formatWait(plan.waitMs)}` : '';
   if (plan.waitMs > 0) {
     onStatus?.(`Waiting for the NIGHT to generate the ${toDust(plan.fee)} DUST registration fee (${formatWait(plan.waitMs)})...`);
+    say?.(`Dust: the registration's fee takes ${roughDust(plan.fee, true)} DUST, which the NIGHT it registers generates in ${formatWait(plan.waitMs)} (${secondsText(plan.waitMs)}); waiting...`, true);
   }
+  // The lines of the wait for the fee's Dust, by the time since the registration began.
+  const feeWaitMs = plan.waitMs;
+  const feeLine = (): string => {
+    const waited = Date.now() - startTime;
+    return feeWaitMs > 0 && waited < feeWaitMs
+      ? `Dust: waited ${secondsText(waited)} of ${secondsText(feeWaitMs)} for the registration's fee`
+      : `Dust: waited ${secondsText(waited)} for the NIGHT to generate the registration's fee`;
+  };
+  const waiting = say === undefined ? undefined : { say, feeLine };
 
   // Once in retry mode, tick the elapsed timer every second so the spinner
   // updates continuously — during the sleep AND during submission attempts.
@@ -163,7 +179,7 @@ export async function registerNightUtxos(
   try {
     while (Date.now() < deadline) {
       try {
-        return await submitDustRegistration(bundle, nightUtxos, dustReceiverAddress, deadline - Date.now(), signal);
+        return await submitDustRegistration(bundle, nightUtxos, dustReceiverAddress, deadline - Date.now(), signal, waiting);
       } catch (err: any) {
         if (err instanceof CancelledError) throw err;
         lastError = err;
@@ -171,7 +187,8 @@ export async function registerNightUtxos(
           retrying = true;
           const elapsed = formatElapsed(Date.now() - startTime);
           onStatus?.(`Waiting for dust generation capacity (${elapsed} elapsed${waitNote})...`);
-          await sleep(DUST_REGISTRATION_RETRY_DELAY_MS, signal);
+          const retryDelay = sleep(DUST_REGISTRATION_RETRY_DELAY_MS, signal);
+          await (waiting === undefined ? retryDelay : sayWhileRunning(retryDelay, feeLine, waiting.say));
           continue;
         }
         throw err;
@@ -211,6 +228,8 @@ export async function ensureDust(
   signal?: AbortSignal,
   /** The network and the command, for what a registration that can't pay its fee yet says to do. */
   context?: RegistrationContext,
+  /** Where the lines of its waits go (the host's `waiting`, shown in every mode). */
+  say?: WaitSink,
 ): Promise<EnsureDustResult> {
   // Prefer caller-provided state; fall back to waitForSyncedState (best-effort).
   const state = syncedState ?? await bundle.facade.waitForSyncedState();
@@ -241,7 +260,7 @@ export async function ensureDust(
   if (nightUtxos.length > 0) {
     onStatus?.(`Registering ${nightUtxos.length} UTXO(s) for dust generation...`);
 
-    txHash = await registerNightUtxos(bundle, nightUtxos, state.dust.address, onStatus, signal, context);
+    txHash = await registerNightUtxos(bundle, nightUtxos, state.dust.address, onStatus, signal, context, say);
   } else {
     onStatus?.('UTXOs already registered, waiting for dust generation...');
   }
@@ -252,7 +271,9 @@ export async function ensureDust(
   // the deadline check indefinitely.
   onStatus?.('Waiting for dust tokens...');
   const pollStart = Date.now();
+  const firstDust = say === undefined ? undefined : stepLines(say);
   while (Date.now() - pollStart < DUST_TIMEOUT_MS) {
+    firstDust?.progress(`Dust: waited ${secondsText(Date.now() - pollStart)} for the registered NIGHT's first Dust to show`);
     try {
       const pollState = await Promise.race([
         bundle.facade.waitForSyncedState(),
@@ -306,9 +327,13 @@ export async function buildAndSubmitTransfer(
   /** The wallet's Dust lock across mn processes, held from balancing to submit; and where its notice goes. */
   dustLock?: WalletDustLock,
   notice?: (line: string) => void,
+  /** Where the lines of its long steps go (the host's `waiting`, shown in every mode): the proof, and the waits for Dust. */
+  say?: WaitSink,
 ): Promise<string> {
   const startTime = Date.now();
   let doubleSpends = 0;
+  // The retries for Dust short of the fee, said every WAIT_LINE_EVERY_MS at most while they last.
+  const dustRetryLines = say === undefined ? undefined : stepLines(say);
   // Use DUST_TIMEOUT_MS (2 min) not DUST_REGISTRATION_TIMEOUT_MS (10 min) —
   // ensureDust already ran before us, so this is only for edge cases where
   // dust became insufficient between ensureDust and transferTransaction.
@@ -354,7 +379,8 @@ export async function buildAndSubmitTransfer(
       log?.('transfer', 'Generating ZK proof...');
       onProving?.();
       // Cancelled while proving, the call stops at once: nothing was sent.
-      finalizedTx = await proveWithin(bundle.facade.finalizeRecipe(signedRecipe), PROOF_TIMEOUT_MS, signal);
+      const proving = proveWithin(bundle.facade.finalizeRecipe(signedRecipe), PROOF_TIMEOUT_MS, signal);
+      finalizedTx = await (say === undefined ? proving : sayWhileRunning(proving, provingLine, say));
       throwIfCancelled(signal);
 
       paidWith = pendingDustNonces(await rx.firstValueFrom(bundle.facade.state()));
@@ -433,10 +459,11 @@ export async function buildAndSubmitTransfer(
       if (isDustRelatedError(err) && Date.now() < dustDeadline) {
         const elapsed = formatElapsed(Date.now() - startTime);
         onDust?.(`Dust insufficient, re-ensuring (${elapsed} elapsed)...`);
+        dustRetryLines?.progress(`Dust: short of this transaction's fee; waiting for more and building it again (${secondsText(Date.now() - startTime)} so far)`);
         try {
           const freshState = await quickSync(bundle, 'lite');
           // Below the fee threshold: wait when the Dust is moments away, else fail fast.
-          await awaitDustForFee(freshState.dust, MIN_DUST_FOR_TRANSFER, onDust, signal);
+          await awaitDustForFee(freshState.dust, MIN_DUST_FOR_TRANSFER, onDust, signal, say);
           // At or above it, this transaction's fee is higher than the threshold
           // (more inputs, other fee prices): give the Dust time to grow rather
           // than rebuilding back to back.
@@ -444,7 +471,7 @@ export async function buildAndSubmitTransfer(
             onDust?.(`Dust is short of this transaction's fee (another transaction from this wallet may be holding some); waiting ${DUST_GROW_WAIT_MS / 1000} s for more...`);
             await sleep(DUST_GROW_WAIT_MS, signal);
           }
-          await ensureDust(bundle, onDust, freshState, signal, registration);
+          await ensureDust(bundle, onDust, freshState, signal, registration, say);
         } catch (retryErr: any) {
           // Re-throw "Insufficient dust" immediately — not retryable
           if (String(retryErr?.message).startsWith('Insufficient dust')) throw retryErr;
@@ -525,13 +552,13 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
 
         // Pre-flight: below the fee threshold, wait when the Dust is moments
         // away (just after registering), else fail fast with how long it takes.
-        await awaitDustForFee(state.dust, MIN_DUST_FOR_TRANSFER, onDust, signal);
+        await awaitDustForFee(state.dust, MIN_DUST_FOR_TRANSFER, onDust, signal, repo.waiting);
 
         throwIfCancelled(signal);
 
         log?.('transfer', 'Ensuring dust availability...');
         const registration: RegistrationContext = { networkId: networkConfig.networkId, retry: 'the transfer' };
-        const dustResult = await ensureDust(bundle, onDust, state, signal, registration);
+        const dustResult = await ensureDust(bundle, onDust, state, signal, registration, repo.waiting);
         // When ensureDust had to wait, it returned once any Dust showed (right
         // after registering that can be less than the fee): wait for the fee on
         // current state. Time-boxed like every other sync wait; skipped on timeout.
@@ -541,7 +568,7 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
             bundle.facade.waitForSyncedState(),
             new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), SYNC_ATTEMPT_TIMEOUT_MS); }),
           ]).finally(() => clearTimeout(timer));
-          if (current) await awaitDustForFee(current.dust, MIN_DUST_FOR_TRANSFER, onDust, signal);
+          if (current) await awaitDustForFee(current.dust, MIN_DUST_FOR_TRANSFER, onDust, signal, repo.waiting);
         }
         log?.('transfer', 'Dust available');
 
@@ -561,6 +588,7 @@ export async function executeTransfer(repo: WalletDataRepository, params: Transf
             registration,
             walletDustLock(walletDustLockFile(root, getNetworkId(networkConfig.networkId), deriveUnshieldedAddress(seedBuffer, getNetworkId(networkConfig.networkId) as NetworkName))),
             notice,
+            repo.waiting,
           );
           return { txHash, amountMicroNight: total };
         } finally {

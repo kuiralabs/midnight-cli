@@ -4,7 +4,7 @@
 
 import * as rx from 'rxjs';
 import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, waitForDustGrowth, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isDroppedFromPool, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, priceTransaction, transactionPriceToWire } from '@kuiralabs/midnight-cli-core/engine';
-import { type NoticeSink, type WaitSink, DustDoubleSpentError, FeeRepricedError, TransactionInvalidatedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
+import { type NoticeSink, type WaitSink, sayWhileRunning, secondsText, DustDoubleSpentError, FeeRepricedError, TransactionInvalidatedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
 import { dim, roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
@@ -357,12 +357,12 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     let finalized: FinalizedTx;
     const finalizing = facade.finalizeRecipe(signed);
     try {
-      finalized = await Promise.race([
+      finalized = await sayWhileRunning(Promise.race([
         finalizing,
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new ProofTimeoutError()), PROOF_TIMEOUT_MS);
         }),
-      ]);
+      ]), (elapsedMs) => `Proving the wallet's part of the transaction: ${secondsText(elapsedMs)} so far...`, (line, opening) => waiting(dim(`  ${line}`), opening));
     } catch (err) {
       // No finalized transaction to track: release what balancing booked now,
       // rather than leaving the coins held until the TTL.
