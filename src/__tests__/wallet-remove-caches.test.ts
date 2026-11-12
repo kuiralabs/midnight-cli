@@ -21,12 +21,12 @@ const PASSPHRASE = { MN_PASSPHRASE: 'correct horse battery staple' };
 const BOB_SEED = '42'.repeat(32);
 let home: string;
 let root: string;
-beforeEach(() => {
+beforeEach(async () => {
   home = mkdtempSync(join(tmpdir(), 'mn-wallet-remove-'));
   root = join(home, '.midnight');
-  expect(runCli(home, ['wallet', 'generate', 'alice', '--json'], { env: PASSPHRASE }).status).toBe(0);
-  expect(runCli(home, ['wallet', 'generate', 'bob', '--seed', BOB_SEED, '--json'], { env: PASSPHRASE }).status).toBe(0);
-  expect(runCli(home, ['wallet', 'use', 'alice'], { env: PASSPHRASE }).status).toBe(0);
+  expect((await runCli(home, ['wallet', 'generate', 'alice', '--json'], { env: PASSPHRASE })).status).toBe(0);
+  expect((await runCli(home, ['wallet', 'generate', 'bob', '--seed', BOB_SEED, '--json'], { env: PASSPHRASE })).status).toBe(0);
+  expect((await runCli(home, ['wallet', 'use', 'alice'], { env: PASSPHRASE })).status).toBe(0);
 }, 120_000);
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
@@ -42,9 +42,9 @@ function bobsReaderCaches(): string[] {
 }
 
 describe('wallet remove', () => {
-  it('with the passphrase, removes the wallet and its Dust and shielded reader caches on every network', () => {
+  it('with the passphrase, removes the wallet and its Dust and shielded reader caches on every network', async () => {
     const caches = bobsReaderCaches();
-    const run = runCli(home, ['wallet', 'remove', 'bob', '--yes', '--json'], { env: PASSPHRASE });
+    const run = await runCli(home, ['wallet', 'remove', 'bob', '--yes', '--json'], { env: PASSPHRASE });
     expect(run.status, run.stdout + run.stderr).toBe(0);
     expect(JSON.parse(run.stdout)).toStrictEqual({ wallet: 'bob', removed: true, readerCachesCleared: true, cachesKeptFor: [] });
     expect(existsSync(join(root, 'wallets', 'bob.json'))).toBe(false);
@@ -52,9 +52,9 @@ describe('wallet remove', () => {
   }, 120_000);
 
   // Regression: removing a wallet never asked for its seed, so its reader caches stayed for ever.
-  it('with no passphrase to be had, still removes the wallet, and says which caches were left and how to clear them', () => {
+  it('with no passphrase to be had, still removes the wallet, and says which caches were left and how to clear them', async () => {
     const caches = bobsReaderCaches();
-    const run = runCli(home, ['wallet', 'remove', 'bob', '--yes', '--json']);
+    const run = await runCli(home, ['wallet', 'remove', 'bob', '--yes', '--json']);
     expect(run.status, run.stdout + run.stderr).toBe(0);
     const result = JSON.parse(run.stdout);
     expect(result).toMatchObject({ wallet: 'bob', removed: true, readerCachesCleared: false });
@@ -63,19 +63,19 @@ describe('wallet remove', () => {
     expect(caches.filter(existsSync)).toEqual(caches);
 
     // Without --json, the same on stderr.
-    const again = runCli(home, ['wallet', 'generate', 'bob', '--seed', BOB_SEED, '--json'], { env: PASSPHRASE });
+    const again = await runCli(home, ['wallet', 'generate', 'bob', '--seed', BOB_SEED, '--json'], { env: PASSPHRASE });
     expect(again.status, again.stdout).toBe(0);
     // Generating made bob the active wallet.
-    expect(runCli(home, ['wallet', 'use', 'alice'], { env: PASSPHRASE }).status).toBe(0);
-    const human = runCli(home, ['wallet', 'remove', 'bob', '--yes']);
+    expect((await runCli(home, ['wallet', 'use', 'alice'], { env: PASSPHRASE })).status).toBe(0);
+    const human = await runCli(home, ['wallet', 'remove', 'bob', '--yes']);
     expect(human.status, human.stderr).toBe(0);
     expect(human.stderr).toContain('The Dust and shielded reader caches of wallet "bob" were left');
   }, 120_000);
 
   // Regression: a funded wallet's sealed seed was deleted without a word off a terminal.
-  it('without --yes, off a terminal or with --json, is refused and removes nothing', () => {
+  it('without --yes, off a terminal or with --json, is refused and removes nothing', async () => {
     for (const argv of [['wallet', 'remove', 'bob'], ['wallet', 'remove', 'bob', '--json']]) {
-      const run = runCli(home, argv, { env: PASSPHRASE });
+      const run = await runCli(home, argv, { env: PASSPHRASE });
       expect(run.status, run.stdout + run.stderr).toBe(2);
       expect(run.stdout + run.stderr).toContain('Add --yes to remove it without asking');
       expect(existsSync(join(root, 'wallets', 'bob.json'))).toBe(true);
@@ -83,22 +83,22 @@ describe('wallet remove', () => {
   }, 120_000);
 
   // Regression: removing a copy cleared the caches the original still reads.
-  it('removing a copy of a wallet keeps the caches the original still needs', () => {
-    expect(runCli(home, ['wallet', 'generate', 'bob-copy', '--seed', BOB_SEED, '--json'], { env: PASSPHRASE }).status).toBe(0);
-    expect(runCli(home, ['wallet', 'use', 'alice'], { env: PASSPHRASE }).status).toBe(0);
+  it('removing a copy of a wallet keeps the caches the original still needs', async () => {
+    expect((await runCli(home, ['wallet', 'generate', 'bob-copy', '--seed', BOB_SEED, '--json'], { env: PASSPHRASE })).status).toBe(0);
+    expect((await runCli(home, ['wallet', 'use', 'alice'], { env: PASSPHRASE })).status).toBe(0);
     const caches = bobsReaderCaches();
-    const run = runCli(home, ['wallet', 'remove', 'bob-copy', '--yes', '--json'], { env: PASSPHRASE });
+    const run = await runCli(home, ['wallet', 'remove', 'bob-copy', '--yes', '--json'], { env: PASSPHRASE });
     expect(run.status, run.stdout + run.stderr).toBe(0);
     expect(JSON.parse(run.stdout)).toStrictEqual({ wallet: 'bob-copy', removed: true, readerCachesCleared: false, cachesKeptFor: ['bob'] });
     expect(caches.filter(existsSync)).toEqual(caches);
     // Once the last wallet of that seed goes, its caches go too.
-    const last = runCli(home, ['wallet', 'remove', 'bob', '--yes', '--json'], { env: PASSPHRASE });
+    const last = await runCli(home, ['wallet', 'remove', 'bob', '--yes', '--json'], { env: PASSPHRASE });
     expect(JSON.parse(last.stdout)).toMatchObject({ readerCachesCleared: true, cachesKeptFor: [] });
     expect(caches.filter(existsSync)).toEqual([]);
   }, 120_000);
 
-  it('with a wrong passphrase removes nothing', () => {
-    const run = runCli(home, ['wallet', 'remove', 'bob', '--yes', '--json'], { env: { MN_PASSPHRASE: 'not the passphrase at all' } });
+  it('with a wrong passphrase removes nothing', async () => {
+    const run = await runCli(home, ['wallet', 'remove', 'bob', '--yes', '--json'], { env: { MN_PASSPHRASE: 'not the passphrase at all' } });
     expect(JSON.parse(run.stdout)).toMatchObject({ error: true, code: 'WRONG_PASSPHRASE' });
     expect(readFileSync(join(root, 'wallets', 'bob.json'), 'utf8')).toContain('sealed');
   }, 120_000);
@@ -107,11 +107,11 @@ describe('wallet remove', () => {
   describe('at a terminal', () => {
     const originalHome = process.env.HOME;
     const originalPassphrase = process.env.MN_PASSPHRASE;
-    beforeEach(() => {
+    beforeEach(async () => {
       process.env.HOME = home;
       process.env.MN_PASSPHRASE = PASSPHRASE.MN_PASSPHRASE;
     });
-    afterEach(() => {
+    afterEach(async () => {
       process.env.HOME = originalHome;
       if (originalPassphrase === undefined) delete process.env.MN_PASSPHRASE;
       else process.env.MN_PASSPHRASE = originalPassphrase;

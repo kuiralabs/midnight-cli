@@ -13,7 +13,7 @@ import { runCli } from '../../test-support/run-cli.ts';
 let home: string;
 let root: string;
 
-beforeEach(() => {
+beforeEach(async () => {
   home = realpathSync(mkdtempSync(join(tmpdir(), 'mn-cache-clear-')));
   root = join(home, '.midnight');
   mkdirSync(join(root, 'wallets'), { recursive: true });
@@ -24,7 +24,7 @@ beforeEach(() => {
   mkdirSync(join(home, 'elsewhere'));
   writeFileSync(join(home, 'elsewhere', 'keep.json'), '{}\n');
 });
-afterEach(() => { rmSync(home, { recursive: true, force: true }); });
+afterEach(async () => { rmSync(home, { recursive: true, force: true }); });
 
 const everyFileKept = () => {
   expect(readdirSync(join(root, 'wallets')).sort()).toStrictEqual(['alice.json', 'bob.json']);
@@ -34,18 +34,18 @@ const everyFileKept = () => {
 };
 
 describe('mn cache clear --network', () => {
-  it.each(['../wallets', '..', '../../elsewhere', 'bogus'])('refuses %s as INVALID_ARGS (exit 2) and deletes nothing', (network) => {
-    const run = runCli(home, ['cache', 'clear', '--network', network, '--json']);
+  it.each(['../wallets', '..', '../../elsewhere', 'bogus'])('refuses %s as INVALID_ARGS (exit 2) and deletes nothing', async (network) => {
+    const run = await runCli(home, ['cache', 'clear', '--network', network, '--json']);
     expect(run.status).toBe(2);
     expect(JSON.parse(run.stdout)).toMatchObject({ error: true, code: 'INVALID_ARGS', message: expect.stringContaining(`Invalid network: "${network}"`) });
     everyFileKept();
   });
 
-  it('clears a network it knows', () => {
+  it('clears a network it knows', async () => {
     const cache = join(root, 'cache', 'undeployed');
     mkdirSync(cache, { recursive: true });
     writeFileSync(join(cache, 'dust-abc.json'), '{}\n');
-    const run = runCli(home, ['cache', 'clear', '--network', 'undeployed', '--json']);
+    const run = await runCli(home, ['cache', 'clear', '--network', 'undeployed', '--json']);
     expect(run.status).toBe(0);
     expect(JSON.parse(run.stdout)).toStrictEqual({ action: 'clear', scope: 'network', network: 'undeployed' });
     expect(readdirSync(cache)).toStrictEqual([]);
