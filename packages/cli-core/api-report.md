@@ -133,7 +133,7 @@ export interface CliConfig {
 export declare class CorruptConfigError extends UsageError {
     constructor(configPath: string, reason: string);
 }
-export declare function getConfigValue(key: string, configDir: string, scope?: NetworkName): string;
+export declare function getConfigValue(key: string, configDir: string, scope?: NetworkName, environment?: BlockfrostSettings): string | undefined;
 export declare function getEndpointOverridesForNetwork(config: CliConfig, networkName: NetworkName): NetworkEndpointOverrides;
 export declare function loadCliConfig(configDir: string): CliConfig;
 export declare function saveCliConfig(config: CliConfig, configDir: string): void;
@@ -315,12 +315,16 @@ export declare function readJsonIfPresent<T>(file: string): T | undefined;
 export declare function writeJsonDurably(file: string, value: unknown, { exclusive }?: {
     exclusive?: boolean;
 }): void;
+export declare function readDescriptorWhole(fd: number): string;
+export declare function readInputFile(path: string): string;
+export declare function readProcessStandardInput(): string;
 export declare function assertValidWalletName(name: string): void;
 export declare class InvalidWalletNameError extends UsageError {
     constructor(name: string, where?: string, fix?: string);
 }
 export declare function ensureOwnerOnlyDir(dir: string): void;
 export declare function narrowToOwnerOnly(file: string): void;
+export declare function narrowTreeToOwnerOnly(dir: string): void;
 export declare function formatWait(ms: number): string;
 export declare function dustShortError(have: bigint, needed: bigint, waitMs: number | null): DustRequiredError;
 export declare const OWN_COMMAND_DUST_WAIT_MS: number;
@@ -1859,6 +1863,12 @@ export declare function priceTransaction(estimate: () => Promise<bigint>, dust: 
 export declare function transactionPriceToWire(price: TransactionPrice): TransactionPriceWire;
 export declare function fromHex(hex: string): Uint8Array;
 export declare function toHex(bytes: Uint8Array): string;
+export declare function readTransactionTag(bytes: Uint8Array): {
+    version: string;
+    stage: TransactionStageName | undefined;
+} | undefined;
+export declare function transactionMismatch(hex: string, expected: TransactionStageName): string | undefined;
+export type TransactionStageName = 'unproven' | 'unsealed' | 'sealed';
 export declare function cacheRootDir(root: string): string;
 export declare function clearWalletCache(address: string | undefined, network: string | undefined, root: string): void;
 export declare function getCachePath(address: string, network: string, root: string): string;

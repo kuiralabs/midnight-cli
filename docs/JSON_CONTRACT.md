@@ -87,6 +87,7 @@ Stable identifiers used in error messages and structured error objects, with the
 |------|------|---------|
 | `INVALID_ARGS` | 2 | Missing/invalid argument. |
 | `WALLET_NOT_FOUND` | 3 | Named wallet doesn't exist on disk. |
+| `WALLET_ADDRESS_MISMATCH` | 2 | A wallet file's saved addresses are not the ones its seed derives: the file was edited or mixed with another wallet's. Nothing was sent. |
 | `NETWORK_ERROR` | 4 | Indexer/node/proof-server connection refused or DNS failure. |
 | `SYNC_TIMEOUT` | 4 | Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync. |
 | `WALLET_BEHIND_FORK` | 4 | A transaction can't be built yet: one of the wallet's three wallets (shielded, unshielded, Dust) hasn't synced past the chain's fork to ledger 9, and the wallet acts at the lowest of their versions. |
@@ -252,6 +253,22 @@ A command that submits a transaction (transfer, airdrop, dust register, contract
 }
 ```
 
+`dustBalance` is DUST as a decimal string (6 to 15 places), never specks. Not registered, it is `{ subcommand, registered: false, registeredUtxos, unregisteredUtxos, network }`.
+
+### `mn dust register --wallet <name> --json`
+
+```jsonc
+{
+  "subcommand": "register",
+  "network": "undeployed",
+  "dustBalance": "0.000000",   // DUST once registered, as status gives it
+  "txHash": "00ab...",         // only when a registration was submitted; absent when the wallet had Dust already
+  "receipt": { /* see Receipts */ }
+}
+```
+
+Without `--json`, stdout is `dust=<DUST>` and, when a registration was submitted, `tx_hash=<txHash>`, one per line.
+
 ### `mn contract inspect --json`
 
 ```jsonc
@@ -334,7 +351,7 @@ Prices the deploy and stops: nothing is proven or sent, and there is no address,
   "address": "9b3e083bf850ca17983d34110337d384d2dc626da8223c3fb2dbd3f8a2df35a3",
   "network": "preprod",
   "fields": { "round": "1", "owner": "511eff…" },     // scalars as strings (BigInt-safe)
-  "maps":   { "providers": { "size": 1 } }            // maps reported by entry count
+  "maps":   { "providers": { "size": 1 } }            // maps by entry count, a number (null when unreadable)
 }
 ```
 

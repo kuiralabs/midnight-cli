@@ -37,7 +37,7 @@ Every secret mn keeps (each wallet's seed and mnemonic, each account's owner key
 
 ### Preprod and mainnet need a Blockfrost project id
 
-Midnight shut its own preprod and mainnet indexers down on 2026-10-09. Blockfrost serves their indexers and nodes now, and every request needs the user's own project id (created at https://blockfrost.io, one project per network; preprod ids start with `nightpreprod`, mainnet ids with `nightmainnet`; each is kept for its own network and never sent to the other; requests count against the user's Blockfrost plan). The user sets it once with `midnight config set blockfrost-project-id <project id>` in their own terminal, or `BLOCKFROST_PROJECT_ID` (or `MN_BLOCKFROST_PROJECT_ID`) in the MCP server's environment. It is a secret: `midnight_config_get` shows it masked, no tool result contains it, and you should never ask for it in chat or echo it. Preview and the local network need none.
+Midnight shut its own preprod and mainnet indexers down on 2026-10-09. Blockfrost serves their indexers and nodes now, and every request needs the user's own project id (created at https://blockfrost.io, one project per network; preprod ids start with `nightpreprod`, mainnet ids with `nightmainnet`; each is kept for its own network and never sent to the other; requests count against the user's Blockfrost plan). The user sets it once with `midnight config set blockfrost-project-id -` in their own terminal (it asks for the id without echoing it), or `BLOCKFROST_PROJECT_ID` (or `MN_BLOCKFROST_PROJECT_ID`) in the MCP server's environment. It is a secret: `midnight_config_get` shows it masked, no tool result contains it, and you should never ask for it in chat or echo it. Preview and the local network need none.
 
 ## Intent routing (natural language → tool)
 
@@ -100,9 +100,9 @@ Use `midnight_contract_*` MCP tools (or `mn contract` CLI). Flow: `compact compi
 
 Plain strings, booleans, fractional numbers, and `null` pass through unchanged. No hex-string detection — `"1234"` stays a string.
 
-**Private arguments.** A circuit's arguments are private inputs to its proof unless the contract discloses them. `args` is text in your tool call, which the host keeps: give private values in a JSON file with `args-file` instead (the same array or object). The confirmation and results never repeat argument values, only that arguments were given; a call whose `args` hold one the circuit keeps private says so in `warnings`. The contract script gets them through an owner-only file mn deletes, never its text or argv.
+**Private arguments.** A circuit's arguments are private inputs to its proof unless the contract discloses them. `args` is text in your tool call, which the host keeps: give private values in a JSON file with `args-file` instead (the same array or object). The confirmation and results never repeat argument values, only that arguments were given; a call whose `args` hold one the circuit keeps private says so in `warnings`. The contract script gets them through an owner-only file mn deletes, never its text or argv. A contract's private-state secret (its owner's, when not the wallet's own) is given the same way, as `secret-key-file` (a file holding its 64 hex characters); no confirmation or result repeats it.
 
-**A fresh coin.** `{"@coin": {"amount": "3", "token": "NIGHT"}}` stands for a new shielded coin wherever the circuit takes a `ShieldedCoinInfo` (a random nonce, NIGHT's colour or a raw type given as 64 hex, the value in the smallest unit). The result's `freshCoins` gives its nonce. After the call lands, mn records each coin it gave the contract in the contract's private state under `mnHeldCoins` (by nonce, with its Merkle tree index), where a witness that spends a privately held coin reads it.
+**A fresh coin.** `{"@coin": {"amount": "3", "token": "NIGHT"}}` stands for a new shielded coin wherever the circuit takes a `ShieldedCoinInfo` (a random nonce, NIGHT's colour or a raw type given as 64 hex, NIGHT when `token` is left out, the value in the smallest unit), paid from the wallet's shielded balance. The result's `freshCoins` gives its nonce. After the call lands, mn records each coin it gave the contract in the contract's private state under `mnHeldCoins` (by nonce, with its Merkle tree index), where a witness that spends a privately held coin reads it.
 
 **Compatibility caveat — runtime version skew.** Contracts must be compiled with Compact 0.36 (language 0.28). The CLI bundles `@midnight-ntwrk/compact-runtime` `0.21.0`, so contracts have to target runtime `0.21.0`. Artifacts built for another runtime (e.g. `0.16.0`, from a ledger-8 toolchain) are rejected at deploy/call with a message like `CompactError: Version mismatch: compiled code expects 0.16.0`. The fix is to recompile with Compact 0.36 (`compact compile`): no network runs ledger 8 any more, so there is no older `mn` to fall back to. `midnight_contract_inspect` shows the compiled `runtimeVersion` so you can flag the mismatch before attempting deploy.
 
@@ -150,6 +150,7 @@ Every MCP tool error returns `{ error: true, code: <ERROR_CODE>, message: <human
 |---|---|---|
 | `INVALID_ARGS` | Missing/invalid argument. | Show the message to the user verbatim — it names the missing field. |
 | `WALLET_NOT_FOUND` | Named wallet doesn't exist on disk. | `midnight_wallet_list()` — user may have removed it. |
+| `WALLET_ADDRESS_MISMATCH` | A wallet file's saved addresses are not the ones its seed derives: the file was edited or mixed with another wallet's. Nothing was sent. | Don't retry. Ask the user to restore the wallet file from a backup, or the wallet from its mnemonic (`midnight wallet generate <name> --mnemonic "..." --force`, at their terminal). |
 | `NETWORK_ERROR` | Indexer/node/proof-server connection refused or DNS failure. | Check `midnight_localnet_status()` (start it with `midnight_localnet_up()`) or the endpoints the user configured. |
 | `SYNC_TIMEOUT` | Long-running wallet sync hit its deadline. Common on a hosted-network first-cold-sync. | Retry; the cache resumes from the last applied event so progress is preserved. |
 | `WALLET_BEHIND_FORK` | A transaction can't be built yet: one of the wallet's three wallets (shielded, unshielded, Dust) hasn't synced past the chain's fork to ledger 9, and the wallet acts at the lowest of their versions. | Retry; mn reads the shielded and Dust history past the fork first, and the next run starts those wallets there. Nothing was sent. |
@@ -207,7 +208,7 @@ A tool's description ends with the codes it can fail with: its own, and sets of 
 | Set | Codes |
 |---|---|
 | network | `AMBIGUOUS_LOCAL_STACKS`, `BLOCKFROST_PROJECT_ID_REQUIRED`, `BLOCKFROST_PROJECT_ID_REJECTED`, `BLOCKFROST_LIMIT_REACHED`, `ENDPOINT_SHUT_DOWN` |
-| wallet | `WALLET_NOT_FOUND`, `WRONG_PASSPHRASE`, `PASSPHRASE_REQUIRED` |
+| wallet | `WALLET_NOT_FOUND`, `WALLET_ADDRESS_MISMATCH`, `WRONG_PASSPHRASE`, `PASSPHRASE_REQUIRED` |
 | engine | `MIXED_SDK_LAYOUT` |
 | sync | `NETWORK_ERROR`, `SYNC_TIMEOUT`, `STALE_CACHE`, `WALLET_BEHIND_FORK` |
 | paying | `TX_REJECTED`, `STALE_UTXO`, `INVALID_DUST_PROOF`, `FEE_TOO_LOW`, `FEE_REPRICED`, `DUST_DOUBLE_SPENT`, `TX_INVALIDATED`, `PROOF_TIMEOUT`, `PROOF_FAILURE`, `DUST_REQUIRED`, `DUST_GENERATING`, `INSUFFICIENT_BALANCE`, `OFFER_COINS_IN_USE`, `OFFER_RECORD_UNREADABLE` |
