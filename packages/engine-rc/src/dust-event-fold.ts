@@ -124,6 +124,9 @@ export class DustEventFold {
   /** The highest Dust event id the indexer reported. */
   get maxIdSeen(): number { return this.maxId; }
 
+  /** The id of the last event read: where the read is (startFromId - 1 before any). */
+  get lastIdSeen(): number { return this.lastEventId; }
+
   /** The fold has read every event the indexer reported holding. */
   get caughtUp(): boolean { return this.lastEventId >= this.maxId; }
 

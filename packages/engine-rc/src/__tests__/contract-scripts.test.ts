@@ -4,8 +4,8 @@
 // runner gives every engine are plain values here (TEST_PARTS): the fragments
 // read only the names of the indexer's environment variables from them.
 
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
-import { type NetworkConfig, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
+import { type NetworkConfig, PRICE_TRANSACTION_METHOD, WAIT_LINE_EVERY_MS } from '@kuiralabs/midnight-cli-core';
 import type { ScriptParts } from '@kuiralabs/midnight-cli-core/engine';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -49,6 +49,7 @@ const TEST_PARTS: ScriptParts = {
   privateStateBusyWaitMs: 1_000,
   noticeMarker: '__MN_TEST_NOTICE__',
   pricedMarker: '__MN_TEST_PRICED__',
+  provingMarker: '__MN_TEST_PROVING__',
   dryRunEnv: 'MN_TEST_DRY_RUN',
   witnessCandidates: [],
   indexerUrlEnv: 'MN_TEST_INDEXER_URL',
@@ -236,6 +237,28 @@ describe('generated pricing proof provider', () => {
     expect(calls).toEqual([{ method: PRICE_TRANSACTION_METHOD, params: { tx: toHex(tx.serialize()) } }]);
     expect(stderr.join('')).toBe(`\n__MN_TEST_PRICED__ ${JSON.stringify(PRICE)}\n`);
     expect(proved).toEqual([tx]);
+  });
+
+  // Regression: a proof of minutes printed nothing off a terminal or under --json.
+  it('says on its marked line, every WAIT_LINE_EVERY_MS while the proof runs, how long it has taken; nothing once it is done', async () => {
+    vi.useFakeTimers();
+    try {
+      const { rpcCall } = makeRpcStub({ [PRICE_TRANSACTION_METHOD]: PRICE });
+      const { stderr, process } = scriptProcess({});
+      let finish: (value: string) => void = () => {};
+      const provider = { supportedEras: ['v9'], proveTx: () => new Promise<string>((resolve) => { finish = resolve; }) };
+      const pricing = (await evalPricing(rpcCall, process))(provider);
+      const proof = pricing.proveTx(unprovenHandle());
+      await vi.advanceTimersByTimeAsync(2 * WAIT_LINE_EVERY_MS + 1_000);
+      finish('proven');
+      expect(await proof).toBe('proven');
+      await vi.advanceTimersByTimeAsync(3 * WAIT_LINE_EVERY_MS);
+
+      const provingLines = stderr.join('').split('\n').filter((line) => line.startsWith('__MN_TEST_PROVING__ '));
+      expect(provingLines).toEqual([`__MN_TEST_PROVING__ ${WAIT_LINE_EVERY_MS}`, `__MN_TEST_PROVING__ ${2 * WAIT_LINE_EVERY_MS}`]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stops once priced on a dry run: nothing is proven', async () => {

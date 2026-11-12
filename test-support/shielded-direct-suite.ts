@@ -9,7 +9,7 @@ import zswapEvents from './fixtures/zswap-events-localnet.json';
 export interface ShieldedDirectEngine<Keys, State> {
   set: 'rc';
   secretKeysFor(seedHex: string): Keys;
-  readShieldedBalanceDirect(secretKeys: Keys, indexerWS: string, options?: { idleMs?: number; initialState?: State; startFromId?: number }): Promise<{
+  readShieldedBalanceDirect(secretKeys: Keys, indexerWS: string, options?: { idleMs?: number; initialState?: State; startFromId?: number; onProgress?: (eventsApplied: number, maxIdSeen: number, lastIdSeen: number, startFromId: number) => void }): Promise<{
     balance: bigint;
     availableCoins: number;
     tokens: ReadonlyMap<string, bigint>;
@@ -58,6 +58,23 @@ export function shieldedDirectSuite<Keys, State>(engine: ShieldedDirectEngine<Ke
       expect(r.availableCoins).toBe(3);
       expect(r.partial).toBe(false);
       expect(r.eventCount).toBe(zswapEvents.length);
+    });
+
+    // Regression: progress was the count of events read against the last id, so
+    // a read of sparse ids (the indexer numbers every kind of ledger event in one
+    // sequence) ended far short of 100%.
+    it('reports where it is by the id of the last event read, which reaches the indexer\'s last when caught up', async () => {
+      const seen: Array<[number, number, number, number]> = [];
+      await readShieldedBalanceDirect(secretKeysFor(EMPTY_SEED), indexer.url, { idleMs: 200, onProgress: (...args) => { seen.push(args); } });
+      const ids = (zswapEvents as { id: number; maxId: number }[]).map((event) => event.id);
+      const [read, maxId, lastId, firstId] = seen.at(-1)!;
+      expect(read).toBe(ids.length);
+      expect(lastId).toBe(ids.at(-1));
+      expect(lastId).toBe(maxId);
+      expect(firstId).toBe(0);
+      // The ids are sparse: the count alone is no fraction of the last id.
+      expect(read).toBeLessThan(maxId);
+      expect(seen.map(([, , last]) => last)).toEqual(ids);
     });
 
     it('adds received coins on top of an existing balance', async () => {

@@ -31,7 +31,7 @@ export interface DustExportOptions {
   root: string;
   /** Where the export's lines for the person go (the host's notices). */
   notice: NoticeSink;
-  onProgress?: (eventsApplied: number, maxIdSeen: number) => void;
+  onProgress?: (eventsApplied: number, maxIdSeen: number, lastIdSeen?: number, firstId?: number) => void;
   signal?: AbortSignal;
   /** The engine's repository the sync runs through. */
   repository: WalletDataRepository;

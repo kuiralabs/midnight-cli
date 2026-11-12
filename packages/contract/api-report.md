@@ -213,6 +213,7 @@ export interface RunnerOptions {
     onMessage?: (msg: string) => void;
     notice?: (line: string) => void;
     onPriced?: (price: TransactionPrice) => void;
+    onProving?: (elapsedMs: number) => void;
     signal?: AbortSignal;
 }
 export declare function runState(options: StateOptions): Promise<StateResult>;

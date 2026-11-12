@@ -2,7 +2,7 @@
 // much it has, registering it, and a snapshot of its Dust another wallet
 // restores from instead of syncing it cold.
 
-import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, type DustExportResult } from '@kuiralabs/midnight-cli-core';
+import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, type DustExportResult, eventsReadLine, type DustReadiness, dustReadiness } from '@kuiralabs/midnight-cli-core';
 import { assertEndpointsReachable, assertNetworkReady, checkBalance, endpointsOf, explainProofFailure, type Receipt, RECEIPT_WAIT_MS, receiptOf } from '@kuiralabs/midnight-chain';
 import { seedOf, type WalletSource } from '../seed-resolver.ts';
 import { networkChoiceOf, unshieldedAddressOf, type WalletCallOptions, type WalletOpened } from './wallet-call.ts';
@@ -101,6 +101,12 @@ export interface DustRegistrationResult {
   readonly alreadyAvailable: boolean;
   /** The wallet's Dust once synced, in its smallest unit (specks). */
   readonly dust: bigint;
+  /**
+   * What that Dust is ready for, as the registration ends: right after one a
+   * wallet holds a fraction of a transfer's fee, and this says what a transfer
+   * and a counter contract's deploy take and when its NIGHT has generated it.
+   */
+  readonly readiness: DustReadiness;
   /** The registration's identifier, when one was submitted. */
   readonly txHash?: string;
   /** The submitted registration once the indexer lists it, or why it is missing; absent when none was submitted, or `receiptWaitMs` is 0. */
@@ -156,6 +162,7 @@ export async function registerDust(host: Host, source: WalletSource, options: Re
     network,
     alreadyAvailable: result.alreadyAvailable,
     dust: result.dustBalance,
+    readiness: dustReadiness(result.dustOverTime),
     ...(result.txHash ? { txHash: result.txHash } : {}),
     ...(receipt === undefined ? {} : { receipt }),
   };
@@ -185,11 +192,7 @@ export async function exportDustSnapshot(host: Host, source: WalletSource, optio
         notice: host.notice,
         signal,
         log,
-        onProgress: (applied, maxIdSeen) => steps.update(
-          maxIdSeen > 0
-            ? `Reading dust events... ${applied}/${maxIdSeen + 1}`
-            : `Reading dust events... ${applied}`,
-        ),
+        onProgress: (applied, maxIdSeen, lastIdSeen, firstId) => steps.update(eventsReadLine('Dust', { read: applied, maxId: maxIdSeen, lastId: lastIdSeen, firstId: firstId ?? 0 })),
       });
       steps.done(
         result.partial

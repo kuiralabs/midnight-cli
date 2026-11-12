@@ -225,6 +225,7 @@ export interface DustRegistrationResult {
     readonly network: NetworkName;
     readonly alreadyAvailable: boolean;
     readonly dust: bigint;
+    readonly readiness: DustReadiness;
     readonly txHash?: string;
     readonly receipt?: Receipt;
 }

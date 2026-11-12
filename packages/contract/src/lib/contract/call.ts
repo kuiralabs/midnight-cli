@@ -2,7 +2,7 @@
 // wallet the payer serves (served-wallet.ts). `mn contract call` calls through here.
 // The call is priced before it is proven (cost.ts); `--dry-run` stops there.
 
-import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, withCallSdkWarnings, type PayingTarget } from '@kuiralabs/midnight-cli-core';
+import { type Host, throwIfCancelled, type NetworkName, networkTargetOf, withCallSdkWarnings, type PayingTarget, provingLine } from '@kuiralabs/midnight-cli-core';
 import type { Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { networkChoiceOf, stepSpinner, type PaidCallOptions } from '@kuiralabs/midnight-wallet';
 import type { Receipt } from '@kuiralabs/midnight-chain';
@@ -116,6 +116,8 @@ async function withCallScript<T>(
         privateStateSecretKey,
         onMessage: (msg) => spinner.update(msg),
         onPriced: priced.onPrice,
+        // A proof of minutes is said in every mode (--json included), as a wait is.
+        onProving: (elapsedMs) => host.waiting(provingLine(elapsedMs), false),
         notice: host.notice,
         signal,
       }, target, priced.cost)));

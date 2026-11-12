@@ -66,6 +66,12 @@ export interface BundleOverrides {
   initSwap?: (...args: any[]) => Promise<any>;
   getAllFromTxHistory?: () => Promise<any[]>;
   estimateTransactionFee?: (...args: any[]) => Promise<bigint>;
+  /** The Dust wallet's fee estimate for a set of transactions (its spend and margin added). */
+  estimateDustFee?: (...args: any[]) => Promise<bigint>;
+  /** The shielded wallet's balancing of a transaction: its zswap offer, or undefined when the transaction owes no shielded coin. */
+  balanceShielded?: (...args: any[]) => Promise<any>;
+  /** Releases what a shielded balancing booked. */
+  revertShielded?: (...args: any[]) => Promise<void>;
   calculateTransactionFee?: (...args: any[]) => Promise<bigint>;
   validateTransaction?: (...args: any[]) => Promise<void>;
 }
@@ -137,6 +143,12 @@ export function connectorStub(engine: StubEngine) {
         // The rc SDK's reader.
         adoptTransaction: vi.fn((bytes: Uint8Array, stage: string) => ({ stage, hex: Buffer.from(bytes).toString('hex') })),
         estimateTransactionFee: overrides?.estimateTransactionFee ?? vi.fn().mockResolvedValue(1_000n),
+        // The wallets inside the facade that pricing reaches: the shielded one's balancing, the Dust one's estimate.
+        shielded: {
+          balanceTransaction: overrides?.balanceShielded ?? vi.fn().mockResolvedValue(undefined),
+          revertTransaction: overrides?.revertShielded ?? vi.fn().mockResolvedValue(undefined),
+        },
+        dust: { estimateFee: overrides?.estimateDustFee ?? vi.fn().mockResolvedValue(1_000n) },
         calculateTransactionFee: overrides?.calculateTransactionFee ?? vi.fn().mockResolvedValue(1_000n),
         getAllFromTxHistory: overrides?.getAllFromTxHistory ?? vi.fn().mockResolvedValue(HISTORY),
         validateTransaction: overrides?.validateTransaction ?? vi.fn().mockResolvedValue(undefined),

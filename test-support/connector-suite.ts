@@ -196,20 +196,56 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
       it('prices the transaction with the wallet\'s own estimate (its Dust spend and margin added), against the Dust it has', async () => {
         const estimate = vi.fn().mockResolvedValue(1_236n * SPECK / 1000n);
-        connector = createConnector({ bundleOverrides: { estimateTransactionFee: estimate, stateFn: () => rx.of(mockState({ dustBalance: 5n * SPECK })) } });
+        connector = createConnector({ bundleOverrides: { estimateDustFee: estimate, stateFn: () => rx.of(mockState({ dustBalance: 5n * SPECK })) } });
 
         const price = await connector.handlers[PRICE_TRANSACTION_METHOD]!({ tx: UNPROVEN_TX }, ctx());
 
         expect(price).toEqual({ committed: '1236000000000000', have: '5000000000000000', covers: true, waitMs: 0, marginBlocks: 3 });
         expect(estimate).toHaveBeenCalledTimes(1);
-        const [priced, options] = estimate.mock.calls[0]!;
-        expect(priced.stage).toBe('Unproven');
-        expect(engine.handleHex(priced)).toBe(UNPROVEN_TX);
-        expect(options.ttl).toBeInstanceOf(Date);
+        const [priced, ttl] = estimate.mock.calls[0]!;
+        // A payment that owes no shielded coin: priced alone.
+        expect(priced).toHaveLength(1);
+        expect(priced[0].stage).toBe('Unproven');
+        expect(engine.handleHex(priced[0])).toBe(UNPROVEN_TX);
+        expect(ttl).toBeInstanceOf(Date);
+      });
+
+      // Regression: a call giving a contract a shielded coin was priced alone,
+      // at 0.81 of its fee on Preview or less, and `covers` could say true for a
+      // fee the wallet's Dust didn't cover.
+      it('prices a transaction that owes a shielded coin with the shielded balancing the wallet adds to it, and releases the coins that booked', async () => {
+        const balancing = { stage: 'Unproven', hex: 'shielded-balancing' };
+        const balanceShielded = vi.fn().mockResolvedValue(balancing);
+        const revertShielded = vi.fn().mockResolvedValue(undefined);
+        const estimate = vi.fn().mockResolvedValue(452n * SPECK / 1000n);
+        connector = createConnector({ bundleOverrides: { balanceShielded, revertShielded, estimateDustFee: estimate, stateFn: () => rx.of(mockState({ dustBalance: 5n * SPECK })) } });
+
+        const price = await connector.handlers[PRICE_TRANSACTION_METHOD]!({ tx: UNPROVEN_TX }, ctx());
+
+        expect(price).toMatchObject({ committed: '452000000000000', covers: true });
+        expect(balanceShielded).toHaveBeenCalledTimes(1);
+        expect(engine.handleHex(balanceShielded.mock.calls[0]![0])).toBe(UNPROVEN_TX);
+        const [priced] = estimate.mock.calls[0]!;
+        expect(priced).toHaveLength(2);
+        expect(engine.handleHex(priced[0])).toBe(UNPROVEN_TX);
+        expect(priced[1]).toBe(balancing);
+        expect(revertShielded).toHaveBeenCalledWith(balancing);
+      });
+
+      it('releases the shielded coins it booked when the Dust falls short of the fee, and prices the shortfall', async () => {
+        const balancing = { stage: 'Unproven', hex: 'shielded-balancing' };
+        const revertShielded = vi.fn().mockResolvedValue(undefined);
+        const short = withDustShortfall(Object.assign(new Error('Insufficient Funds: could not balance dust'), { _tag: 'Wallet.InsufficientFunds', tokenType: 'dust' }), { needed: SPECK, available: SPECK / 10n });
+        connector = createConnector({ bundleOverrides: { balanceShielded: vi.fn().mockResolvedValue(balancing), revertShielded, estimateDustFee: vi.fn().mockRejectedValue(short), stateFn: () => rx.of(mockState({ dustBalance: SPECK / 10n })) } });
+
+        const price = await connector.handlers[PRICE_TRANSACTION_METHOD]!({ tx: UNPROVEN_TX }, ctx());
+
+        expect(price).toMatchObject({ committed: '1000000000000000', have: '100000000000000', covers: false });
+        expect(revertShielded).toHaveBeenCalledWith(balancing);
       });
 
       it('prices with the margin the wallet prices with now, a raised one included', async () => {
-        const bundle = createBundleStub({ estimateTransactionFee: vi.fn().mockResolvedValue(SPECK) });
+        const bundle = createBundleStub({ estimateDustFee: vi.fn().mockResolvedValue(SPECK) });
         bundle.feePricing.feeBlocksMargin = 5;
         connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
@@ -226,7 +262,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         });
         const short = withDustShortfall(Object.assign(new Error('Insufficient Funds: could not balance dust'), { _tag: 'Wallet.InsufficientFunds', tokenType: 'dust' }), { needed: SPECK, available: 350n * SPECK / 1000n });
         const estimate = vi.fn().mockRejectedValue(short);
-        connector = createConnector({ bundleOverrides: { estimateTransactionFee: estimate, stateFn: growing } });
+        connector = createConnector({ bundleOverrides: { estimateDustFee: estimate, stateFn: growing } });
 
         const price = await connector.handlers[PRICE_TRANSACTION_METHOD]!({ tx: UNPROVEN_TX }, ctx()) as Record<string, unknown>;
 

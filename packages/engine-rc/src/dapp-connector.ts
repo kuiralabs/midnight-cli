@@ -4,7 +4,7 @@
 
 import * as rx from 'rxjs';
 import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, waitForDustGrowth, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, proofTimeoutMessage, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isDroppedFromPool, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, priceTransaction, transactionPriceToWire } from '@kuiralabs/midnight-cli-core/engine';
-import { type NoticeSink, type WaitSink, DustDoubleSpentError, FeeRepricedError, TransactionInvalidatedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
+import { type NoticeSink, type WaitSink, sayWhileRunning, secondsText, DustDoubleSpentError, FeeRepricedError, TransactionInvalidatedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
 import { dim, roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
@@ -13,6 +13,7 @@ import type { FinalizedTx } from '@midnightntwrk/wallet-sdk';
 
 import { type FacadeBundle, hasDustAvailable } from './facade.ts';
 import { refusedFeeCheck } from './fee-refusal.ts';
+import { estimateFeeAsBalanced } from './fee-as-balanced.ts';
 import { awaitDustSpendSeen, pendingDustNonces } from './dust-spend-seen.ts';
 import { inspectTxHex } from './tx-inspect.ts';
 import { readOffer, spentNullifiers } from './offer-reader.ts';
@@ -356,12 +357,12 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     let finalized: FinalizedTx;
     const finalizing = facade.finalizeRecipe(signed);
     try {
-      finalized = await Promise.race([
+      finalized = await sayWhileRunning(Promise.race([
         finalizing,
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new ProofTimeoutError(proofTimeoutMessage(PROOF_TIMEOUT_MS, networkConfig.proofServer))), PROOF_TIMEOUT_MS);
         }),
-      ]);
+      ]), (elapsedMs) => `Proving the wallet's part of the transaction: ${secondsText(elapsedMs)} so far...`, (line, opening) => waiting(dim(`  ${line}`), opening));
     } catch (err) {
       // No finalized transaction to track: release what balancing booked now,
       // rather than leaving the coins held until the TTL.
@@ -1218,8 +1219,9 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
     /**
      * The price of a transaction a dApp is about to prove (unproven, hex): the
-     * fee this wallet would commit to it when it balances it, with its own
-     * Dust spend and the margin it prices with now, against the Dust it has.
+     * fee this wallet would commit to it when it balances it, with the
+     * shielded coins and the Dust spend it adds and the margin it prices with
+     * now, against the Dust it has.
      * Nothing is booked, signed or sent, so the operator isn't asked.
      */
     [PRICE_TRANSACTION_METHOD]: async (params) => {
@@ -1231,7 +1233,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       const unproven = adopt(txHex, 'Unproven');
       const state = getState();
       const price = await priceTransaction(
-        () => facade.estimateTransactionFee(unproven, { ttl: createTtl() }),
+        () => estimateFeeAsBalanced(facade, unproven, createTtl()),
         state.dust,
         bundle.feePricing.feeBlocksMargin,
       );

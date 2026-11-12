@@ -207,7 +207,7 @@ describe('help — the lists come from the registry', () => {
     await cliCall(helpCommand, parseArgs(['help', '--json']));
     const manifest = JSON.parse(io.stdout()) as { globalFlags: { name: string; description: string }[]; commands: { name: string }[] };
     expect(manifest.globalFlags).toStrictEqual([
-      { name: '--json', description: 'Output structured JSON to stdout (stderr stays quiet but for the lines of a long wait, such as Dust for a fee)' },
+      { name: '--json', description: 'Output structured JSON to stdout (stderr stays quiet but for the lines of a long step: a wait for Dust, a sync or read of the chain\'s events, a proof)' },
       { name: '--wallet <name|file>', description: 'Wallet name or path' },
       { name: '--network <name>', description: 'Override network (mainnet, preprod, preview, undeployed)' },
       { name: '--version, -v', description: 'Print CLI version' },

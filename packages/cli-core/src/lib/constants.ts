@@ -50,6 +50,13 @@ export const DUST_FEE_BLOCKS_MARGIN = 3;
 // caught by the transfer retry, which waits for Dust to grow.
 export const MIN_DUST_FOR_TRANSFER = 650_000_000_000_000n;
 
+// What a counter contract's deploy commits to its fee with 3 blocks of margin:
+// 1.231052 DUST on a ledger-9 local chain (2026-11-08), so 1.24 DUST. A guide
+// to what a small contract's deploy takes, not a price: a deploy's fee grows
+// with the contract's circuits (a five-circuit probe contract committed 6.40
+// DUST on the same chain), and `mn contract deploy --dry-run` prices one.
+export const COUNTER_DEPLOY_DUST = 1_240_000_000_000_000n;
+
 // Initial dust-accrual parameters (protocol constants, matching the ledger's
 // INITIAL_PARAMETERS). Single source of truth: the direct dust readers build a
 // `DustParameters` from these. The native sidecar (Rust) carries its own copy

@@ -5,10 +5,12 @@
 
 import { formatWait } from './duration.ts';
 import { sleep } from './sleep.ts';
-import { DUST_RETRY_DELAY_MS } from './constants.ts';
+import { COUNTER_DEPLOY_DUST, DUST_RETRY_DELAY_MS, MIN_DUST_FOR_TRANSFER } from './constants.ts';
 import { DustRequiredError } from './errors.ts';
 import { dustShortfallOf } from './sdk-errors.ts';
 import { roughDust, toDust } from '../ui/format.ts';
+import type { WaitSink } from './notices.ts';
+import { secondsText, WAIT_LINE_EVERY_MS } from './wait-lines.ts';
 
 /** What the check reads from the SDK's Dust state. */
 export interface DustBalanceSource {
@@ -43,6 +45,38 @@ export function msUntilDust(dust: DustBalanceSource, needed: bigint, now: Date, 
   return high * 1000;
 }
 
+/** An amount of Dust a payment takes, and how long until the wallet has it: 0 when it has, null when not within a day. */
+export interface DustNeed {
+  readonly needs: bigint;
+  readonly waitMs: number | null;
+}
+
+/** What a wallet's Dust is ready for: a NIGHT transfer and a counter contract's deploy, and how fast its NIGHT generates more. */
+export interface DustReadiness {
+  /** What the wallet has now, in Specks. */
+  readonly have: bigint;
+  /** What its registered NIGHT generates a second now, in Specks (0 once its Dust is at its cap). */
+  readonly perSecond: bigint;
+  /** A NIGHT transfer: MIN_DUST_FOR_TRANSFER, what a one-recipient transfer commits to its fee with mn's margin. */
+  readonly transfer: DustNeed;
+  /** A counter contract's deploy: COUNTER_DEPLOY_DUST, a guide to a small contract's (a deploy is priced by `mn contract deploy --dry-run`). */
+  readonly counterDeploy: DustNeed;
+}
+
+/**
+ * What the Dust in `dust` (its balance as a function of time: a wallet's
+ * registered NIGHT keeps generating) is ready for at `now`: right after a
+ * registration a wallet has a fraction of a transfer's fee, and this says when
+ * it has the rest.
+ */
+export function dustReadiness(dust: DustBalanceSource, now: Date = new Date()): DustReadiness {
+  const need = (needs: bigint): DustNeed => ({ needs, waitMs: msUntilDust(dust, needs, now, LOOK_AHEAD_MS) });
+  const have = dust.balance(now);
+  const MINUTE_MS = 60_000;
+  const perSecond = (dust.balance(new Date(now.getTime() + MINUTE_MS)) - have) / 60n;
+  return { have, perSecond: perSecond > 0n ? perSecond : 0n, transfer: need(MIN_DUST_FOR_TRANSFER), counterDeploy: need(COUNTER_DEPLOY_DUST) };
+}
+
 /** Not enough Dust for the fee, with how long until there is. */
 /** Another transaction from the same wallet (another mn, or mn serve) holds the Dust it spends until it is final: mn has no per-wallet lock, so it says so. */
 const HELD_BY_ANOTHER = 'If another transaction from this wallet is running (another mn, or mn serve), it holds the Dust it spends until it is final: let it finish, then retry.';
@@ -56,15 +90,17 @@ export function dustShortError(have: bigint, needed: bigint, waitMs: number | nu
 
 /**
  * Make sure the Dust balance covers `needed`: return at once when it does,
- * wait when it will within DUST_SHORT_WAIT_MS (reporting how long), and throw
- * dustShortError otherwise. A wallet with no Dust at all is left to the
- * registration path (returns at once).
+ * wait when it will within DUST_SHORT_WAIT_MS (reporting how long, and on
+ * `say` the wait's lines: waitForDustGrowth), and throw dustShortError
+ * otherwise. A wallet with no Dust at all is left to the registration path
+ * (returns at once).
  */
 export async function awaitDustForFee(
   dust: DustBalanceSource,
   needed: bigint,
   onStatus?: (status: string) => void,
   signal?: AbortSignal,
+  say?: WaitSink,
 ): Promise<void> {
   const now = new Date();
   const have = dust.balance(now);
@@ -72,14 +108,15 @@ export async function awaitDustForFee(
   const waitMs = msUntilDust(dust, needed, now, LOOK_AHEAD_MS);
   if (waitMs === null || waitMs > DUST_SHORT_WAIT_MS) throw dustShortError(have, needed, waitMs);
   onStatus?.(`Waiting ${formatWait(waitMs)} for Dust to cover the fee (${toDust(have)} of ${toDust(needed)} DUST)...`);
-  await sleep(waitMs, signal);
+  if (say === undefined) await sleep(waitMs, signal);
+  else await waitForDustGrowth({ have, needed, waitMs }, dust, say, { signal });
 }
 
-/** How often a wait for Dust says how far it is: often enough that a wait of minutes never looks like a hang, seldom enough for a log. */
-export const DUST_WAIT_REPORT_MS = 15_000;
+/** How often a wait for Dust says how far it is (WAIT_LINE_EVERY_MS, as every long step). */
+export const DUST_WAIT_REPORT_MS = WAIT_LINE_EVERY_MS;
 
 /** Whole seconds, for a wait's lines: "89 s". */
-const seconds = (ms: number): string => `${Math.round(ms / 1000)} s`;
+const seconds = secondsText;
 
 /** A wait's opening line: what the wallet has, what the fee takes, how long its NIGHT takes to generate the rest. */
 export function dustWaitOpening(have: bigint, needed: bigint, waitMs: number): string {
@@ -156,7 +193,7 @@ export function planDustWait(err: unknown, dust: DustBalanceSource, now: Date): 
 export async function payWhenDustCovers<T>(
   pay: () => Promise<T>,
   dust: DustBalanceSource,
-  options: { maxWaitMs: number; onStatus?: (status: string) => void; signal?: AbortSignal },
+  options: { maxWaitMs: number; onStatus?: (status: string) => void; signal?: AbortSignal; /** Where each wait's lines go (waitForDustGrowth), in every mode. */ say?: WaitSink },
 ): Promise<T> {
   let waitedMs = 0;
   for (;;) {
@@ -167,7 +204,8 @@ export async function payWhenDustCovers<T>(
       if (!plan) throw err;
       if (plan.waitMs === null || waitedMs + plan.waitMs > options.maxWaitMs) throw dustShortError(plan.have, plan.needed, plan.waitMs);
       options.onStatus?.(`Waiting ${formatWait(plan.waitMs)} for Dust to cover the fee (${roughDust(plan.have)} of ${roughDust(plan.needed, true)} DUST)...`);
-      await sleep(plan.waitMs, options.signal);
+      if (options.say === undefined) await sleep(plan.waitMs, options.signal);
+      else await waitForDustGrowth({ have: plan.have, needed: plan.needed, waitMs: plan.waitMs }, dust, options.say, { signal: options.signal });
       waitedMs += plan.waitMs;
     }
   }
