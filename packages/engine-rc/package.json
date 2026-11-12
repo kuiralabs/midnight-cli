@@ -31,7 +31,7 @@
     "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@kuiralabs/midnight-account-chain": "file:../../../../local-tarballs/kuiralabs-midnight-account-chain-0.4.0-rc.0.tgz",
+    "@kuiralabs/midnight-account-chain": "0.4.0-rc.0",
     "@kuiralabs/midnight-chain": "0.1.0",
     "@kuiralabs/midnight-cli-core": "0.1.0",
     "@midnight-ntwrk/compact-js": "3.0.0",
