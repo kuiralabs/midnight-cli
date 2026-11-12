@@ -13,12 +13,11 @@ import {
   resolveNetworkConfig,
   type EndpointOverrides,
 } from './network.ts';
-import { checkProjectId, networkOfProjectId, usesBlockfrost } from './blockfrost.ts';
-import { getBlockfrostProjectId, loadCliConfig, getEndpointOverridesForNetwork } from './cli-config.ts';
+import { usesBlockfrost } from './blockfrost.ts';
+import { type BlockfrostSettings, blockfrostProjectIdInUse, loadCliConfig, getEndpointOverridesForNetwork } from './cli-config.ts';
 import { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV, type Settings } from './settings.ts';
 
-/** The Blockfrost project ids the settings give (MN_BLOCKFROST_PROJECT_ID, then BLOCKFROST_PROJECT_ID). */
-export type BlockfrostSettings = Pick<Settings, 'blockfrostProjectId' | 'sharedBlockfrostProjectId'>;
+export type { BlockfrostSettings };
 
 /** The settings resolving a network reads: whether to look for a local stack, and the Blockfrost ids. */
 export type NetworkSettings = BlockfrostSettings & Pick<Settings, 'isLocalDetectOff'>;
@@ -65,14 +64,7 @@ export { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV };
  */
 export function resolveBlockfrostProjectId(name: NetworkName, configDir: string, settings: BlockfrostSettings): string | undefined {
   if (!usesBlockfrost(name)) return undefined;
-  const own = settings.blockfrostProjectId?.trim();
-  if (own) {
-    const { projectId, network } = checkProjectId(own);
-    if (network === name) return projectId;
-  }
-  const shared = settings.sharedBlockfrostProjectId?.trim();
-  if (shared && /^[A-Za-z0-9]+$/.test(shared) && networkOfProjectId(shared) === name) return shared;
-  return getBlockfrostProjectId(loadCliConfig(configDir), name);
+  return blockfrostProjectIdInUse(loadCliConfig(configDir), name, settings)?.projectId;
 }
 
 /**

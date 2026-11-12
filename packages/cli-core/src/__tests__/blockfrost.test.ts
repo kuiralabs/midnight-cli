@@ -40,7 +40,7 @@ describe('a project id', () => {
   it.each(['nighttestnetAbCdEfGhIjKl', 'abc', '', `${ID}&x=1`, `https://midnight-preprod.blockfrost.io/api/v0?project_id=${ID}`])(
     'is refused when it is %j, saying what one looks like', (given) => {
       expect(() => checkProjectId(given)).toThrow(UsageError);
-      expect(() => checkProjectId(given)).toThrow('it should start with "nightpreprod" (preprod), "nightmainnet" (mainnet)');
+      expect(() => checkProjectId(given)).toThrow('it should start with "nightpreprod" (preprod) or "nightmainnet" (mainnet)');
     });
 
   it('is shown as its prefix and last four characters', () => {

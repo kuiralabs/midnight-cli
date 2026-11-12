@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WrongPassphraseError, FILE_MODE, createHost } from '@kuiralabs/midnight-cli-core';
 import { PASSPHRASE_ENV, establishPassphrase } from '../lib/passphrase.ts';
-import { loadWalletConfig, protectAllWallets, sealWalletInPlace, unlockWallet, writeSealedWallet } from '../lib/wallet-config.ts';
+import { loadWalletConfig, protectAllWallets, sealWalletInPlace, unlockWallet, WalletAddressMismatchError, writeSealedWallet } from '../lib/wallet-config.ts';
 import { rcKeys } from '../../../../test-support/rc-engine.ts';
 import { stateRootIn } from '../../../../test-support/state-root-in.ts';
 import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
@@ -76,6 +76,38 @@ describe('a sealed wallet', () => {
   });
 });
 
+describe('a wallet file whose addresses are not its seed\'s', () => {
+  const OTHER = '11'.repeat(32);
+  const othersAddresses = {
+    addresses: rcKeys.unshieldedAddresses(Buffer.from(OTHER, 'hex')),
+    shieldedAddresses: rcKeys.shieldedAddresses(Buffer.from(OTHER, 'hex')),
+  };
+
+  it('is refused once opened, sealed, with WALLET_ADDRESS_MISMATCH', async () => {
+    writeSealedWallet(file, { ...PUBLIC, ...othersAddresses }, { seed: SEED }, PASSPHRASE);
+    await expect(unlockWallet(file, withPassphrase(PASSPHRASE))).rejects.toMatchObject({ code: 'WALLET_ADDRESS_MISMATCH' });
+  });
+
+  it('is refused when only one network\'s shielded address is another\'s, and the refusal names it', async () => {
+    writeSealedWallet(file, { ...PUBLIC, shieldedAddresses: { ...PUBLIC.shieldedAddresses, preview: othersAddresses.shieldedAddresses.preview } }, { seed: SEED }, PASSPHRASE);
+    const refusal = await unlockWallet(file, withPassphrase(PASSPHRASE)).catch((err: unknown) => err);
+    expect(refusal).toBeInstanceOf(WalletAddressMismatchError);
+    expect((refusal as Error).message).toContain('preview shielded');
+    expect((refusal as Error).message).not.toContain(SEED);
+  });
+
+  it('is refused in plain text too', async () => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ seed: SEED, ...othersAddresses, createdAt: PUBLIC.createdAt }));
+    await expect(unlockWallet(file, withPassphrase(PASSPHRASE))).rejects.toThrow(WalletAddressMismatchError);
+  });
+
+  it('opens when its addresses are its seed\'s', async () => {
+    writeSealedWallet(file, PUBLIC, { seed: SEED }, PASSPHRASE);
+    await expect(unlockWallet(file, withPassphrase(PASSPHRASE))).resolves.toMatchObject({ seed: SEED, addresses: PUBLIC.addresses });
+  });
+});
+
 describe('a wallet an earlier mn wrote in plain text', () => {
   const writePlain = (): void => {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -115,7 +147,9 @@ describe('protecting every wallet', () => {
   const writePlainAt = (name: string, seed: string): string => {
     const at = path.join(home, '.midnight', 'wallets', `${name}.json`);
     fs.mkdirSync(path.dirname(at), { recursive: true });
-    fs.writeFileSync(at, JSON.stringify({ seed, ...PUBLIC }, null, 2), { mode: FILE_MODE });
+    const seedBytes = Buffer.from(seed, 'hex');
+    const own = { addresses: rcKeys.unshieldedAddresses(seedBytes), shieldedAddresses: rcKeys.shieldedAddresses(seedBytes), createdAt: PUBLIC.createdAt };
+    fs.writeFileSync(at, JSON.stringify({ seed, ...own }, null, 2), { mode: FILE_MODE });
     return at;
   };
   const OTHER_SEED = '11'.repeat(32);

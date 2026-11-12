@@ -232,6 +232,36 @@ describe('isValidWalletName', () => {
     expect(isValidWalletName('test\nnewline')).toBe(false);
     expect(isValidWalletName('\ttab')).toBe(false);
   });
+
+  it('accepts dots inside a name and non-ASCII letters', () => {
+    expect(isValidWalletName('alice.v2')).toBe(true);
+    expect(isValidWalletName('josé')).toBe(true);
+    expect(isValidWalletName('2026-wallet')).toBe(true);
+  });
+
+  it('rejects hidden, flag-like, spaced and trailing-dot names', () => {
+    expect(isValidWalletName('.hidden')).toBe(false);
+    expect(isValidWalletName('-wallet')).toBe(false);
+    expect(isValidWalletName('x y')).toBe(false);
+    expect(isValidWalletName('alice.')).toBe(false);
+    expect(isValidWalletName('a$b')).toBe(false);
+    expect(isValidWalletName('a:b')).toBe(false);
+  });
+
+  it('rejects Windows device names, in any case and with an extension', () => {
+    for (const name of ['CON', 'con', 'Nul', 'PRN', 'AUX', 'COM1', 'lpt9', 'nul.txt']) {
+      expect(isValidWalletName(name), name).toBe(false);
+    }
+    expect(isValidWalletName('console')).toBe(true);
+  });
+
+  it('refuses an invalid name with the rule it breaks', () => {
+    const message = new InvalidWalletNameError('.hidden').message;
+    expect(message).toContain('Invalid wallet name: ".hidden"');
+    expect(message).toContain('starts with a letter or digit');
+    expect(message).toContain('Windows device name');
+    expect(message).not.toContain('special characters');
+  });
 });
 
 // ─── saveWalletConfig + loadWalletConfig round-trip ─────────

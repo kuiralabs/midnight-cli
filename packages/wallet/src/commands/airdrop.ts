@@ -19,7 +19,8 @@ export default async function airdropCommand(args: ParsedArgs, ctx: CallContext)
   rejectNoCacheForWrites(args);
   // No amount: what mn funds its own local wallets with, whose Dust pays a
   // deploy's fee without waiting once registered (LOCAL_WALLET_FUNDING_NIGHT).
-  const amount = args.subcommand ? parseAmount(args.subcommand) : nightToMicro(LOCAL_WALLET_FUNDING_NIGHT);
+  // An amount given empty (`airdrop ""`) is refused by parseAmount, never read as "none given".
+  const amount = args.subcommand !== undefined ? parseAmount(args.subcommand) : nightToMicro(LOCAL_WALLET_FUNDING_NIGHT);
   const jsonMode = hasFlag(args, 'json');
   // --json shows no step and no heading on the terminal.
   const progress = spinnerReporter(ctx.progress, jsonMode);

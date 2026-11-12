@@ -405,6 +405,20 @@ describe('a contract call or deploy given arguments', () => {
     expect(JSON.stringify(pending)).not.toContain(String(SECRET));
   }, 60_000);
 
+  // The private-state secret is the contract owner's: an MCP call names its file, never what it holds.
+  it('confirms a call given the private-state secret in a file without it, and refuses a bad one without quoting it', async () => {
+    const key = 'e7'.repeat(32);
+    const file = path.join(home, 'owner.key');
+    fs.writeFileSync(file, `${key}\n`, { mode: 0o600 });
+    const pending = await call('midnight_contract_call', { path: dappDir, address: ADDRESS, circuit: 'bid', args: JSON.stringify({ amount: 1 }), 'secret-key-file': file, wallet: 'alice', network: 'undeployed', ...ENDPOINTS });
+    expect(pending.description).toBe(`Call circuit bid on contract ${ADDRESS} as alice on undeployed with arguments (given, not shown), the private-state secret from the file ${file}` + VIA);
+    expect(JSON.stringify(pending)).not.toContain(key);
+    fs.writeFileSync(file, 'not-a-key-but-private\n', { mode: 0o600 });
+    const bad = await call('midnight_contract_call', { path: dappDir, address: ADDRESS, circuit: 'bid', args: JSON.stringify({ amount: 1 }), 'secret-key-file': file, wallet: 'alice', network: 'undeployed', ...ENDPOINTS });
+    expect(bad.pending).toBeUndefined();
+    expect(JSON.stringify(bad)).not.toContain('not-a-key-but-private');
+  }, 60_000);
+
   it('refuses --args - (the standard input is the server\'s protocol channel), and a refusal quotes no argument', async () => {
     const stdin = await call('midnight_contract_call', { path: dappDir, address: ADDRESS, circuit: 'bid', args: '-', wallet: 'alice', network: 'undeployed', ...ENDPOINTS });
     expect(stdin.pending).toBeUndefined();

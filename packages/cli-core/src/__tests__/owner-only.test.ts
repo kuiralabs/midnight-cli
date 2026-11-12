@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { ensureOwnerOnlyDir, narrowToOwnerOnly } from '../lib/owner-only.ts';
+import { ensureOwnerOnlyDir, narrowToOwnerOnly, narrowTreeToOwnerOnly } from '../lib/owner-only.ts';
 import { writeJsonDurably } from '../lib/durable-file.ts';
 import { saveWalletCache } from '../lib/wallet-cache.ts';
 import { bindCachesToIndexer } from '../lib/cache-indexer.ts';
@@ -70,5 +70,21 @@ describe('the writers that use them', () => {
     await saveWalletCache('mn_addr_undeployed1abc', 'undeployed', { shielded: serialized, unshielded: serialized, dust: serialized }, root);
     expect(modeOf(path.join(root, 'cache'))).toBe(0o700);
     expect(modeOf(path.join(root, 'cache', 'undeployed'))).toBe(0o700);
+  });
+});
+
+describe('narrowTreeToOwnerOnly', () => {
+  it('narrows every folder to 0700 and file to 0600 under it, and follows no link', () => {
+    const tree = wideDir(path.join(dir, 'store'));
+    wideDir(path.join(tree, 'nested'));
+    fs.writeFileSync(path.join(tree, 'CURRENT'), 'x', { mode: 0o644 });
+    fs.writeFileSync(path.join(tree, 'nested', 'LOG'), 'x', { mode: 0o644 });
+    const outside = path.join(dir, 'outside');
+    fs.writeFileSync(outside, 'x', { mode: 0o644 });
+    fs.symlinkSync(outside, path.join(tree, 'link'));
+    narrowTreeToOwnerOnly(tree);
+    expect([tree, path.join(tree, 'nested')].map(modeOf)).toEqual([0o700, 0o700]);
+    expect([path.join(tree, 'CURRENT'), path.join(tree, 'nested', 'LOG')].map(modeOf)).toEqual([0o600, 0o600]);
+    expect(modeOf(outside)).toBe(0o644);
   });
 });

@@ -88,6 +88,12 @@ describe('airdrop command — argument validation', () => {
     await expect(cliCall(airdropCommand, args)).rejects.toThrow('Invalid amount: "-5" — must be a positive number');
   });
 
+  // Regression: `airdrop ""` sent the default amount, as if none were given.
+  it('refuses an empty amount instead of sending the default', async () => {
+    const args = parseArgs(['airdrop', '', '--wallet', path.join(TEST_DIR, 'nonexistent.json'), '--network', 'undeployed']);
+    await expect(cliCall(airdropCommand, args)).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('Invalid amount: ""') });
+  });
+
   it('throws when no wallet file exists', async () => {
     // --network undeployed pinned so the test passes regardless of the
     // developer's ~/.midnight/config.json (resolveNetwork reads the real

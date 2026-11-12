@@ -14,7 +14,8 @@ export declare class NodeTooOldForAccountError extends Error {
     readonly code = "UNSUPPORTED_NODE";
     constructor(version: string);
 }
-export declare class UnreachableByAccountError extends UsageError {
+export declare class UnreachableByAccountError extends Error {
+    readonly code = "INVALID_ARGS";
     constructor(networkId: string);
 }
 export declare function accountArtifactsDir(root: string): string;

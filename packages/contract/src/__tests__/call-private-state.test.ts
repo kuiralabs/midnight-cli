@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import type { NetworkConfig } from '@kuiralabs/midnight-cli-core';
 import { sleep } from '@kuiralabs/midnight-cli-core';
@@ -94,7 +95,80 @@ describe('a contract call\'s private state', () => {
     const NETWORK: NetworkConfig = { indexer: 'http://127.0.0.1:1/api/v4/graphql', indexerWS: 'ws://127.0.0.1:1/api/v4/graphql/ws', node: 'ws://127.0.0.1:1', proofServer: 'http://127.0.0.1:1', networkId: 'Undeployed' };
     const script = rcEngine.contracts.scripts.call({ networkConfig: NETWORK, managedDir: '/tmp/dapp/managed/counter', contractName: 'counter', servePort: 9932, contractAddress: ADDRESS, circuit: 'increment' }, SCRIPT_PARTS);
     expect(script).toContain(SCRIPT_PARTS.callPrivateStateFn);
-    expect(script).toContain(`...(await callPrivateStateOptions(providers.privateStateProvider.forContract(${JSON.stringify(ADDRESS)}), "counterPrivateState", makeInitialPrivateState)),`);
+    expect(script).toContain(`...(await callPrivateStateOptions(providers.privateStateProvider.forContract(${JSON.stringify(ADDRESS)}), "counterPrivateState", makeInitialPrivateState, givenPrivateStateSecret)),`);
     expect(script).not.toMatch(/initialPrivateState: makeInitialPrivateState\(\)/);
+    // The script as written is valid JavaScript (a string's \\n must reach it escaped).
+    const file = path.join(work, 'call.mjs');
+    fs.writeFileSync(file, script);
+    expect(spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' }).stderr).toBe('');
+  });
+});
+
+/**
+ * A call given a --secret-key: the store seeded (by the first call) with the
+ * secret `seededHex` as the contract's witnesses keep it (a byte array beside
+ * other state), then a call given `givenHex` through the script's function.
+ */
+const secretCall = (givenHex: string) => `${SCRIPT_PARTS.prelude}
+import { levelPrivateStateProvider } from ${JSON.stringify(pathToFileURL(PROVIDER).href)};
+${SCRIPT_PARTS.callPrivateStateFn}
+const provider = levelPrivateStateProvider({
+  midnightDbName: ${JSON.stringify(dir)},
+  privateStateStoreName: ${JSON.stringify(ID)},
+  privateStoragePasswordProvider: () => 'A-wallet-password-0f-length',
+  accountId: 'the-wallet',
+});
+const states = provider.forContract(${JSON.stringify(ADDRESS)});
+const bytes = (hex) => Uint8Array.from(hex.match(/../g).map((b) => parseInt(b, 16)));
+const given = bytes(${JSON.stringify(givenHex)});
+const makeInitialPrivateState = () => ({ secretKey: given, count: 0 });
+let unused = false;
+const findOptions = await callPrivateStateOptions(states, ${JSON.stringify(ID)}, makeInitialPrivateState, { secret: given, unused: () => { unused = true; } });
+if ('initialPrivateState' in findOptions) await states.set(${JSON.stringify(ID)}, findOptions.initialPrivateState);
+const current = await states.get(${JSON.stringify(ID)});
+await states.set(${JSON.stringify(ID)}, { ...current, count: current.count + 1 });
+console.log(JSON.stringify({ seeded: 'initialPrivateState' in findOptions, unused }));
+process.exit(0);
+`;
+
+// The bug: a --secret-key given for a contract whose store already held a
+// private state seeded nothing, and nothing said so.
+describe('a call given a private-state secret', () => {
+  const OWNER = '1f'.repeat(32);
+  const OTHER = 'a0'.repeat(32);
+  const run = async (givenHex: string) => {
+    const release = await acquireContractCallLock(LOCK_DEPS, dir, { pid: process.pid, command: 'mn contract call' }, { address: ADDRESS, timeoutMs: 60_000, notice: () => {}, progress: () => {} });
+    try {
+      return JSON.parse(await executeScript({ dir: work, script: secretCall(givenHex), overlaySdk: false, packages: NO_PACKAGES })) as { seeded: boolean; unused: boolean };
+    } finally {
+      release();
+    }
+  };
+
+  it('seeds an empty store with it, and is quiet when the stored state holds the same secret', async () => {
+    expect(await run(OWNER)).toEqual({ seeded: true, unused: false });
+    expect(await run(OWNER)).toEqual({ seeded: false, unused: false });
+  });
+
+  it('says a different secret was not used: the call runs from the stored state', async () => {
+    await run(OWNER);
+    expect(await run(OTHER)).toEqual({ seeded: false, unused: true });
+  });
+
+  it('finds the secret as an array of numbers or as hex too, and only a whole 32-byte match', async () => {
+    const { callPrivateStateOptions } = await import('../lib/contract/call-private-state.ts');
+    const secret = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
+    const hex = Buffer.from(secret).toString('hex');
+    const check = async (stored: unknown) => {
+      let unused = false;
+      await callPrivateStateOptions({ get: async () => stored }, ID, () => ({}), { secret, unused: () => { unused = true; } });
+      return unused;
+    };
+    expect(await check({ owner: { key: [...secret] } })).toBe(false);
+    expect(await check({ keys: new Map([['k', hex.toUpperCase()]]) })).toBe(false);
+    expect(await check({ key: secret.slice(0, 31) })).toBe(true);
+    expect(await check({ count: 3 })).toBe(true);
+    // No secret given: nothing to check.
+    expect(await callPrivateStateOptions({ get: async () => ({ count: 3 }) }, ID, () => ({}))).toEqual({});
   });
 });

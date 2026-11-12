@@ -32,4 +32,13 @@ describe('inlinePrivateArgumentsWarning', () => {
     expect(inlinePrivateArgumentsWarning({ circuit: 'withdraw', argsSource: 'inline', privateArguments: [] })).toBeUndefined();
     expect(inlinePrivateArgumentsWarning({ circuit: 'withdraw', argsSource: 'inline' })).toBeUndefined();
   });
+
+  // The bug: the help's own example (`lock` given {"@coin": ...} on --args) was warned about.
+  it('leaves out an argument given whole as a fresh coin mn made, and still names the others', () => {
+    const coin = { argument: 'coin', nonce: 'ab'.repeat(32) };
+    expect(inlinePrivateArgumentsWarning({ circuit: 'lock', argsSource: 'inline', privateArguments: ['coin'], freshCoins: [coin] })).toBeUndefined();
+    expect(inlinePrivateArgumentsWarning({ circuit: 'lock', argsSource: 'inline', privateArguments: ['coin', 'salt'], freshCoins: [coin] })).toContain('its argument "salt" private');
+    // A coin inside a struct argument leaves the argument's other fields on the command line.
+    expect(inlinePrivateArgumentsWarning({ circuit: 'bet', argsSource: 'inline', privateArguments: ['bet'], freshCoins: [{ argument: 'bet.coin', nonce: 'cd'.repeat(32) }] })).toContain('its argument "bet" private');
+  });
 });

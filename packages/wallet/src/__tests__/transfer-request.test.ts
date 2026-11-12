@@ -67,6 +67,15 @@ describe('resolveTransferRequest', () => {
     expect((await request('bob', '2', '--wallet', 'sender', '--shielded')).recipients[0]!.address).toBe(RECIPIENT_SHIELDED.undeployed);
   });
 
+  it('refuses a recipient wallet whose file holds another wallet\'s address, with WALLET_ADDRESS_MISMATCH', async () => {
+    // bob's file, edited to hold the sender's addresses: paying "bob" must not pay the sender's address.
+    const file = path.join(WALLETS, 'bob.json');
+    saveWalletConfig({ seed: RECIPIENT_SEED.toString('hex'), addresses: rcKeys.unshieldedAddresses(SENDER_SEED), createdAt: new Date(0).toISOString() }, file);
+    const refusal = await request('bob', '2', '--wallet', 'sender').catch((err: unknown) => err);
+    expect(refusal).toMatchObject({ code: 'WALLET_ADDRESS_MISMATCH' });
+    expect(classifyError(refusal as Error, codeRegistry(coreCodes, walletCodes))).toMatchObject({ errorCode: 'WALLET_ADDRESS_MISMATCH', exitCode: 2 });
+  });
+
   it('takes a mainnet address, whose prefix has no network segment, as an address on mainnet', async () => {
     expect(RECIPIENT.mainnet.startsWith('mn_addr1')).toBe(true);
     const r = await request(RECIPIENT.mainnet, '1', '--wallet', 'sender', '--network', 'mainnet');

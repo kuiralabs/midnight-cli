@@ -48,7 +48,7 @@ export { assertInstalledAsShipped, assertOneSdkCopy, MixedSdkLayoutError, NotIns
 export { decodeSignPayload, signedMessageBytes } from './lib/sign-data.ts';
 export { describeLeg, NotAnOfferError } from './lib/swap-offer.ts';
 export { priceTransaction, transactionPriceToWire } from './lib/transaction-price.ts';
-export { fromHex, toHex } from './lib/tx-serde.ts';
+export { fromHex, toHex, readTransactionTag, transactionMismatch, type TransactionStageName } from './lib/tx-serde.ts';
 export {
   cacheRootDir, clearWalletCache, getCachePath, loadWalletCache, networkCacheFolder, saveWalletCache, walletCacheFileName,
   validateWalletCacheChainId, type WalletCacheData

@@ -197,6 +197,24 @@ describe('approval', () => {
       expect(written).toContain('Auto-approved (read-only)');
     });
 
+    // Regression: getConfiguration gave every dApp the endpoints with the
+    // user's Blockfrost project id in them, approved as a read.
+    it('prompts for a read that reveals a secret even with autoApproveReads (no terminal: nobody to ask), saying how to give it', async () => {
+      const result = await promptApproval(
+        { method: 'getConfiguration', network: 'preprod', details: [], revealsSecret: true },
+        { ...asker, autoApproveReads: true, approveFees: true },
+      );
+      expect(result).toBe('unavailable');
+      const written = stripAnsi(stderrOutput.join(''));
+      expect(written).not.toContain('Auto-approved');
+      expect(written).toContain("getConfiguration's endpoints carry your Blockfrost project id: approve it at a terminal, or use --approve-all");
+    });
+
+    it('approves a read that reveals a secret under --approve-all', async () => {
+      const result = await promptApproval({ method: 'getConfiguration', network: 'preprod', details: [], revealsSecret: true }, { ...asker, approveAll: true });
+      expect(result).toBe('approve');
+    });
+
     // Balancing signs and returns a finished transaction a dApp can submit
     // through any node, so it is a write: it prompts unless --approve-all, or
     // --approve-fees for a fee-only balance.

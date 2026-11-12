@@ -13,8 +13,18 @@ import { type ContractCost, type ContractPriced, costRecorder, maxPriceAdjustmen
 import type { ContractCallRequest } from './request.ts';
 import type { CallOptions } from './runner.ts';
 import type { HeldCoin } from './held-coins.ts';
+import { namingFreshCoinShortfall } from './fresh-coin-funds.ts';
 
-export interface CallContractOptions extends PaidCallOptions<ContractChecked | ContractPriced> {
+/**
+ * The call's --secret-key seeded nothing: the contract's private-state store
+ * already held a private state, which doesn't hold that secret, and the call
+ * runs from it (call-private-state.ts).
+ */
+export interface PrivateStateSecretUnused {
+  readonly kind: 'private-state-secret-unused';
+}
+
+export interface CallContractOptions extends PaidCallOptions<ContractChecked | ContractPriced | PrivateStateSecretUnused> {
   /** The circuit to call, on which contract (contractCallRequest). */
   request: ContractCallRequest;
 }
@@ -90,7 +100,7 @@ async function withCallScript<T>(
   run: (call: CallOptions, target: PayingTarget, cost: () => ContractCost | undefined) => Promise<T>,
 ): Promise<T> {
   const { request, payer, wallet, signal, onProgress } = options;
-  const { dappDir, info, address, circuit, callArgs, privateStateSecretKey } = request;
+  const { dappDir, info, address, circuit, callArgs, freshCoins, privateStateSecretKey } = request;
   throwIfCancelled(signal);
   const target = networkTargetOf(host, networkChoiceOf(options));
   const { network } = target;
@@ -98,6 +108,7 @@ async function withCallScript<T>(
   onProgress?.({ kind: 'contract-checked', network });
   const priced = costRecorder(await maxPriceAdjustmentOn(host, target, signal), onProgress);
 
+  // A wallet short of the shielded coins the call's fresh coins take is said with their amounts.
   return withCallSdkWarnings(host.sdkWarnings, options.sdkWarnings, (sdkWarnings) =>
     withServedWallet({ target, wallet, payer, progress: (message) => stepSpinner(onProgress, message), sdkWarnings, signal }, labels, (served, spinner: Spinner) =>
       run({
@@ -118,7 +129,10 @@ async function withCallScript<T>(
         onPriced: priced.onPrice,
         // A proof of minutes is said in every mode (--json included), as a wait is.
         onProving: (elapsedMs) => host.waiting(provingLine(elapsedMs), false),
+        ...(privateStateSecretKey === undefined ? {} : { onPrivateStateSecretUnused: () => onProgress?.({ kind: 'private-state-secret-unused' }) }),
         notice: host.notice,
         signal,
-      }, target, priced.cost)));
+      }, target, priced.cost))).catch((err: unknown) => {
+    throw namingFreshCoinShortfall(err, callArgs, freshCoins, wallet);
+  });
 }

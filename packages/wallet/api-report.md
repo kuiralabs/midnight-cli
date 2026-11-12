@@ -331,6 +331,10 @@ export declare class WalletNotFoundError extends Error {
     readonly code = "WALLET_NOT_FOUND";
     constructor(message: string);
 }
+export declare class WalletAddressMismatchError extends Error {
+    readonly code = "WALLET_ADDRESS_MISMATCH";
+    constructor(file: string, networks: readonly string[]);
+}
 export interface WalletSecrets {
     seed: string;
     mnemonic?: string;
@@ -401,6 +405,13 @@ export declare const walletCodes: readonly [
         readonly order: 20;
         readonly summary: "Named wallet doesn't exist on disk.";
         readonly recovery: "`midnight_wallet_list()` — user may have removed it.";
+    },
+    {
+        readonly code: "WALLET_ADDRESS_MISMATCH";
+        readonly exitCode: 2;
+        readonly order: 21;
+        readonly summary: "A wallet file's saved addresses are not the ones its seed derives: the file was edited or mixed with another wallet's. Nothing was sent.";
+        readonly recovery: "Don't retry. Ask the user to restore the wallet file from a backup, or the wallet from its mnemonic (`midnight wallet generate <name> --mnemonic \"...\" --force`, at their terminal).";
     },
     {
         readonly code: "OFFER_TAKEN";

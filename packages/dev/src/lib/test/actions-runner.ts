@@ -350,7 +350,8 @@ async function executeState(action: TestAction, ctx: ExecutionContext): Promise<
         // Check maps
         const mapInfo = stateResult.maps[field];
         if (mapInfo) {
-          evaluateCondition(field, BigInt(mapInfo.size), condition as Record<string, unknown>, failures);
+          if (mapInfo.size === null) failures.push(`Map "${field}" has a size the contract couldn't read`);
+          else evaluateCondition(field, BigInt(mapInfo.size), condition as Record<string, unknown>, failures);
         } else {
           failures.push(`Field "${field}" not found in ledger state`);
         }
@@ -467,8 +468,9 @@ export function diffState(before: StateResult | undefined, after: StateResult | 
   // Compare map sizes
   const allMaps = new Set([...Object.keys(before.maps), ...Object.keys(after.maps)]);
   for (const field of allMaps) {
-    const b = before.maps[field]?.size ?? '0';
-    const a = after.maps[field]?.size ?? '0';
+    // A map absent on one side has no entries; one whose size couldn't be read shows as "?".
+    const b = String(before.maps[field] === undefined ? 0 : before.maps[field]!.size ?? '?');
+    const a = String(after.maps[field] === undefined ? 0 : after.maps[field]!.size ?? '?');
     if (b !== a) {
       diffs.push({ field: `${field} (entries)`, before: b, after: a });
     }

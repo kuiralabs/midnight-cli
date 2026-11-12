@@ -7,6 +7,7 @@ import { blockfrostNetworks, checkProjectId, maskProjectId, networkOfProjectId }
 import { InvalidNetworkError, type NetworkName, NetworkNotNamedError, RetiredNetworkError, getValidNetworkNames, isNamedOnlyNetwork, isRetiredNetworkName, isValidNetworkName } from './network.ts';
 import { UsageError } from './errors.ts';
 import { ACCOUNT_ARTIFACTS_KEY, checkAccountArtifactsSource } from './account-artifacts.ts';
+import { BLOCKFROST_PROJECT_ID_ENV, SHARED_BLOCKFROST_PROJECT_ID_ENV, type Settings } from './settings.ts';
 
 /** mn's config file can't be read as one: mn neither guesses its settings nor writes over it. */
 export class CorruptConfigError extends UsageError {
@@ -218,6 +219,33 @@ export function getBlockfrostProjectId(config: CliConfig, networkName: NetworkNa
   return config.networks?.[networkName]?.[PROJECT_ID_KEY];
 }
 
+/** The Blockfrost project ids the environment gives (MN_BLOCKFROST_PROJECT_ID, then BLOCKFROST_PROJECT_ID). */
+export type BlockfrostSettings = Pick<Settings, 'blockfrostProjectId' | 'sharedBlockfrostProjectId'>;
+
+/** A Blockfrost project id mn uses for a network, and where it comes from: an environment variable (by name) or config.json. */
+export interface BlockfrostProjectIdInUse {
+  projectId: string;
+  from: typeof BLOCKFROST_PROJECT_ID_ENV | typeof SHARED_BLOCKFROST_PROJECT_ID_ENV | 'config';
+}
+
+/**
+ * The Blockfrost project id mn uses for `network`: the environment's (mn's own
+ * variable, then the shared one), else the one in the config. Each is used
+ * only for the network its id is for. mn's own variable is checked: an id
+ * that is no network's is refused.
+ */
+export function blockfrostProjectIdInUse(config: CliConfig, network: NetworkName, settings: BlockfrostSettings): BlockfrostProjectIdInUse | undefined {
+  const own = settings.blockfrostProjectId?.trim();
+  if (own) {
+    const checked = checkProjectId(own);
+    if (checked.network === network) return { projectId: checked.projectId, from: BLOCKFROST_PROJECT_ID_ENV };
+  }
+  const shared = settings.sharedBlockfrostProjectId?.trim();
+  if (shared && /^[A-Za-z0-9]+$/.test(shared) && networkOfProjectId(shared) === network) return { projectId: shared, from: SHARED_BLOCKFROST_PROJECT_ID_ENV };
+  const saved = getBlockfrostProjectId(config, network);
+  return saved === undefined ? undefined : { projectId: saved, from: 'config' };
+}
+
 /**
  * Save CLI config to ~/.midnight/config.json.
  * Creates the directory if it doesn't exist.
@@ -232,31 +260,38 @@ export function saveCliConfig(config: CliConfig, configDir: string): void {
   narrowToOwnerOnly(configPath);
 }
 
+/** The environment a config value is shown with: a Blockfrost project id it sets is shown as the one in use. */
+const NO_ENVIRONMENT: BlockfrostSettings = { blockfrostProjectId: undefined, sharedBlockfrostProjectId: undefined };
+
 /**
- * Get a single config value.
+ * Get a single config value, as mn shows it; undefined when it isn't set.
  * Endpoint keys are network-scoped: returns the value that applies to the
  * currently configured network (scoped entry first, then the legacy flat key).
+ * The Blockfrost project id is a secret, shown masked and by network, with
+ * where it comes from when that is the environment (`environment`), which
+ * wins over the config file.
  */
-export function getConfigValue(key: string, configDir: string, scope?: NetworkName): string {
+export function getConfigValue(key: string, configDir: string, scope?: NetworkName, environment: BlockfrostSettings = NO_ENVIRONMENT): string | undefined {
   const canonical = resolveConfigKey(key);
   const config = loadCliConfig(configDir);
   assertScopeApplies(canonical, scope);
 
   if (canonical === 'network') return config.retiredNetwork ?? config.network;
-  if (canonical === 'wallet') return config.wallet ?? '(not set)';
-  if (canonical === ACCOUNT_ARTIFACTS_KEY) return config[ACCOUNT_ARTIFACTS_KEY] ?? '(not set)';
+  if (canonical === 'wallet') return config.wallet;
+  if (canonical === ACCOUNT_ARTIFACTS_KEY) return config[ACCOUNT_ARTIFACTS_KEY];
   if (canonical === PROJECT_ID_KEY) {
-    // A secret: shown masked, and by network, since each network has its own.
     const set = blockfrostNetworks().filter((network) => scope === undefined || scope === network).flatMap((network) => {
-      const projectId = getBlockfrostProjectId(config, network);
-      return projectId === undefined ? [] : [`${maskProjectId(projectId)} (${network})`];
+      const inUse = blockfrostProjectIdInUse(config, network, environment);
+      if (inUse === undefined) return [];
+      const from = inUse.from === 'config' ? '' : `, set from environment ${inUse.from}`;
+      return [`${maskProjectId(inUse.projectId)} (${network}${from})`];
     });
-    return set.length > 0 ? set.join(', ') : '(not set)';
+    return set.length > 0 ? set.join(', ') : undefined;
   }
   if (ENDPOINT_KEYS.has(canonical)) {
     const overrides = getEndpointOverridesForNetwork(config, scope ?? config.network);
     const value = overrides[canonical as keyof NetworkEndpointOverrides];
-    return typeof value === 'string' ? value : '(not set)';
+    return typeof value === 'string' ? value : undefined;
   }
 
   throw new UsageError(
@@ -344,12 +379,15 @@ export function setConfigValue(key: string, value: string, configDir: string, sc
  * For 'network': resets to default ('undeployed').
  * For endpoint keys: removes both the current network's scoped entry and the
  * legacy flat key (so one unset reliably clears whatever was applying).
+ * For the Blockfrost project id: removes the given network's, or every
+ * network's without one, and returns the networks whose id it removed.
  * For other optional keys: removes the key entirely.
  */
-export function unsetConfigValue(key: string, configDir: string, scope?: NetworkName): void {
+export function unsetConfigValue(key: string, configDir: string, scope?: NetworkName): NetworkName[] | undefined {
   const canonical = resolveConfigKey(key);
   const config = loadCliConfig(configDir);
   assertScopeApplies(canonical, scope);
+  let removed: NetworkName[] | undefined;
 
   if (canonical === 'network') {
     config.network = DEFAULT_CLI_CONFIG.network;
@@ -359,11 +397,13 @@ export function unsetConfigValue(key: string, configDir: string, scope?: Network
   } else if (canonical === ACCOUNT_ARTIFACTS_KEY) {
     delete config[ACCOUNT_ARTIFACTS_KEY];
   } else if (canonical === PROJECT_ID_KEY) {
+    removed = [];
     for (const network of blockfrostNetworks()) {
       if (scope !== undefined && scope !== network) continue;
       const scoped = config.networks?.[network];
-      if (!scoped) continue;
+      if (scoped?.[PROJECT_ID_KEY] === undefined) continue;
       delete scoped[PROJECT_ID_KEY];
+      removed.push(network);
       if (Object.keys(scoped).length === 0) delete config.networks![network];
     }
     if (config.networks && Object.keys(config.networks).length === 0) delete config.networks;
@@ -386,6 +426,7 @@ export function unsetConfigValue(key: string, configDir: string, scope?: Network
   }
 
   saveCliConfig(config, configDir);
+  return removed;
 }
 
 /** A network scope (`--network`) only means something for the keys kept per network. */
@@ -397,12 +438,12 @@ function assertScopeApplies(canonical: string, scope: NetworkName | undefined): 
 
 /**
  * Every config value as `getConfigValue` shows it (the Blockfrost project id
- * masked), key by key. With `scope`, only the keys a network scopes
- * (endpoints, the project id), for that network.
+ * masked; null when not set), key by key. With `scope`, only the keys a
+ * network scopes (endpoints, the project id), for that network.
  */
-export function listConfigValues(configDir: string, scope?: NetworkName): Record<string, string> {
+export function listConfigValues(configDir: string, scope?: NetworkName, environment: BlockfrostSettings = NO_ENVIRONMENT): Record<string, string | null> {
   const keys = VALID_CONFIG_KEYS.filter((key) => scope === undefined || ENDPOINT_KEYS.has(key) || key === PROJECT_ID_KEY);
-  return Object.fromEntries(keys.map((key) => [key, getConfigValue(key, configDir, scope)]));
+  return Object.fromEntries(keys.map((key) => [key, getConfigValue(key, configDir, scope, environment) ?? null]));
 }
 
 export function getValidConfigKeys(): readonly string[] {

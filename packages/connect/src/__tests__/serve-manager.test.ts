@@ -242,6 +242,40 @@ describe('startServeOrReuse against a running serve', () => {
       }
     });
 
+    // getConfiguration on a network whose endpoints carry a Blockfrost project
+    // id asks the serve's operator: the reuse check must not set that off.
+    it('reuses a preprod serve without asking it for its endpoints, which carry the project id', async () => {
+      const { startServeOrReuse } = await import('../lib/serve-on-port.ts');
+      const { WebSocketServer } = await import('ws');
+      const asked: string[] = [];
+      const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+      await new Promise<void>((r) => wss.once('listening', () => r()));
+      wss.on('connection', (ws) => ws.on('message', (data) => {
+        const req = JSON.parse(data.toString());
+        asked.push(req.method);
+        const result = req.method === 'connect' ? { networkId: 'preprod' }
+          : req.method === 'getConnectionStatus' ? { status: 'connected', networkId: 'preprod' }
+          : req.method === 'getUnshieldedAddress' ? { unshieldedAddress: rcKeys.unshieldedAddresses(TWO).preprod }
+          : null;
+        ws.send(JSON.stringify({ jsonrpc: '2.0', id: req.id, result }));
+      }));
+      const port = (wss.address() as import('node:net').AddressInfo).port;
+      // A made-up preprod id: the shape mn checks, no real project's.
+      const fakeId = 'nightpreprodFAKE0000000000000000';
+      const preprod = {
+        node: `wss://rpc.midnight-preprod.blockfrost.io?project_id=${fakeId}`,
+        indexerWS: `wss://midnight-preprod.blockfrost.io/api/v0/ws?project_id=${fakeId}`,
+        proofServer: 'http://localhost:26300',
+      };
+      try {
+        const handle = await startServeOrReuse({ root: stateRootIn(home), host, port, network: 'preprod', sdkWarnings: createSdkWarningRouter().openCall().warnings, endpoints: preprod, wallet: 'two' });
+        expect(handle.port).toBe(port);
+        expect(asked).not.toContain('getConfiguration');
+      } finally {
+        await new Promise<void>((r) => wss.close(() => r()));
+      }
+    });
+
     // Found reading the code: `mn grant --wallet two` beside a running serve
     // for bob had bob pay, with no word of it.
     it('refuses a serve that pays from another wallet, on the same chain', async () => {

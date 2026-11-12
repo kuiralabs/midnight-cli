@@ -6,7 +6,7 @@ import { header, keyValue, divider, formatNight, formatAddress, toNight, bold, d
 import { findWalletByAddress } from '../lib/wallet-config.ts';
 import { walletSourceOf } from '../lib/seed-resolver.ts';
 import { isNativeToken } from '@kuiralabs/midnight-chain';
-import { addressNetwork, readAddressBalance, readWalletBalance } from '../lib/wallet/balance.ts';
+import { addressNetwork, readAddressBalance, readWalletBalance, walletShieldedBalanceCommand } from '../lib/wallet/balance.ts';
 
 export default async function balanceCommand(args: ParsedArgs, ctx: CallContext): Promise<void> {
   // Positional address → unshielded only (lightweight, no facade)
@@ -51,7 +51,7 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
       `Shielded balances are private — they can only be read with the wallet's secret key, ` +
       `not from an address alone.\n` +
       `This address isn't one of your wallets. Check its shielded balance from the wallet that owns it:\n` +
-      `  midnight balance --wallet <name> --shielded --network ${networkName}`
+      `  ${walletShieldedBalanceCommand(networkName)}`
     );
   }
 
@@ -92,7 +92,8 @@ async function addressBalance(args: ParsedArgs, ctx: CallContext): Promise<void>
       ctx.output.stdout('0\n');
     } else {
       for (const [tokenType, amount] of result.balances) {
-        ctx.output.stdout(`${isNativeToken(tokenType) ? 'NIGHT' : tokenType}=${amount}\n`);
+        // NIGHT in NIGHT, as --json gives it; another token in its smallest unit, under its raw type.
+        ctx.output.stdout(isNativeToken(tokenType) ? `NIGHT=${toNight(amount)}\n` : `${tokenType}=${amount}\n`);
       }
     }
 
@@ -159,7 +160,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
           }
           // Pipeable stdout for unshielded — emit immediately so consumers don't
           // have to wait for the shielded sync to read the unshielded value.
-          ctx.output.stdout(`NIGHT=${event.night}\n`);
+          ctx.output.stdout(`NIGHT=${toNight(event.night)}\n`);
           ctx.output.stderr('\n  ' + bold('Shielded') + '\n');
         } else {
           progress.report(event);
@@ -218,7 +219,7 @@ async function walletBalance(args: ParsedArgs, ctx: CallContext): Promise<void> 
 
     // When shielded was skipped, say so on stdout too — `=0` would read as a
     // confirmed zero to a script parsing the pipeable output.
-    ctx.output.stdout(`SHIELDED_NIGHT=${shielded !== null ? shieldedNight : 'skipped'}\n`);
+    ctx.output.stdout(`SHIELDED_NIGHT=${shielded !== null ? toNight(shieldedNight) : 'skipped'}\n`);
     for (const [tokenType, amount] of shieldedTokens) ctx.output.stdout(`SHIELDED_${tokenType}=${amount}\n`);
     ctx.output.stderr('\n' + divider() + '\n\n');
   } catch (err) {

@@ -87,7 +87,7 @@ describe('the account-artifacts config key', () => {
     expect(() => setConfigValue(ACCOUNT_ARTIFACTS_KEY, build, configDir, 'preview')).toThrow('--network only applies');
 
     unsetConfigValue(ACCOUNT_ARTIFACTS_KEY, configDir);
-    expect(getConfigValue(ACCOUNT_ARTIFACTS_KEY, configDir)).toBe('(not set)');
+    expect(getConfigValue(ACCOUNT_ARTIFACTS_KEY, configDir)).toBeUndefined();
     expect(resolveAccountArtifactsSource(settingsFromEnvironment({}), loadCliConfig(configDir)).source).toBeUndefined();
   });
 });

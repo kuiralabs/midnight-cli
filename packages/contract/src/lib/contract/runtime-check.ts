@@ -25,7 +25,7 @@ export async function assertContractRunsOn(info: Pick<ContractInfo, 'name' | 'co
   if (scripts.acceptsRuntime(info.runtimeVersion)) return;
   throw new UsageError(
     `${info.name} was compiled by compactc ${info.compilerVersion} for compact-runtime ${info.runtimeVersion}, ` +
-    `but ${network} runs contracts on compact-runtime ${scripts.compactRuntimeVersion}.\n` +
+    `but mn runs ${network}'s contracts on compact-runtime ${scripts.compactRuntimeVersion}.\n` +
     `Recompile it with ${scripts.compiler}.`,
   );
 }

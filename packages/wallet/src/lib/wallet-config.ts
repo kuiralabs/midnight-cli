@@ -15,6 +15,23 @@ export class WalletNotFoundError extends Error {
   }
 }
 
+/**
+ * A wallet file whose saved addresses are not its seed's: someone edited or
+ * mixed up the file. Nothing is sent from it or to it until it is fixed.
+ */
+export class WalletAddressMismatchError extends Error {
+  readonly code = 'WALLET_ADDRESS_MISMATCH';
+
+  constructor(file: string, networks: readonly string[]) {
+    super(
+      `Wallet file ${file} holds addresses that its seed does not derive (${networks.join(', ')}): the file was edited or mixed with another wallet's.\n` +
+      'mn refuses to use it, so nothing is sent from or to the wrong address. Restore the file from a backup, or restore the wallet from its mnemonic: midnight wallet generate <name> --mnemonic "..." --force'
+    );
+    this.name = 'WalletAddressMismatchError';
+    Object.setPrototypeOf(this, WalletAddressMismatchError.prototype);
+  }
+}
+
 /** What anyone may read of a wallet: its addresses, and whether its secrets are sealed. No secret. */
 export interface WalletConfig {
   addresses: Record<NetworkName, string>;
@@ -127,6 +144,28 @@ async function completedAddresses(config: WalletConfig, seed: Buffer, engines: H
     addresses: { ...keys.unshieldedAddresses(seed), ...config.addresses },
     ...(config.shieldedAddresses !== undefined ? { shieldedAddresses: { ...keys.shieldedAddresses(seed), ...config.shieldedAddresses } } : {}),
   };
+}
+
+/**
+ * Throws WalletAddressMismatchError when an address the wallet file saves
+ * (unshielded or shielded, on any network) is not the one its seed derives.
+ * The file's addresses are read without the seed (balance, a transfer's
+ * recipient by name), so once the seed is open they are checked against it.
+ */
+async function assertAddressesOfSeed(file: string, config: Pick<WalletConfig, 'addresses' | 'shieldedAddresses'>, seed: Buffer, engines: HostEngines): Promise<void> {
+  const { keys } = await engines.any();
+  const unshielded = keys.unshieldedAddresses(seed);
+  const wrong = new Set<string>();
+  for (const [network, address] of Object.entries(config.addresses)) {
+    if (address !== unshielded[network as NetworkName]) wrong.add(network);
+  }
+  if (config.shieldedAddresses !== undefined) {
+    const shielded = keys.shieldedAddresses(seed);
+    for (const [network, address] of Object.entries(config.shieldedAddresses)) {
+      if (address !== shielded[network as NetworkName]) wrong.add(`${network} shielded`);
+    }
+  }
+  if (wrong.size > 0) throw new WalletAddressMismatchError(file, [...wrong]);
 }
 
 /**
@@ -288,10 +327,6 @@ export async function findWalletByAddress(
 }
 
 /**
- * Remove a named wallet.
- * Refuses if it's the active wallet or the last remaining wallet.
- */
-/**
  * Throws, saying why, unless the named wallet can be removed: it exists, and
  * it is neither the active wallet nor the only one. Returns its file.
  */
@@ -325,21 +360,50 @@ export function assertWalletRemovable(root: string, name: string): string {
   return walletPath;
 }
 
-/**
- * Removes the named wallet (see assertWalletRemovable), and its sync cache on
- * every network, named by the addresses its file keeps.
- */
-export function removeWallet(root: string, name: string): void {
-  const file = assertWalletRemovable(root, name);
-  let addresses: Record<string, unknown> = {};
+/** The unshielded addresses a wallet file saves, by network; empty when the file can't be read as a wallet. */
+function savedAddressesOf(file: string): Record<string, string> {
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf-8')) as { addresses?: unknown };
-    if (raw.addresses !== null && typeof raw.addresses === 'object') addresses = raw.addresses as Record<string, unknown>;
-  } catch { /* not readable as a wallet: there is no cache named by it to find */ }
-  fs.unlinkSync(file);
-  for (const [network, address] of Object.entries(addresses)) {
-    if (isValidNetworkName(network) && typeof address === 'string') clearWalletCache(address, network, root);
+    if (raw.addresses === null || typeof raw.addresses !== 'object') return {};
+    return Object.fromEntries(Object.entries(raw.addresses as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+  } catch {
+    return {};
   }
+}
+
+/**
+ * The other wallets under the state root `root` that save one of the
+ * addresses the wallet `name` saves: a copy of it, from the same seed, whose
+ * caches are the same files (the sync caches are named by the address, the
+ * readers' by keys from the seed).
+ */
+function walletsSharingSeed(root: string, name: string, addresses: Record<string, string>): string[] {
+  const walletsDir = getWalletsDir(root);
+  const own = new Set(Object.values(addresses));
+  if (own.size === 0) return [];
+  return fs.readdirSync(walletsDir)
+    .filter((f) => f.endsWith('.json') && f !== `${name}.json`)
+    .filter((f) => Object.values(savedAddressesOf(path.join(walletsDir, f))).some((address) => own.has(address)))
+    .map((f) => f.replace(/\.json$/, ''))
+    .sort();
+}
+
+/**
+ * Removes the named wallet (see assertWalletRemovable), and its sync cache on
+ * every network, named by the addresses its file keeps, unless another wallet
+ * saves the same addresses (a copy, from the same seed): its caches are that
+ * wallet's too, and are kept. Returns the wallets they were kept for.
+ */
+export function removeWallet(root: string, name: string): string[] {
+  const file = assertWalletRemovable(root, name);
+  const addresses = savedAddressesOf(file);
+  const sharing = walletsSharingSeed(root, name, addresses);
+  fs.unlinkSync(file);
+  if (sharing.length > 0) return sharing;
+  for (const [network, address] of Object.entries(addresses)) {
+    if (isValidNetworkName(network)) clearWalletCache(address, network, root);
+  }
+  return [];
 }
 
 /** What removing a wallet with its caches did. */
@@ -347,9 +411,11 @@ export interface RemovedWallet {
   /**
    * Its Dust and shielded readers' caches (named by keys from its seed) were
    * removed on every network; false when its seed couldn't be opened (no
-   * passphrase to be had), so they were left.
+   * passphrase to be had), or when they were kept for another wallet.
    */
   readonly readerCachesCleared: boolean;
+  /** The other wallets from the same seed (copies of it), whose caches these are too, so all were kept; empty when there are none. */
+  readonly cachesKeptFor: string[];
 }
 
 /**
@@ -359,10 +425,15 @@ export interface RemovedWallet {
  * mn's passphrase for them. With no passphrase to be had (no terminal, no
  * MN_PASSPHRASE) the wallet and its sync caches still go and the reader
  * caches are left (`readerCachesCleared` false); a wrong passphrase removes
- * nothing.
+ * nothing. When another wallet is a copy of it (the same addresses, so the
+ * same seed), every cache is that wallet's too and is kept, and the seed is
+ * not opened (`cachesKeptFor` names those wallets).
  */
 export async function removeWalletAndCaches(host: UnlockHost, root: string, name: string): Promise<RemovedWallet> {
   const file = assertWalletRemovable(root, name);
+  if (walletsSharingSeed(root, name, savedAddressesOf(file)).length > 0) {
+    return { readerCachesCleared: false, cachesKeptFor: removeWallet(root, name) };
+  }
   let seed: Buffer | undefined;
   try {
     seed = Buffer.from((await unlockWallet(file, { root, host })).seed, 'hex');
@@ -372,7 +443,7 @@ export async function removeWalletAndCaches(host: UnlockHost, root: string, name
   // The reader caches' keys, derived before the file goes. Every SDK set derives them alike from a seed.
   const keys = seed === undefined ? undefined : (await host.engines.any()).keys;
   removeWallet(root, name);
-  if (seed === undefined || keys === undefined) return { readerCachesCleared: false };
+  if (seed === undefined || keys === undefined) return { readerCachesCleared: false, cachesKeptFor: [] };
   const dust = keys.dustPublicKeyHex(seed);
   const shielded = keys.shieldedCoinPublicKeyHex(seed);
   for (const network of getValidNetworkNames()) {
@@ -380,7 +451,7 @@ export async function removeWalletAndCaches(host: UnlockHost, root: string, name
     clearNativeDustCheckpoint(network, dust, root);
     clearShieldedDirectCache(network, shielded, root);
   }
-  return { readerCachesCleared: true };
+  return { readerCachesCleared: true, cachesKeptFor: [] };
 }
 
 /** Throws, with how to make one, when there is no wallet file at `resolvedPath`. */
@@ -657,10 +728,12 @@ export async function unlockWallet(walletPath: string, options: UnlockOptions): 
       if (options.warn !== undefined) options.warn(warning);
       else options.host.notice(warning);
     }
+    await assertAddressesOfSeed(resolvedPath, config, Buffer.from(raw.seed, 'hex'), options.host.engines);
     return typeof raw.mnemonic === 'string' ? { ...config, seed: raw.seed, mnemonic: raw.mnemonic } : { ...config, seed: raw.seed };
   }
   const passphrase = await unlockPassphrase(options.host, options.root, options.source);
   const secrets = JSON.parse(openSecret(raw.sealed, passphrase, 'wallet').toString('utf8')) as WalletSecrets;
+  await assertAddressesOfSeed(resolvedPath, config, Buffer.from(secrets.seed, 'hex'), options.host.engines);
   // A network added since the wallet was written: now that its seed is open,
   // derive that network's addresses and save them beside the sealed secrets.
   const completed = await completedAddresses(config, Buffer.from(secrets.seed, 'hex'), options.host.engines);

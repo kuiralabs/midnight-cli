@@ -1,7 +1,7 @@
 // transfer command — send NIGHT from my wallet to other addresses, in one transaction
 // Usage: midnight transfer <to> <amount> [<to> <amount> ...] [--to-file <file>] [--shielded]
 
-import { type ParsedArgs, hasFlag, rejectNoCacheForWrites, networkChoiceFromArgs, nightAmountJson, nightAmountText, type CallContext } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, hasFlag, rejectNoCacheForWrites, networkChoiceFromArgs, nightAmountJson, nightAmountText, shieldedSyncEnabled, type CallContext } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, divider, formatAddress, successMessage, bold, dim, yellow, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { resolveTransferRequest, type TransferRequest } from '../lib/transfer-request.ts';
 import { transferNight, type NightTransfer } from '../lib/wallet/transfer.ts';
@@ -69,9 +69,17 @@ function printHeading(opened: WalletOpened, { recipients, total, shielded }: Tra
     return;
   }
   ctx.output.stderr(keyValue('To', `${recipients.length} recipients`) + '\n');
-  recipients.forEach(({ input, address, amount }, index) => {
-    const named = input === address ? '' : dim(` (${input})`);
-    ctx.output.stderr(`    ${formatAddress(address, true)}${named}  ${bold(nightAmountText(amount) + ' NIGHT')}\n`);
+  // One column of recipients, and their amounts lined up on the decimal point.
+  const rows = recipients.map(({ input, address, amount }) => {
+    const [whole, fraction] = nightAmountText(amount).split('.') as [string, string | undefined];
+    return { address, named: input === address ? '' : ` (${input})`, whole, fraction: fraction === undefined ? '' : `.${fraction}` };
+  });
+  const nameWidth = Math.max(...rows.map((row) => row.named.length));
+  const wholeWidth = Math.max(...rows.map((row) => row.whole.length));
+  const fractionWidth = Math.max(...rows.map((row) => row.fraction.length));
+  rows.forEach(({ address, named, whole, fraction }, index) => {
+    const amount = whole.padStart(wholeWidth) + fraction.padEnd(fractionWidth);
+    ctx.output.stderr(`    ${formatAddress(address, true)}${dim(named.padEnd(nameWidth))}  ${bold(amount)} NIGHT\n`);
     if (toSelf[index]) ctx.output.stderr(yellow(`      Warning: recipient ${index + 1} is this wallet itself: its NIGHT stays in it.`) + '\n');
   });
   ctx.output.stderr(keyValue('Total', bold(nightAmountText(total) + unit)) + '\n');
@@ -105,5 +113,6 @@ function printTransfer({ network, txHash, receipt }: NightTransfer, { recipients
   ctx.output.stderr('\n' + successMessage(`Transferred ${nightAmountText(total)} ${what}${to}`, txHash) + '\n');
   if (receipt) ctx.output.stderr(receiptText(receipt, txHash));
   ctx.output.stderr('\n' + divider() + '\n');
-  ctx.output.stderr(dim(shielded ? '  Verify: midnight balance --shielded' : '  Verify: midnight balance') + '\n\n');
+  // A wallet's own balance reads its shielded part, where shielded sync is on or forced.
+  ctx.output.stderr(dim(`  Verify: midnight balance${shielded && !shieldedSyncEnabled(network) ? ' --force-shielded' : ''}`) + '\n\n');
 }

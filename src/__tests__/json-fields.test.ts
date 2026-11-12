@@ -45,7 +45,7 @@ const runs: ReadonlyArray<readonly string[]> = [
   ['wallet', 'list'],
   ['wallet', 'info', 'bob'],
   ['wallet', 'seed', 'bob', '--entropy'],
-  ['wallet', 'remove', 'bob'],
+  ['wallet', 'remove', 'bob', '--yes'],
   ['wallet', 'protect'],
   ['info'],
   ['address', '--seed', 'aa'.repeat(32), '--network', 'undeployed'],

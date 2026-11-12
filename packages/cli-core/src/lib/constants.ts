@@ -153,19 +153,31 @@ export const DEFAULT_WALLET_NAME = 'default';
 export const MAX_WALLET_NAME_LENGTH = 64;
 
 /**
- * Validate a wallet name (not a path).
- * Rejects empty strings, names longer than MAX_WALLET_NAME_LENGTH, path
- * separators, '.json' suffix, '..' traversal, and control characters.
- * Returns true if the name is safe.
+ * Windows' reserved device names: a file called `CON` or `nul.json` there is
+ * the device, not a file. Refused on every platform, so a wallet's name means
+ * the same file wherever its folder is copied.
+ */
+const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i;
+
+/** What a wallet name may be, for the refusal that names the rule. */
+export const WALLET_NAME_RULE =
+  'A wallet name is letters, digits, "-", "_" and ".", starts with a letter or digit, ends with neither "." nor ".json", ' +
+  `and is at most ${MAX_WALLET_NAME_LENGTH} characters and not a Windows device name (CON, PRN, AUX, NUL, COM1, LPT1, ...).`;
+
+/**
+ * Validate a wallet name (not a path): see WALLET_NAME_RULE. The name becomes
+ * a file name under the wallets folder, and folders under the caches and the
+ * accounts are named after it, so only what is a plain file name on every
+ * platform is taken: no separators or traversal, no hidden (leading dot) or
+ * flag-like (leading dash) name, no spaces, no Windows device name, and no
+ * trailing dot (Windows drops it).
  */
 export function isValidWalletName(name: string): boolean {
-  if (!name || name !== name.trim()) return false;
+  if (!name) return false;
   if ([...name].length > MAX_WALLET_NAME_LENGTH) return false;
-  if (/[\/\\]/.test(name)) return false;
-  if (name.endsWith('.json')) return false;
-  if (name === '.' || name === '..') return false;
-  // eslint-disable-next-line no-control-regex
-  if (/[\x00-\x1f]/.test(name)) return false;
+  if (!/^[\p{L}\p{N}][\p{L}\p{N}._-]*$/u.test(name)) return false;
+  if (name.endsWith('.') || name.endsWith('.json')) return false;
+  if (WINDOWS_DEVICE_NAME.test(name)) return false;
   return true;
 }
 

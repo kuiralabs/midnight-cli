@@ -71,3 +71,25 @@ describe('opening an account', () => {
     expect(account.keys.read()).toBeUndefined();
   });
 });
+
+// The account's LevelDB folder was 0755 with 0644 files (its contents encrypted, but outside the 0700/0600 rule).
+describe('an account\'s private-state folder', () => {
+  const database = () => path.join(dir, 'midnight-level-db');
+  const modeOf = (target: string) => fs.statSync(target).mode & 0o777;
+
+  it('is made 0700 for a sealed account before LevelDB writes in it', async () => {
+    await open();
+    expect(modeOf(database())).toBe(0o700);
+  });
+
+  it('left wider by an earlier run is narrowed to 0700 and 0600 when the account opens', async () => {
+    establishPassphrase(stateRootIn(home), PASSPHRASE);
+    sealedOwnerStore(dir, createAccountKey(dir, PASSPHRASE)).writeOwner(RECORD);
+    fs.mkdirSync(database(), { mode: 0o755 });
+    fs.chmodSync(database(), 0o755);
+    fs.writeFileSync(path.join(database(), '000003.log'), 'x', { mode: 0o644 });
+    await open();
+    expect(modeOf(database())).toBe(0o700);
+    expect(modeOf(path.join(database(), '000003.log'))).toBe(0o600);
+  });
+});

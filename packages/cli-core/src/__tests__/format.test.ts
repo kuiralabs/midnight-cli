@@ -225,6 +225,12 @@ describe('keyValue', () => {
     expect(result).toContain('A:        ');
   });
 
+  // The bug: a key as long as the column ran into its value ("Constructor args:1").
+  it('keeps a space between a key as long as the column and its value', () => {
+    expect(keyValue('Constructor args', '1').replace(/\x1b\[[0-9;]*m/g, '')).toBe('  Constructor args: 1');
+    expect(keyValue('A long key that overflows', 'v').replace(/\x1b\[[0-9;]*m/g, '')).toBe('  A long key that overflows: v');
+  });
+
   it('indents with 2 spaces', () => {
     const result = keyValue('Key', 'Value');
     expect(result.startsWith('  ')).toBe(true);

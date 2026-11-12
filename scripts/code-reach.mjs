@@ -19,7 +19,8 @@
 //     engine's index; one that uses a part of an engine (its keys, ledger,
 //     contracts, readers or wallet) reaches that part's modules (ENGINE_SITES);
 //   - the shell's payer and protectors, given to a command whose definition
-//     asks for them (SHELL_PROVISIONS).
+//     asks for them (SHELL_PROVISIONS), except a provision that catches every
+//     failure under it (CATCHING_PROVISIONS).
 // And one import is not followed: a definition's dynamic ones (its load() and
 // its tools' checks), which run only when the shell or the MCP server calls
 // them, not when help reads the registry.
@@ -137,6 +138,15 @@ export const CUT_IMPORTS = ENGINE_SETS.flatMap((set) => [...new Set(Object.value
 export const SHELL_PROVISIONS = {
   payer: 'packages/connect/src/lib/serve-payer.ts',
   protectors: 'packages/grant/src/lib/grant/account-protector.ts',
+};
+
+/**
+ * The provisions that catch every failure under them, with why: a code thrown
+ * there never ends the command, so their modules' codes are not its codes.
+ * Held to the code by the protector's own test (protect-account.test.ts).
+ */
+export const CATCHING_PROVISIONS = {
+  protectors: "protectAllAccounts catches each account's failure and reports it as one of protect's items: wallet protect never ends with a code thrown while sealing an account",
 };
 
 // The class EngineError takes its code as its first argument: `new EngineError('X', …)`, or a subclass's `super('X', …)`.
@@ -297,7 +307,8 @@ export function commandEntries(files = sourceFiles().filter((file) => file.endsW
     const handler = sourceOf(file, load);
     if (handler === undefined) throw new CodeReachError(`${shown(file)}: its load() target ${load} is not a source file`);
     const provisions = Object.keys(SHELL_PROVISIONS).filter((key) => new RegExp(`\\b${key}:\\s*true`).test(shell));
-    return { name, definition: shown(file), handler: shown(handler), provisions, entries: [shown(handler), ...provisions.map((key) => SHELL_PROVISIONS[key])] };
+    const throwing = provisions.filter((key) => !Object.hasOwn(CATCHING_PROVISIONS, key));
+    return { name, definition: shown(file), handler: shown(handler), provisions, entries: [shown(handler), ...throwing.map((key) => SHELL_PROVISIONS[key])] };
   });
 }
 

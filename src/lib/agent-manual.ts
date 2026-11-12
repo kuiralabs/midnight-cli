@@ -97,7 +97,10 @@ nightmainnet), from a Midnight project at https://blockfrost.io:
 or MN_BLOCKFROST_PROJECT_ID (or BLOCKFROST_PROJECT_ID) in the environment.
 Without one, a command that
 reaches preprod or mainnet fails with BLOCKFROST_PROJECT_ID_REQUIRED. The project id is
-a secret: mn never prints it. Preview and undeployed need none.
+a secret: mn never prints it. mn serve hands it to a dApp only inside
+getConfiguration's endpoint URLs, which a dApp needs to reach those
+endpoints, and only once the operator approves that for the connection (or
+under --approve-all). Preview and undeployed need none.
 
 LEDGER 9: mn speaks ledger 9, which mainnet, preprod and preview all run.
 localnet up starts a ledger-9 stack on undeployed. A local stack still on

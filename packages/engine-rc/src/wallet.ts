@@ -21,7 +21,7 @@ import { airdropNight } from './airdrop.ts';
 import { registerDust } from './dust-register.ts';
 import { exportDustSnapshot } from './dust-export.ts';
 import type { WalletDataRepository } from './wallet-data-repository.ts';
-import { createDAppConnector } from './dapp-connector.ts';
+import { createDAppConnector, OWN_COMMAND_APPROVALS } from './dapp-connector.ts';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -278,8 +278,7 @@ async function openConnector(repo: WalletDataRepository, options: Parameters<Eng
     connector = createDAppConnector({
       bundle: built,
       networkConfig,
-      // Approves every request: nobody is asked.
-      approvalOptions: { approveAll: true, autoApproveReads: true, prompter: null, notice },
+      approvalOptions: OWN_COMMAND_APPROVALS,
       notice,
       waiting,
       // Reads answer from the state this sync ended on, and from every later

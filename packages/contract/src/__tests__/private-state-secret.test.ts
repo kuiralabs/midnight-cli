@@ -35,3 +35,13 @@ describe('resolvePrivateStateSecretKey', () => {
     expect(() => resolvePrivateStateSecretKey(undefined, undefined)).toThrow();
   });
 });
+
+// The call script checks a stored private state against the secret only when the caller gave one.
+describe('privateStateEnvironment', () => {
+  const keys = { privateStateSecret: '11'.repeat(32), storagePassword: 'pw', storageAccountId: 'acct' } as never;
+  it('marks a secret the caller gave, and not the wallet\'s own', async () => {
+    const { privateStateEnvironment } = await import('../lib/contract/runner.ts');
+    expect(privateStateEnvironment({ contractKeys: keys, privateStateSecretKey: '22'.repeat(32) })).toMatchObject({ MN_PRIVATE_STATE_SECRET: '22'.repeat(32), MN_PRIVATE_STATE_SECRET_GIVEN: '1' });
+    expect(privateStateEnvironment({ contractKeys: keys })).not.toHaveProperty('MN_PRIVATE_STATE_SECRET_GIVEN');
+  });
+});

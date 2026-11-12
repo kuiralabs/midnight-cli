@@ -4,9 +4,8 @@
 // stores); mn only names the place. The account package caches its proving
 // artefacts beside them, in ~/.midnight/account-artifacts/.
 
-import { mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { DIR_MODE } from '@kuiralabs/midnight-cli-core';
+import { ensureOwnerOnlyDir } from '@kuiralabs/midnight-cli-core';
 
 /** The directory under ~/.midnight that holds each network's accounts. */
 export const ACCOUNTS_DIR_NAME = 'accounts';
@@ -25,12 +24,18 @@ export function accountRecordsDir(network: string, walletName: string, root: str
   return join(root, ACCOUNTS_DIR_NAME, network, walletName);
 }
 
-/** Creates the records directory, readable by its owner only: it will hold keys. */
+/** Creates the records directory, or narrows an existing one, readable by its owner only: it will hold keys. */
 export function ensureAccountRecordsDir(dir: string): void {
-  mkdirSync(dir, { recursive: true, mode: DIR_MODE });
+  ensureOwnerOnlyDir(dir);
 }
 
-/** Where the account package caches its proving artefacts, under ~/.midnight: each file is fetched the first time a command proves with it. */
+/**
+ * Where the account package caches its proving artefacts, under ~/.midnight:
+ * each file is fetched the first time a command proves with it. Left to the
+ * package's own modes, outside the 0700/0600 rule: they are the account
+ * contract's public proving and verifying keys and ZK IR, the same for every
+ * user, and nothing in them is secret.
+ */
 const ACCOUNT_ARTIFACTS_DIR_NAME = 'account-artifacts';
 
 export function accountArtifactsDir(root: string): string {

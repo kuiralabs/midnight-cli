@@ -24,7 +24,7 @@ import type {
 export interface WalletClientOptions {
   /** WebSocket URL (e.g. ws://localhost:9932). If omitted, uses the Lace browser extension. */
   url?: string;
-  /** Network to connect to: 'Undeployed', 'PreProd', 'Preview' */
+  /** Network to connect to, in the SDK's lowercase form: 'undeployed', 'preview', 'preprod', 'mainnet' */
   networkId: string;
   /** Per-call timeout in ms (default: 300_000 = 5 minutes) */
   timeout?: number;

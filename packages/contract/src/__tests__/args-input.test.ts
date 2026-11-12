@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, UsageError } from '@kuiralabs/midnight-cli-core';
 import { readGivenArgs } from '../lib/contract/args-input.ts';
@@ -44,6 +44,18 @@ describe('readGivenArgs', () => {
     expect(run).toThrow(UsageError);
     expect(run).toThrow(message);
     try { run(); } catch (err) { expect((err as Error).message).not.toContain(SECRET); }
+  });
+
+  // `--args-file <(echo …)` names a pipe: a FIFO whose writer may not have written yet.
+  it('reads --args-file from a FIFO written after the read starts', async () => {
+    const fifo = join(dir, 'args.fifo');
+    execFileSync('mkfifo', [fifo]);
+    const writer = spawn('bash', ['-c', `sleep 0.3; echo '[1,"${SECRET}"]' > "${fifo}"`], { stdio: 'ignore' });
+    try {
+      expect(readGivenArgs({ argsFile: fifo }, dir)).toEqual({ args: [1, SECRET], source: 'file' });
+    } finally {
+      await new Promise((resolve) => writer.once('exit', resolve));
+    }
   });
 
   it('refuses a file that isn\'t JSON without quoting it', () => {

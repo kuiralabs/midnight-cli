@@ -17,6 +17,7 @@ import {
   removeWalletAndCaches,
   resolveWalletPath,
   getActiveWalletName,
+  assertWalletRemovable,
 } from '../lib/wallet-config.ts';
 import { passphraseForNewSecret } from '../lib/passphrase.ts';
 import { createWallet, walletFilePath, walletSecretFrom } from '../lib/wallet-create.ts';
@@ -308,22 +309,52 @@ async function walletRemove(args: ParsedArgs, ctx: CallContext): Promise<void> {
   const name = args.positionals[0];
   if (!name) {
     throw new UsageError(
-      'Missing wallet name.\nUsage: midnight wallet remove <name>'
+      'Missing wallet name.\nUsage: midnight wallet remove <name> [--yes]'
     );
+  }
+  const root = ctx.config.paths.stateRoot;
+  // Refused (active, only, missing) before anything is asked.
+  const file = assertWalletRemovable(root, name);
+
+  // Its file holds the only copy of the seed on this machine: removed only on a yes at a terminal, or with --yes.
+  if (!hasFlag(args, 'yes')) {
+    const prompter = ctx.host.prompter;
+    if (hasFlag(args, 'json') || prompter === null || !prompter.isInteractive()) {
+      throw new UsageError(
+        `Removing wallet "${name}" deletes its file and the sealed seed in it, and nobody is here to confirm it.\n` +
+        `Add --yes to remove it without asking: midnight wallet remove ${name} --yes`
+      );
+    }
+    ctx.output.stderr('\n' + yellow(bold(`  ⚠ Remove wallet "${name}"?`)) + '\n');
+    ctx.output.stderr(yellow('  Its file, and the seed sealed in it, is deleted from this machine. Without its mnemonic') + '\n');
+    ctx.output.stderr(yellow('  or a backup of the file, what it holds can\'t be spent again.') + '\n');
+    ctx.output.stderr(`  ${dim('file   ')}  ${file}\n`);
+    // Its address, to check what it holds first (midnight balance <address>): reading the balance here would sync it from the chain.
+    const network = resolveNetworkName({ args, configDir: root });
+    const address = (await loadWalletConfig(file, ctx.host.engines)).addresses[network];
+    if (address !== undefined) ctx.output.stderr(`  ${dim('address')}  ${address} ${dim(`(${network}: midnight balance ${address})`)}\n`);
+    ctx.output.stderr('\n');
+    const answer = await prompter.ask(`  Remove wallet "${name}"? (y/N) `);
+    if (answer === null) throw new CancelledError(`Cancelled: no answer to "Remove wallet ${name}?", so it was kept. To remove it without asking, add --yes.`);
+    if (answer.trim().toLowerCase() !== 'y') throw new CancelledError(`Cancelled: wallet "${name}" was kept.`);
   }
 
   // Opened with mn's passphrase first, for the reader caches named by keys from its seed.
-  const { readerCachesCleared } = await removeWalletAndCaches(ctx.host, ctx.config.paths.stateRoot, name);
-  if (!readerCachesCleared) {
+  const { readerCachesCleared, cachesKeptFor } = await removeWalletAndCaches(ctx.host, root, name);
+  // A copy's caches are kept on purpose (said below), not left for want of a passphrase.
+  if (cachesKeptFor.length === 0 && !readerCachesCleared) {
     ctx.warn(`The Dust and shielded reader caches of wallet "${name}" were left: they are named by keys from its seed, which can't be opened without mn's passphrase (set MN_PASSPHRASE, or run at a terminal). Clear them with: midnight cache clear --network <name>, for each network the wallet was used on.`);
   }
 
   if (hasFlag(args, 'json')) {
-    ctx.output.result({ wallet: name, removed: true, readerCachesCleared });
+    ctx.output.result({ wallet: name, removed: true, readerCachesCleared, cachesKeptFor });
     return;
   }
 
   ctx.output.stderr(green('✓') + ` Wallet "${name}" removed\n`);
+  if (cachesKeptFor.length > 0) {
+    ctx.output.stderr(dim(`  Its caches were kept: ${cachesKeptFor.map((w) => `"${w}"`).join(', ')} ${cachesKeptFor.length === 1 ? 'is a wallet' : 'are wallets'} from the same seed.`) + '\n');
+  }
 }
 
 async function walletSeed(args: ParsedArgs, ctx: CallContext): Promise<void> {

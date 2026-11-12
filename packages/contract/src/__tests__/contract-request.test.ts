@@ -7,6 +7,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { contractCallRequest, contractDeployRequest, resolveContractCallRequest, resolveContractDeployRequest, resolveScanDir } from '../lib/contract/request.ts';
 import { parseArgs, UsageError } from '@kuiralabs/midnight-cli-core';
+import { inlineSecretKeyWarning } from '../lib/contract/secret-key-input.ts';
+import { spawn, execFileSync } from 'node:child_process';
 
 const UINT = { 'type-name': 'Uint', maxval: 255 };
 const ADDRESS = 'cb5230e1ac98e07520d3b330016743a05fec38dd8fe894ae5b9ac3f71cac5190';
@@ -71,7 +73,7 @@ describe('resolveContractDeployRequest', () => {
 
   it('refuses a secret key that is not 32 bytes of hex', () => {
     expect(() => deploy('--secret-key', 'abc')).toThrow(UsageError);
-    expect(() => deploy('--secret-key', 'abc')).toThrow('--secret-key must be 32 bytes of hex (64 chars)');
+    expect(() => deploy('--secret-key', 'abc')).toThrow('(--secret-key, --secret-key-file) must be 32 bytes of hex (64 chars)');
   });
 
   it('refuses a contract that declares witnesses with no compiled witnesses.js, naming them', () => {
@@ -108,9 +110,9 @@ describe('the plain builders', () => {
   it('build the same request from plain values a program holds, with no flags and no working directory', () => {
     // The readers say where the arguments came from as well (argsSource).
     expect(contractCallRequest({ dappDir: dir, address: ADDRESS, circuit: 'add', args: [1, 2] }))
-      .toEqual({ ...call('--address', ADDRESS, '--circuit', 'add', '--args', '[1,2]'), argsSource: undefined });
+      .toEqual({ ...call('--address', ADDRESS, '--circuit', 'add', '--args', '[1,2]'), argsSource: undefined, secretKeySource: undefined });
     const key = 'ab'.repeat(32);
-    expect(contractDeployRequest({ dappDir: dir, args: [7], secretKey: key })).toEqual({ ...deploy('--args', '[7]', '--secret-key', key), argsSource: undefined });
+    expect(contractDeployRequest({ dappDir: dir, args: [7], secretKey: key })).toEqual({ ...deploy('--args', '[7]', '--secret-key', key), argsSource: undefined, secretKeySource: undefined });
     expect(contractDeployRequest({ dappDir: dir })).toMatchObject({ constructorArgs: [], privateStateSecretKey: undefined });
   });
 
@@ -145,8 +147,54 @@ describe('--secret-key', () => {
   it('refuses legacy on a deploy, and anything but 32 bytes of hex on either', () => {
     expect(() => deploy('--secret-key', 'legacy')).toThrow(UsageError);
     expect(() => deploy('--secret-key', 'legacy')).toThrow(/must not be deployed with it/);
-    expect(() => deploy('--secret-key', 'abcd')).toThrow('--secret-key must be 32 bytes of hex (64 chars)');
+    expect(() => deploy('--secret-key', 'abcd')).toThrow('(--secret-key, --secret-key-file) must be 32 bytes of hex (64 chars)');
     expect(() => call('--address', ADDRESS, '--circuit', 'increment', '--secret-key', 'abcd')).toThrow(UsageError);
+  });
+});
+
+// The owner's secret has ways in that keep it off the command line, as private arguments do.
+describe('--secret-key-file and --secret-key -', () => {
+  const key = 'cd'.repeat(32);
+
+  it('read the secret from a file (trimmed), and from the standard input', () => {
+    writeFileSync(join(dir, 'owner.key'), `${key}\n`, { mode: 0o600 });
+    const fromFile = resolveContractCallRequest(parseArgs(['contract', 'call', '--path', dir, '--address', ADDRESS, '--circuit', 'increment', '--secret-key-file', 'owner.key']), dir);
+    expect(fromFile).toMatchObject({ privateStateSecretKey: key, secretKeySource: 'file' });
+    const fromStdin = resolveContractDeployRequest(parseArgs(['contract', 'deploy', '--path', dir, '--secret-key', '-']), dir, () => `${key}\n`);
+    expect(fromStdin).toMatchObject({ privateStateSecretKey: key, secretKeySource: 'stdin' });
+    expect(deploy('--secret-key', key).secretKeySource).toBe('inline');
+    expect(deploy().secretKeySource).toBe('none');
+  });
+
+  // The bug's shape: a FIFO (what <(…) names) whose writer has not written yet.
+  it('read a FIFO to its end, written after the read starts', async () => {
+    const fifo = join(dir, 'owner.fifo');
+    execFileSync('mkfifo', [fifo]);
+    const writer = spawn('bash', ['-c', `sleep 0.3; printf '%s\\n' ${key} > "${fifo}"`], { stdio: 'ignore' });
+    try {
+      expect(call('--address', ADDRESS, '--circuit', 'increment', '--secret-key-file', fifo)).toMatchObject({ privateStateSecretKey: key, secretKeySource: 'file' });
+    } finally {
+      await new Promise((resolve) => writer.once('exit', resolve));
+    }
+  });
+
+  it('refuse both flags, both - inputs, an empty file, - with no standard input, and never quote what was read', () => {
+    writeFileSync(join(dir, 'empty.key'), '\n');
+    writeFileSync(join(dir, 'bad.key'), 'not-the-secret-123');
+    expect(() => deploy('--secret-key', key, '--secret-key-file', 'x')).toThrow('Give the private-state secret once');
+    expect(() => resolveContractCallRequest(parseArgs(['contract', 'call', '--path', dir, '--address', ADDRESS, '--circuit', 'add', '--args', '-', '--secret-key', '-']), dir, () => '[1,2]')).toThrow('--args - and --secret-key - both read the standard input');
+    expect(() => deploy('--secret-key-file', join(dir, 'empty.key'))).toThrow('holds no private-state secret');
+    expect(() => deploy('--secret-key', '-')).toThrow('--secret-key - reads the secret from the standard input');
+    expect(() => deploy('--secret-key-file', join(dir, 'missing.key'))).toThrow(/Can't read --secret-key-file .*missing\.key \(ENOENT\)/);
+    try { deploy('--secret-key-file', join(dir, 'bad.key')); } catch (err) { expect((err as Error).message).not.toContain('not-the-secret-123'); }
+  });
+
+  it('warn when the secret is on the command line, never for a file, the standard input or legacy', () => {
+    expect(inlineSecretKeyWarning({ secretKey: key, source: 'inline' })).toMatch(/^--secret-key put the contract's private-state secret .* on the command line.*--secret-key-file <path> or --secret-key -/);
+    expect(inlineSecretKeyWarning({ secretKey: key, source: 'inline' })).not.toContain(key);
+    expect(inlineSecretKeyWarning({ secretKey: key, source: 'file' })).toBeUndefined();
+    expect(inlineSecretKeyWarning({ secretKey: key, source: 'stdin' })).toBeUndefined();
+    expect(inlineSecretKeyWarning({ secretKey: 'legacy', source: 'inline' })).toBeUndefined();
   });
 });
 

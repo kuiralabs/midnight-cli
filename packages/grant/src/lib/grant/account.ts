@@ -9,6 +9,7 @@
 // owner key) and roster.json, with the private state in the directory's
 // midnight-level-db under the store name and password it was first made with.
 
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AccountContext, ProgressEvent } from '@kuiralabs/midnight-account-chain/context';
 import type { DirectoryDeviceKeys, OwnerDevice, OwnerStore, PrivateStateLocation } from '@kuiralabs/midnight-account-chain/owner';
@@ -27,7 +28,7 @@ import {
   sealedOwnerStore,
   sealedPrivateStatePassword,
 } from './sealed-account.ts';
-import type { AccountArtifactsSource, NetworkConfig, NetworkName } from '@kuiralabs/midnight-cli-core';
+import { type AccountArtifactsSource, ensureOwnerOnlyDir, type NetworkConfig, type NetworkName, narrowTreeToOwnerOnly } from '@kuiralabs/midnight-cli-core';
 import { type AccountChain, accountChainOf } from './account-chain.ts';
 import { MIN_NODE_FOR_ACCOUNT, NodeTooOldForAccountError, UnreachableByAccountError } from './account-errors.ts';
 import { accountArtifactsDir } from './account-records.ts';
@@ -39,7 +40,13 @@ import { accountArtifactsDir } from './account-records.ts';
  */
 const ACCOUNT_NETWORKS: readonly NetworkName[] = ['undeployed'];
 
-/** The private state's database, store and password, as every account so far was made with them. */
+/**
+ * The private state's store name, as every account so far was made with it.
+ * The name is the account build's own (from its bench), and it is kept: it
+ * is the LevelDB store every existing account's private state is filed
+ * under, so another name would open an empty store and lose those accounts'
+ * private state.
+ */
 const PRIVATE_STATE_STORE = 'midnight-bench-account';
 // The password the account package encrypted every account's private state
 // with until it took one from its caller: testkit-js's own, public in its
@@ -119,10 +126,20 @@ export async function openGrantAccount(networkConfig: NetworkConfig, recordsDir:
   const source = options.artefacts?.source;
   const context = contexts.accountContext({ network, artefacts: artefacts.artefactCache(accountArtifactsDir(root), { progress, ...(source === undefined ? {} : { source }) }), progress });
   const database = join(recordsDir, PRIVATE_STATE_DATABASE);
+  // LevelDB makes its folder and files with the process's umask (0755/0644):
+  // what an earlier run left is narrowed to 0700/0600 here, and a sealed
+  // account's folder is made 0700 before LevelDB writes in it, so nobody else
+  // can reach what it writes. (A plain-text account's is left to be made as
+  // before: wallet protect reads a folder there as private state to re-encrypt.)
+  if (existsSync(database)) narrowTreeToOwnerOnly(database);
   // The account's private state is midnight-js's, which the engine's policy checks a new password against.
   const { contracts } = engine;
 
-  const sealed = (key: Buffer): GrantAccount => ({
+  const sealed = (key: Buffer): GrantAccount => {
+    ensureOwnerOnlyDir(database);
+    return sealedAccount(key);
+  };
+  const sealedAccount = (key: Buffer): GrantAccount => ({
     chain,
     context,
     store: sealedOwnerStore(recordsDir, key),

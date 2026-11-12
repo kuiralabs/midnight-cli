@@ -53,7 +53,10 @@ describe('prepareGrant', () => {
   it('refuses a network the account package can\'t reach, saying which it reaches, creating nothing', async () => {
     const refusal = asAlice('status', '--network', 'preprod');
     await expect(refusal).rejects.toThrow(UnreachableByAccountError);
-    await expect(refusal).rejects.toThrow("mn grant runs on a local network (undeployed) only: the account contract's current build has been tested there and nowhere else; PreProd is not one.");
+    await expect(refusal).rejects.toThrow("mn grant runs on a local network (undeployed) only: the account contract's current build has been tested there and nowhere else; preprod is not one.");
+    // Refused as the caller's to fix, but not framed as a usage mistake.
+    await expect(refusal).rejects.not.toBeInstanceOf(UsageError);
+    await expect(refusal).rejects.toMatchObject({ code: 'INVALID_ARGS' });
     expect(fs.existsSync(accounts())).toBe(false);
   });
 

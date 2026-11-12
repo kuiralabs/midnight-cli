@@ -23,7 +23,8 @@ export function divider(width: number = DEFAULT_WIDTH): string {
 
 // Key: Value with aligned padding
 export function keyValue(key: string, value: string, padWidth: number = 16): string {
-  const paddedKey = (key + ':').padEnd(padWidth);
+  // A key as long as the column still gets a space before its value.
+  const paddedKey = (key + ':').padEnd(padWidth - 1) + ' ';
   return `  ${gray(paddedKey)}${value}`;
 }
 

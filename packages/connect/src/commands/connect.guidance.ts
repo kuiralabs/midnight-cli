@@ -33,7 +33,8 @@ can connect to it — no browser extension needed.
     connects only with --allow-origin <its origin> (e.g.
     --allow-origin http://localhost:5173; repeat for more). Node scripts
     send no Origin and always connect. A refused page gets HTTP 403, and
-    serve prints the origin it refused. --approve-all with an allowed
+    serve prints the origin it refused; allow only your own dApp's page,
+    since an allowed page can ask the wallet to sign and spend. --approve-all with an allowed
     origin prints a warning: any script on that page can spend and sign
   - Shielded wallet on mainnet, preview and preprod: serve is ready
     without waiting for the shielded sync, which goes on behind it, so
@@ -42,7 +43,13 @@ can connect to it — no browser extension needed.
     needs shielded balances or coins there needs it
   - A client calls connect(networkId) first, as the DApp connector API
     has it: any other method before that is refused as Disconnected
-  - Read operations: never prompt
+  - Read operations: never prompt, except getConfiguration on preprod and
+    mainnet: its endpoint URLs carry the user's Blockfrost project id
+    (?project_id=...), which a dApp needs to reach them, so serve asks the
+    operator once per connection before it gives them (--approve-all gives
+    them without asking). Without a terminal, and under --approve-fees with
+    nobody to ask, it is refused as APPROVAL_UNAVAILABLE: give the dApp its
+    own endpoints (its own Blockfrost project id)
   - A request that needs approval with no terminal to ask at is refused
     as APPROVAL_UNAVAILABLE (PermissionRejected to the dApp), not as a
     rejection: start serve with --approve-all or --approve-fees for that
@@ -67,8 +74,14 @@ can connect to it — no browser extension needed.
     {"maxFeeSpecks":"10000000000000000","maxPending":2}}
   - --no-auto-approve-reads: no effect, kept for old scripts
   - getTxHistory lists the transactions this server has seen since it
-    started (submitted through it or synced after start); it is kept in
+    began serving, newest first: those submitted through it (pending, then
+    finalized or discarded) and those its sync reads after that. What the
+    wallet's sync read before serve was ready is left out. It is kept in
     memory, so a restart starts it empty
+  - connect and getConnectionStatus give the network id in the SDK's
+    lowercase form (undeployed, preview, preprod, mainnet), as does
+    getConfiguration
+  - A request sent right after connect, before its answer, waits for it
 
 DApp developers connect via the midnight-wallet-connector npm package:
 

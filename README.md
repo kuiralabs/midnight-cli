@@ -77,6 +77,8 @@ midnight balance
 midnight transfer mn_addr_undeployed1... 100
 ```
 
+The first `wallet generate` asks for mn's passphrase, which encrypts every secret mn keeps (wallet seeds, account owner keys): at least 12 characters. Off a terminal, give it in `MN_PASSPHRASE`.
+
 ### Preprod / Preview (testnet)
 
 Preprod and preview run ledger 9. mn proves every transaction on your machine, so start a local proof server first (see [Proof server](#proof-server)). The flow:
@@ -91,8 +93,8 @@ midnight config set network preprod   # or: preview
 
 # Preprod only: its indexer and node are served by Blockfrost, which needs
 # your own project id. Create a "Midnight Preprod" project at https://blockfrost.io
-# and set its id once (it starts with nightpreprod):
-midnight config set blockfrost-project-id <project id>
+# and set its id once (it starts with nightpreprod); - asks for it without echoing:
+midnight config set blockfrost-project-id -
 
 # 2. Get test tokens from the faucet
 #    preprod: https://faucet.preprod.midnight.network/
@@ -154,6 +156,7 @@ midnight config set blockfrost-project-id <project id>   # or: export BLOCKFROST
 ```
 
 - Project ids are per network: a preprod id starts with `nightpreprod`, a mainnet id with `nightmainnet`. mn files each under its own network and never sends one to the other network.
+- `midnight config set blockfrost-project-id -` keeps the id off the command line and out of your shell history: mn asks for it without echoing at a terminal, and otherwise reads it from the standard input. It is kept in `~/.midnight/config.json`, which only you can read (0600); it isn't sealed under your passphrase, because commands that never unlock a wallet need it too. `midnight config get blockfrost-project-id` shows it masked, and says when the one in use comes from the environment. `midnight config unset blockfrost-project-id --network preprod` removes one network's; without `--network` every network's is removed, and mn says which.
 - Without one, a command that reaches preprod stops with `BLOCKFROST_PROJECT_ID_REQUIRED` and these instructions. A refused id is `BLOCKFROST_PROJECT_ID_REJECTED`. Requests count against your Blockfrost plan.
 - The project id is a secret. mn keeps it in `~/.midnight/config.json` (mode 0600), shows it masked in `config get`, and hides it in everything it prints, errors and `--verbose` logs included.
 - `mn serve` gives a connected dApp the wallet's indexer and node URLs (the DApp connector's `getConfiguration`), and on preprod those carry your project id: connect only dApps you trust with it.
