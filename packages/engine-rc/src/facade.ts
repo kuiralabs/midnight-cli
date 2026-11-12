@@ -1,3 +1,5 @@
+// Before any SDK module: Node 22's WebSocket made to fire close on a failed connect.
+import './websocket-close.ts';
 import { getNetworkId, type WalletCacheData, type FeePricing, newFeePricing, SYNC_TIMEOUT_MS, PRE_SEND_SYNC_TIMEOUT_MS } from '@kuiralabs/midnight-cli-core/engine';
 import { type NoticeSink, type NetworkConfig, type VerboseLog, CancelledError, EndpointUnreachableError, NetworkError, SyncTimeoutError, throwIfCancelled, type WaitSink, sayWhileRunning, secondsText } from '@kuiralabs/midnight-cli-core';
 import {

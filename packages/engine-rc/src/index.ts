@@ -4,6 +4,8 @@
 // it (bun's) resolves the ranges again, and the SDK can then fail as it loads,
 // before any check inside the engine could say why.
 
+// Before any SDK module: Node 22's WebSocket made to fire close on a failed connect.
+import './websocket-close.ts';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertInstalledAsShipped, type Engine, type EngineHost } from '@kuiralabs/midnight-cli-core/engine';
