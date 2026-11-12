@@ -58,6 +58,12 @@ describe('the package registry\'s codes', () => {
     expect(installedCommands.code('COMMAND_FAILED')).toMatchObject({ code: 'COMMAND_FAILED', exitCode: 1 });
   });
 
+  it('keeps every code the installed packages define in the deprecated ERROR_CODES, as it promises', () => {
+    const published = new Set<string>(Object.values(ERROR_CODES));
+    const defined = installedCommands.packages.flatMap((pkg) => (pkg.codes ?? []).map(({ code }) => code));
+    expect(defined.filter((code) => !published.has(code))).toStrictEqual([]);
+  });
+
   it('finds a plugin package\'s codes, and classifies its errors by them', () => {
     const registry = createPackageRegistry([...installedCommands.packages, codesOnly('plugin', PLUGIN_CODES)], installedCommands.globalFlags);
     expect(registry.code('PLUGIN_ORACLE_DOWN')).toBe(PLUGIN_CODES[0]);

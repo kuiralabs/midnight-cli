@@ -116,6 +116,12 @@ export const ERROR_CODES = {
   OFFER_RECORD_UNREADABLE: 'OFFER_RECORD_UNREADABLE',
   /** A proving key of the account contract couldn't be had (not published, or the fetch failed). Recovery: set `account-artifacts` to a local build, or retry a failed fetch once. */
   ACCOUNT_KEYS_UNAVAILABLE: 'ACCOUNT_KEYS_UNAVAILABLE',
+  /** No contract is deployed at the address on this network. Recovery: check the address and the network. */
+  CONTRACT_NOT_FOUND: 'CONTRACT_NOT_FOUND',
+  /** The contract declares witnesses and the dApp has no compiled witnesses module. Recovery: build the witnesses, then retry. */
+  WITNESSES_NOT_FOUND: 'WITNESSES_NOT_FOUND',
+  /** A wallet file's saved addresses are not the ones its seed derives. Recovery: restore the wallet file from a backup, or the wallet from its mnemonic. */
+  WALLET_ADDRESS_MISMATCH: 'WALLET_ADDRESS_MISMATCH',
   UNKNOWN: 'UNKNOWN',
 } as const;
 
