@@ -29,6 +29,12 @@ export interface ApprovalRequest {
    * `approveFees`.
    */
   feeOnly?: boolean;
+  /**
+   * A read whose answer hands the dApp a secret of the user's (getConfiguration
+   * when the endpoints carry a Blockfrost project id): asked like a write, never
+   * approved as a read.
+   */
+  revealsSecret?: boolean;
 }
 
 /** Approved; rejected by whoever answered; or nobody could be asked (no terminal, no prompter), which is no one's rejection. */
@@ -53,7 +59,7 @@ export interface ApprovalOptions {
 
 /** What a server approves without asking, as `mn serve` reports it. */
 export interface ApprovalPolicy {
-  /** Read-only methods never prompt. */
+  /** Read-only methods never prompt; getConfiguration does when its endpoints carry a Blockfrost project id, unless everything is approved. */
   reads: 'auto';
   /**
    * balanceUnsealedTransaction / balanceSealedTransaction, which reserve the
@@ -147,6 +153,9 @@ export function renderApprovalBox(request: ApprovalRequest): string {
 
 /** What a server without a terminal can do about a request it can't prompt for. */
 function nonInteractiveHint(request: ApprovalRequest, options: Pick<ApprovalOptions, 'approveFees'>): string {
+  if (request.revealsSecret) {
+    return `${request.method}'s endpoints carry your Blockfrost project id: approve it at a terminal, or use --approve-all to give it to every dApp`;
+  }
   if (options.approveFees) {
     return `--approve-fees approves only paying the Dust fee for an agent's own balanced transaction (and its submit); ${request.method} needs a terminal to approve`;
   }
@@ -160,7 +169,7 @@ function nonInteractiveHint(request: ApprovalRequest, options: Pick<ApprovalOpti
  *
  * If options.approveAll is true, auto-approves without prompting.
  * If options.approveFees is true, auto-approves a fee-only request.
- * If options.autoApproveReads is true and the method is read-only, auto-approves.
+ * If options.autoApproveReads is true and the method is read-only (and reveals no secret), auto-approves.
  *
  * Unavailable if stdin is not a TTY (non-interactive environment) or the host gave no prompter.
  * Only one prompt can be active at a time: the prompter refuses a second
@@ -182,7 +191,7 @@ export async function promptApproval(
     return 'approve';
   }
 
-  if (options.autoApproveReads && isReadOnlyMethod(request.method)) {
+  if (options.autoApproveReads && isReadOnlyMethod(request.method) && request.revealsSecret !== true) {
     notice(dim(`  Auto-approved (read-only): ${request.method}`));
     return 'approve';
   }

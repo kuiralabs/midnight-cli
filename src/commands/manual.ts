@@ -146,7 +146,7 @@ export function buildManual(): string {
   out.push(`  ${bold('First wallet on preprod')}`);
   out.push(`    ${dim('# once: a Midnight preprod project id from https://blockfrost.io')}`);
   out.push(`    ${dim('$')} ${dim(PROOF_SERVER_DOCKER_RUN)}   ${dim('# in another terminal')}`);
-  out.push(`    ${dim('$')} ${dim('mn config set blockfrost-project-id nightpreprod...')}`);
+  out.push(`    ${dim('$')} ${dim('mn config set blockfrost-project-id -')}   ${dim('# asks for it, unechoed')}`);
   out.push(`    ${dim('$')} ${dim('mn wallet generate alice --network preprod')}`);
   out.push(`    ${dim('# fund from the preprod faucet:')}`);
   out.push(`    ${dim('# https://faucet.preprod.midnight.network/')}`);
@@ -188,8 +188,12 @@ export function buildManual(): string {
   out.push(`    ${yellow('blockfrost-project-id')}`);
   out.push(`                   Your Blockfrost project id for preprod or mainnet, whose`);
   out.push(`                   indexer and node Blockfrost serves (nightpreprod... or`);
-  out.push(`                   nightmainnet...). Kept per network, shown masked,`);
-  out.push(`                   never printed. Or: MN_BLOCKFROST_PROJECT_ID / BLOCKFROST_PROJECT_ID.`);
+  out.push(`                   nightmainnet...). Kept per network in config.json (0600),`);
+  out.push(`                   shown masked. Give it as ${dim('-')} to keep it off the command line`);
+  out.push(`                   (asked unechoed at a terminal, else read from stdin).`);
+  out.push(`                   Or: MN_BLOCKFROST_PROJECT_ID / BLOCKFROST_PROJECT_ID, which win.`);
+  out.push(`                   mn serve hands it to a dApp (in getConfiguration's endpoint`);
+  out.push(`                   URLs) only once you approve that, or under --approve-all.`);
   out.push(`    ${yellow('account-artifacts')}`);
   out.push(`                   Where mn grant gets the account contract's proving artefacts:`);
   out.push(`                   the build's release by default, or a local build's folder`);

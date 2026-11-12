@@ -184,7 +184,7 @@ function printStatus(status: DustStatus, jsonMode: boolean, minimal: boolean, ct
 
   // Machine-readable to stdout
   ctx.output.stdout('registered=yes\n');
-  ctx.output.stdout(`dust=${status.dust}\n`);
+  ctx.output.stdout(`dust=${toDust(status.dust)}\n`);
   ctx.output.stdout(`registered_utxos=${registeredUtxos}\n`);
   ctx.output.stdout(`unregistered_utxos=${unregisteredUtxos}\n`);
 
@@ -201,16 +201,18 @@ function printStatus(status: DustStatus, jsonMode: boolean, minimal: boolean, ct
 }
 
 function printRegistration(result: DustRegistrationResult, jsonMode: boolean, ctx: CallContext): void {
-  const { dust, txHash, receipt } = result;
+  const { network, dust, txHash, receipt } = result;
   if (jsonMode) {
-    const json: Record<string, unknown> = { subcommand: 'register', dustBalance: toDust(dust) };
+    const json: Record<string, unknown> = { subcommand: 'register', network, dustBalance: toDust(dust) };
     if (txHash) json.txHash = txHash;
     if (receipt) Object.assign(json, receiptJson(receipt));
     ctx.output.result(json);
     return;
   }
 
-  ctx.output.stdout(dust.toString() + '\n');
+  // Machine-readable to stdout, as status gives it: the Dust in DUST, and the registration's identifier when one was sent.
+  ctx.output.stdout(`dust=${toDust(dust)}\n`);
+  if (txHash) ctx.output.stdout(`tx_hash=${txHash}\n`);
   ctx.output.stderr('\n' + successMessage(
     result.alreadyAvailable
       ? `Dust tokens already available: ${formatDust(dust)}`

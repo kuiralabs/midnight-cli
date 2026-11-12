@@ -40,7 +40,7 @@ describe('classifyError usage errors (positional-address balance)', () => {
   // runs it); approved (Y52), their words alone no longer give INVALID_ARGS.
   const PRIVATE = 'Shielded balances are private — they can only be read with the wallet\'s secret key, not from an address alone.\n' +
     'This address isn\'t one of your wallets. Check its shielded balance from the wallet that owns it:\n' +
-    '  midnight balance --wallet <name> --shielded --network undeployed';
+    '  midnight balance --wallet <name> --network undeployed';
   const MISMATCH = 'Address belongs to undeployed but --network is preprod.\nDrop --network or pass an address for preprod.';
 
   it.each([['the "shielded balances are private" error', PRIVATE], ['the address-HRP / --network mismatch', MISMATCH]])('classifies %s by its class: INVALID_ARGS as a UsageError, UNKNOWN as a plain error', (_what, said) => {

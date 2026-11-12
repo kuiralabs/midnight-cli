@@ -67,6 +67,16 @@ describe('balance command — the address given', () => {
     await expect(cliCall(balanceCommand, args)).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('balance takes one address') });
   });
 
+  // Regression: `balance bob` showed the address parser's "invalid string length 3, expected (8..false)".
+  it('refuses a wallet name given as the address with how to read a wallet\'s balance, not the parser\'s words', async () => {
+    const args = parseArgs(['balance', 'bob', '--network', 'undeployed', '--indexer-ws', 'ws://localhost:19999']);
+    const refusal = await cliCall(balanceCommand, args).then(() => { throw new Error('balance bob was not refused'); }, (err: unknown) => err as Error);
+    expect(refusal).toMatchObject({ code: 'INVALID_ARGS' });
+    expect(refusal.message).toContain('"bob" is not an address');
+    expect(refusal.message).toContain('midnight balance --wallet bob');
+    expect(refusal.message).not.toMatch(/string length|expected \(/);
+  });
+
   it('refuses a word that is not an address as a usage error', async () => {
     const args = parseArgs(['balance', 'notanaddress', '--network', 'undeployed', '--indexer-ws', 'ws://localhost:19999']);
     await expect(cliCall(balanceCommand, args)).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('Invalid address') });
@@ -84,7 +94,9 @@ describe('balance command — shielded flag errors', () => {
     // decrypted, so we fail with a clear pointer to the wallet-based form.
     const args = parseArgs(['balance', EMPTY_ADDRESS, '--shielded', '--network', 'undeployed']);
     await expect(cliCall(balanceCommand, args)).rejects.toThrow(/Shielded balances are private/);
-    await expect(cliCall(balanceCommand, args)).rejects.toThrow(/--wallet <name> --shielded/);
+    // The wallet's own balance reads its shielded part: --shielded there does nothing.
+    await expect(cliCall(balanceCommand, args)).rejects.toThrow('midnight balance --wallet <name> --network undeployed');
+    await expect(cliCall(balanceCommand, args)).rejects.not.toThrow(/--wallet <name> --shielded/);
   });
 });
 

@@ -7,6 +7,13 @@ import { parseArgs, loadCliConfig } from '@kuiralabs/midnight-cli-core';
 import { captureOutput, type CapturedOutput } from '../../test-support/capture-output.ts';
 import { cliCall } from './helpers/cli-call.ts';
 import { stateRootIn } from '../../test-support/state-root-in.ts';
+import { testHost } from '../../test-support/test-host.ts';
+import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+
+const entryPoint = path.resolve(import.meta.dirname, '../wallet.ts');
+const tsxLoader = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
 
 // The config handler, as the shell loads it.
 const { default: configCommand } = await configDefinition.load();
@@ -80,10 +87,10 @@ describe('config command — error handling', () => {
     await cliCall(configCommand, parseArgs(['config', 'set', 'node', 'ws://n.example', '--network', 'preview']));
     io.clearStdout();
     await cliCall(configCommand, parseArgs(['config', 'get', '--json']));
-    expect(JSON.parse(io.stdout())).toMatchObject({ action: 'get', values: { network: 'undeployed', node: '(not set)', wallet: '(not set)' } });
+    expect(JSON.parse(io.stdout())).toMatchObject({ action: 'get', values: { network: 'undeployed', node: null, wallet: null } });
     io.clearStdout();
     await cliCall(configCommand, parseArgs(['config', 'get', '--network', 'preview', '--json']));
-    expect(JSON.parse(io.stdout())).toEqual({ action: 'get', network: 'preview', values: { 'proof-server': '(not set)', node: 'ws://n.example', 'indexer-ws': '(not set)', 'blockfrost-project-id': '(not set)' } });
+    expect(JSON.parse(io.stdout())).toEqual({ action: 'get', network: 'preview', values: { 'proof-server': null, node: 'ws://n.example', 'indexer-ws': null, 'blockfrost-project-id': null } });
   });
 
   it('throws when key is missing for set', async () => {
@@ -131,4 +138,98 @@ describe('config command — set + get round-trip', () => {
     await cliCall(configCommand, getArgs);
     expect(io.stdout()).toBe('preprod\n');
   });
+});
+
+// A fake id: never a real project's.
+const PREPROD_ID = 'nightpreprodFakeFakeFakeFakeFake0123';
+const MAINNET_ID = 'nightmainnetFakeFakeFakeFakeFake4567';
+
+describe('config command — a key that isn\'t set', () => {
+  // Was the literal "(not set)" as the value, in plain and --json.
+  it('prints nothing in plain mode and null in JSON, exit 0', async () => {
+    await cliCall(configCommand, parseArgs(['config', 'get', 'wallet']));
+    expect(io.stdout()).toBe('');
+    await cliCall(configCommand, parseArgs(['config', 'get', 'proof-server', '--json']));
+    expect(JSON.parse(io.stdout())).toEqual({ action: 'get', key: 'proof-server', value: null });
+  });
+});
+
+describe('config command — the Blockfrost project id', () => {
+  const ENV_KEYS = ['MN_BLOCKFROST_PROJECT_ID', 'BLOCKFROST_PROJECT_ID'] as const;
+  const saved = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
+  beforeEach(() => { for (const key of ENV_KEYS) delete process.env[key]; });
+  afterEach(() => { for (const key of ENV_KEYS) { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; } });
+
+  // Was "(not set)" while the variable was set and in use.
+  it('says when the one in use comes from the environment, masked', async () => {
+    process.env.MN_BLOCKFROST_PROJECT_ID = PREPROD_ID;
+    await cliCall(configCommand, parseArgs(['config', 'get', 'blockfrost-project-id']));
+    expect(io.stdout()).toBe('nightpreprod…0123 (preprod, set from environment MN_BLOCKFROST_PROJECT_ID)\n');
+    io.clearStdout();
+    await cliCall(configCommand, parseArgs(['config', 'get', '--json']));
+    const listed = JSON.parse(io.stdout());
+    expect(listed.values['blockfrost-project-id']).toBe('nightpreprod…0123 (preprod, set from environment MN_BLOCKFROST_PROJECT_ID)');
+    expect(JSON.stringify(listed)).not.toContain(PREPROD_ID);
+  });
+
+  it('shows the environment\'s over the saved one for the same network, the saved one for another', async () => {
+    await cliCall(configCommand, parseArgs(['config', 'set', 'blockfrost-project-id', MAINNET_ID]));
+    process.env.BLOCKFROST_PROJECT_ID = PREPROD_ID;
+    io.clearStdout();
+    await cliCall(configCommand, parseArgs(['config', 'get', 'blockfrost-project-id']));
+    expect(io.stdout()).toBe('nightpreprod…0123 (preprod, set from environment BLOCKFROST_PROJECT_ID), nightmainnet…4567 (mainnet)\n');
+  });
+
+  // Was silent: every network's id went, and "(removed)" was said even when none was set.
+  it('unset says which networks\' ids it removed, and when none was set', async () => {
+    await cliCall(configCommand, parseArgs(['config', 'set', 'blockfrost-project-id', PREPROD_ID]));
+    await cliCall(configCommand, parseArgs(['config', 'set', 'blockfrost-project-id', MAINNET_ID]));
+    io.clearStderr();
+    await cliCall(configCommand, parseArgs(['config', 'unset', 'blockfrost-project-id', '--network', 'mainnet']));
+    expect(io.stderr()).toContain('blockfrost-project-id removed for mainnet');
+    io.clearStderr();
+    await cliCall(configCommand, parseArgs(['config', 'unset', 'blockfrost-project-id', '--network', 'mainnet']));
+    expect(io.stderr()).toContain('blockfrost-project-id none was set for mainnet');
+    await cliCall(configCommand, parseArgs(['config', 'set', 'blockfrost-project-id', MAINNET_ID]));
+    io.clearStdout();
+    await cliCall(configCommand, parseArgs(['config', 'unset', 'blockfrost-project-id', '--json']));
+    expect(JSON.parse(io.stdout())).toEqual({ action: 'unset', key: 'blockfrost-project-id', value: null, removed: ['preprod', 'mainnet'] });
+    io.clearStdout();
+    await cliCall(configCommand, parseArgs(['config', 'unset', 'blockfrost-project-id', '--json']));
+    expect(JSON.parse(io.stdout())).toEqual({ action: 'unset', key: 'blockfrost-project-id', value: null, removed: [] });
+  });
+
+  // Was refused: the id could only come from argv or the environment.
+  it('set - asks for it at a terminal, unechoed, and never prints it', async () => {
+    const questions: string[] = [];
+    const host = testHost({
+      prompter: {
+        isInteractive: () => true,
+        ask: async () => { throw new Error('asked in the open'); },
+        askSecret: async (question) => { questions.push(question); return `  ${PREPROD_ID}\n`; },
+      },
+    });
+    await cliCall(configCommand, parseArgs(['config', 'set', 'blockfrost-project-id', '-']), { host });
+    expect(questions).toEqual(['Blockfrost project id: ']);
+    expect(loadCliConfig(stateRootIn(home)).networks?.preprod?.['blockfrost-project-id']).toBe(PREPROD_ID);
+    expect(io.stderr()).not.toContain(PREPROD_ID);
+    expect(io.stderr()).toContain('nightpreprod…0123 (preprod)');
+  });
+
+  it('set - is refused in an MCP call, whose standard input is the protocol', async () => {
+    await expect(cliCall(configCommand, parseArgs(['config', 'set', 'blockfrost-project-id', '-', '--_minimal']))).rejects.toThrow('protocol channel');
+  });
+
+  it('set - reads it from the standard input when there is no terminal', () => {
+    const run = spawnSync(process.execPath, ['--import', tsxLoader, entryPoint, 'config', 'set', 'blockfrost-project-id', '-', '--json'], {
+      env: { ...process.env, HOME: home, NO_COLOR: '1' },
+      input: `${PREPROD_ID}\n`,
+      encoding: 'utf8',
+      timeout: 60_000,
+    });
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout)).toEqual({ action: 'set', key: 'blockfrost-project-id', value: 'nightpreprod…0123 (preprod)' });
+    expect(run.stdout + run.stderr).not.toContain(PREPROD_ID);
+    expect(loadCliConfig(stateRootIn(home)).networks?.preprod?.['blockfrost-project-id']).toBe(PREPROD_ID);
+  }, 60_000);
 });

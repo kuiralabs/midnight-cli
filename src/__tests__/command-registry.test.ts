@@ -290,7 +290,8 @@ describe('the MCP tools, generated from the registry', () => {
     ['midnight_wallet_info', {}, args('wallet', 'info', [], {})],
     ['midnight_wallet_info', { name: '', full: true }, args('wallet', 'info', [], { [FULL_FLAG]: true })],
     ['midnight_wallet_info', { name: 'bob' }, args('wallet', 'info', ['bob'], {})],
-    ['midnight_wallet_remove', { name: 'bob' }, args('wallet', 'remove', ['bob'], {})],
+    // Run once the user has confirmed: --yes, so the CLI asks no second time.
+    ['midnight_wallet_remove', { name: 'bob' }, args('wallet', 'remove', ['bob'], { yes: true })],
     ['midnight_info', { wallet: 'alice' }, args('info', undefined, [], { wallet: 'alice' })],
     ['midnight_balance', { address: 'mn_addr_x', network: 'preview', 'indexer-ws': 'ws://i', full: true }, args('balance', 'mn_addr_x', [], { network: 'preview', 'indexer-ws': 'ws://i', [FULL_FLAG]: true })],
     ['midnight_balance', { wallet: 'alice' }, args('balance', undefined, [], { wallet: 'alice' })],

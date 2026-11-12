@@ -67,7 +67,9 @@ proofs. The CLI provides full shielded support:
   Shielded balance is private — it can't be read from an address alone
   (no secret key). Pass --shielded with a positional address and, if the
   address is one of your wallets, it maps to that wallet's full sync;
-  otherwise it errors and points you to --wallet <name> --shielded.
+  otherwise it errors and points you to midnight balance --wallet <name>
+  (which reads the shielded balance too, with --force-shielded where it is
+  off by default).
 
   On mainnet, preview and preprod the shielded balance is not read by
   default: the first read takes a while. A wallet can still hold shielded

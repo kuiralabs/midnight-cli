@@ -43,7 +43,8 @@ export interface ParsedContractState {
   readonly network: NetworkName;
   readonly address: string;
   readonly fields: Record<string, string>;
-  readonly maps: Record<string, { size: string }>;
+  /** Each map by its entry count (a number, as JSON_CONTRACT has it); null when the contract's map couldn't say. */
+  readonly maps: Record<string, { size: number | null }>;
 }
 
 /** A contract's untyped state tree, as the indexer holds it. */

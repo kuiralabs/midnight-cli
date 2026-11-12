@@ -4,7 +4,7 @@
 
 import * as fs from 'node:fs';
 import { type ParsedArgs, getFlag, hasFlag, UsageError, resolveNetworkName, sdkSetOf, type EngineKeys, parseAmount, type NetworkName, looksLikeShieldedAddress, looksLikeUnshieldedAddress } from '@kuiralabs/midnight-cli-core';
-import { loadWalletConfig, resolveWalletPath, walletAddress, walletShieldedAddress, type UnlockHost, type WalletConfig } from './wallet-config.ts';
+import { loadWalletConfig, resolveWalletPath, unlockWallet, type UnlockHost, type WalletConfig } from './wallet-config.ts';
 import { assertShieldedTransferAllowed } from './wallet/transfer.ts';
 import { assertRecipientCount, readRecipientsFile, recipientLabel, recipientPairsOf, type RecipientEntry } from './transfer-recipients.ts';
 
@@ -103,7 +103,7 @@ function assertRecipient(keys: EngineKeys, address: string, shielded: boolean, n
 /**
  * An address (mn_addr or mn_shield-addr prefix, with mainnet's having no
  * network segment) is used as given. Anything else is a wallet name, and the
- * address comes from that wallet's file.
+ * address comes from that wallet's file, opened to check it against its seed.
  */
 async function resolveRecipient(input: string, args: ParsedArgs, shielded: boolean, root: string, host: UnlockHost): Promise<string> {
   if (looksLikeShieldedAddress(input) && !shielded) {
@@ -125,8 +125,12 @@ async function resolveRecipient(input: string, args: ParsedArgs, shielded: boole
     );
   }
 
+  // Opened, so the address the file saves is checked against its seed
+  // (WalletAddressMismatchError): a file edited to hold someone else's address
+  // is never paid. The transfer needs mn's passphrase for the sender anyway.
+  const recipient = await unlockWallet(recipientPath, { root, host });
   if (shielded) {
-    const shieldedAddr = await walletShieldedAddress(recipientPath, networkName, root, host);
+    const shieldedAddr = recipient.shieldedAddresses?.[networkName];
     if (!shieldedAddr) {
       throw new Error(
         `Wallet "${input}" has no shielded address for network "${networkName}".\n` +
@@ -136,7 +140,7 @@ async function resolveRecipient(input: string, args: ParsedArgs, shielded: boole
     return shieldedAddr;
   }
 
-  const address = await walletAddress(recipientPath, networkName, root, host);
+  const address = recipient.addresses[networkName];
   if (!address) {
     throw new Error(`Wallet "${input}" has no address for network "${networkName}". Regenerate the wallet to derive one.`);
   }

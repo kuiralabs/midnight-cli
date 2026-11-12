@@ -65,7 +65,7 @@ export async function ensureHeapForSync(): Promise<void> {
         process.argv[1],
         ...process.argv.slice(2),
       ],
-      { stdio: 'inherit', env: { ...process.env, [BUMP_ENV]: '1' } },
+      { stdio: reExecStdio(process.argv.slice(2)), env: { ...process.env, [BUMP_ENV]: '1' } },
     );
 
     // Tie the child's lifetime to the parent (forward signals + kill on exit).
@@ -82,6 +82,30 @@ export async function ensureHeapForSync(): Promise<void> {
     // the Promise never resolves — the parent never returns to command dispatch.
     child.on('exit', (code, sig) => process.exit(sig ? 1 : (code ?? 0)));
   });
+}
+
+/** A descriptor an argument names by path: /dev/fd/N (zsh's and macOS bash's process substitution) or /proc/self/fd/N. */
+const DESCRIPTOR_PATH = /^(?:\/dev\/fd|\/proc\/self\/fd)\/(\d+)$/;
+
+/**
+ * The re-exec'd child's stdio: the standard three, and every descriptor above
+ * them that an argument names by path, at the same number. A process
+ * substitution (`--args-file <(…)`) hands mn /dev/fd/11; a child given only
+ * 0-2 would open its own fd 11 there (nothing, or one of Node's own pipes,
+ * which reads as EAGAIN), not the shell's pipe.
+ */
+export function reExecStdio(args: readonly string[]): Array<'inherit' | 'ignore' | number> {
+  const named = new Set<number>();
+  for (const arg of args) {
+    // A flag given as --flag=<path> names its path after the '='.
+    const path = arg.startsWith('--') && arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : arg;
+    const fd = DESCRIPTOR_PATH.exec(path)?.[1];
+    if (fd !== undefined && Number(fd) > 2) named.add(Number(fd));
+  }
+  const stdio: Array<'inherit' | 'ignore' | number> = ['inherit', 'inherit', 'inherit'];
+  const highest = Math.max(2, ...named);
+  for (let fd = 3; fd <= highest; fd++) stdio.push(named.has(fd) ? fd : 'ignore');
+  return stdio;
 }
 
 /** The subset of a child process we need to signal. */

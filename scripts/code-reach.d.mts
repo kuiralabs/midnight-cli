@@ -13,6 +13,7 @@ export const ENGINE_PARTS: Readonly<Record<'keys' | 'ledger' | 'contracts' | 're
 export const ENGINE_SITES: readonly { readonly site: RegExp; readonly reaches: readonly string[] }[];
 export const CUT_IMPORTS: readonly (readonly [from: string, to: string])[];
 export const SHELL_PROVISIONS: Readonly<Record<'payer' | 'protectors', string>>;
+export const CATCHING_PROVISIONS: Readonly<Partial<Record<'payer' | 'protectors', string>>>;
 /** The codes a module's own code can throw. */
 export function moduleCodes(file: string): Set<string>;
 /** The codes the entry modules reach: each, with the chain of modules from an entry to the first one throwing it. */

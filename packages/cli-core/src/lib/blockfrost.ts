@@ -49,7 +49,7 @@ export function checkProjectId(given: string): { projectId: string; network: Blo
   const projectId = given.trim();
   const network = /^[A-Za-z0-9]+$/.test(projectId) ? networkOfProjectId(projectId) : undefined;
   if (network === undefined) {
-    const expected = blockfrostNetworks().map((name) => `"${BLOCKFROST_NETWORKS[name].prefix}" (${name})`).join(', ');
+    const expected = blockfrostNetworks().map((name) => `"${BLOCKFROST_NETWORKS[name].prefix}" (${name})`).join(' or ');
     throw new UsageError(
       `That is not a Blockfrost project id mn can use: it should start with ${expected}. `
       + `Project ids are per network; create a project for the Midnight network you need at ${BLOCKFROST_SITE}.`,

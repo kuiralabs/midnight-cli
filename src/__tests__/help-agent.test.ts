@@ -48,7 +48,7 @@ describe('help --agent', () => {
   it('lists each set of codes once, by name, after the code table', async () => {
     await cliCall(helpCommand, parseArgs(['help', '--agent']));
     const table = io.stdout().split('ERROR CODES')[1]!.split('MCP SERVER')[0]!;
-    expect(table).toContain('\n  Sets of codes (a command\'s "sets", a tool\'s "Errors" name them):\n    network   AMBIGUOUS_LOCAL_STACKS, BLOCKFROST_PROJECT_ID_REQUIRED, BLOCKFROST_PROJECT_ID_REJECTED, BLOCKFROST_LIMIT_REACHED, ENDPOINT_SHUT_DOWN\n    wallet    WALLET_NOT_FOUND, WRONG_PASSPHRASE, PASSPHRASE_REQUIRED\n');
+    expect(table).toContain('\n  Sets of codes (a command\'s "sets", a tool\'s "Errors" name them):\n    network   AMBIGUOUS_LOCAL_STACKS, BLOCKFROST_PROJECT_ID_REQUIRED, BLOCKFROST_PROJECT_ID_REJECTED, BLOCKFROST_LIMIT_REACHED, ENDPOINT_SHUT_DOWN\n    wallet    WALLET_NOT_FOUND, WALLET_ADDRESS_MISMATCH, WRONG_PASSPHRASE, PASSPHRASE_REQUIRED\n');
   });
 
   it('documents all commands', async () => {

@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vite
 import * as rx from 'rxjs';
 // The wallet SDK's copy of Effect: its submit runs on it.
 import { Effect } from 'effect';
-import { HISTORY, NO_TERMINAL, TEST_NETWORK_CONFIG, connectorStub, type BundleOverrides, type StubConnector, type StubEngine } from './connector-stub.ts';
+import { HISTORY, NO_TERMINAL, TEST_NETWORK_CONFIG, connectorStub, historyAfterServing, type BundleOverrides, type StubConnector, type StubEngine } from './connector-stub.ts';
 import { startLocalIndexer, type LocalIndexer } from './local-indexer.ts';
 import { ledgerTx, type Ledger } from './ledger-tx.ts';
 import { SWAP_OFFER_HEX, OFFER_GIVE } from './fixtures/swap-offer.ts';
@@ -137,16 +137,19 @@ export function connectorSuite(engine: ConnectorEngine): void {
     // ── Handshake ──
 
     describe('connect', () => {
-      it('returns networkId on match', async () => {
+      // Regression: connect answered "Undeployed" (mn's casing) while
+      // getConnectionStatus answered "undeployed" (the SDK's).
+      it('returns the SDK\'s lowercase networkId on match, as getConnectionStatus does', async () => {
         connector = createConnector();
-        const result = await connector.handlers.connect({ networkId: 'Undeployed' }, ctx());
-        expect(result).toEqual({ networkId: 'Undeployed' });
+        const result = await connector.handlers.connect({ networkId: 'undeployed' }, ctx());
+        expect(result).toEqual({ networkId: 'undeployed' });
+        expect(await connector.handlers.getConnectionStatus({}, ctx())).toEqual({ status: 'connected', networkId: 'undeployed' });
       });
 
       it('matches case-insensitively', async () => {
         connector = createConnector();
-        const result = await connector.handlers.connect({ networkId: 'undeployed' }, ctx());
-        expect(result).toEqual({ networkId: 'Undeployed' });
+        const result = await connector.handlers.connect({ networkId: 'Undeployed' }, ctx());
+        expect(result).toEqual({ networkId: 'undeployed' });
       });
 
       it('throws InvalidRequest on network mismatch', async () => {
@@ -270,13 +273,13 @@ export function connectorSuite(engine: ConnectorEngine): void {
     });
 
     describe('getTxHistory', () => {
-      it('returns entries with correct TxStatus object shape', async () => {
+      it('returns entries with correct TxStatus object shape, newest first', async () => {
         connector = createConnector();
         const result = await connector.handlers.getTxHistory({ pageNumber: 0, pageSize: 10 }, ctx()) as any[];
         expect(result).toEqual([
-          { txHash: 'tx-hash-001', txStatus: { status: 'finalized', executionStatus: { 0: 'Success' } } },
-          { txHash: 'tx-hash-002', txStatus: { status: 'discarded' } },
           { txHash: 'tx-hash-003', txStatus: { status: 'pending' } },
+          { txHash: 'tx-hash-002', txStatus: { status: 'discarded' } },
+          { txHash: 'tx-hash-001', txStatus: { status: 'finalized', executionStatus: { 0: 'Success' } } },
         ]);
       });
 
@@ -284,7 +287,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         connector = createConnector();
         const result = await connector.handlers.getTxHistory({ pageNumber: 0, pageSize: 1 }, ctx()) as any[];
         expect(result).toHaveLength(1);
-        expect(result[0].txHash).toBe('tx-hash-001');
+        expect(result[0].txHash).toBe('tx-hash-003');
       });
 
       it('returns page 2', async () => {
@@ -292,6 +295,27 @@ export function connectorSuite(engine: ConnectorEngine): void {
         const result = await connector.handlers.getTxHistory({ pageNumber: 1, pageSize: 1 }, ctx()) as any[];
         expect(result).toHaveLength(1);
         expect(result[0].txHash).toBe('tx-hash-002');
+      });
+
+      // Regression: the history listed what the wallet's sync had read before
+      // serve started, oldest first, so a transaction submitted through serve
+      // was past the first page and never shown there.
+      it('lists only what it saw after it began serving, newest first, so a transaction just submitted is on the first page', async () => {
+        const synced = (hash: string, height: number) => ({
+          hash, identifiers: [], status: 'SUCCESS',
+          lifecycle: { status: 'finalized', finalizedBlock: { hash: `b${height}`, height, timestamp: new Date(0) } },
+        });
+        const old = Array.from({ length: 30 }, (_, i) => synced(`old-${i}`, i + 1));
+        const submitted = { hash: 'submitted', identifiers: [], lifecycle: { status: 'pending', submittedAt: new Date(0) } };
+        const later = synced('synced-after', 40);
+        connector = createConnector({ bundleOverrides: { getAllFromTxHistory: historyAfterServing([...old, submitted, later], old) } });
+
+        const result = await connector.handlers.getTxHistory({ pageNumber: 0, pageSize: 5 }, ctx()) as any[];
+
+        expect(result).toEqual([
+          { txHash: 'synced-after', txStatus: { status: 'finalized', executionStatus: { 0: 'Success' } } },
+          { txHash: 'submitted', txStatus: { status: 'pending' } },
+        ]);
       });
 
       it.each([
@@ -302,8 +326,11 @@ export function connectorSuite(engine: ConnectorEngine): void {
         [{ pageSize: -5 }, 'Invalid pageSize: -5'],
         [{ pageSize: 'all' }, 'Invalid pageSize: "all"'],
       ])('refuses paging %o as InvalidRequest before reading the history', async (paging, message) => {
-        const history = vi.fn().mockResolvedValue(HISTORY);
+        const history = historyAfterServing(HISTORY);
         connector = createConnector({ bundleOverrides: { getAllFromTxHistory: history } });
+        // The connector's own read when it was made: what it saw before serving.
+        await vi.waitFor(() => expect(history).toHaveBeenCalledTimes(1));
+        history.mockClear();
 
         const err: any = await connector.handlers.getTxHistory(paging, ctx()).catch((e: any) => e);
 
@@ -329,7 +356,7 @@ export function connectorSuite(engine: ConnectorEngine): void {
         function connectorWith(history: unknown[], indexerUrl = TEST_NETWORK_CONFIG.indexer): StubConnector {
           return engine.createDAppConnector({
             notice: NO_TERMINAL.notice,
-            bundle: createBundleStub({ getAllFromTxHistory: () => Promise.resolve(history as any[]) }),
+            bundle: createBundleStub({ getAllFromTxHistory: historyAfterServing(history) }),
             networkConfig: { ...TEST_NETWORK_CONFIG, indexer: indexerUrl },
             approvalOptions: { ...NO_TERMINAL, approveAll: true },
           });
@@ -342,10 +369,10 @@ export function connectorSuite(engine: ConnectorEngine): void {
           const result = await connector.handlers.getTxHistory({}, ctx());
 
           expect(result).toEqual([
-            { txHash: 'ok', txStatus: { status: 'finalized', executionStatus: { 0: 'Success' } } },
-            { txHash: 'bad', txStatus: { status: 'finalized', executionStatus: { 0: 'Failure' } } },
             // No recorded outcome: none is claimed.
             { txHash: 'unknown', txStatus: { status: 'finalized', executionStatus: {} } },
+            { txHash: 'bad', txStatus: { status: 'finalized', executionStatus: { 0: 'Failure' } } },
+            { txHash: 'ok', txStatus: { status: 'finalized', executionStatus: { 0: 'Success' } } },
           ]);
           expect(indexer.requests).toEqual([]);
         });
@@ -360,8 +387,8 @@ export function connectorSuite(engine: ConnectorEngine): void {
           const result = await connector.handlers.getTxHistory({}, ctx());
 
           expect(result).toEqual([
-            { txHash: 'ok', txStatus: { status: 'finalized', executionStatus: { 0: 'Success' } } },
             { txHash: 'partly', txStatus: { status: 'finalized', executionStatus: { 0: 'Success', 1: 'Success', 2: 'Failure' } } },
+            { txHash: 'ok', txStatus: { status: 'finalized', executionStatus: { 0: 'Success' } } },
           ]);
           expect(indexer.requests.map((r) => r.variables)).toEqual([{ hash: 'partly' }]);
         });
@@ -383,14 +410,14 @@ export function connectorSuite(engine: ConnectorEngine): void {
 
       it('defaults to pageNumber 0 and pageSize 20', async () => {
         const many = Array.from({ length: 25 }, (_, i) => ({ ...HISTORY[2], hash: `h${i}` }));
-        connector = createConnector({ bundleOverrides: { getAllFromTxHistory: () => Promise.resolve(many) } });
+        connector = createConnector({ bundleOverrides: { getAllFromTxHistory: historyAfterServing(many) } });
         const result = await connector.handlers.getTxHistory({}, ctx()) as any[];
-        expect(result.map((e) => e.txHash)).toEqual(many.slice(0, 20).map((e) => e.hash));
+        expect(result.map((e) => e.txHash)).toEqual([...many].reverse().slice(0, 20).map((e) => e.hash));
       });
     });
 
     describe('getConfiguration', () => {
-      it('maps NetworkConfig fields to Configuration shape', async () => {
+      it('maps NetworkConfig fields to Configuration shape, with the SDK\'s lowercase networkId', async () => {
         connector = createConnector();
         const result = await connector.handlers.getConfiguration({}, ctx()) as any;
         expect(result).toEqual({
@@ -398,7 +425,68 @@ export function connectorSuite(engine: ConnectorEngine): void {
           indexerWsUri: 'ws://localhost:8088/api/v4/graphql/ws',
           proverServerUri: 'http://localhost:6300',
           substrateNodeUri: 'ws://localhost:9944',
-          networkId: 'Undeployed',
+          networkId: 'undeployed',
+        });
+      });
+
+      // Regression: every client got the URLs with the user's Blockfrost
+      // project id in them, with nobody asked, --approve-fees included.
+      describe('when the endpoints carry a Blockfrost project id', () => {
+        // A made-up preprod id: the shape mn checks, no real project's.
+        const FAKE_ID = 'nightpreprodFAKE0000000000000000';
+        const PREPROD: typeof TEST_NETWORK_CONFIG = {
+          indexer: `https://midnight-preprod.blockfrost.io/api/v0?project_id=${FAKE_ID}`,
+          indexerWS: `wss://midnight-preprod.blockfrost.io/api/v0/ws?project_id=${FAKE_ID}`,
+          node: `wss://rpc.midnight-preprod.blockfrost.io?project_id=${FAKE_ID}`,
+          proofServer: 'http://localhost:6300',
+          networkId: 'PreProd',
+        };
+        const answering = (answer: string) => {
+          const questions: string[] = [];
+          return { questions, prompter: { isInteractive: () => true, ask: async (q: string) => { questions.push(q); return answer; }, askSecret: async () => answer } };
+        };
+
+        it('asks the operator once per connection, never showing the id, and gives the URLs once approved', async () => {
+          const { questions, prompter } = answering('a');
+          connector = createConnector({ networkConfig: PREPROD, approvalOptions: { ...NO_TERMINAL, prompter, autoApproveReads: true } });
+
+          const result = await connector.handlers.getConfiguration({}, ctx('conn_a')) as any;
+          await connector.handlers.getConfiguration({}, ctx('conn_a'));
+
+          expect(result.indexerUri).toBe(PREPROD.indexer);
+          expect(result.substrateNodeUri).toBe(PREPROD.node);
+          expect(result.networkId).toBe('preprod');
+          expect(questions).toHaveLength(1);
+          expect(questions[0]).toContain('getConfiguration');
+          expect(questions[0]).toContain('endpoints with your Blockfrost project id');
+          expect(questions[0]).not.toContain(FAKE_ID);
+
+          // Another connection is asked again.
+          await connector.handlers.getConfiguration({}, ctx('conn_b'));
+          expect(questions).toHaveLength(2);
+        });
+
+        it('gives nothing when the operator rejects', async () => {
+          const { prompter } = answering('r');
+          connector = createConnector({ networkConfig: PREPROD, approvalOptions: { ...NO_TERMINAL, prompter, autoApproveReads: true } });
+          const err: any = await connector.handlers.getConfiguration({}, ctx()).catch((e: any) => e);
+          expect(err.code).toBe('Rejected');
+          expect(JSON.stringify(err)).not.toContain(FAKE_ID);
+        });
+
+        it('is refused as APPROVAL_UNAVAILABLE under --approve-fees with nobody to ask, saying how the dApp gets endpoints', async () => {
+          connector = createConnector({ networkConfig: PREPROD, approvalOptions: { ...NO_TERMINAL, approveFees: true, autoApproveReads: true } });
+          const err: any = await connector.handlers.getConfiguration({}, ctx()).catch((e: any) => e);
+          expect(err.code).toBe('PermissionRejected');
+          expect(err.mnCode).toBe('APPROVAL_UNAVAILABLE');
+          expect(err.message).toContain('Give the dApp its own endpoints');
+          expect(err.message).not.toContain(FAKE_ID);
+        });
+
+        it('is given without asking under --approve-all', async () => {
+          connector = createConnector({ networkConfig: PREPROD });
+          const result = await connector.handlers.getConfiguration({}, ctx()) as any;
+          expect(result.indexerWsUri).toBe(PREPROD.indexerWS);
         });
       });
     });
@@ -919,12 +1007,40 @@ export function connectorSuite(engine: ConnectorEngine): void {
         (bundle.facade as any).adoptTransaction = () => { throw new Error('unknown tag midnight:transaction[v99]'); };
         connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
 
-        const err: any = await connector.handlers.balanceUnsealedTransaction({ tx: 'aabb' }, ctx()).catch((e: any) => e);
+        // An unsealed transaction's tag, from a ledger version this wallet doesn't read.
+        const otherVersion = Buffer.from('midnight:transaction[v99](signature[v2],proof,embedded-fr[v1]):0000').toString('hex');
+        const err: any = await connector.handlers.balanceUnsealedTransaction({ tx: otherVersion }, ctx()).catch((e: any) => e);
 
         expect(err.code).toBe('InvalidRequest');
         expect(err.message).toContain('stage Unbound');
         expect(err.message).toContain('unknown tag midnight:transaction[v99]');
         expect(balance).not.toHaveBeenCalled();
+      });
+
+      // Regression: bytes that are no transaction at all, or a transaction at
+      // another stage, were refused as if from another ledger version.
+      it('says bytes that are no transaction are none, not another ledger version', async () => {
+        const bundle = createBundleStub();
+        (bundle.facade as any).adoptTransaction = () => { throw new Error('expected header tag'); };
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        const err: any = await connector.handlers.submitTransaction({ tx: 'deadbeef' }, ctx()).catch((e: any) => e);
+
+        expect(err.code).toBe('InvalidRequest');
+        expect(err.message).toBe("These bytes are not a serialized Midnight transaction (they don't start with the ledger's transaction tag): pass a sealed transaction (proven and bound), serialized, as hex.");
+      });
+
+      it('says a transaction at another stage is at that stage, not from another ledger version', async () => {
+        const bundle = createBundleStub();
+        (bundle.facade as any).adoptTransaction = () => { throw new Error('expected header tag'); };
+        connector = engine.createDAppConnector({ bundle, networkConfig: TEST_NETWORK_CONFIG, approvalOptions: { ...NO_TERMINAL, approveAll: true }, notice: NO_TERMINAL.notice });
+
+        const priced: any = await connector.handlers[PRICE_TRANSACTION_METHOD]!({ tx: SEALED_AGENT_TX }, ctx()).catch((e: any) => e);
+        expect(priced.code).toBe('InvalidRequest');
+        expect(priced.message).toBe('This is a sealed transaction (proven and bound), and this takes an unproven transaction (not yet proven).');
+
+        const submitted: any = await connector.handlers.submitTransaction({ tx: AGENT_TX }, ctx()).catch((e: any) => e);
+        expect(submitted.message).toBe('This is an unsealed transaction (proven, not yet bound), and this takes a sealed transaction (proven and bound).');
       });
 
       it('rejects non-hex input before it reaches the SDK', async () => {

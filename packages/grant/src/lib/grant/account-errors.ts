@@ -4,12 +4,19 @@
 // server, a program classifying a failure) has them without loading the
 // account chain and the SDK set it is built on.
 
-import { UsageError } from '@kuiralabs/midnight-cli-core';
 
-/** A network mn grant doesn't run the account package on yet: its current build was tested on a local network only. */
-export class UnreachableByAccountError extends UsageError {
+/**
+ * A network mn grant doesn't run the account package on yet: its current
+ * build was tested on a local network only. The caller's to fix (INVALID_ARGS),
+ * but not a mistake in how the command was written, so it isn't shown as
+ * "Usage:". The network is named as mn names it (preprod), whatever the SDK's
+ * casing of its id (PreProd).
+ */
+export class UnreachableByAccountError extends Error {
+  readonly code = 'INVALID_ARGS';
+
   constructor(networkId: string) {
-    super(`mn grant runs on a local network (undeployed) only: the account contract's current build has been tested there and nowhere else; ${networkId} is not one.`);
+    super(`mn grant runs on a local network (undeployed) only: the account contract's current build has been tested there and nowhere else; ${networkId.toLowerCase()} is not one.`);
     this.name = 'UnreachableByAccountError';
     Object.setPrototypeOf(this, UnreachableByAccountError.prototype);
   }

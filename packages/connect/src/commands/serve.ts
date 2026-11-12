@@ -6,7 +6,7 @@ import { type ParsedArgs, getFlag, getFlagValues, hasFlag, rejectNoCacheForWrite
 import { header, divider, formatAddress, bold, dim, teal, green, red, yellow, type Spinner } from '@kuiralabs/midnight-cli-core/ui';
 import { resolveWalletPath, unlockWallet } from '@kuiralabs/midnight-wallet';
 import { assertEndpointsReachable, endpointsOf } from '@kuiralabs/midnight-chain';
-import { createRpcServer, type RpcServer } from '../lib/ws-rpc.ts';
+import { createRpcServer, ORIGIN_RISK, type RpcServer } from '../lib/ws-rpc.ts';
 import { approveAllBrowserWarning, serveHeaderLines } from '../lib/serve-header.ts';
 import { parseAllowedOrigins } from '../lib/allowed-origins.ts';
 
@@ -171,7 +171,7 @@ export default async function serveCommand(args: ParsedArgs, ctx: CallContext): 
       handlers: connector.handlers,
       allowedOrigins,
       onOriginRefused: (origin) => {
-        ctx.output.stderr(dim(`  [${timestamp()}] `) + red('refused') + dim(` a connection from ${origin}: not an allowed origin (start mn serve with --allow-origin ${origin} to let that page connect)`) + '\n');
+        ctx.output.stderr(dim(`  [${timestamp()}] `) + red('refused') + dim(` a connection from ${origin}: not an allowed origin. ${ORIGIN_RISK}`) + '\n');
       },
       onConnect: (conn) => {
         ctx.output.stderr(dim(`  [${timestamp()}] `) + green('connected') + dim(` ${conn.id}`) + '\n');

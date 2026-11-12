@@ -5,7 +5,7 @@
 // payer's wallet session: no server, no port. inspect and list open no wallet.
 
 import { existsSync, writeFileSync } from 'node:fs';
-import { type ParsedArgs, hasFlag, getFlag, UsageError, networkChoiceFromArgs, payerFor, type CallContext, type SwapLeg, type SwapTerms } from '@kuiralabs/midnight-cli-core';
+import { type ParsedArgs, hasFlag, getFlag, UsageError, FILE_MODE, networkChoiceFromArgs, payerFor, type CallContext, type SwapLeg, type SwapTerms } from '@kuiralabs/midnight-cli-core';
 import { header, keyValue, dim, spinnerReporter } from '@kuiralabs/midnight-cli-core/ui';
 import { showPaidStep } from '../lib/wallet/paid-call.ts';
 import { makeSwapOffer } from '../lib/swap/make.ts';
@@ -50,7 +50,8 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
         },
       });
       const file = out ?? `offer-${made.id.slice(0, 16)}.json`;
-      writeFileSync(file, made.file, { flag: 'wx' });
+      // 0600, as everything mn writes: the file is a signed, spendable half of a trade, for the taker it is handed to.
+      writeFileSync(file, made.file, { flag: 'wx', mode: FILE_MODE });
       if (jsonMode) {
         const split = made.split === undefined ? {} : { split: { txHash: made.split.txHash, ...(made.split.receipt === undefined ? {} : receiptJson(made.split.receipt)) } };
         ctx.output.result({ subcommand: 'make', network: made.network, id: made.id, file, terms: termsJson(made.terms), expiresAt: made.expiresAt.toISOString(), ...split });
@@ -69,12 +70,15 @@ export default async function swapCommand(args: ParsedArgs, ctx: CallContext): P
     }
 
     case 'inspect': {
-      const standing = await inspectSwapOffer(ctx.host, { ...call, offer: readOfferText(args), now, onProgress: (event) => progress.report(event) });
+      const offer = readOfferText(args);
+      // The heading first, as the other commands give it: the indexer's step shows under it.
+      if (!jsonMode) ctx.output.stderr('\n' + header('Swap offer') + '\n\n');
+      const standing = await inspectSwapOffer(ctx.host, { ...call, offer, now, onProgress: (event) => progress.report(event) });
       if (jsonMode) {
         ctx.output.result({ subcommand: 'inspect', network: standing.network, id: standing.id, terms: termsJson(standing.terms), expiresAt: standing.expiresAt.toISOString(), live: standing.live, expired: standing.expired });
         return;
       }
-      ctx.output.stderr('\n' + header('Swap offer') + '\n\n');
+      ctx.output.stderr('\n');
       ctx.output.stderr(keyValue('Offer', standing.id) + '\n');
       ctx.output.stderr(keyValue('Network', standing.network) + '\n');
       ctx.output.stderr(keyValue('Maker gives', legText(standing.terms.give)) + '\n');

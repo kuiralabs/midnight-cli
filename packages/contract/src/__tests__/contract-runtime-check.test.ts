@@ -45,7 +45,7 @@ describe('a contract for another compact runtime', () => {
     const refused = await assertContractRunsOn(contract('0.16.0'), 'undeployed', ROOT, engines).then(() => undefined, (err: unknown) => err);
     expect(refused).toBeInstanceOf(UsageError);
     expect((refused as Error).message).toBe(
-      'counter was compiled by compactc 0.30.0 for compact-runtime 0.16.0, but undeployed runs contracts on compact-runtime 0.21.0.\nRecompile it with compactc 0.36.',
+      'counter was compiled by compactc 0.30.0 for compact-runtime 0.16.0, but mn runs undeployed\'s contracts on compact-runtime 0.21.0.\nRecompile it with compactc 0.36.',
     );
     expect(classifyError(refused as Error, CONTRACT_CODES).errorCode).toBe('INVALID_ARGS');
   });

@@ -4,7 +4,7 @@
 // yet starts from a copy of it.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { callStateDir, clearNetworkContractState, contractStateDir, deployStateDir, dropEmptyDeployState, keepDeployState, moveDappStore, movedDappStoreDir } from '../lib/contract/private-state.ts';
@@ -83,6 +83,28 @@ describe('a store an earlier mn kept in the dApp', () => {
     expect(readFileSync(join(moved!.to, '000003.log'), 'utf8')).toBe('state');
     expect(mode(moved!.to)).toBe(0o700);
     expect(moveDappStore(root, dapp)).toBeUndefined();
+  });
+
+  // Its files kept the dApp's 0644: a moved store is never opened again, so nothing narrowed them.
+  it('has its files and folders narrowed to 0600/0700 when moved, and when a call copies it', () => {
+    store(join(dapp, 'midnight-level-db'));
+    mkdirSync(join(dapp, 'midnight-level-db', 'sub'), { mode: 0o755 });
+    writeFileSync(join(dapp, 'midnight-level-db', 'sub', 'LOG'), 'x', { mode: 0o644 });
+    const moved = moveDappStore(root, dapp)!;
+    for (const file of ['CURRENT', '000003.log', join('sub', 'LOG')]) expect(mode(join(moved.to, file))).toBe(0o600);
+    expect(mode(join(moved.to, 'sub'))).toBe(0o700);
+    const called = callStateDir(root, 'undeployed', ADDRESS, dapp);
+    expect(mode(join(called.dir, '000003.log'))).toBe(0o600);
+  });
+
+  // A store an mn 0.6.0 release candidate moved kept 0644 files.
+  it('moved earlier with wider modes, is narrowed when a call from its dApp next runs', () => {
+    const moved = movedDappStoreDir(root, dapp);
+    store(moved);
+    chmodSync(join(moved, 'CURRENT'), 0o644);
+    store(contractStateDir(root, 'undeployed', ADDRESS), 'deployed');
+    callStateDir(root, 'undeployed', ADDRESS, dapp);
+    expect(mode(join(moved, 'CURRENT'))).toBe(0o600);
   });
 
   it('found again after one was moved, goes beside it', () => {

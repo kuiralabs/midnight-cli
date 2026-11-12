@@ -10,7 +10,8 @@ import { findContractInfo, type ContractInfo } from './inspect.ts';
 import { findWitnessFile, buildMissingWitnessError } from './witness-discovery.ts';
 import { validateCallRequest, validateContractAddress } from './validate.ts';
 import { LEGACY_SECRET_KEY } from './private-state-secret.ts';
-import { type ArgsSource, readGivenArgs, type StdinReader } from './args-input.ts';
+import { ARGS_FROM_STDIN, type ArgsSource, readGivenArgs, type StdinReader } from './args-input.ts';
+import { type GivenSecretKey, readGivenSecretKey, SECRET_KEY_FROM_STDIN, type SecretKeySource } from './secret-key-input.ts';
 import { expandCoinShorthands, type FreshCoin } from './coin-shorthand.ts';
 import { privateArgumentsOf } from './private-arguments.ts';
 
@@ -23,6 +24,8 @@ export interface ContractDeployRequest {
   argsSource?: ArgsSource;
   /** --secret-key: seeds the contract's initial private state (32-byte hex) instead of the wallet's own secret. The script gets it through its environment. */
   privateStateSecretKey?: string;
+  /** Where the secret was given (--secret-key, --secret-key-file, --secret-key -); absent from a request built from values. */
+  secretKeySource?: SecretKeySource;
 }
 
 export interface ContractCallRequest {
@@ -40,6 +43,8 @@ export interface ContractCallRequest {
   privateArguments?: string[];
   /** --secret-key: the private-state secret the contract was deployed with, when not the wallet's own: 32-byte hex, or `legacy` (the default of an mn before 0.6.0). */
   privateStateSecretKey?: string;
+  /** Where the secret was given (--secret-key, --secret-key-file, --secret-key -); absent from a request built from values. */
+  secretKeySource?: SecretKeySource;
 }
 
 /** Where a contract is: its dApp, and the compiled contract in it. */
@@ -109,8 +114,8 @@ export function contractCallRequest(location: ContractLocation & { address: stri
 function assertSecretKey(secretKey: string | undefined, legacyAllowed: boolean): void {
   if (secretKey === undefined || /^[0-9a-fA-F]{64}$/.test(secretKey) || (legacyAllowed && secretKey === LEGACY_SECRET_KEY)) return;
   throw new UsageError(legacyAllowed
-    ? `--secret-key must be 32 bytes of hex (64 chars), or "${LEGACY_SECRET_KEY}" for a contract deployed by an mn before 0.6.0 without one`
-    : '--secret-key must be 32 bytes of hex (64 chars)');
+    ? `The private-state secret (--secret-key, --secret-key-file) must be 32 bytes of hex (64 chars), or "${LEGACY_SECRET_KEY}" for a contract deployed by an mn before 0.6.0 without one`
+    : 'The private-state secret (--secret-key, --secret-key-file) must be 32 bytes of hex (64 chars)');
 }
 
 /**
@@ -133,18 +138,29 @@ function managedDirOf(args: ParsedArgs, cwd: string): string | undefined {
   return managed === undefined ? undefined : resolve(cwd, managed);
 }
 
-/** The arguments a command's --args or --args-file give (args-input.ts), `--args -` read with `readStdin`. */
-function givenArgsOf(args: ParsedArgs, cwd: string, readStdin: StdinReader | undefined) {
-  return readGivenArgs({ args: getFlag(args, 'args'), argsFile: getFlag(args, 'args-file') }, cwd, readStdin);
+/**
+ * The arguments a command's --args or --args-file give (args-input.ts) and
+ * the secret its --secret-key or --secret-key-file give (secret-key-input.ts),
+ * `-` read with `readStdin`: the standard input is read once, so only one of
+ * them can take it.
+ */
+function givenInputsOf(args: ParsedArgs, cwd: string, readStdin: StdinReader | undefined): { given: ReturnType<typeof readGivenArgs>; secret: GivenSecretKey } {
+  if (getFlag(args, 'args') === ARGS_FROM_STDIN && getFlag(args, 'secret-key') === SECRET_KEY_FROM_STDIN) {
+    throw new UsageError('--args - and --secret-key - both read the standard input, which has one: give one of them from a file (--args-file or --secret-key-file).');
+  }
+  return {
+    given: readGivenArgs({ args: getFlag(args, 'args'), argsFile: getFlag(args, 'args-file') }, cwd, readStdin),
+    secret: readGivenSecretKey({ secretKey: getFlag(args, 'secret-key'), secretKeyFile: getFlag(args, 'secret-key-file') }, cwd, readStdin),
+  };
 }
 
 /**
- * `deploy [--args <json>|-] [--args-file <path>] [--secret-key <hex>]` for the
+ * `deploy [--args <json>|-] [--args-file <path>] [--secret-key <hex>|-] [--secret-key-file <path>]` for the
  * contract found from --managed/--path, else `cwd`; `--args -` reads the
  * standard input with `readStdin`, and is refused without one.
  */
 export function resolveContractDeployRequest(args: ParsedArgs, cwd: string, readStdin?: StdinReader): ContractDeployRequest {
-  const given = givenArgsOf(args, cwd, readStdin);
+  const { given, secret } = givenInputsOf(args, cwd, readStdin);
   // --managed only says where contract-info.json lives; the runner still
   // needs the project root (--path or cwd) for witnesses.js.
   return {
@@ -153,22 +169,23 @@ export function resolveContractDeployRequest(args: ParsedArgs, cwd: string, read
       managedDir: managedDirOf(args, cwd),
       name: getFlag(args, 'name'),
       args: given.args,
-      secretKey: getFlag(args, 'secret-key'),
+      secretKey: secret.secretKey,
     }),
     argsSource: given.source,
+    secretKeySource: secret.source,
   };
 }
 
 /**
  * `call --address <hex> --circuit <name> [--args <json>|-] [--args-file <path>]
- * [--secret-key <hex|legacy>]` for the contract found from --managed/--path,
+ * [--secret-key <hex|legacy|->] [--secret-key-file <path>]` for the contract found from --managed/--path,
  * else `cwd`; `--args -` reads the standard input with `readStdin`, and is
  * refused without one.
  */
 export function resolveContractCallRequest(args: ParsedArgs, cwd: string, readStdin?: StdinReader): ContractCallRequest {
   const address = requireFlag(args, 'address', 'contract address');
   const circuit = requireFlag(args, 'circuit', 'circuit name');
-  const given = givenArgsOf(args, cwd, readStdin);
+  const { given, secret } = givenInputsOf(args, cwd, readStdin);
   return {
     ...contractCallRequest({
       dappDir: resolveDappDir(args, cwd),
@@ -177,8 +194,9 @@ export function resolveContractCallRequest(args: ParsedArgs, cwd: string, readSt
       address,
       circuit,
       args: given.args,
-      secretKey: getFlag(args, 'secret-key'),
+      secretKey: secret.secretKey,
     }),
     argsSource: given.source,
+    secretKeySource: secret.source,
   };
 }

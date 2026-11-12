@@ -21,7 +21,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
-import type { NetworkName } from '@kuiralabs/midnight-cli-core';
+import { type NetworkName, narrowTreeToOwnerOnly } from '@kuiralabs/midnight-cli-core';
 
 /** The name of the store's folder in a dApp, where an mn before this one kept it. */
 export const PRIVATE_STATE_DATABASE = 'midnight-level-db';
@@ -72,7 +72,7 @@ function filesOf(dir: string): Map<string, number> {
 /** Copies the store at `from` to `to`, and checks every file arrived whole; throws, leaving `from` as it was, when one didn't. */
 function copyStore(from: string, to: string): void {
   cpSync(from, to, { recursive: true, errorOnExist: true, force: false });
-  chmodSync(to, 0o700);
+  narrowTreeToOwnerOnly(to);
   const sent = filesOf(from);
   const arrived = filesOf(to);
   const missing = [...sent].filter(([file, size]) => arrived.get(file) !== size).map(([file]) => file);
@@ -102,7 +102,9 @@ export function moveDappStore(root: string, dappDir: string): { from: string; to
     copyStore(from, to);
     rmSync(from, { recursive: true, force: true });
   }
-  chmodSync(to, 0o700);
+  // A moved store is never opened again (a call starts from a copy of it), so
+  // the 0644 files an earlier mn left in the dApp are tightened here, once.
+  narrowTreeToOwnerOnly(to);
   return { from, to };
 }
 
@@ -113,8 +115,10 @@ export function moveDappStore(root: string, dappDir: string): { from: string; to
  */
 export function callStateDir(root: string, network: NetworkName, address: string, dappDir: string): { dir: string; copiedFrom?: string } {
   const dir = contractStateDir(root, network, address);
-  if (existsSync(dir)) return { dir };
   const moved = movedDappStoreDir(root, dappDir);
+  // A store an mn 0.6.0 release candidate moved here kept the dApp's 0644 files.
+  if (existsSync(moved)) narrowTreeToOwnerOnly(moved);
+  if (existsSync(dir)) return { dir };
   ownerOnlyDir(join(dir, '..'));
   if (!existsSync(moved)) return { dir };
   copyStore(moved, dir);

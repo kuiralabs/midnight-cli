@@ -31,8 +31,8 @@ function ask(question: string, defaultValue?: string): Promise<string> {
 }
 
 /**
- * Ask the user to pick a strategy. Accepts the canonical names ('cli',
- * 'browser') plus the friendlier 'ui' alias. Empty input → 'cli' default.
+ * Ask the user to pick a strategy: 'cli' or 'ui' (kept as 'browser' in the
+ * suite's files). Empty input → 'cli' default.
  * Re-prompts on invalid input rather than silently defaulting, so the user
  * notices the typo.
  */
@@ -41,7 +41,7 @@ export async function promptStrategy(): Promise<CreateStrategy> {
   for (;;) {
     const raw = (await ask('Strategy? cli or ui', 'cli')).toLowerCase();
     if (raw === 'cli') return 'cli';
-    if (raw === 'ui' || raw === 'browser') return 'browser';
+    if (raw === 'ui') return 'browser';
     process.stderr.write(dim(`  Unknown strategy "${raw}". Pick "cli" or "ui".\n`));
   }
 }

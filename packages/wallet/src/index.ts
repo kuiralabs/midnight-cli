@@ -50,7 +50,7 @@ export {
   assertWalletFileExists, assertWalletRemovable, getActiveWalletName, listWallets, loadWalletConfig,
   type ProtectedWallet, protectAllWallets, resolveWalletPath, setActiveWallet, type UnlockedWallet,
   type UnlockHost, type UnlockOptions, unlockWallet, walletAddress, type WalletConfig, type WalletInfo,
-  WalletNotFoundError, type WalletSecrets
+  WalletNotFoundError, WalletAddressMismatchError, type WalletSecrets
 } from './lib/wallet-config.ts';
 export { createWallet, type CreatedWallet, walletFilePath, type WalletSecret, walletSecretFrom } from './lib/wallet-create.ts';
 export { migrateOldWallet } from './lib/wallet-paths.ts';

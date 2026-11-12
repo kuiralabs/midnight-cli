@@ -122,6 +122,11 @@ export const serveDefinition: CommandDefinition = {
       { flag: 'force-shielded' },
       { flag: 'no-auto-approve-reads' },
       { flag: 'verbose' },
+      '',
+      'Reads never prompt, except getConfiguration on preprod and mainnet: its',
+      'endpoint URLs carry your Blockfrost project id, which a dApp needs to',
+      'reach them, so serve asks once per connection before it gives them',
+      '(--approve-all gives them without asking).',
     ],
     examples: [
       'midnight serve',

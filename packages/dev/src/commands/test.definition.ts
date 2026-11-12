@@ -117,7 +117,7 @@ export const testDefinition: CommandDefinition = {
       help: [
         '--strategy cli|ui             Scaffold strategy (create — interactive prompt if omitted)',
       ],
-      agent: { type: 'string', enum: ['cli', 'browser'], description: 'cli (default): drive contracts via actions.json. browser: drive a real UI via Claude + Chrome via prompt.md.' },
+      agent: { type: 'string', enum: ['cli', 'ui'], description: 'cli (default): drive contracts via actions.json. ui: drive a real UI via Claude + Chrome via prompt.md.' },
     },
     {
       name: 'suite',

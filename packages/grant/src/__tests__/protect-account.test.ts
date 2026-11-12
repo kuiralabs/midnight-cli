@@ -15,7 +15,7 @@ import { PRIVATE_STATE_ID } from '@kuiralabs/midnight-account-chain/contract';
 import { establishPassphrase } from '@kuiralabs/midnight-wallet';
 import { getNetworkConfig, createHost, PASSPHRASE_ENV } from '@kuiralabs/midnight-cli-core';
 import { LEGACY_STORE_PASSWORD, openGrantAccount, privateStateLocationOf } from '../lib/grant/account.ts';
-import { AccountMigrationInterruptedError, protectAccount } from '../lib/grant/protect-account.ts';
+import { AccountMigrationInterruptedError, protectAccount, protectAllAccounts } from '../lib/grant/protect-account.ts';
 import { isSealedAccount } from '../lib/grant/sealed-account.ts';
 import { stateRootIn } from '../../../../test-support/state-root-in.ts';
 import { loadInstalledEngine } from '../../../../test-support/test-host.ts';
@@ -118,5 +118,24 @@ describe('protecting an account an earlier mn made in plain text', () => {
     await protectAccount(dir, 'undeployed', PASSPHRASE, COIN_KEY, host.engines);
     expect(plainTextLeft()).toEqual([]);
     expect(fs.readdirSync(dir).some((f) => f.startsWith('owner.unlanded-1790000000000') && f.endsWith('.sealed.json'))).toBe(true);
+  });
+});
+
+// scripts/code-reach.mjs leaves the protector's codes out of wallet's
+// (CATCHING_PROVISIONS): that holds only while every account's failure is
+// caught here and reported, never thrown.
+describe('protecting every account', () => {
+  it('reports an account that fails, with a coded error, as one of its items, and goes on', async () => {
+    for (const wallet of ['alice', 'bob']) {
+      const dir = path.join(stateRootIn(home), 'accounts', 'undeployed', wallet);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify({ ...RECORD, deviceArm: 'k1', deviceSk: DEVICE_SECRET }));
+    }
+    const coded = Object.assign(new Error('the contract state could not be read'), { code: 'CONTRACT_STATE_UNREADABLE' });
+    const report = await protectAllAccounts(stateRootIn(home), PASSPHRASE, async () => { throw coded; }, host.engines);
+    expect(report).toEqual([
+      { network: 'undeployed', wallet: 'alice', error: 'the contract state could not be read' },
+      { network: 'undeployed', wallet: 'bob', error: 'the contract state could not be read' },
+    ]);
   });
 });

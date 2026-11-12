@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 
 import { discoverDappConfig, discoverTestSuites, loadAssertions, loadActions, loadPrompt } from '../lib/test/discovery.ts';
-import { createPrepContext, type TestRunResult, type PrepStepResult } from '../lib/test/types.ts';
+import { createPrepContext, type TestRunResult, type PrepStepResult, type TestStrategy } from '../lib/test/types.ts';
 import { runPrepSteps } from '../lib/test/prep-runner.ts';
 import { runBrowserTest, resolveBrowserMode } from '../lib/test/browser-test.ts';
 import { runAssertions, type AssertionContext } from '../lib/test/assertions.ts';
@@ -57,13 +57,18 @@ import type { CreateStrategy, BrowserOptions } from '../lib/test/create.ts';
 
 type NetworkOpt = NetworkName;
 
-/** Allow either canonical strategy names or the friendlier "ui" alias. */
+/** The strategy as --strategy names it: cli or ui (a suite file's "browser"). */
 function parseStrategyFlag(flag: string | undefined): CreateStrategy | undefined {
   const normalized = (flag ?? '').toLowerCase();
   if (normalized === '') return undefined;
-  if (normalized === 'cli' || normalized === 'browser') return normalized;
+  if (normalized === 'cli') return 'cli';
   if (normalized === 'ui') return 'browser';
   throw new UsageError(`Unknown strategy "${flag}". Use "cli" or "ui".`);
+}
+
+/** A suite's strategy as mn names it to the user: "ui" for the "browser" a suite file keeps. */
+function strategyName(strategy: TestStrategy): string {
+  return strategy === 'browser' ? 'ui' : strategy;
 }
 
 /** A test run deploys throwaway contracts and funds test wallets: refused on mainnet, for `create` and `run` alike. */
@@ -197,7 +202,7 @@ async function handleCreate(args: ParsedArgs, jsonMode: boolean, ctx: CallContex
       subcommand: 'create',
       contractName: info.name,
       suiteName: scaffold.suiteName,
-      strategy,
+      strategy: strategyName(strategy),
       aiAssisted: aiOptIn && scaffold.suiteName !== `cli-default` && scaffold.suiteName !== `ui-default`,
       written: result.written,
       excludedCircuits: scaffold.excludedCircuits,
@@ -439,7 +444,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
     if (config.port) ctx.output.stderr(keyValue('Port', String(config.port)) + '\n');
     if (selectedSuite) {
       ctx.output.stderr(keyValue('Suite', selectedSuite.suite.name) + '\n');
-      ctx.output.stderr(keyValue('Strategy', selectedSuite.suite.strategy) + '\n');
+      ctx.output.stderr(keyValue('Strategy', strategyName(selectedSuite.suite.strategy)) + '\n');
       if (selectedSuite.suite.strategy === 'browser') {
         const mode = resolveBrowserMode(selectedSuite.suite);
         ctx.output.stderr(keyValue('Browser Mode', mode) + '\n');
@@ -684,7 +689,7 @@ async function handleRun(args: ParsedArgs, jsonMode: boolean, ctx: CallContext):
       timestamp,
       duration,
       network: config.network ?? 'undeployed',
-      strategy: selectedSuite?.suite.strategy ?? 'none',
+      strategy: selectedSuite === undefined ? 'none' : strategyName(selectedSuite.suite.strategy),
       model: selectedSuite?.suite.model,
       status: overall,
       prep: prepResults,
@@ -730,7 +735,7 @@ function handleList(jsonMode: boolean, ctx: CallContext): void {
       suites: suites.map(s => ({
         name: s.suite.name,
         description: s.suite.description,
-        strategy: s.suite.strategy,
+        strategy: strategyName(s.suite.strategy),
         timeout: s.suite.timeout,
       })),
     });
@@ -746,7 +751,7 @@ function handleList(jsonMode: boolean, ctx: CallContext): void {
     for (const { suite } of suites) {
       ctx.output.stderr(`  ${bold(teal(suite.name))}\n`);
       ctx.output.stderr(`  ${dim(suite.description)}\n`);
-      ctx.output.stderr(dim(`  strategy: ${suite.strategy}`) + (suite.timeout ? dim(`, timeout: ${suite.timeout}s`) : '') + '\n\n');
+      ctx.output.stderr(dim(`  strategy: ${strategyName(suite.strategy)}`) + (suite.timeout ? dim(`, timeout: ${suite.timeout}s`) : '') + '\n\n');
     }
   }
 

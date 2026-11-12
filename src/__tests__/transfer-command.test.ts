@@ -227,10 +227,11 @@ describe('transfer command — several recipients', () => {
     const short = (address: string) => address.slice(0, 10) + '…' + address.slice(-8);
     const lines = said.split('\n');
     const listed = lines.filter((line) => line.startsWith('    ') && !line.includes('Warning'));
+    // The amounts line up on the decimal point (they ran on from each address before).
     expect(listed).toEqual([
-      `    ${short(other)}  10 NIGHT`,
-      `    ${short(addresses.undeployed)}  2.5 NIGHT`,
-      `    ${short(other)}  0.000001 NIGHT`,
+      `    ${short(other)}  10        NIGHT`,
+      `    ${short(addresses.undeployed)}   2.5      NIGHT`,
+      `    ${short(other)}   0.000001 NIGHT`,
     ]);
     expect(said).toContain('      Warning: recipient 2 is this wallet itself: its NIGHT stays in it.');
     expect(said.match(/Warning/g)).toHaveLength(1);

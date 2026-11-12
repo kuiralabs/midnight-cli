@@ -3,7 +3,7 @@
 // becomes a file name under the wallets folder, so anything else is refused
 // before a file is touched or a passphrase asked for.
 
-import { isValidWalletName, MAX_WALLET_NAME_LENGTH } from './constants.ts';
+import { isValidWalletName, MAX_WALLET_NAME_LENGTH, WALLET_NAME_RULE } from './constants.ts';
 import { UsageError } from './errors.ts';
 
 /** A wallet name mn won't use: what is wrong with it, and what a name may be. */
@@ -13,7 +13,7 @@ export class InvalidWalletNameError extends UsageError {
     const length = [...name].length;
     const why = length > MAX_WALLET_NAME_LENGTH
       ? `Wallet name is ${length} characters; at most ${MAX_WALLET_NAME_LENGTH}.`
-      : `Invalid wallet name: "${name}"\nWallet name must be a simple name (no path separators, .json suffix, or special characters).`;
+      : `Invalid wallet name: "${name}"\n${WALLET_NAME_RULE}`;
     super((where === undefined ? why : `${where}: ${why}`) + (fix === undefined ? '' : `\n${fix}`));
     this.name = 'InvalidWalletNameError';
     Object.setPrototypeOf(this, InvalidWalletNameError.prototype);

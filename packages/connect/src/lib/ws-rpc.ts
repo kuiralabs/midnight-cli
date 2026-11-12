@@ -216,6 +216,14 @@ function parseRequest(data: string): JsonRpcRequest {
 
 // ── Create server ──
 
+/**
+ * What allowing a page's origin means, said wherever one is refused: a page
+ * the user merely opened must not get the wallet because a hint said so.
+ */
+export const ORIGIN_RISK = 'A web page allowed in can ask the wallet for its addresses and balances and ask it to sign and spend '
+  + '(without asking, under --approve-all). Allow only your own dApp\'s page, by restarting mn serve with --allow-origin <its origin>; '
+  + 'if you don\'t know this page, leave it refused.';
+
 // The connections a host's servers have accepted: ids are unique across its servers.
 const CONNECTIONS = defineHostSlot('ws-rpc.connections', () => ({ count: 0 }));
 
@@ -235,7 +243,7 @@ export function createRpcServer(options: RpcServerOptions): RpcServer {
       const origin = info.req.headers.origin;
       if (origin === undefined || allowedOrigins.has(origin)) { accept(true); return; }
       onOriginRefused?.(origin);
-      accept(false, 403, `Origin ${origin} is not allowed: start mn serve with --allow-origin ${origin} to let this page connect`);
+      accept(false, 403, `Origin ${origin} is not allowed to reach this wallet. ${ORIGIN_RISK}`);
     },
   });
   const ready = new Promise<void>((resolve, reject) => {
@@ -269,6 +277,10 @@ export function createRpcServer(options: RpcServerOptions): RpcServer {
     connections.set(id, connection);
     onConnect?.(connection);
 
+    // The connect being answered, if any: a request sent right after it, before
+    // its answer, waits for it rather than being refused as not connected.
+    let handshake: Promise<void> | undefined;
+
     // Guard against double-disconnect (error fires before close)
     let disconnected = false;
     const handleDisconnect = () => {
@@ -282,6 +294,7 @@ export function createRpcServer(options: RpcServerOptions): RpcServer {
       let requestId: number | string | null = null;
       let request: JsonRpcRequest | undefined;
       let context: RpcHandlerContext | undefined;
+      let endHandshake: (() => void) | undefined;
       const startTime = Date.now();
 
       try {
@@ -289,6 +302,12 @@ export function createRpcServer(options: RpcServerOptions): RpcServer {
         requestId = request.id;
         connection.requestCount++;
         onRequest?.(connection, request);
+
+        if (request.method === 'connect') {
+          handshake = new Promise<void>((resolve) => { endHandshake = resolve; });
+        } else if (!connection.authenticated && handshake !== undefined) {
+          await handshake;
+        }
 
         // The DApp connector API offers only connect before a connection is
         // made: every other method is the connected API's.
@@ -357,6 +376,9 @@ export function createRpcServer(options: RpcServerOptions): RpcServer {
           };
           onResponse?.(connection, request, durationMs, undefined, errorInfo, context?.metadata);
         }
+      } finally {
+        // Answered either way: what waited on it goes on, connected or not.
+        endHandshake?.();
       }
     });
 

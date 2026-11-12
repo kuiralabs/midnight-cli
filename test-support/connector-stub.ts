@@ -53,6 +53,15 @@ export const HISTORY = [
   { hash: 'tx-hash-003', identifiers: [], lifecycle: { status: 'pending', submittedAt: new Date(0) } },
 ];
 
+/**
+ * The wallet's history as a connector reads it: empty when the connector is
+ * made (its first read, which is what it saw before serving), `entries` at
+ * every read after.
+ */
+export function historyAfterServing(entries: readonly unknown[], before: readonly unknown[] = []) {
+  return vi.fn().mockResolvedValueOnce([...before]).mockResolvedValue([...entries]);
+}
+
 export interface BundleOverrides {
   stateFn?: () => rx.Observable<any>;
   /** How the wallet picks coins; mn's own over no open offers when not given. */
@@ -138,7 +147,8 @@ export function connectorStub(engine: StubEngine) {
         adoptTransaction: vi.fn((bytes: Uint8Array, stage: string) => ({ stage, hex: Buffer.from(bytes).toString('hex') })),
         estimateTransactionFee: overrides?.estimateTransactionFee ?? vi.fn().mockResolvedValue(1_000n),
         calculateTransactionFee: overrides?.calculateTransactionFee ?? vi.fn().mockResolvedValue(1_000n),
-        getAllFromTxHistory: overrides?.getAllFromTxHistory ?? vi.fn().mockResolvedValue(HISTORY),
+        // The wallet's history: empty when the connector is made (its first read), HISTORY after.
+        getAllFromTxHistory: overrides?.getAllFromTxHistory ?? historyAfterServing(HISTORY),
         validateTransaction: overrides?.validateTransaction ?? vi.fn().mockResolvedValue(undefined),
       },
       keystore: {

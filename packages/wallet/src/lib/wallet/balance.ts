@@ -3,7 +3,7 @@
 // NIGHT and tokens, read with its secret keys, where the network has a
 // shielded faucet (or when asked).
 
-import { type Host, type EngineKeys, addressPrefix, looksLikeShieldedAddress, throwIfCancelled, UsageError, detectNetworkFromAddress, isNamedOnlyNetwork, NetworkNotNamedError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core';
+import { type Host, type EngineKeys, addressPrefix, looksLikeShieldedAddress, looksLikeUnshieldedAddress, isValidWalletName, throwIfCancelled, UsageError, detectNetworkFromAddress, isNamedOnlyNetwork, NetworkNotNamedError, type NetworkName, networkTargetOf, progressSteps, withCallSdkWarnings, shieldedSyncEnabled } from '@kuiralabs/midnight-cli-core';
 import { assertEndpointsReachable, checkLedgerSupported, endpointsOf, fetchProtocolVersion, getChainGenesisHash } from '@kuiralabs/midnight-chain';
 import { saveShieldedAddress } from '../wallet-config.ts';
 import { seedOf, type WalletSource } from '../seed-resolver.ts';
@@ -44,15 +44,36 @@ export function addressNetwork(address: string, network?: NetworkName): NetworkN
   return network ?? inferred ?? undefined;
 }
 
-/** Refuses, as a usage mistake, anything but an unshielded address on `network`; a shielded one is told its balance needs the wallet. */
+/**
+ * The command that reads a wallet's shielded balance on `network`: the
+ * wallet's own balance, which reads it where the network's shielded sync is
+ * on, and with --force-shielded where it is off by default.
+ */
+export function walletShieldedBalanceCommand(network: NetworkName): string {
+  return `midnight balance --wallet <name> --network ${network}${shieldedSyncEnabled(network) ? '' : ' --force-shielded'}`;
+}
+
+/**
+ * Refuses, as a usage mistake, anything but an unshielded address on
+ * `network`: a shielded one is told its balance needs the wallet, and a
+ * word that isn't written as an address (a wallet's name) is told how to
+ * read a wallet's balance, without the address parser's own words.
+ */
 function assertUnshieldedAddress(keys: EngineKeys, address: string, network: NetworkName): void {
+  if (looksLikeShieldedAddress(address)) {
+    throw new UsageError(`${address} is a shielded address: its balance is private, read only with its wallet: ${walletShieldedBalanceCommand(network)}`);
+  }
+  if (!looksLikeUnshieldedAddress(address)) {
+    throw new UsageError(
+      `Invalid address: "${address}" is not an address.\n` +
+      `Give an unshielded address (${addressPrefix('unshielded', network)}...) on ${network}; for a wallet's balance: midnight balance --wallet ${isValidWalletName(address) ? address : '<name>'}`
+    );
+  }
   try {
     keys.assertAddress(address, 'unshielded', network);
   } catch (err) {
     const why = err instanceof Error ? err.message : String(err);
-    throw new UsageError(looksLikeShieldedAddress(address)
-      ? `${address} is a shielded address: its balance is private, read only with its wallet: midnight balance --wallet <name> --shielded`
-      : `Invalid address: ${why}\nExpected an unshielded address (${addressPrefix('unshielded', network)}...) on ${network}, or no address for the active wallet's balance.`);
+    throw new UsageError(`Invalid address: ${why}\nExpected an unshielded address (${addressPrefix('unshielded', network)}...) on ${network}, or no address for the active wallet's balance.`);
   }
 }
 

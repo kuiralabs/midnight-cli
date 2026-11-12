@@ -89,6 +89,59 @@ describe('ws-rpc', () => {
       expect((await answered).result).toEqual({ cap: '1', balance: '1' });
     });
 
+    // Regression: a request sent right after connect, without awaiting its
+    // answer, was refused as Disconnected while connect was still running.
+    it('answers a request sent right after connect, before its answer, once connect has answered', async () => {
+      const port = nextPort();
+      let finishConnect: () => void = () => {};
+      server = createRpcServer({ host, port, handlers: {
+        connect: () => new Promise((resolve) => { finishConnect = () => resolve({ networkId: 'undeployed' }); }),
+        getDustBalance: async () => ({ cap: 1n, balance: 1n }),
+      } });
+      const ws = await openClient(port);
+      clients.push(ws);
+      const answers: any[] = [];
+      const both = new Promise<void>((resolve) => {
+        ws.on('message', (data: Buffer) => {
+          answers.push(JSON.parse(data.toString('utf-8')));
+          if (answers.length === 2) resolve();
+        });
+      });
+
+      sendRpc(ws, 1, 'connect', { networkId: 'undeployed' });
+      sendRpc(ws, 2, 'getDustBalance');
+      // Both requests are in before connect answers.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(answers).toEqual([]);
+      finishConnect();
+      await both;
+
+      expect(answers.map((a) => a.id)).toEqual([1, 2]);
+      expect(answers[1].result).toEqual({ cap: '1', balance: '1' });
+    });
+
+    it('refuses a request sent right after a connect the wallet refuses, as Disconnected', async () => {
+      const port = nextPort();
+      server = createRpcServer({ host, port, handlers: {
+        connect: async () => { await new Promise((resolve) => setTimeout(resolve, 30)); throw createApiError('InvalidRequest', 'Network mismatch'); },
+        getDustBalance: async () => 'ok',
+      } });
+      const ws = await openClient(port);
+      clients.push(ws);
+      const answers: any[] = [];
+      const both = new Promise<void>((resolve) => {
+        ws.on('message', (data: Buffer) => {
+          answers.push(JSON.parse(data.toString('utf-8')));
+          if (answers.length === 2) resolve();
+        });
+      });
+      sendRpc(ws, 1, 'connect', { networkId: 'mainnet' });
+      sendRpc(ws, 2, 'getDustBalance');
+      await both;
+      expect(answers.find((a) => a.id === 1).error.message).toBe('Network mismatch');
+      expect(answers.find((a) => a.id === 2).error.data.code).toBe('Disconnected');
+    });
+
     it('stays unconnected after a connect the wallet refused', async () => {
       const port = nextPort();
       server = createRpcServer({ host, port, handlers: {
@@ -136,7 +189,9 @@ describe('ws-rpc', () => {
 
     // Regression: mn serve accepted a connection from any web page the user
     // opened, so under --approve-all a page could spend and sign.
-    it('refuses a connection from a browser page (an Origin) by default, saying how to allow it, and accepts mn\'s own scripts', async () => {
+    // Regression: the refusal told whoever read it to start mn serve with
+    // --allow-origin <that page>, nudging users to let an unknown page in.
+    it('refuses a connection from a browser page (an Origin) by default, saying what allowing one risks, and accepts mn\'s own scripts', async () => {
       const port = nextPort();
       const refusedOrigins: string[] = [];
       server = serve({ host, port, handlers: {}, onOriginRefused: (origin) => refusedOrigins.push(origin) });
@@ -145,7 +200,10 @@ describe('ws-rpc', () => {
       const fromPage = await openFrom(port, 'https://evil.example');
       fromPage.ws.terminate();
       expect(fromPage.outcome).toBe(403);
-      expect(fromPage.body).toContain('--allow-origin https://evil.example');
+      expect(fromPage.body).toContain('Origin https://evil.example is not allowed to reach this wallet');
+      expect(fromPage.body).toContain('can ask the wallet for its addresses and balances and ask it to sign and spend');
+      expect(fromPage.body).toContain('if you don\'t know this page, leave it refused');
+      expect(fromPage.body).not.toContain('--allow-origin https://evil.example');
       expect(refusedOrigins).toEqual(['https://evil.example']);
       expect(server.connections.size).toBe(0);
 

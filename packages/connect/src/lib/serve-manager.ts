@@ -5,7 +5,7 @@
 
 import { Socket, type AddressInfo } from 'node:net';
 import { resolveWalletPath, unlockWallet, walletAddress, type UnlockHost } from '@kuiralabs/midnight-wallet';
-import { resolveNetwork, applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName, sdkSetOf, type DAppConnectorCallbacks, type OpenedConnector, DEFAULT_SERVE_PORT, type CallSdkWarnings, shieldedSyncEnabled, CancelledError, throwIfCancelled, type ContractKeys, contractKeysFromSeed, type RpcHandler, type Host } from '@kuiralabs/midnight-cli-core';
+import { resolveNetwork, applyEndpointOverrides, endpointFlags, type EndpointOverrides, type NetworkConfig, type NetworkName, sdkSetOf, type DAppConnectorCallbacks, type OpenedConnector, DEFAULT_SERVE_PORT, type CallSdkWarnings, shieldedSyncEnabled, CancelledError, throwIfCancelled, type ContractKeys, contractKeysFromSeed, type RpcHandler, type Host, mayHoldProjectId } from '@kuiralabs/midnight-cli-core';
 import { createRpcServer, type RpcServer } from './ws-rpc.ts';
 
 /** A running mn serve, and how to stop it. */
@@ -117,9 +117,12 @@ export type ServeProbe =
 /**
  * Connects to the serve on `port` for `networkId`, as a dApp does, and asks
  * it its network, endpoints and wallet. Any answer that isn't JSON-RPC, and
- * any wait over 2 s for one, is `not-serve`.
+ * any wait over 2 s for one, is `not-serve`. With `askEndpoints` false its
+ * endpoints aren't asked for (`endpoints` is null): on a network whose
+ * endpoints carry a Blockfrost project id, the serve asks its operator before
+ * it gives them.
  */
-export async function probeServe(port: number, networkId: string): Promise<ServeProbe> {
+export async function probeServe(port: number, networkId: string, askEndpoints = true): Promise<ServeProbe> {
   const WebSocket = (await import('ws')).default;
   return new Promise<ServeProbe>((resolve) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -149,11 +152,11 @@ export async function probeServe(port: number, networkId: string): Promise<Serve
           return;
         }
         ask(2, 'getConnectionStatus');
-        ask(3, 'getConfiguration');
+        if (askEndpoints) ask(3, 'getConfiguration');
         ask(4, 'getUnshieldedAddress');
         return;
       }
-      if (![2, 3, 4].every((id) => answers.has(id))) return;
+      if (![2, ...(askEndpoints ? [3] : []), 4].every((id) => answers.has(id))) return;
       const status = answers.get(2)?.result as { networkId?: unknown } | undefined;
       if (typeof status?.networkId !== 'string') { finish({ kind: 'not-serve' }); return; }
       const configuration = answers.get(3)?.result;
@@ -209,14 +212,20 @@ export async function probeServeNetwork(port: number, networkId: string = 'undep
  */
 export async function serveReuseRefusal(port: number, options: ServeManagerOptions): Promise<string | undefined> {
   const requestedNetwork = (options.network ?? 'undeployed').toLowerCase();
-  const probe = await probeServe(port, requestedNetwork);
+  const target = resolveServeTarget(options).networkConfig;
+  // Endpoints that carry a Blockfrost project id are a hosted network's, one
+  // chain per network name: nothing to tell apart, and asking for them would
+  // prompt the serve's operator.
+  const compareEndpoints = !mayHoldProjectId(target.node) && !mayHoldProjectId(target.indexerWS);
+  const probe = await probeServe(port, requestedNetwork, compareEndpoints);
   if (probe.kind === 'not-serve') return `Port ${port} is in use by a process that does not look like mn serve.`;
   if (probe.kind === 'refused') return `The mn serve on port ${port} can't serve ${requestedNetwork}: ${probe.message}.`;
   const actualNetwork = probe.networkId.toLowerCase();
   if (actualNetwork !== requestedNetwork) {
     return `The mn serve on port ${port} is for network ${actualNetwork}, and this run needs ${requestedNetwork}.`;
   }
-  const mismatch = probe.endpoints ? serveEndpointMismatch(probe.endpoints, resolveServeTarget(options).networkConfig) : 'its endpoints could not be read';
+  const mismatch = !compareEndpoints ? undefined
+    : probe.endpoints ? serveEndpointMismatch(probe.endpoints, target) : 'its endpoints could not be read';
   if (mismatch) return `The mn serve on port ${port} is on a different ${actualNetwork} chain: ${mismatch}.`;
   const wanted = await walletAddress(resolveWalletPath(options.root, options.wallet), actualNetwork as NetworkName, options.root, options.host);
   const walletMismatch = serveWalletMismatch(probe.unshieldedAddress, { address: wanted, name: options.wallet ?? 'the active wallet' });

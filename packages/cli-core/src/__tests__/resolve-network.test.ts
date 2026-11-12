@@ -143,7 +143,7 @@ describe('resolveBlockfrostProjectId', () => {
 
   it('refuses an environment value that is no project id', () => {
     expect(() => resolveBlockfrostProjectId('preprod', TEST_DIR, settingsFromEnvironment({ MN_BLOCKFROST_PROJECT_ID: 'nighttestnetAbCdEfGhIjKl' })))
-      .toThrow('it should start with "nightpreprod" (preprod), "nightmainnet" (mainnet)');
+      .toThrow('it should start with "nightpreprod" (preprod) or "nightmainnet" (mainnet)');
   });
 
   describe('with a mainnet id', () => {

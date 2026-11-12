@@ -63,6 +63,11 @@ export const balanceDefinition: CommandDefinition = {
     usage: 'midnight balance [address] [--wallet <name|file> | --seed <hex>] [--shielded] [--force-shielded] [--network <name>] [--no-cache] [--node <url>] [--indexer-ws <url>] [--proof-server <url>] [--verbose]',
     flags: [
       '<address>           Check a specific address (unshielded only, no wallet sync)',
+      '',
+      'On stdout, one KEY=value line each: NIGHT=<NIGHT> (decimal, as --json gives it),',
+      'SHIELDED_NIGHT=<NIGHT> or SHIELDED_NIGHT=skipped where shielded was not read,',
+      'and other tokens as <raw type>=<smallest unit>. The rest goes to stderr.',
+      '',
       { flag: 'wallet' },
       { flag: 'seed' },
       { flag: 'shielded' },

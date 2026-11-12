@@ -50,8 +50,9 @@ export {
   WALLETS_DIR_NAME
 } from './lib/constants.ts';
 export { FileExistsError, readJsonIfPresent, writeJsonDurably } from './lib/durable-file.ts';
+export { readDescriptorWhole, readInputFile, readProcessStandardInput } from './lib/read-input.ts';
 export { assertValidWalletName, InvalidWalletNameError } from './lib/wallet-name.ts';
-export { ensureOwnerOnlyDir, narrowToOwnerOnly } from './lib/owner-only.ts';
+export { ensureOwnerOnlyDir, narrowToOwnerOnly, narrowTreeToOwnerOnly } from './lib/owner-only.ts';
 export { formatWait } from './lib/duration.ts';
 export { dustShortError, OWN_COMMAND_DUST_WAIT_MS } from './lib/dust-wait.ts';
 export { type TransactionPrice, type TransactionPriceWire, transactionPriceFromWire } from './lib/transaction-price.ts';

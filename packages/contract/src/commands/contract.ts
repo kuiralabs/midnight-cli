@@ -12,6 +12,7 @@ import { showPaidStep } from '@kuiralabs/midnight-wallet/commands';
 import { receiptJson } from '@kuiralabs/midnight-chain';
 import { resolveContractCallRequest, resolveContractDeployRequest, resolveDappDir, resolveScanDir, type ContractCallRequest } from '../lib/contract/request.ts';
 import { readProcessStdin, type StdinReader } from '../lib/contract/args-input.ts';
+import { inlineSecretKeyWarning } from '../lib/contract/secret-key-input.ts';
 import type { FreshCoin } from '../lib/contract/coin-shorthand.ts';
 import type { HeldCoin } from '../lib/contract/held-coins.ts';
 import {
@@ -122,13 +123,34 @@ function stdinReaderFor(args: ParsedArgs): StdinReader | undefined {
  * or an MCP tool's `args`) and its proof keeps some of them private, as its
  * ZK IR shows: there they are in `ps`, the shell's history or the agent's
  * transcript. None when mn can't tell.
+ *
+ * An argument given whole as a fresh-coin shorthand (`{"@coin": ...}`) is
+ * left out. A circuit that takes the coin (`receiveShielded(disclose(coin))`)
+ * publishes only its commitment, so its ZK IR shows the coin kept private;
+ * but the command line holds no part of that coin that could be linked to it:
+ * its nonce is made by mn, in its own process, and only the amount and token
+ * are typed.
  */
-export function inlinePrivateArgumentsWarning(request: Pick<ContractCallRequest, 'argsSource' | 'privateArguments' | 'circuit'>): string | undefined {
-  const kept = request.privateArguments ?? [];
+export function inlinePrivateArgumentsWarning(request: Pick<ContractCallRequest, 'argsSource' | 'privateArguments' | 'circuit'> & { freshCoins?: readonly FreshCoin[] }): string | undefined {
+  const madeByMn = new Set((request.freshCoins ?? []).map((coin) => coin.argument));
+  const kept = (request.privateArguments ?? []).filter((name) => !madeByMn.has(name));
   if (request.argsSource !== 'inline' || kept.length === 0) return undefined;
   const named = kept.map((name) => `"${name}"`).join(', ');
   return `${request.circuit}'s proof keeps ${kept.length === 1 ? `its argument ${named}` : `its arguments ${named}`} private, and --args (an MCP tool's args) put ${kept.length === 1 ? 'it' : 'them'} on the command line, where other users see ${kept.length === 1 ? 'it' : 'them'} in ps and the shell keeps ${kept.length === 1 ? 'it' : 'them'} in its history, or in the agent's transcript. Give private arguments with --args-file <path> (an MCP tool's args-file) or --args - (the standard input).`;
 }
+
+/** Warns when the request's private-state secret came on the command line (secret-key-input.ts). */
+function warnOfInlineSecret(request: { privateStateSecretKey?: string; secretKeySource?: 'inline' | 'file' | 'stdin' | 'none' }, ctx: CallContext): void {
+  const warning = inlineSecretKeyWarning({ secretKey: request.privateStateSecretKey, source: request.secretKeySource ?? 'none' });
+  if (warning !== undefined) ctx.warn(warning);
+}
+
+/**
+ * Why a call's --secret-key seeded nothing (call-private-state.ts): the
+ * contract's store already held a private state, which doesn't hold that
+ * secret. Neither secret is named.
+ */
+export const PRIVATE_STATE_SECRET_UNUSED = 'The given private-state secret was not used: this contract\'s private-state store already holds a private state (seeded by its deploy or an earlier call), and it doesn\'t hold that secret. The call runs from the stored state, as the owner it was seeded for. A secret seeds the private state only while none is stored (~/.midnight/contract-state/<network>/<address>/).';
 
 /** The fresh coins mn made and the coins the call recorded for the contract's witnesses, as lines for the terminal. */
 function coinLines(freshCoins: readonly FreshCoin[], heldCoins: readonly HeldCoin[] | undefined): string[] {
@@ -185,6 +207,7 @@ async function handleDeploy(args: ParsedArgs, payer: Payer, ctx: CallContext): P
   const dryRun = hasFlag(args, 'dry-run');
   const request = resolveContractDeployRequest(args, process.cwd(), stdinReaderFor(args));
   const { info, constructorArgs } = request;
+  warnOfInlineSecret(request, ctx);
 
   if (!jsonMode) {
     ctx.output.stderr('\n' + header(dryRun ? 'Contract Deploy (dry run)' : 'Contract Deploy') + '\n\n');
@@ -275,6 +298,7 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
   const { info, address, circuit } = request;
   const exposed = inlinePrivateArgumentsWarning(request);
   if (exposed !== undefined) ctx.warn(exposed);
+  warnOfInlineSecret(request, ctx);
 
   if (!jsonMode) {
     ctx.output.stderr('\n' + header(dryRun ? 'Contract Call (dry run)' : 'Contract Call') + '\n\n');
@@ -291,6 +315,11 @@ async function handleCall(args: ParsedArgs, payer: Payer, ctx: CallContext): Pro
     onProgress: (event) => {
       if (event.kind === 'contract-priced') {
         if (!jsonMode) writeAboveSpinner(ctx, costLines(event.cost, 'call'));
+        return;
+      }
+      if (event.kind === 'private-state-secret-unused') {
+        if (jsonMode) ctx.warn(PRIVATE_STATE_SECRET_UNUSED);
+        else writeAboveSpinner(ctx, [yellow(`  ${PRIVATE_STATE_SECRET_UNUSED}`)]);
         return;
       }
       if (event.kind !== 'contract-checked') return showPaidStep(progress, event);
@@ -377,7 +406,7 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
         ctx.output.stderr(`    ${key}: ${teal(value)}` + '\n');
       }
       for (const [key, info] of Object.entries(maps)) {
-        ctx.output.stderr(`    ${key}: ${dim(`Map (${info.size} entries)`)}` + '\n');
+        ctx.output.stderr(`    ${key}: ${dim(mapSizeText(info.size))}` + '\n');
       }
     } else {
       ctx.output.stderr(dim('  (no ledger fields found)') + '\n');
@@ -397,6 +426,12 @@ async function handleState(args: ParsedArgs, ctx: CallContext): Promise<void> {
   }
 }
 
+/** A map by its entry count, for the terminal: "Map (1 entry)", "Map (3 entries)". */
+export function mapSizeText(size: number | null): string {
+  if (size === null) return 'Map (size unknown)';
+  return `Map (${size} ${size === 1 ? 'entry' : 'entries'})`;
+}
+
 /** The untyped state as indented lines: an array's items by index, a cell's bytes in hex. */
 function rawStateLines(value: RawStateValue, indent: string): string[] {
   switch (value.type) {
@@ -405,7 +440,7 @@ function rawStateLines(value: RawStateValue, indent: string): string[] {
     case 'cell':
       return [indent + 'cell ' + teal(value.value.map((atom) => '0x' + atom).join(' '))];
     case 'map':
-      return [indent + dim(`Map (${value.size} entries)`)];
+      return [indent + dim(mapSizeText(value.size))];
     case 'boundedMerkleTree':
       return [indent + dim(`Merkle tree (height ${value.height}, root ${value.root === null ? 'none' : '0x' + value.root.join('')})`)];
     case 'array':

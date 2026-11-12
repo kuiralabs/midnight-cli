@@ -190,10 +190,10 @@ describe('endpoint config keys', () => {
     expect(getConfigValue('node', TEST_DIR)).toBe('ws://localhost:9944');
   });
 
-  it('returns (not set) for unset endpoint keys', () => {
-    expect(getConfigValue('proof-server', TEST_DIR)).toBe('(not set)');
-    expect(getConfigValue('node', TEST_DIR)).toBe('(not set)');
-    expect(getConfigValue('indexer-ws', TEST_DIR)).toBe('(not set)');
+  it('returns undefined for unset endpoint keys', () => {
+    expect(getConfigValue('proof-server', TEST_DIR)).toBeUndefined();
+    expect(getConfigValue('node', TEST_DIR)).toBeUndefined();
+    expect(getConfigValue('indexer-ws', TEST_DIR)).toBeUndefined();
   });
 
   it('does not interfere with network config', () => {
@@ -275,8 +275,8 @@ describe('wallet config key', () => {
     expect(() => setConfigValue('wallet', 'x'.repeat(65), TEST_DIR)).toThrow('at most 64');
   });
 
-  it('returns (not set) when wallet is not configured', () => {
-    expect(getConfigValue('wallet', TEST_DIR)).toBe('(not set)');
+  it('returns undefined when wallet is not configured', () => {
+    expect(getConfigValue('wallet', TEST_DIR)).toBeUndefined();
   });
 
   it('does not corrupt existing config on validation failure', () => {
@@ -337,25 +337,25 @@ describe('unsetConfigValue', () => {
   it('removes endpoint key (proof-server)', () => {
     setConfigValue('proof-server', 'http://localhost:6300', TEST_DIR);
     unsetConfigValue('proof-server', TEST_DIR);
-    expect(getConfigValue('proof-server', TEST_DIR)).toBe('(not set)');
+    expect(getConfigValue('proof-server', TEST_DIR)).toBeUndefined();
   });
 
   it('removes endpoint key (node)', () => {
     setConfigValue('node', 'ws://localhost:9944', TEST_DIR);
     unsetConfigValue('node', TEST_DIR);
-    expect(getConfigValue('node', TEST_DIR)).toBe('(not set)');
+    expect(getConfigValue('node', TEST_DIR)).toBeUndefined();
   });
 
   it('removes endpoint key (indexer-ws)', () => {
     setConfigValue('indexer-ws', 'wss://indexer.example.com/ws', TEST_DIR);
     unsetConfigValue('indexer-ws', TEST_DIR);
-    expect(getConfigValue('indexer-ws', TEST_DIR)).toBe('(not set)');
+    expect(getConfigValue('indexer-ws', TEST_DIR)).toBeUndefined();
   });
 
   it('removes wallet key', () => {
     setConfigValue('wallet', 'alice', TEST_DIR);
     unsetConfigValue('wallet', TEST_DIR);
-    expect(getConfigValue('wallet', TEST_DIR)).toBe('(not set)');
+    expect(getConfigValue('wallet', TEST_DIR)).toBeUndefined();
   });
 
   it('throws for unknown key', () => {
@@ -368,7 +368,7 @@ describe('unsetConfigValue', () => {
     unsetConfigValue('network', TEST_DIR);
     unsetConfigValue('proof-server', TEST_DIR);
     expect(getConfigValue('network', TEST_DIR)).toBe('undeployed');
-    expect(getConfigValue('proof-server', TEST_DIR)).toBe('(not set)');
+    expect(getConfigValue('proof-server', TEST_DIR)).toBeUndefined();
   });
 
   it('does not corrupt other keys', () => {
@@ -378,7 +378,7 @@ describe('unsetConfigValue', () => {
     unsetConfigValue('proof-server', TEST_DIR);
     expect(getConfigValue('network', TEST_DIR)).toBe('preprod');
     expect(getConfigValue('wallet', TEST_DIR)).toBe('alice');
-    expect(getConfigValue('proof-server', TEST_DIR)).toBe('(not set)');
+    expect(getConfigValue('proof-server', TEST_DIR)).toBeUndefined();
   });
 });
 
@@ -388,7 +388,7 @@ describe('blockfrost-project-id config key', () => {
 
   it('is a valid key, not set by default', () => {
     expect(getValidConfigKeys()).toContain('blockfrost-project-id');
-    expect(getConfigValue('blockfrost-project-id', TEST_DIR)).toBe('(not set)');
+    expect(getConfigValue('blockfrost-project-id', TEST_DIR)).toBeUndefined();
   });
 
   it('is filed under the network its prefix names, whichever network is selected', () => {
@@ -406,7 +406,7 @@ describe('blockfrost-project-id config key', () => {
   });
 
   it('refuses a project id for a network mn doesn\'t reach through Blockfrost, and writes nothing', () => {
-    expect(() => setConfigValue('blockfrost-project-id', 'nighttestnetAbCdEfGhIjKlMnOp', TEST_DIR)).toThrow('it should start with "nightpreprod" (preprod), "nightmainnet" (mainnet)');
+    expect(() => setConfigValue('blockfrost-project-id', 'nighttestnetAbCdEfGhIjKlMnOp', TEST_DIR)).toThrow('it should start with "nightpreprod" (preprod) or "nightmainnet" (mainnet)');
     expect(fs.existsSync(path.join(TEST_DIR, 'config.json'))).toBe(false);
   });
 
@@ -460,7 +460,7 @@ describe('blockfrost-project-id config key', () => {
   it('takes --network when it names the id\'s own network, and refuses another', () => {
     setConfigValue('blockfrost-project-id', ID, TEST_DIR, 'preprod');
     expect(getConfigValue('blockfrost-project-id', TEST_DIR, 'preprod')).toBe('nightpreprod…0123 (preprod)');
-    expect(getConfigValue('blockfrost-project-id', TEST_DIR, 'preview')).toBe('(not set)');
+    expect(getConfigValue('blockfrost-project-id', TEST_DIR, 'preview')).toBeUndefined();
     expect(() => setConfigValue('blockfrost-project-id', ID, TEST_DIR, 'preview')).toThrow('That is a preprod project id, and --network says preview.');
   });
 
@@ -477,7 +477,7 @@ describe('blockfrost-project-id config key', () => {
     setConfigValue('proof-server', 'http://localhost:16300', TEST_DIR, 'preprod');
     setConfigValue('blockfrost-project-id', ID, TEST_DIR);
     unsetConfigValue('blockfrost-project-id', TEST_DIR);
-    expect(getConfigValue('blockfrost-project-id', TEST_DIR)).toBe('(not set)');
+    expect(getConfigValue('blockfrost-project-id', TEST_DIR)).toBeUndefined();
     expect(raw().networks.preprod).toEqual({ 'proof-server': 'http://localhost:16300' });
 
     unsetConfigValue('proof-server', TEST_DIR, 'preprod');
@@ -592,7 +592,7 @@ describe('per-network endpoint scoping', () => {
     expect(raw.networks.preprod.node).toBe('wss://rpc.preprod.midnight.network');
     expect(raw.networks.preprod['indexer-ws']).toBe('wss://indexer.preprod.midnight.network/api/v4/graphql/ws');
     // And the new network sees defaults, not the old URLs.
-    expect(getConfigValue('node', TEST_DIR)).toBe('(not set)');
+    expect(getConfigValue('node', TEST_DIR)).toBeUndefined();
   });
 
   it('unset clears both the scoped entry and the flat key', () => {
@@ -605,7 +605,7 @@ describe('per-network endpoint scoping', () => {
     const raw = readRaw();
     expect(raw.node).toBeUndefined();
     expect(raw.networks).toBeUndefined(); // empty scopes are pruned
-    expect(getConfigValue('node', TEST_DIR)).toBe('(not set)');
+    expect(getConfigValue('node', TEST_DIR)).toBeUndefined();
   });
 
   it('unset for one network leaves other networks scoped entries alone', () => {
@@ -647,7 +647,7 @@ describe('endpoint keys for a network other than the selected one (--network)', 
     expect(getConfigValue('node', TEST_DIR, 'preprod')).toBe('wss://preprod-node.example');
 
     unsetConfigValue('node', TEST_DIR, 'preprod');
-    expect(getConfigValue('node', TEST_DIR, 'preprod')).toBe('(not set)');
+    expect(getConfigValue('node', TEST_DIR, 'preprod')).toBeUndefined();
     expect(getConfigValue('node', TEST_DIR)).toBe('ws://undeployed-node:9944');
   });
 
@@ -681,7 +681,7 @@ describe('a config an earlier mn wrote with stagenet, which mn no longer runs on
   it('runs a command that names its network, without the flat endpoints set under stagenet', () => {
     writeConfig({ network: 'stagenet', node: 'wss://rpc.stagenet.example', 'indexer-ws': 'wss://indexer.stagenet.example/api/v4/graphql/ws' });
     expect(resolveNetworkName({ args: args({ network: 'undeployed' }), configDir: root })).toBe('undeployed');
-    expect(getConfigValue('node', root, 'undeployed')).toBe('(not set)');
+    expect(getConfigValue('node', root, 'undeployed')).toBeUndefined();
   });
 
   it('shows stagenet as the saved network, and keeps it through another key\'s write', () => {

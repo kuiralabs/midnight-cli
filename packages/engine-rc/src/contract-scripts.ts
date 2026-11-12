@@ -213,6 +213,8 @@ const pricingProofProvider = (proving) => ({
       process.stderr.write('Could not price the transaction before proving it: ' + String(err?.message ?? err) + '\\n');
     }
     if (dryRun) {
+      // A dry-run call's result: only what the call script found of a given secret (written at once: the script exits next).
+      if (globalThis.mnPrivateStateSecretUnused) (await import('node:fs')).writeSync(1, JSON.stringify({ privateStateSecretUnused: true }) + '\\n');
       rpcClose();
       process.exit(0);
     }
@@ -426,12 +428,18 @@ process.stderr.write('Finding deployed contract...\\n');
 // The call starts from the private state the contract's store holds (what the
 // last call's witnesses left), seeded only when it holds none: midnight-js
 // stores a given initialPrivateState over the stored one.
+// A --secret-key given (the environment says so) for a store that already
+// holds a private state seeds nothing: the result says so when that state
+// doesn't hold the same secret, and mn warns.
 ${parts.callPrivateStateFn}
+const givenPrivateStateSecret = process.env.${parts.privateStateSecretEnv}_GIVEN === '1'
+  ? { secret: resolvePrivateStateSecretKey(process.env.${parts.privateStateSecretEnv}, walletState?.shieldedCoinPublicKey), unused: () => { globalThis.mnPrivateStateSecretUnused = true; } }
+  : undefined;
 const deployed = await findDeployedContract(providers, {
   compiledContract: compiled,
   contractAddress: ${JSON.stringify(opts.contractAddress)},
   privateStateId: ${JSON.stringify(privateStateKey)},
-  ...(await callPrivateStateOptions(providers.privateStateProvider.forContract(${JSON.stringify(opts.contractAddress)}), ${JSON.stringify(privateStateKey)}, makeInitialPrivateState)),
+  ...(await callPrivateStateOptions(providers.privateStateProvider.forContract(${JSON.stringify(opts.contractAddress)}), ${JSON.stringify(privateStateKey)}, makeInitialPrivateState, givenPrivateStateSecret)),
 });
 
 process.stderr.write('Calling ${opts.circuit}...\\n');
@@ -440,7 +448,7 @@ const called = await deployed.callTx.${opts.circuit}(...contractArgs);
 // The call's transaction, as the indexer listed it once midnight-js saw it final.
 const callTx = called?.public;
 ${heldCoinsCode(opts, parts, privateStateKey)}
-console.log(JSON.stringify({ status: 'success', circuit: ${JSON.stringify(opts.circuit)}, txHash: callTx?.txHash, txId: callTx?.txId, ...(heldCoins.length > 0 ? { heldCoins } : {}) }));
+console.log(JSON.stringify({ status: 'success', circuit: ${JSON.stringify(opts.circuit)}, txHash: callTx?.txHash, txId: callTx?.txId, ...(heldCoins.length > 0 ? { heldCoins } : {}), ...(globalThis.mnPrivateStateSecretUnused ? { privateStateSecretUnused: true } : {}) }));
 rpcClose();
 process.exit(0);
 `;
@@ -485,12 +493,12 @@ const maps = {};
 for (const key of Object.keys(state)) {
   const val = state[key];
 
-  // Check if it's a map-like (has size() and Symbol.iterator)
+  // A map-like (has size() and Symbol.iterator), by its entry count: a number, null when it can't be read.
   if (val && typeof val === 'object' && typeof val.size === 'function') {
     try {
-      maps[key] = { size: val.size().toString() };
+      maps[key] = { size: Number(val.size()) };
     } catch {
-      maps[key] = { size: '?' };
+      maps[key] = { size: null };
     }
   } else if (typeof val === 'bigint') {
     fields[key] = val.toString();

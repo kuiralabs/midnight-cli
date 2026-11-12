@@ -98,7 +98,7 @@ describe('readAddressBalance', () => {
 
   it('refuses a shielded address as a usage error, saying its balance needs the wallet, before asking the indexer', async () => {
     const address = rcKeys.shieldedAddresses(Buffer.from(SEED_A, 'hex')).undeployed;
-    await expect(readAddressBalance(programHost('a'), address, { ...endpoints(), network: 'undeployed', forceFresh: true })).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('--shielded') });
+    await expect(readAddressBalance(programHost('a'), address, { ...endpoints(), network: 'undeployed', forceFresh: true })).rejects.toMatchObject({ code: 'INVALID_ARGS', message: expect.stringContaining('read only with its wallet: midnight balance --wallet <name> --network undeployed') });
     expect(indexer.subscriptions).toEqual([]);
   });
 
@@ -150,15 +150,17 @@ describe('readWalletBalance', () => {
     const root = host.paths().stateRoot;
     establishPassphrase(root, PASSPHRASE);
     const addresses = rcKeys.unshieldedAddresses(Buffer.from(SEED_B, 'hex'));
-    const shieldedAddresses = { preview: 'mn_shield-addr_preview1saved' } as WalletPublic['addresses'];
+    // Only the preview one saved: it is checked against the seed when the wallet is opened.
+    const savedShielded = rcKeys.shieldedAddresses(Buffer.from(SEED_B, 'hex')).preview;
+    const shieldedAddresses = { preview: savedShielded } as WalletPublic['addresses'];
     writeSealedWallet(path.join(root, 'wallets', 'alice.json'), { addresses, shieldedAddresses, createdAt: new Date().toISOString() }, { seed: SEED_B }, PASSPHRASE);
     const said: Said[] = [];
 
     const result = await readWalletBalance(host, { wallet: 'alice' }, { ...endpoints(), network: 'preview', forceFresh: true, onProgress: (event) => said.push(event) });
 
     expect(result.address).toBe(addresses.preview);
-    expect(result.shieldedAddress).toBe('mn_shield-addr_preview1saved');
-    expect(said[0]).toEqual({ kind: 'wallet-opened', network: 'preview', address: addresses.preview, shieldedAddress: 'mn_shield-addr_preview1saved' });
+    expect(result.shieldedAddress).toBe(savedShielded);
+    expect(said[0]).toEqual({ kind: 'wallet-opened', network: 'preview', address: addresses.preview, shieldedAddress: savedShielded });
     expect(indexer.subscriptions.map((s) => s.address)).toEqual([addresses.preview]);
   });
 

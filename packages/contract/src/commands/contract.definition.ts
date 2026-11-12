@@ -28,16 +28,21 @@ export function describeGivenArgs(params: Readonly<Record<string, unknown>>, wha
   return '';
 }
 
+/** How a confirmation names a private-state secret given in a file: the file, never what it holds. */
+export function describeGivenSecretKey(params: Readonly<Record<string, unknown>>): string {
+  return typeof params['secret-key-file'] === 'string' && params['secret-key-file'] !== '' ? `, the private-state secret from the file ${params['secret-key-file']}` : '';
+}
+
 /** What a deploy confirmation names: the dApp, the wallet, the network, and whether constructor arguments were given (never their values). */
 function describeDeploy(params: Readonly<Record<string, unknown>>): string {
   const { network, wallet } = confirmationTarget(params);
-  return `Deploy contract from ${params.path ?? 'current directory'} as ${wallet} on ${network}${describeGivenArgs(params, 'constructor arguments')}`;
+  return `Deploy contract from ${params.path ?? 'current directory'} as ${wallet} on ${network}${describeGivenArgs(params, 'constructor arguments')}${describeGivenSecretKey(params)}`;
 }
 
 /** What a call confirmation names: the circuit, the contract, the wallet, the network, and whether arguments were given (never their values). */
 function describeCall(params: Readonly<Record<string, unknown>>): string {
   const { network, wallet } = confirmationTarget(params);
-  return `Call circuit ${params.circuit} on contract ${params.address} as ${wallet} on ${network}${describeGivenArgs(params, 'arguments')}`;
+  return `Call circuit ${params.circuit} on contract ${params.address} as ${wallet} on ${network}${describeGivenArgs(params, 'arguments')}${describeGivenSecretKey(params)}`;
 }
 
 export const contractDefinition: CommandDefinition = {
@@ -59,9 +64,9 @@ export const contractDefinition: CommandDefinition = {
       help: [
         '--args \'<json>\'               JSON arguments, for public values only: constructor args (deploy) or circuit args (call), an array in order or an object read by its values in order (its keys are not matched to parameter names: list them in the circuit\'s order). Numbers auto-coerce to BigInt; "123n" strings parse as BigInt; arrays of 0–255 ints become Uint8Array. On the command line they are in ps and the shell\'s history: a circuit\'s arguments are private inputs to its proof, so give private ones with --args-file or --args -, and mn warns when it sees a circuit keep one private',
         '--args -                      Read the JSON arguments from the standard input (deploy, call): echo \'{"bid": 5}\' | mn contract call ... --args -',
-        '"@coin" in the arguments      {"@coin": {"amount": "3", "token": "NIGHT"}} is a fresh shielded coin, anywhere the circuit takes a ShieldedCoinInfo (call): mn makes a random nonce, the token\'s colour (NIGHT, or a raw type as 64 hex) and the value in its smallest unit (a NIGHT amount has up to 6 decimals; another token\'s is a whole number of its smallest unit). The result gives each fresh coin\'s nonce (freshCoins)',
+        '"@coin" in the arguments      {"@coin": {"amount": "3", "token": "NIGHT"}} is a fresh shielded coin, anywhere the circuit takes a ShieldedCoinInfo (call): mn makes a random nonce, the token\'s colour ("token": NIGHT, the default when it is left out, or a raw type as 64 hex) and the value in its smallest unit (a NIGHT amount has up to 6 decimals; another token\'s is a whole number of its smallest unit). The result gives each fresh coin\'s nonce (freshCoins)',
       ],
-      agent: { type: 'string', description: 'JSON-encoded array or object of circuit arguments (an object is read by its values in order, not by key: list its keys in the circuit\'s parameter order), for public values: the confirmation and results never repeat them, but they are text in the tool call. Give private ones (a bid, a vote, a coin\'s nonce) with args-file. {"@coin": {"amount": "3", "token": "NIGHT"}} stands for a fresh shielded coin wherever the circuit takes a ShieldedCoinInfo; the result gives its nonce (freshCoins)' },
+      agent: { type: 'string', description: 'JSON-encoded array or object of circuit arguments (an object is read by its values in order, not by key: list its keys in the circuit\'s parameter order), for public values: the confirmation and results never repeat them, but they are text in the tool call. Give private ones (a bid, a vote, a coin\'s nonce) with args-file. {"@coin": {"amount": "3", "token": "NIGHT"}} stands for a fresh shielded coin wherever the circuit takes a ShieldedCoinInfo (token defaults to NIGHT; the wallet pays it from its shielded balance); the result gives its nonce (freshCoins)' },
     },
     {
       name: 'args-file',
@@ -122,13 +127,23 @@ export const contractDefinition: CommandDefinition = {
       takesValue: true,
       subcommands: ['deploy', 'call'],
       help: [
-        '--secret-key <64-hex>         The private-state secret (deploy, call), for a contract whose owner is public_key(secret_key()). Default: one derived from the wallet\'s seed, the same on every run. It reaches the contract script through its environment, never argv; the private state it seeds is kept under mn\'s state root (~/.midnight/contract-state/<network>/<address>/, one store per contract, owner-only), encrypted with a key derived from the wallet\'s seed. A call starts from the private state stored for the contract (what the last call\'s witnesses left), so on call the secret seeds it only when none is stored yet',
+        '--secret-key <64-hex>         The private-state secret (deploy, call), for a contract whose owner is public_key(secret_key()). Default: one derived from the wallet\'s seed, the same on every run. It is the owner\'s secret: on the command line it is in ps and the shell\'s history, so mn warns; give it with --secret-key-file or --secret-key -. It reaches the contract script through its environment, never argv; the private state it seeds is kept under mn\'s state root (~/.midnight/contract-state/<network>/<address>/, one store per contract, owner-only), encrypted with a key derived from the wallet\'s seed. A call starts from the private state stored for the contract (what the last call\'s witnesses left), so on call the secret seeds it only when none is stored yet, and mn warns when the stored state doesn\'t hold the secret given',
+        '--secret-key -                Read the private-state secret from the standard input (deploy, call): mn contract call ... --secret-key - < owner.key. Not with --args -',
         '--secret-key legacy           (call) The secret an mn before 0.6.0 used by default: the wallet\'s public coin key. Only for calling a contract deployed with that default',
       ],
       agent: {
         type: 'string',
         description: 'The private-state secret, 64 hex chars, for a contract whose owner is public_key(secret_key()); by default one derived from the wallet\'s seed. On call, "legacy" uses the default of an mn before 0.6.0 (the wallet\'s public coin key) for a contract deployed with it. The private state it seeds is kept under mn\'s state root, one store per contract (~/.midnight/contract-state/<network>/<address>/), encrypted with a key from the wallet\'s seed',
       },
+    },
+    {
+      name: 'secret-key-file',
+      takesValue: true,
+      subcommands: ['deploy', 'call'],
+      help: [
+        '--secret-key-file <path>      Read the private-state secret (64 hex characters) from a file (deploy, call), keeping it off the command line; a FIFO or a process substitution works: --secret-key-file <(pass show owner-key)',
+      ],
+      agent: { type: 'string', description: 'Path of a file holding the private-state secret, 64 hex chars, for a contract whose owner is public_key(secret_key()): the confirmation and results never repeat it or what the file holds. By default the secret is one derived from the wallet\'s seed' },
     },
     {
       name: 'wallet',
@@ -182,22 +197,24 @@ export const contractDefinition: CommandDefinition = {
       { flag: 'indexer-ws' },
       { flag: 'proof-server' },
       { flag: 'secret-key' },
+      { flag: 'secret-key-file' },
       { flag: 'dry-run' },
       '--json                        Output structured JSON',
-      'A deploy or call says its cost after the wallet syncs and before anything is proven: the expected fee at the chain\'s fee prices now, the Dust the wallet commits to it (the fee with its margin of rising prices, all of it burned), and whether the wallet\'s Dust covers that or how long its registered NIGHT takes to',
+      'A deploy or call says its cost after the wallet syncs and before anything is proven: the expected fee at the chain\'s fee prices now, the Dust the wallet commits to it (the fee with its margin of rising prices, all of it burned), and whether the wallet\'s Dust covers that or how long its registered NIGHT takes to generate the rest',
     ],
     examples: [
       'midnight contract inspect',
       'midnight contract deploy',
       'midnight contract deploy --args \'{"deadlineSecs": 300}\'',
-      'midnight contract call --address 0x123 --circuit submit_score --args \'{"score": 100, "alias": "TEST"}\'',
-      'midnight contract call --address 0x123 --circuit bid --args-file bid.json',
-      'echo \'{"vote": 1}\' | midnight contract call --address 0x123 --circuit vote --args -',
-      'midnight contract call --address 0x123 --circuit lock --args \'{"coin": {"@coin": {"amount": "3", "token": "NIGHT"}}, "unlock": 1794378400}\'',
-      'midnight contract state --address 0x123',
+      'midnight contract call --address cb5230e1ac98e07520d3b330016743a05fec38dd8fe894ae5b9ac3f71cac5190 --circuit submit_score --args \'{"score": 100, "alias": "TEST"}\'',
+      'midnight contract call --address cb5230e1ac98e07520d3b330016743a05fec38dd8fe894ae5b9ac3f71cac5190 --circuit bid --args-file bid.json',
+      'echo \'{"vote": 1}\' | midnight contract call --address cb5230e1ac98e07520d3b330016743a05fec38dd8fe894ae5b9ac3f71cac5190 --circuit vote --args -',
+      'midnight contract call --address cb5230e1ac98e07520d3b330016743a05fec38dd8fe894ae5b9ac3f71cac5190 --circuit lock --args \'{"coin": {"@coin": {"amount": "3", "token": "NIGHT"}}, "unlock": 1794378400}\'',
+      'midnight contract state --address cb5230e1ac98e07520d3b330016743a05fec38dd8fe894ae5b9ac3f71cac5190',
       'midnight contract deploy --json',
       'midnight contract deploy --dry-run',
-      'midnight contract call --address 0x123 --circuit increment --dry-run --json',
+      'midnight contract deploy --secret-key-file owner.key',
+      'midnight contract call --address cb5230e1ac98e07520d3b330016743a05fec38dd8fe894ae5b9ac3f71cac5190 --circuit increment --dry-run --json',
     ],
     jsonFields: {
       subcommand: 'deploy, call or state (not inspect)',
@@ -213,7 +230,7 @@ export const contractDefinition: CommandDefinition = {
       dryRun: 'true when --dry-run priced the deploy or call and stopped: nothing was proven or sent, and there is no address, txHash or receipt (deploy, call)',
       freshCoins: 'The fresh coins mn made for {"@coin": ...} arguments: [{argument, nonce}], the nonce in hex, by which a contract may name the coin later (call; absent when none)',
       heldCoins: 'The coins the call gave the contract, recorded in its private state under mnHeldCoins (by nonce) for a witness to spend: [{argument, commitment, mtIndex}] (call; absent when none)',
-      warnings: 'Notes on the call: --args gave arguments its circuit keeps private, which belong in --args-file or --args - (call)',
+      warnings: 'Notes on the deploy or call: --args gave arguments its circuit keeps private, which belong in --args-file or --args - (call); --secret-key put the private-state secret on the command line, where --secret-key-file or --secret-key - belong (deploy, call); the given secret was not used, since the contract\'s store already holds a private state without it (call)',
       fields: 'Ledger fields, each a string (state)',
       maps: 'Ledger maps, each with its size (state)',
       raw: 'The ledger state undecoded, when the compiled contract is not at hand (state)',
@@ -275,6 +292,7 @@ export const contractDefinition: CommandDefinition = {
           // As this tool showed it before tool schemas came from the flags, saying what it is for.
           { flag: 'args', schema: { type: 'string', description: 'JSON-encoded array or object of constructor arguments, for public values: the confirmation and results never repeat them. Give private ones with args-file' } },
           { flag: 'args-file' },
+          { flag: 'secret-key-file' },
           { flag: 'path' },
           { flag: 'managed' },
           { flag: 'name' },
@@ -323,6 +341,7 @@ export const contractDefinition: CommandDefinition = {
           { flag: 'network' },
           { flag: 'args' },
           { flag: 'args-file' },
+          { flag: 'secret-key-file' },
           { flag: 'path' },
           { flag: 'managed' },
           { flag: 'name' },

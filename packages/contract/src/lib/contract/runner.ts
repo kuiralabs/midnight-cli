@@ -83,6 +83,8 @@ export interface CallOptions extends RunnerOptions {
   /** The circuit's arguments: through a 0600 file under mn's state root, never the script's text. */
   args?: unknown[];
   privateStateKey?: string;
+  /** Called when `privateStateSecretKey` was given but the contract's store already holds a private state without it (call-private-state.ts): the call runs from the stored state. */
+  onPrivateStateSecretUnused?: () => void;
 }
 
 export interface StateOptions {
@@ -119,11 +121,14 @@ export interface CallResult {
   txId?: string;
   /** The coins the call gave the contract that the script recorded in the private state (held-coins.ts); absent when none. */
   heldCoins?: HeldCoin[];
+  /** True when the given private-state secret seeded nothing: the store held a private state without it. */
+  privateStateSecretUnused?: boolean;
 }
 
 export interface StateResult {
   fields: Record<string, string>;
-  maps: Record<string, { size: string }>;
+  /** Each map by its entry count; null when the contract's map couldn't say. */
+  maps: Record<string, { size: number | null }>;
 }
 
 // The indexer's URLs reach a generated script through its environment, not
@@ -148,6 +153,8 @@ export const SCRIPT_PRICED_MARKER = '__MN_PRICED__';
 export function privateStateEnvironment({ contractKeys, privateStateSecretKey }: Pick<RunnerOptions, 'contractKeys' | 'privateStateSecretKey'>): Record<string, string> {
   return {
     [PRIVATE_STATE_SECRET_ENV]: privateStateSecretKey ?? contractKeys.privateStateSecret,
+    // Whether the secret is the caller's (--secret-key): a call checks it against a stored private state.
+    ...(privateStateSecretKey === undefined ? {} : { [`${PRIVATE_STATE_SECRET_ENV}_GIVEN`]: '1' }),
     [PRIVATE_STATE_PASSWORD_ENV]: contractKeys.storagePassword,
     [PRIVATE_STATE_ACCOUNT_ENV]: contractKeys.storageAccountId,
   };
@@ -253,6 +260,9 @@ function noteMovedStore(moved: { from: string; to: string } | undefined, notice:
   if (moved !== undefined) notice(`Moved the contract private-state store out of the dApp: ${moved.from} is now ${moved.to} (mn keeps private state under its state root, one store per contract).`);
 }
 
+/** The line a dry-run call script writes on stdout when the given private-state secret seeded nothing. */
+const PRIVATE_STATE_SECRET_UNUSED_LINE = JSON.stringify({ privateStateSecretUnused: true });
+
 /** A call script's run, with the contract's call lock held: what it wrote to stdout. */
 async function executeCallScript(options: CallOptions, extraEnv: Record<string, string>): Promise<string> {
   // Every run, whoever starts it (dev, test, a program): the contract must suit the network's engine.
@@ -285,11 +295,14 @@ async function executeCallScript(options: CallOptions, extraEnv: Record<string, 
 
 export async function runCall(options: CallOptions): Promise<CallResult> {
   const result = await executeCallScript(options, {});
+  let called: CallResult;
   try {
-    return JSON.parse(result) as CallResult;
+    called = JSON.parse(result) as CallResult;
   } catch {
     throw new Error(`Call script returned unexpected output:\n${result}`);
   }
+  if (called.privateStateSecretUnused === true) options.onPrivateStateSecretUnused?.();
+  return called;
 }
 
 /**
@@ -298,7 +311,11 @@ export async function runCall(options: CallOptions): Promise<CallResult> {
  * nothing is proven, sent, or written to its private state.
  */
 export function priceCall(options: CallOptions): Promise<TransactionPrice> {
-  return pricedBy(options, 'call', (priced) => executeCallScript(priced, { [DRY_RUN_ENV]: '1' }));
+  return pricedBy(options, 'call', async (priced) => {
+    // A dry run's stdout has no result: only, as a line of its own, what it found of a given secret.
+    const written = await executeCallScript(priced, { [DRY_RUN_ENV]: '1' });
+    if (written.split('\n').some((line) => line.trim() === PRIVATE_STATE_SECRET_UNUSED_LINE)) options.onPrivateStateSecretUnused?.();
+  });
 }
 
 // ── Shared script fragments ──

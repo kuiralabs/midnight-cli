@@ -3,8 +3,8 @@
 // Factory function returns a handler map for ws-rpc.ts to dispatch
 
 import * as rx from 'rxjs';
-import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, waitForDustGrowth, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isDroppedFromPool, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, priceTransaction, transactionPriceToWire } from '@kuiralabs/midnight-cli-core/engine';
-import { type NoticeSink, type WaitSink, DustDoubleSpentError, FeeRepricedError, TransactionInvalidatedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE, PRICE_TRANSACTION_METHOD } from '@kuiralabs/midnight-cli-core';
+import { type ApprovalOptions, promptApproval, createPhaseTracker, type PhaseTracker, toHex, fromHex, getNetworkId, isDustShortage, isSdkInsufficientFundsError, markingEngineCodes, ProofTimeoutError, DEFAULT_FEE_LIMITS, feeLimitRefusal, pendingLimitRefusal, type FeeLimits, assertSpendsNoOfferCoin, NotAnOfferError, describeLeg, decodeSignPayload, signedMessageBytes, DUST_SHORT_WAIT_MS, planDustWait, sleep, type DustWaitPlan, waitForDustGrowth, TX_TTL_MINUTES, PROOF_TIMEOUT_MS, DUST_RETRY_ATTEMPTS, DUST_RETRY_DELAY_MS, ABANDONED_TX_TIMEOUT_MS, submitWithin, type DAppConnector, type DAppConnectorCallbacks, dustGenerationCap, isDroppedFromPool, isDustDoubleSpendRefusal, isFeeShortRefusal, repriceAfterFeeRefusal, priceTransaction, transactionPriceToWire, transactionMismatch, type TransactionStageName } from '@kuiralabs/midnight-cli-core/engine';
+import { type NoticeSink, type WaitSink, DustDoubleSpentError, FeeRepricedError, TransactionInvalidatedError, LEDGER_9_FORK_VERSION, type WalletDustLock, type NetworkConfig, createApiError, type RpcHandler, type RpcHandlerContext, type OpenOffer, formatWait, OPERATOR_REJECTED_MESSAGE, APPROVAL_UNAVAILABLE_MESSAGE, PRICE_TRANSACTION_METHOD, mayHoldProjectId } from '@kuiralabs/midnight-cli-core';
 import { dim, roughDust, toDust } from '@kuiralabs/midnight-cli-core/ui';
 import { MidnightBech32m, UnshieldedAddress, ShieldedAddress } from '@midnightntwrk/wallet-sdk/address-format';
 import type { TransactionStage, WalletTransaction } from '@midnightntwrk/wallet-sdk';
@@ -64,6 +64,14 @@ export interface DAppConnectorOptions {
    */
   dustWaitMs?: number;
 }
+
+/**
+ * How a connector that serves mn's own command approves: every request,
+ * nobody asked, and nothing said. Each request is the command's own, so an
+ * "Auto-approved" line tells no one anything (and under --json it would land
+ * in the command's `warnings`).
+ */
+export const OWN_COMMAND_APPROVALS: ApprovalOptions = { approveAll: true, autoApproveReads: true, prompter: null, notice: () => {} };
 
 /** Which token kinds the facade balances a dApp's transaction in. */
 export type TokenKindsToBalance = 'all' | Array<'dust' | 'shielded' | 'unshielded'>;
@@ -142,6 +150,9 @@ function extractErrorDetail(err: unknown): string {
 
 export { OPERATOR_REJECTED_MESSAGE } from '@kuiralabs/midnight-cli-core';
 
+/** The DApp connector's name for each stage the wallet reads a transaction at. */
+const STAGE_NAMES = { Unproven: 'unproven', Unbound: 'unsealed', Finalized: 'sealed' } as const satisfies Record<TransactionStage, TransactionStageName>;
+
 /** The connector API's history entry for one wallet history entry. */
 export type HistoryEntry = {
   txHash: string;
@@ -219,6 +230,19 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     protocolVersions = state.protocolVersion;
     if (isCurrent(state)) latestState = state;
   });
+
+  // getTxHistory lists what this server saw once it served: the transactions
+  // submitted through it and those its sync reads after that. What the
+  // wallet's history held when the connector was made (its sync up to then,
+  // all of it on a wallet synced from scratch) is left out.
+  const historyBeforeServing: Promise<ReadonlySet<string>> = facade.getAllFromTxHistory().then(
+    (entries) => new Set(entries.map((entry) => entry.hash)),
+    () => new Set<string>(),
+  );
+
+  // The connections that approved getConfiguration's endpoints, which carry
+  // the network's Blockfrost project id: each is asked once.
+  const endpointsApproved = new Set<string>();
 
   function getState(): FacadeState {
     if (!latestState) {
@@ -317,6 +341,8 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
   /** Revert and clean up all pending transactions for a connection (disconnect). */
   async function revertPendingTxs(connectionId: string): Promise<void> {
+    // A closed connection's approval of the endpoints goes with it.
+    endpointsApproved.delete(connectionId);
     const txMap = pendingTxsByConnection.get(connectionId);
     if (!txMap || txMap.size === 0) return;
     pendingTxsByConnection.delete(connectionId);
@@ -390,16 +416,18 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
 
   /**
    * Read a dApp's hex transaction at the given stage, as this wallet's current
-   * ledger version. Bytes from another ledger version, or another stage, are
-   * the caller's mistake, so they come back as InvalidRequest.
+   * ledger version. Bytes that aren't a transaction, one at another stage, or
+   * one from another ledger version are the caller's mistake, so they come
+   * back as InvalidRequest, saying which.
    */
   function adopt<TStage extends TransactionStage>(txHex: string, stage: TStage): WalletTransaction<TStage> {
     try {
       return facade.adoptTransaction(fromHex(txHex), stage);
     } catch (err) {
+      const mismatch = transactionMismatch(txHex, STAGE_NAMES[stage]);
       throw createApiError(
         'InvalidRequest',
-        `The transaction could not be read at stage ${stage} as this wallet's ledger version: ${extractErrorDetail(err)}`,
+        mismatch ?? `The transaction could not be read at stage ${stage} as this wallet's ledger version: ${extractErrorDetail(err)}`,
       );
     }
   }
@@ -410,10 +438,11 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     details: Array<{ label: string; value: string }> = [],
     context?: RpcHandlerContext,
     feeOnly = false,
+    revealsSecret = false,
   ): Promise<void> {
     context?.notify('approval:pending', { method });
     const result = await promptApproval(
-      { method, network: networkConfig.networkId, details, dappName: context?.connectionId, feeOnly },
+      { method, network: networkConfig.networkId, details, dappName: context?.connectionId, feeOnly, revealsSecret },
       approvalOptions,
     );
     const outcome = result === 'approve' ? 'approved' : result === 'reject' ? 'rejected' : 'unavailable';
@@ -421,7 +450,9 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
     if (result === 'unavailable') {
       // Nobody was asked, so nobody rejected it: say what would let it through.
       throw createApiError('PermissionRejected', `${APPROVAL_UNAVAILABLE_MESSAGE}: ${method} needs approval, and mn serve has no terminal to ask at. `
-        + (approvalOptions.approveFees
+        + (revealsSecret
+          ? 'Its endpoints carry the Blockfrost project id of the wallet\'s user, given to a dApp only when the operator approves (or under --approve-all). Give the dApp its own endpoints (its own Blockfrost project id), or run mn serve at a terminal.'
+          : approvalOptions.approveFees
           ? 'This fee wallet (--approve-fees) approves without asking only paying the Dust fee for an agent\'s own transaction and submitting a transaction it balanced that way on the same connection.'
           : 'Start mn serve with --approve-all to approve requests without asking (or --approve-fees for a wallet that only pays an agent\'s Dust fee), or run it at a terminal.'),
         'APPROVAL_UNAVAILABLE');
@@ -450,7 +481,7 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       tx = readDAppTransaction(fromHex(txHex), stage);
     } catch (err) {
       throw createApiError('InvalidRequest',
-        `The transaction could not be read as a proven ledger-9 ${stage} transaction: ${extractErrorDetail(err)}`);
+        transactionMismatch(txHex, stage) ?? `The transaction could not be read as a proven ledger-9 ${stage} transaction: ${extractErrorDetail(err)}`);
     }
     const reasons = feeOnlyRefusals(tx, keystore.getPublicKey());
     if (reasons.length > 0) {
@@ -910,7 +941,8 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
         throw createApiError('InvalidRequest',
           `Network mismatch: wallet is on ${networkConfig.networkId}, requested ${requestedNetwork}`);
       }
-      return { networkId: networkConfig.networkId };
+      // The SDK's network id, as getConnectionStatus gives it (lowercase).
+      return { networkId };
     },
 
     // ── Read-Only Methods (9) — auto-approved ──
@@ -960,7 +992,10 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
         throw createApiError('InvalidRequest', `Invalid pageSize: ${JSON.stringify(pageSize)} — must be a whole number, 1 or more`);
       }
       const start = pageNumber * pageSize;
-      const entries = await facade.getAllFromTxHistory();
+      const before = await historyBeforeServing;
+      // Newest first, so the first page has what was just submitted. The
+      // wallet's history keeps entries in the order it first saw them.
+      const entries = (await facade.getAllFromTxHistory()).filter((entry) => !before.has(entry.hash)).reverse();
       const page: HistoryEntry[] = [];
       // One at a time: a page can be large, and each partial success is an indexer query.
       for (const entry of entries.slice(start, start + pageSize)) {
@@ -977,14 +1012,26 @@ export function createDAppConnector(options: DAppConnectorOptions): DAppConnecto
       return page;
     },
 
-    getConfiguration: async () => {
-      return {
+    getConfiguration: async (_params, context) => {
+      const configuration = {
         indexerUri: networkConfig.indexer,
         indexerWsUri: networkConfig.indexerWS,
         proverServerUri: networkConfig.proofServer,
         substrateNodeUri: networkConfig.node,
-        networkId: networkConfig.networkId,
+        networkId,
       };
+      // Endpoints that carry the user's Blockfrost project id (preprod's and
+      // mainnet's) hand that secret to the dApp: the operator approves that,
+      // once per connection. A dApp needs the id to reach those endpoints.
+      const secretBearing = [configuration.indexerUri, configuration.indexerWsUri, configuration.substrateNodeUri].filter(mayHoldProjectId);
+      if (secretBearing.length > 0 && !endpointsApproved.has(context.connectionId)) {
+        await requireApproval('getConfiguration', [
+          { label: 'Gives', value: 'endpoints with your Blockfrost project id' },
+          { label: 'Risk', value: 'the dApp can use up your Blockfrost plan' },
+        ], context, false, true);
+        endpointsApproved.add(context.connectionId);
+      }
+      return configuration;
     },
 
     getConnectionStatus: async () => {

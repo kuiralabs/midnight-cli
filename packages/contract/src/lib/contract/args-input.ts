@@ -7,9 +7,8 @@
 //
 // No refusal here quotes what the arguments hold.
 
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { UsageError } from '@kuiralabs/midnight-cli-core';
+import { UsageError, readInputFile, readProcessStandardInput } from '@kuiralabs/midnight-cli-core';
 
 /** Where arguments were given: on the command line, in a file, on the standard input, or not at all. */
 export type ArgsSource = 'inline' | 'file' | 'stdin' | 'none';
@@ -48,7 +47,8 @@ export function readGivenArgs(flags: ArgsFlags, cwd: string, readStdin?: StdinRe
     const path = resolve(cwd, argsFile);
     let text: string;
     try {
-      text = readFileSync(path, 'utf8');
+      // A FIFO or a process substitution (<(…)) is read as it is written, to its end.
+      text = readInputFile(path);
     } catch (err) {
       const code = (err as { code?: unknown }).code;
       throw new UsageError(`Can't read --args-file ${path}${typeof code === 'string' ? ` (${code})` : ''}: give the path of a JSON file of the arguments.`);
@@ -80,7 +80,7 @@ export function parseArgsJson(text: string, from: string): unknown[] {
   throw new UsageError(`The arguments in ${from} are JSON ${parsed === null ? 'null' : `of type ${typeof parsed}`}: give an array or an object of the arguments.`);
 }
 
-/** Reads the whole standard input of this process. */
+/** Reads the whole standard input of this process, waiting for a pipe's writer to finish. */
 export function readProcessStdin(): string {
-  return readFileSync(0, 'utf8');
+  return readProcessStandardInput();
 }

@@ -57,8 +57,8 @@ Compile with Compact 0.36 (language 0.28): mn bundles compact-runtime
   A fresh shielded coin as an argument (call), wherever the circuit takes
   a ShieldedCoinInfo:
     {"@coin": {"amount": "3", "token": "NIGHT"}}
-  mn makes a random nonce, the token's colour (NIGHT, or a token's raw
-  type as 64 hex) and the value in its smallest unit (a NIGHT amount has
+  mn makes a random nonce, the token's colour (NIGHT, the default when
+  "token" is left out, or a token's raw type as 64 hex) and the value in its smallest unit (a NIGHT amount has
   up to 6 decimals; another token's is a whole number of its smallest
   unit). The result's freshCoins gives each one's nonce (hex), by which a
   contract may name the coin later.
@@ -104,13 +104,18 @@ Compile with Compact 0.36 (language 0.28): mn bundles compact-runtime
   so a call from any folder finds what its deploy left. A call starts
   from the stored private state, what the last call's witnesses left; it
   is seeded (the wallet's secret, or --secret-key) only when none is
-  stored yet, as on the first call from a machine with no store. A
-  midnight-level-db folder an earlier mn left in the dApp is moved out once
-  (said on stderr; with --json, in "warnings").
+  stored yet, as on the first call from a machine with no store; a
+  --secret-key the stored state doesn't hold is not used, and mn warns
+  (stderr; with --json, in "warnings"). The secret is the contract
+  owner's: give it with --secret-key-file <path> or --secret-key - (the
+  standard input), not --secret-key <hex>, which mn warns is in ps and
+  the shell's history. A midnight-level-db folder an earlier mn left in
+  the dApp is moved out once (said on stderr; with --json, in "warnings").
 
   State — read ledger state of a deployed contract:
     midnight contract state --address <addr> [--network <name>] [--json]
     → { address, network, fields: { key: value }, maps: { key: { size } } }
+      (each field a string, each map's size a number)
 
   Full workflow example:
     cd my-dapp
@@ -180,9 +185,9 @@ Use \`midnight_contract_*\` MCP tools (or \`mn contract\` CLI). Flow: \`compact 
 
 Plain strings, booleans, fractional numbers, and \`null\` pass through unchanged. No hex-string detection — \`"1234"\` stays a string.
 
-**Private arguments.** A circuit's arguments are private inputs to its proof unless the contract discloses them. \`args\` is text in your tool call, which the host keeps: give private values in a JSON file with \`args-file\` instead (the same array or object). The confirmation and results never repeat argument values, only that arguments were given; a call whose \`args\` hold one the circuit keeps private says so in \`warnings\`. The contract script gets them through an owner-only file mn deletes, never its text or argv.
+**Private arguments.** A circuit's arguments are private inputs to its proof unless the contract discloses them. \`args\` is text in your tool call, which the host keeps: give private values in a JSON file with \`args-file\` instead (the same array or object). The confirmation and results never repeat argument values, only that arguments were given; a call whose \`args\` hold one the circuit keeps private says so in \`warnings\`. The contract script gets them through an owner-only file mn deletes, never its text or argv. A contract's private-state secret (its owner's, when not the wallet's own) is given the same way, as \`secret-key-file\` (a file holding its 64 hex characters); no confirmation or result repeats it.
 
-**A fresh coin.** \`{"@coin": {"amount": "3", "token": "NIGHT"}}\` stands for a new shielded coin wherever the circuit takes a \`ShieldedCoinInfo\` (a random nonce, NIGHT's colour or a raw type given as 64 hex, the value in the smallest unit). The result's \`freshCoins\` gives its nonce. After the call lands, mn records each coin it gave the contract in the contract's private state under \`mnHeldCoins\` (by nonce, with its Merkle tree index), where a witness that spends a privately held coin reads it.
+**A fresh coin.** \`{"@coin": {"amount": "3", "token": "NIGHT"}}\` stands for a new shielded coin wherever the circuit takes a \`ShieldedCoinInfo\` (a random nonce, NIGHT's colour or a raw type given as 64 hex, NIGHT when \`token\` is left out, the value in the smallest unit), paid from the wallet's shielded balance. The result's \`freshCoins\` gives its nonce. After the call lands, mn records each coin it gave the contract in the contract's private state under \`mnHeldCoins\` (by nonce, with its Merkle tree index), where a witness that spends a privately held coin reads it.
 
 **Compatibility caveat — runtime version skew.** Contracts must be compiled with Compact 0.36 (language 0.28). The CLI bundles \`@midnight-ntwrk/compact-runtime\` \`0.21.0\`, so contracts have to target runtime \`0.21.0\`. Artifacts built for another runtime (e.g. \`0.16.0\`, from a ledger-8 toolchain) are rejected at deploy/call with a message like \`CompactError: Version mismatch: compiled code expects 0.16.0\`. The fix is to recompile with Compact 0.36 (\`compact compile\`): no network runs ledger 8 any more, so there is no older \`mn\` to fall back to. \`midnight_contract_inspect\` shows the compiled \`runtimeVersion\` so you can flag the mismatch before attempting deploy.
 
