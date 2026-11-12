@@ -156,9 +156,23 @@ export async function readShieldedBalanceCached(
   // State resumed from another indexer's event ids would replay the wrong events.
   bindCachesToIndexer(network, indexerWS, options.root);
   // A connection that fails (an indexer that blinked) is retried after a
-  // wait, from the checkpoint the failed read saved.
-  return retryingTransient(() => readFromCheckpoint(keys, pubkeyHex, network, indexerWS, options), { signal: options.signal });
+  // wait, from the checkpoint the failed read saved; one the indexer closed
+  // mid-stream ends a window short, and the next window resumes from where it
+  // stopped, while windows still move and the read's time lasts.
+  const deadline = Date.now() + (options.timeoutMs ?? SHIELDED_READ_MS);
+  let eventCount = 0;
+  let fromCache: boolean | undefined;
+  for (;;) {
+    const timeoutMs = Math.max(1, deadline - Date.now());
+    const read = await retryingTransient(() => readFromCheckpoint(keys, pubkeyHex, network, indexerWS, { ...options, timeoutMs }), { signal: options.signal });
+    eventCount += read.eventCount;
+    fromCache ??= read.fromCache;
+    if (!read.partial || read.eventCount === 0 || Date.now() >= deadline) return { ...read, eventCount, fromCache };
+  }
 }
+
+/** How long a shielded read may take in all, over however many windows, unless its caller says. */
+const SHIELDED_READ_MS = 600_000;
 
 /** One read of the shielded history, from the checkpoint on disk to the tip. */
 async function readFromCheckpoint(keys: ReturnType<typeof shieldedKeysFromSeed>, pubkeyHex: string, network: string, indexerWS: string, options: ShieldedCachedOptions): Promise<ShieldedBalanceResult> {

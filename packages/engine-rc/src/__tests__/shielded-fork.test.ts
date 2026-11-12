@@ -364,3 +364,48 @@ describe('readShieldedBalanceCached on Preview', () => {
     expect(again.lastAppliedEventId).toBe(4970);
   });
 });
+
+describe('readShieldedBalanceCached when the indexer drops the connection mid-stream', () => {
+  // A 2-second indexer blip cut the shielded read of a write on preprod at
+  // event 26523 of 1.86M, and the write failed WALLET_BEHIND_FORK. The read
+  // now resumes from where the cut window stopped. The indexer is a stand-in
+  // that closes its first connection after a few events, as the blip did.
+  let root: string;
+  let wss: import('ws').WebSocketServer;
+  const starts: number[] = [];
+  const WALLET_SEED = Buffer.from('00'.repeat(31) + 'ab', 'hex');
+  beforeEach(async () => {
+    root = mkdtempSync(join(tmpdir(), 'mn-shielded-cut-'));
+    starts.length = 0;
+    const { WebSocketServer } = await import('ws');
+    wss = new WebSocketServer({ host: '127.0.0.1', port: 0, handleProtocols: () => 'graphql-transport-ws' });
+    wss.on('connection', (socket) => {
+      socket.on('message', (data) => {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'connection_init') { socket.send(JSON.stringify({ type: 'connection_ack' })); return; }
+        if (msg.type !== 'subscribe') return;
+        const startId: number = msg.payload?.variables?.id ?? 0;
+        starts.push(startId);
+        const events = PREVIEW.filter((e) => e.id >= startId);
+        // The first connection is cut after a few events; later ones serve the rest.
+        const sent = starts.length === 1 ? events.slice(0, 5) : events;
+        for (const e of sent) socket.send(JSON.stringify({ id: msg.id, type: 'next', payload: { data: { zswapLedgerEvents: e } } }));
+        if (starts.length === 1) setTimeout(() => socket.terminate(), 50);
+      });
+    });
+    await new Promise<void>((resolve) => wss.on('listening', () => resolve()));
+  });
+  afterEach(async () => {
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('resumes from where the cut window stopped and reads to the tip in one call', async () => {
+    const url = `ws://127.0.0.1:${(wss.address() as import('node:net').AddressInfo).port}`;
+    const read = await readShieldedBalanceCached(WALLET_SEED, 'preview', url, { root, chainProtocolVersion: PREVIEW_TIP });
+    expect(read.partial).toBe(false);
+    expect(read.lastAppliedEventId).toBe(4970);
+    // The cut window, then at least one more that read on to the tip.
+    expect(starts.length).toBeGreaterThanOrEqual(2);
+  });
+});
