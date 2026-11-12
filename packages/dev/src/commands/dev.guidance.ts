@@ -56,7 +56,7 @@ contract deployment, circuit calls, and state verification.
       text: 'skill-core',
       section: 'intent-routing',
       order: 40,
-      body: `| "Generate tests for this contract" / "scaffold a test suite" | \`midnight_test_create({ path })\` (default cli; pass \`strategy: "browser"\` + \`port\` + \`build-cmd\` for UI tests) |
+      body: `| "Generate tests for this contract" / "scaffold a test suite" | \`midnight_test_create({ path })\` (default cli; pass \`strategy: "ui"\` + \`port\` + \`build-cmd\` for UI tests) |
 `,
     },
     {

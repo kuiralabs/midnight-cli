@@ -370,7 +370,7 @@ Prices the deploy and stops: nothing is proven or sent, and there is no address,
   "subcommand": "create",
   "contractName": "counter",
   "suiteName": "cli-default",
-  "strategy": "cli",                                  // "cli" or "browser"
+  "strategy": "cli",                                  // "cli" or "ui"
   "written": [
     "/path/to/dapp.test.json",
     "/path/to/tests/suites/cli-default/suite.json",
