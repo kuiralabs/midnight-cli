@@ -45,6 +45,22 @@ export function registryDist(registry) {
 }
 
 /**
+ * A published package's lockfile entry, as `registry` serves it: its version,
+ * tarball and integrity, and the platforms it installs on (`os`, `cpu`,
+ * `libc`), which npm reads to skip an optional package on any other.
+ */
+export function registryPackage(registry) {
+  return (name, version) => {
+    const fields = ['version', 'dist.tarball', 'dist.integrity', 'os', 'cpu', 'libc'];
+    const viewed = viewedField(execFileSync('npm', ['view', `${name}@${version}`, ...fields, '--json', '--registry', registry], { encoding: 'utf-8' }));
+    if (viewed?.version !== version) throw new Error(`${registry} serves no ${name}@${version}`);
+    const entry = { version: viewed.version, resolved: viewed['dist.tarball'], integrity: viewed['dist.integrity'] };
+    for (const field of ['os', 'cpu', 'libc']) if (viewed[field] !== undefined) entry[field] = viewed[field];
+    return entry;
+  };
+}
+
+/**
  * The one field `npm view <name>@<version> <field> --json` printed: the value
  * itself up to npm 11, an array of one value from npm 12 (the release job
  * holds npm 11; both are read, for a run by hand with npm 12).
@@ -81,6 +97,13 @@ function parentOf(path) {
  * it: a consumer resolves them itself, so one copy serves the consumer and the
  * package alike. `dir` resolves the manifest's tarball paths.
  *
+ * The package's own optional dependencies the lockfile has not installed (mn's
+ * dust-sync platform packages, pinned into package.json only by the release
+ * job) come from `published(name, version)`, their entries as the registry
+ * serves them, marked optional: npm installs exactly the shrinkwrap's tree, so
+ * one missing there is never installed, and npm skips each on any platform but
+ * its own.
+ *
  * mn's tree is laid out as the lockfile lays it out: the lockfile is already
  * an install of mn. A workspace package's tree spans its own folder and the
  * root's, so it is laid out afresh, as Node resolves it: each dependency the
@@ -89,7 +112,7 @@ function parentOf(path) {
  * engine's own SDK set then sits at its top while the shared packages it also
  * reaches keep their versions.
  */
-export function shrinkwrapFrom(lock, manifest, dist, { at = '', leaveOut = [], dir = join(repo, at) } = {}) {
+export function shrinkwrapFrom(lock, manifest, dist, { at = '', leaveOut = [], dir = join(repo, at), published } = {}) {
   const packages = lock.packages;
   // The workspace packages, by their folder: what mn's links point at.
   const workspaces = new Map(
@@ -123,11 +146,17 @@ export function shrinkwrapFrom(lock, manifest, dist, { at = '', leaveOut = [], d
     }
   };
   const queue = [['', depsOf(manifest).filter(([name]) => !leaveOut.includes(name))]];
+  /** The package's own optional dependencies the lockfile has not installed. */
+  const unlocked = [];
   while (queue.length > 0) {
     const [place, deps] = queue.shift();
     for (const [name, optional] of deps) {
       let path = resolveIn(packages, layout.get(place), name);
       if (path === undefined) {
+        if (place === '' && manifest.optionalDependencies?.[name] !== undefined) {
+          unlocked.push(name);
+          continue;
+        }
         if (optional) continue;
         throw new Error(`package-lock.json resolves no ${name} for ${layout.get(place) || 'mn'}`);
       }
@@ -164,7 +193,14 @@ export function shrinkwrapFrom(lock, manifest, dist, { at = '', leaveOut = [], d
     }
     out[place] = entry;
   }
-  return { name, version, lockfileVersion: 3, requires: true, packages: out };
+  for (const dependency of unlocked) {
+    const place = `node_modules/${dependency}`;
+    if (out[place] !== undefined) throw new Error(`${dependency} and ${layout.get(place)} both land at ${place} in ${manifest.name}'s shrinkwrap`);
+    if (published === undefined) throw new Error(`package-lock.json resolves no ${dependency}, and no registry was given to read it from`);
+    out[place] = { ...published(dependency, optionalDependencies[dependency]), optional: true };
+  }
+  const sorted = Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b))));
+  return { name, version, lockfileVersion: 3, requires: true, packages: sorted };
 }
 
 /**
@@ -173,13 +209,13 @@ export function shrinkwrapFrom(lock, manifest, dist, { at = '', leaveOut = [], d
  * packages. A workspace package's shrinkwrap leaves out the workspace
  * packages it depends on.
  */
-export function makeShrinkwrap({ dir = '', dist = registryDist('https://registry.npmjs.org'), out = join(repo, dir, 'npm-shrinkwrap.json') } = {}) {
+export function makeShrinkwrap({ dir = '', registry = 'https://registry.npmjs.org', dist = registryDist(registry), published = registryPackage(registry), out = join(repo, dir, 'npm-shrinkwrap.json') } = {}) {
   const lock = JSON.parse(readFileSync(join(repo, 'package-lock.json'), 'utf-8'));
   const manifest = JSON.parse(readFileSync(join(repo, dir, 'package.json'), 'utf-8'));
   const workspaceNames = (JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8')).workspaces ?? [])
     .map((folder) => JSON.parse(readFileSync(join(repo, folder, 'package.json'), 'utf-8')).name);
   const leaveOut = dir === '' ? [] : Object.keys(manifest.dependencies ?? {}).filter((name) => workspaceNames.includes(name));
-  const shrinkwrap = shrinkwrapFrom(lock, manifest, dist, { at: dir, leaveOut, dir: join(repo, dir) });
+  const shrinkwrap = shrinkwrapFrom(lock, manifest, dist, { at: dir, leaveOut, dir: join(repo, dir), published });
   writeFileSync(out, JSON.stringify(shrinkwrap, null, 2) + '\n');
   return shrinkwrap.packages;
 }
@@ -198,7 +234,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   };
   const dir = (flag('--package') ?? '').replace(/\/$/, '');
   const out = flag('--out') ?? join(repo, dir, 'npm-shrinkwrap.json');
-  const packages = makeShrinkwrap({ dir, dist: registryDist(flag('--registry') ?? 'https://registry.npmjs.org'), out });
+  const packages = makeShrinkwrap({ dir, registry: flag('--registry') ?? 'https://registry.npmjs.org', out });
   for (const copy of copiesInShrinkwrap(packages, '@midnightntwrk/ledger-v9')) console.log(`ledger-v9 ${copy.version}  ${copy.path}`);
   console.log(`wrote ${out}`);
 }

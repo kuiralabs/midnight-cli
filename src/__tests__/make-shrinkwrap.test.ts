@@ -46,3 +46,39 @@ describe('a dependency installed from a tarball on disk', () => {
     expect(packages['node_modules/tiny']).toMatchObject({ resolved: 'https://registry.npmjs.org/tiny/-/tiny-1.0.0.tgz', integrity: 'sha512-tiny' });
   });
 });
+
+describe("the package's own optional dependencies the lockfile has not installed", () => {
+  // mn's dust-sync platform packages: the release job pins them into
+  // package.json, so package-lock.json never installed them. npm installs
+  // exactly the shrinkwrap's tree, so each must be there to be installed.
+  const lock = {
+    packages: {
+      '': { name: 'mn' },
+      'node_modules/tiny': { version: '1.0.0', resolved: 'https://registry.npmjs.org/tiny/-/tiny-1.0.0.tgz', integrity: 'sha512-tiny' },
+    },
+  };
+  const manifest = { name: 'mn', version: '0.6.1', dependencies: { tiny: '1.0.0' }, optionalDependencies: { '@x/sync-linux-x64': '0.1.0', '@x/sync-darwin-arm64': '0.1.0' } };
+  const dist = () => {
+    throw new Error('no workspace package here');
+  };
+  const asked: string[] = [];
+  const published = (name: string, version: string) => {
+    asked.push(`${name}@${version}`);
+    const [os, cpu] = name.slice('@x/sync-'.length).split('-');
+    return { version, resolved: `https://registry.npmjs.org/${name}/-/${version}.tgz`, integrity: `sha512-${name}`, os: [os], cpu: [cpu] };
+  };
+
+  it('are in the shrinkwrap as the registry serves them, optional, with their platforms', () => {
+    const { packages } = shrinkwrapFrom(lock, manifest, dist, { published });
+    expect(asked.sort()).toStrictEqual(['@x/sync-darwin-arm64@0.1.0', '@x/sync-linux-x64@0.1.0']);
+    expect(packages['node_modules/@x/sync-linux-x64']).toStrictEqual({ version: '0.1.0', resolved: 'https://registry.npmjs.org/@x/sync-linux-x64/-/0.1.0.tgz', integrity: 'sha512-@x/sync-linux-x64', os: ['linux'], cpu: ['x64'], optional: true });
+    expect(packages['node_modules/@x/sync-darwin-arm64']).toMatchObject({ version: '0.1.0', os: ['darwin'], cpu: ['arm64'], optional: true });
+    expect(packages['node_modules/tiny']).toMatchObject({ version: '1.0.0' });
+    expect(packages['']).toMatchObject({ optionalDependencies: manifest.optionalDependencies });
+    expect(Object.keys(packages)).toStrictEqual(['', 'node_modules/@x/sync-darwin-arm64', 'node_modules/@x/sync-linux-x64', 'node_modules/tiny']);
+  });
+
+  it('are refused, not left out, when no registry is given to read them from', () => {
+    expect(() => shrinkwrapFrom(lock, manifest, dist)).toThrow('package-lock.json resolves no @x/sync-');
+  });
+});

@@ -4,6 +4,12 @@ All notable changes to midnight-wallet-cli will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-12
+
+### Fixed
+
+- **An install from npm gets the native Dust reader again.** 0.6.0's shrinkwrap listed the `@kuiralabs/dust-sync-*` platform packages without installing them, so on 0.6.0 a hosted network's first Dust read fell back to the WASM reader (several times slower). The shrinkwrap now carries each platform package as the registry serves it, and the release job installs the published mn from npm and checks that it finds a reader reporting ledger 9. npm installs the binaries for all five platforms (about 26 MB); mn runs the one for its own.
+
 ## [0.6.0] - 2026-11-12
 
 ### Highlights

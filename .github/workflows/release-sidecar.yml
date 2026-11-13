@@ -1,7 +1,8 @@
 # Build the native dust-sync sidecar for every target, then publish the five
 # per-platform packages, the eight @kuiralabs workspace packages mn depends on,
 # and mn itself, so an `npm install midnight-wallet-cli` gets the native Dust
-# reader (a cold mainnet Dust read in about 11 minutes, against about 18 in WASM).
+# reader (a cold read of mainnet's Dust events in 86 s on a laptop, several times
+# faster than the WASM reader).
 #
 # Trigger: push a `v*` tag (after bumping the versions). Or run manually with
 # dry_run to build without publishing.
@@ -227,3 +228,31 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           tag=""; case "$version" in *-*) tag="--tag next" ;; esac
           npm publish --access public $tag
+      # A user's install, from npm: mn runs, and finds a native Dust reader that
+      # folds ledger 9. 0.6.0 shipped without one, its shrinkwrap listing the
+      # platform packages but not installing them. A version just published can
+      # take a minute or two to be served, so the install is retried.
+      - name: Check a clean install from npm finds the native Dust reader
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('$GITHUB_WORKSPACE/package.json').version")"
+          prefix="$RUNNER_TEMP/clean-install"
+          for attempt in $(seq 1 10); do
+            if npm install -g --prefix "$prefix" --prefer-online "midnight-wallet-cli@$version"; then break; fi
+            if [ "$attempt" = 10 ]; then echo "::error::midnight-wallet-cli@$version did not install from npm"; exit 1; fi
+            sleep 30
+          done
+          installed="$("$prefix/bin/mn" --version)"
+          [ "$installed" = "$version" ] || { echo "::error::mn --version printed '$installed', not $version"; exit 1; }
+          # As mn resolves it: the platform package beside its bundle.
+          reader="$(node -e "
+            const { createRequire } = require('node:module');
+            const { dirname, join } = require('node:path');
+            const from = createRequire('$prefix/lib/node_modules/midnight-wallet-cli/dist/wallet.js');
+            console.log(join(dirname(from.resolve('@kuiralabs/dust-sync-linux-x64/package.json')), 'dust-sync'));
+          ")"
+          ledger="$("$reader" --ledger)"
+          [ "$ledger" = "9" ] || { echo "::error::$reader --ledger printed '$ledger', not 9"; exit 1; }
+          echo "mn $installed from npm runs the native Dust reader $reader (ledger $ledger)"

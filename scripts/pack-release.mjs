@@ -17,7 +17,7 @@ import { copyFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startLocalRegistryProcess } from './local-registry.mjs';
-import { makeShrinkwrap, registryDist } from './make-shrinkwrap.mjs';
+import { makeShrinkwrap } from './make-shrinkwrap.mjs';
 import { localTarballsOf, packPublished } from './publish-manifest.mjs';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
@@ -50,21 +50,20 @@ export async function packRelease(dir, port = 0) {
     copyFileSync(tarball, join(dir, basename(tarball)));
   }
   const registry = await startLocalRegistryProcess(dir, port);
-  const dist = registryDist(registry.url);
 
   const shrinkwrapPath = join(repo, 'npm-shrinkwrap.json');
   try {
     // The engine and grant with the shrinkwrap the release job writes for it.
     for (const { folder, name } of workspaces) {
       const shrinkwrapped = shipsShrinkwrap(name);
-      if (shrinkwrapped) makeShrinkwrap({ dir: folder, dist });
+      if (shrinkwrapped) makeShrinkwrap({ dir: folder, registry: registry.url });
       try {
         packPublished(join(repo, folder), dir);
       } finally {
         if (shrinkwrapped) rmSync(join(repo, folder, 'npm-shrinkwrap.json'), { force: true });
       }
     }
-    makeShrinkwrap({ dist, out: shrinkwrapPath });
+    makeShrinkwrap({ registry: registry.url, out: shrinkwrapPath });
     run('npm', ['pack', '--pack-destination', dir], repo);
   } catch (error) {
     await registry.close();
