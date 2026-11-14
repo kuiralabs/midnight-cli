@@ -29,7 +29,7 @@ import { createWalletClient } from 'midnight-wallet-connector';
 
 const wallet = await createWalletClient({
   url: 'ws://localhost:9932',
-  networkId: 'Undeployed',
+  networkId: 'undeployed',
 });
 
 const balances = await wallet.getUnshieldedBalances();
@@ -59,7 +59,7 @@ Connects to `mn serve` over WebSocket and performs a network handshake. Throws a
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `url` | `string` | — | WebSocket URL, e.g. `ws://localhost:9932` |
-| `networkId` | `string` | — | `'Undeployed'`, `'PreProd'`, or `'Preview'` |
+| `networkId` | `string` | — | `'undeployed'`, `'preview'`, `'preprod'` or `'mainnet'` (the SDK's lowercase form) |
 | `timeout` | `number` | `300000` | Per-call timeout in ms (5 min default, sized for proof-heavy ops) |
 | `onApprovalPending` | `(method: string) => void` | — | Called when the server begins waiting for terminal approval |
 | `onApprovalResolved` | `(method: string, result: 'approved' \| 'rejected') => void` | — | Called when terminal approval completes |
@@ -199,7 +199,7 @@ In development, connect to `mn serve` via WebSocket. In production, omit the env
 import { createWalletClient, type ConnectedAPI } from 'midnight-wallet-connector';
 
 const walletUrl = import.meta.env.VITE_WALLET_URL; // undefined in production
-const networkId = 'Undeployed';
+const networkId = 'undeployed';
 
 let wallet: ConnectedAPI;
 
@@ -239,7 +239,7 @@ When `mn serve` is running in interactive mode (without `--approve-all`), write 
 ```typescript
 const wallet = await createWalletClient({
   url: 'ws://localhost:9932',
-  networkId: 'Undeployed',
+  networkId: 'undeployed',
   onApprovalPending(method) {
     showToast(`Waiting for terminal approval: ${method}...`);
   },
@@ -260,7 +260,7 @@ These callbacks are optional and only relevant during development with `mn serve
 `mn serve --approve-fees` (midnight-wallet-cli 0.6, ledger 9) is for an agent that builds, proves and signs its own transaction, with its own value already balanced, and only needs the Dust fee paid:
 
 ```typescript
-const wallet = await createWalletClient({ url: 'ws://localhost:9932', networkId: 'Undeployed' });
+const wallet = await createWalletClient({ url: 'ws://localhost:9932', networkId: 'undeployed' });
 const { tx } = await wallet.balanceUnsealedTransaction(agentTxHex); // adds only Dust
 await wallet.submitTransaction(tx);
 ```
